@@ -229,126 +229,188 @@ h1, h2, h3,
 .theme-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
 /* =========================================================================
-   Landing — cabecera
+   Landing — liquid glass (mundo oscuro, sobrio y cinematográfico)
+   La portada comparte el ambiente del acceso: fondo con orbes de luz y
+   superficies de cristal esmerilado. Es un mundo visual propio elegido a
+   propósito, con acento dorado y tipografía serif para los titulares.
    ========================================================================= */
+.landing-glass {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  color: #efe7f5;
+  background: #130a19;
+}
+.landing-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(70% 55% at 15% 6%, rgba(104, 58, 112, 0.5), transparent 60%),
+    radial-gradient(58% 50% at 88% 12%, rgba(150, 118, 60, 0.22), transparent 58%),
+    radial-gradient(90% 80% at 50% 116%, rgba(70, 34, 79, 0.55), transparent 62%),
+    linear-gradient(170deg, #1f0e2c 0%, #170c20 55%, #100713 100%);
+}
+.landing-bg .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.36; will-change: transform; }
+
+/* cabecera glass */
 .site-header {
   position: sticky;
   top: 0;
   z-index: 40;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: saturate(1.4) blur(10px);
-  border-bottom: 1px solid var(--line);
+  background: rgba(19, 10, 25, 0.55);
+  backdrop-filter: saturate(1.4) blur(16px);
+  -webkit-backdrop-filter: saturate(1.4) blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .nav-row { display: flex; align-items: center; justify-content: space-between; padding: 0.95rem 0; gap: 1.5rem; }
 .nav-links { display: flex; gap: 1.8rem; font-size: 0.9rem; }
-.nav-links a { text-decoration: none; color: var(--text-muted); }
-.nav-links a:hover { color: var(--text); }
+.nav-links a { text-decoration: none; color: rgba(239, 231, 245, 0.66); }
+.nav-links a:hover { color: #fff; }
 .nav-cta { display: flex; align-items: center; gap: 0.9rem; }
-.link-login { text-decoration: none; font-size: 0.9rem; font-weight: 600; color: var(--text); }
-.link-login:hover { color: var(--gold); }
+.link-login { text-decoration: none; font-size: 0.9rem; font-weight: 600; color: #f4ecff; }
+.link-login:hover { color: #e2c584; }
 
-/* =========================================================================
-   Landing — hero
-   ========================================================================= */
+/* acento dorado y botones sobre el mundo oscuro */
+.landing-glass .eyebrow { color: #e2c584; }
+.landing-glass .btn-primary {
+  background: linear-gradient(180deg, #ecd6a0 0%, #c6a04d 100%);
+  color: #2c1636;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 12px 28px -12px rgba(198, 160, 77, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.landing-glass .btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #f2e0b2 0%, #d3ac5a 100%); filter: none; }
+.landing-glass .btn-outline {
+  color: #f4ecff;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.landing-glass .btn-outline:hover { border-color: #e2c584; background: rgba(255, 255, 255, 0.09); }
+
+/* hero */
 .hero { padding: 4.5rem 0 4rem; }
 .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 3.5rem; align-items: center; }
-.hero-copy h1 { font-size: clamp(2.5rem, 4.8vw, 3.6rem); line-height: 1.08; margin-top: 1rem; }
-.hero-copy h1 em { font-style: italic; color: var(--morado-500); }
-:root[data-theme='dark'] .hero-copy h1 em { color: var(--oro-300); }
-@media (prefers-color-scheme: dark) { .hero-copy h1 em { color: var(--oro-300); } }
-:root[data-theme='light'] .hero-copy h1 em { color: var(--morado-500); }
-.lede { margin-top: 1.3rem; max-width: 48ch; color: var(--text-muted); font-size: 1.08rem; }
+.hero-copy h1 { font-size: clamp(2.5rem, 4.8vw, 3.6rem); line-height: 1.08; margin-top: 1rem; color: #fdfaf3; }
+.hero-copy h1 em { font-style: italic; color: #e2c584; }
+.lede { margin-top: 1.3rem; max-width: 48ch; color: rgba(239, 231, 245, 0.7); font-size: 1.08rem; }
 .bullets { list-style: none; padding: 0; margin: 1.8rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
-.bullets li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; }
-.bullets svg { width: 18px; height: 18px; color: var(--oro-500); flex: none; }
+.bullets li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; color: rgba(239, 231, 245, 0.9); }
+.bullets svg { width: 18px; height: 18px; color: #e2c584; flex: none; }
 .hero-actions { display: flex; gap: 0.9rem; margin-top: 2.1rem; flex-wrap: wrap; }
 
-/* tarjeta decorativa del hero */
+/* tarjeta de cristal del hero (vista previa) */
 .hero-visual { display: flex; justify-content: center; }
 .glass-card {
   width: 100%;
   max-width: 360px;
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 1.5rem;
-  box-shadow: var(--shadow);
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  padding: 1.6rem;
+  backdrop-filter: blur(26px) saturate(1.6);
+  -webkit-backdrop-filter: blur(26px) saturate(1.6);
+  box-shadow: 0 44px 90px -34px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .glass-card__head { display: flex; gap: 0.4rem; margin-bottom: 1.3rem; }
-.glass-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+.glass-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); }
 .glass-stat { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 1.2rem; }
-.glass-stat__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
-.glass-stat__value { font-size: 2.4rem; font-variant-numeric: tabular-nums; color: var(--text); font-family: 'Iowan Old Style', Palatino, Georgia, serif; }
+.glass-stat__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: rgba(239, 231, 245, 0.6); }
+.glass-stat__value { font-size: 2.4rem; font-variant-numeric: tabular-nums; color: #fdfaf3; font-family: 'Iowan Old Style', Palatino, Georgia, serif; }
 .glass-rows { display: flex; flex-direction: column; gap: 0.7rem; margin-bottom: 1.2rem; }
-.glass-row { display: flex; justify-content: space-between; font-size: 0.86rem; color: var(--text-muted); }
-.glass-row b { color: var(--text); font-variant-numeric: tabular-nums; }
-.glass-bar { height: 8px; border-radius: 5px; background: var(--bg-sunken); overflow: hidden; }
-.glass-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--oro-700), var(--oro-300)); }
+.glass-row { display: flex; justify-content: space-between; font-size: 0.86rem; color: rgba(239, 231, 245, 0.7); }
+.glass-row b { color: #fff; font-variant-numeric: tabular-nums; }
+.glass-bar { height: 8px; border-radius: 5px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.glass-bar span { display: block; height: 100%; background: linear-gradient(90deg, #b08a3e, #e2c584); }
 
-/* =========================================================================
-   Landing — franja de confianza
-   ========================================================================= */
-.trust { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 1.6rem 0; }
+/* franja de confianza */
+.trust { border-top: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding: 1.6rem 0; }
 .trust .wrap { display: flex; align-items: center; justify-content: space-between; gap: 2rem; flex-wrap: wrap; }
-.trust p { margin: 0; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-muted); }
-.trust-names { display: flex; gap: 2rem; flex-wrap: wrap; font-family: 'Iowan Old Style', Palatino, Georgia, serif; font-size: 1.05rem; color: var(--text); opacity: 0.72; }
+.trust p { margin: 0; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.09em; color: rgba(239, 231, 245, 0.5); }
+.trust-names { display: flex; gap: 2rem; flex-wrap: wrap; font-family: 'Iowan Old Style', Palatino, Georgia, serif; font-size: 1.05rem; color: rgba(239, 231, 245, 0.75); }
 
-/* =========================================================================
-   Landing — secciones
-   ========================================================================= */
+/* secciones */
 .section { padding: 5rem 0; }
 .section-head { max-width: 62ch; margin-bottom: 3rem; }
-.section-head h2 { font-size: 2.1rem; margin-top: 0.8rem; }
-.section-lead { color: var(--text-muted); margin-top: 0.9rem; font-size: 1.05rem; }
+.section-head h2 { font-size: 2.1rem; margin-top: 0.8rem; color: #fdfaf3; }
+.section-lead { color: rgba(239, 231, 245, 0.68); margin-top: 0.9rem; font-size: 1.05rem; }
 
 .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; }
-.feature { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem; }
+.feature {
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.028));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 1.6rem;
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.feature:hover {
+  transform: translateY(-3px);
+  border-color: rgba(226, 197, 132, 0.4);
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.045));
+}
 .feature__ic {
-  width: 42px; height: 42px; border-radius: 10px;
+  width: 42px; height: 42px; border-radius: 12px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(173, 138, 76, 0.14); color: var(--oro-700);
+  background: rgba(226, 197, 132, 0.16); color: #e2c584;
+  border: 1px solid rgba(226, 197, 132, 0.2);
   margin-bottom: 1rem;
 }
-:root[data-theme='dark'] .feature__ic { color: var(--oro-300); background: rgba(217, 189, 130, 0.14); }
-@media (prefers-color-scheme: dark) { .feature__ic { color: var(--oro-300); background: rgba(217, 189, 130, 0.14); } }
-:root[data-theme='light'] .feature__ic { color: var(--oro-700); background: rgba(173, 138, 76, 0.14); }
 .feature__ic svg { width: 21px; height: 21px; }
-.feature h3 { font-size: 1.1rem; }
-.feature p { color: var(--text-muted); font-size: 0.9rem; margin: 0.5rem 0 0; }
+.feature h3 { font-size: 1.1rem; color: #fdfaf3; }
+.feature p { color: rgba(239, 231, 245, 0.66); font-size: 0.9rem; margin: 0.5rem 0 0; }
 
 /* audiencia */
 .audience { padding-top: 0; }
 .audience-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
 .audience-panel {
-  background: var(--morado-900);
-  color: var(--marfil-100);
-  border-radius: 16px;
+  color: #fdfaf3;
+  border-radius: 22px;
   padding: 2.6rem;
-  background-image: repeating-linear-gradient(135deg, rgba(217, 189, 130, 0.05) 0, rgba(217, 189, 130, 0.05) 1px, transparent 1px, transparent 20px);
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
-.audience-panel h2 { font-size: 1.9rem; color: var(--marfil-100); margin-top: 0.8rem; }
-.audience-panel p { color: var(--oro-300); opacity: 0.92; margin-top: 1rem; }
+.audience-panel h2 { font-size: 1.9rem; color: #fdfaf3; margin-top: 0.8rem; }
+.audience-panel p { color: rgba(239, 231, 245, 0.72); margin-top: 1rem; }
 .audience-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1.2rem; }
 .audience-list li { display: flex; gap: 0.9rem; align-items: flex-start; }
-.audience-n { font-family: 'Iowan Old Style', Palatino, Georgia, serif; color: var(--gold); font-size: 1.15rem; flex: none; width: 1.9rem; }
-.audience-list b { display: block; }
-.audience-text { color: var(--text-muted); font-size: 0.9rem; }
+.audience-n { font-family: 'Iowan Old Style', Palatino, Georgia, serif; color: #e2c584; font-size: 1.15rem; flex: none; width: 1.9rem; }
+.audience-list b { display: block; color: #fdfaf3; }
+.audience-text { color: rgba(239, 231, 245, 0.62); font-size: 0.9rem; }
 
-/* cta band */
-.cta-band { background: var(--morado-700); color: var(--marfil-100); padding: 4.5rem 0; }
-.cta-inner { text-align: center; }
-.cta-inner h2 { font-size: 2.3rem; color: var(--marfil-100); max-width: 20ch; margin: 0.8rem auto 0; }
+/* cta band — panel de cristal centrado */
+.cta-band { padding: 4.5rem 0 5.5rem; }
+.cta-inner {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+  border-radius: 26px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(26px) saturate(1.6);
+  -webkit-backdrop-filter: blur(26px) saturate(1.6);
+  box-shadow: 0 44px 100px -44px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+.cta-inner h2 { font-size: 2.2rem; color: #fdfaf3; max-width: 20ch; margin: 0.8rem auto 0; }
 .cta-inner .btn { margin-top: 1.8rem; }
 
 /* footer */
-.site-footer { padding: 3.2rem 0 2.5rem; border-top: 1px solid var(--line); }
+.site-footer { padding: 3.2rem 0 2.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .footer-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 2.5rem; }
-.footer-about { color: var(--text-muted); font-size: 0.88rem; max-width: 34ch; margin: 0.9rem 0 0; }
-.footer-grid h4 { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 0 0 0.9rem; }
+.footer-about { color: rgba(239, 231, 245, 0.6); font-size: 0.88rem; max-width: 34ch; margin: 0.9rem 0 0; }
+.footer-grid h4 { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(239, 231, 245, 0.55); margin: 0 0 0.9rem; }
 .footer-grid ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem; }
-.footer-grid a { text-decoration: none; color: var(--text-muted); }
-.footer-grid a:hover { color: var(--text); }
-.footer-bottom { margin-top: 2.6rem; padding-top: 1.5rem; border-top: 1px solid var(--line); display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.78rem; flex-wrap: wrap; gap: 0.6rem; }
+.footer-grid a { text-decoration: none; color: rgba(239, 231, 245, 0.6); }
+.footer-grid a:hover { color: #fff; }
+.footer-bottom { margin-top: 2.6rem; padding-top: 1.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; color: rgba(239, 231, 245, 0.45); font-size: 0.78rem; flex-wrap: wrap; gap: 0.6rem; }
 
 /* =========================================================================
    Autenticación — liquid glass (escenario inmersivo, mundo visual propio)

@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import Logo from '../components/Logo'
-import ThemeToggle from '../components/ThemeToggle'
 
 function Check() {
   return (
@@ -80,17 +79,23 @@ const AUDIENCE = [
 
 export default function Landing() {
   return (
-    <div className="landing">
+    <div className="landing-glass">
+      <div className="landing-bg" aria-hidden="true">
+        <span className="orb orb--gold" />
+        <span className="orb orb--violet" />
+        <span className="orb orb--plum" />
+        <span className="auth-grain" />
+      </div>
+
       <header className="site-header">
         <div className="wrap nav-row">
-          <Logo size={34} />
+          <Logo light size={34} />
           <nav className="nav-links">
             <a href="#funciones">Funciones</a>
             <a href="#audiencia">Para quién es</a>
             <a href="#precios">Precios</a>
           </nav>
           <div className="nav-cta">
-            <ThemeToggle />
             <Link className="link-login" to="/login">
               Iniciar sesión
             </Link>
@@ -209,19 +214,21 @@ export default function Landing() {
       </section>
 
       <section className="cta-band" id="precios">
-        <div className="wrap cta-inner">
-          <p className="eyebrow eyebrow--gold">Empieza hoy</p>
-          <h2>Lleva tu hermandad al día en una tarde</h2>
-          <Link className="btn btn-gold" to="/registro">
-            Crea tu hermandad gratis
-          </Link>
+        <div className="wrap">
+          <div className="cta-inner">
+            <p className="eyebrow eyebrow--gold">Empieza hoy</p>
+            <h2>Lleva tu hermandad al día en una tarde</h2>
+            <Link className="btn btn-primary" to="/registro">
+              Crea tu hermandad gratis
+            </Link>
+          </div>
         </div>
       </section>
 
       <footer className="site-footer">
         <div className="wrap footer-grid">
           <div>
-            <Logo size={32} />
+            <Logo light size={32} />
             <p className="footer-about">
               El software para gestionar hermandades y cofradías. Hecho por y para el mundo
               cofrade.
