@@ -20,8 +20,9 @@ interface AuthContextValue {
   signUp: (
     email: string,
     password: string,
-    hermandad: string,
+    meta: { hermandad: string; nombre: string },
   ) => Promise<AuthResult & { needsConfirmation?: boolean }>
+  resetPassword: (email: string) => Promise<AuthResult>
   signOut: () => Promise<void>
 }
 
@@ -65,17 +66,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error ? translateError(error.message) : null }
       },
 
-      async signUp(email, password, hermandad) {
+      async signUp(email, password, meta) {
         if (!supabase) return { error: NOT_CONFIGURED_MSG }
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { hermandad } },
+          options: { data: { hermandad: meta.hermandad, nombre: meta.nombre } },
         })
         if (error) return { error: translateError(error.message) }
         // Si la confirmación por email está activada, no hay sesión todavía.
         const needsConfirmation = !data.session
         return { error: null, needsConfirmation }
+      },
+
+      async resetPassword(email) {
+        if (!supabase) return { error: NOT_CONFIGURED_MSG }
+        const redirectTo = `${window.location.origin}/login`
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+        return { error: error ? translateError(error.message) : null }
       },
 
       async signOut() {

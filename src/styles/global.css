@@ -351,139 +351,204 @@ h1, h2, h3,
 .footer-bottom { margin-top: 2.6rem; padding-top: 1.5rem; border-top: 1px solid var(--line); display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.78rem; flex-wrap: wrap; gap: 0.6rem; }
 
 /* =========================================================================
-   Autenticación — pantalla partida premium
+   Autenticación — liquid glass (escenario inmersivo, mundo visual propio)
+   Estas pantallas usan deliberadamente un ambiente oscuro y cinematográfico
+   en ambos temas: el cristal esmerilado luce sobre un fondo vívido.
    ========================================================================= */
-.auth-shell { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
-
-.auth-aside {
+.auth-scene {
   position: relative;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 2rem;
-  padding: 2.4rem;
-  color: var(--marfil-100);
-  background:
-    radial-gradient(120% 80% at 15% 0%, rgba(106, 58, 111, 0.55) 0%, transparent 55%),
-    linear-gradient(160deg, #3a1c44 0%, #2c1636 55%, #1c0f22 100%);
+  color: #f4ecff;
+  background: #140b1b;
   overflow: hidden;
+  isolation: isolate;
 }
-.auth-aside::before {
-  content: '';
-  position: absolute;
+
+/* fondo ambiental con orbes de luz */
+.auth-bg {
+  position: fixed;
   inset: 0;
-  background-image: repeating-linear-gradient(135deg, rgba(217, 189, 130, 0.06) 0, rgba(217, 189, 130, 0.06) 1px, transparent 1px, transparent 22px);
-  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(78% 60% at 18% 12%, rgba(112, 62, 118, 0.55), transparent 60%),
+    radial-gradient(64% 55% at 85% 18%, rgba(160, 124, 62, 0.32), transparent 58%),
+    radial-gradient(90% 90% at 50% 118%, rgba(74, 36, 84, 0.65), transparent 60%),
+    linear-gradient(157deg, #251034 0%, #1a0e24 52%, #110814 100%);
 }
-.auth-aside::after {
-  content: '';
+.auth-bg .orb {
   position: absolute;
-  right: -120px; bottom: -120px;
-  width: 340px; height: 340px;
   border-radius: 50%;
-  border: 1px solid rgba(217, 189, 130, 0.28);
-  box-shadow: 0 0 0 22px rgba(217, 189, 130, 0.05);
-  pointer-events: none;
+  filter: blur(70px);
+  opacity: 0.55;
+  will-change: transform;
 }
-.auth-aside > * { position: relative; z-index: 1; }
-.auth-aside__top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.auth-back { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--oro-300); text-decoration: none; }
-.auth-back svg { width: 16px; height: 16px; }
-.auth-back:hover { color: var(--marfil-100); }
-.auth-aside__eyebrow { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--oro-300); font-weight: 700; margin: 0 0 1.1rem; }
-.auth-aside__quote {
-  font-family: 'Iowan Old Style', Palatino, Georgia, serif;
-  font-size: 1.7rem;
-  line-height: 1.32;
-  margin: 0;
-  color: var(--marfil-100);
-  max-width: 22ch;
+.orb--gold {
+  width: 440px; height: 440px; top: -90px; right: -70px;
+  background: radial-gradient(circle, rgba(226, 197, 132, 0.9), transparent 70%);
+  animation: orbDrift1 19s ease-in-out infinite;
 }
-.auth-aside__cite { display: block; margin-top: 1.1rem; font-style: normal; font-size: 0.8rem; letter-spacing: 0.04em; color: rgba(217, 189, 130, 0.85); }
-.auth-aside__feats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
-.auth-aside__feats li { position: relative; padding-left: 1.5rem; font-size: 0.9rem; color: rgba(251, 245, 233, 0.85); }
-.auth-aside__feats li::before {
-  content: '';
-  position: absolute; left: 0; top: 0.5rem;
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--oro-500);
+.orb--violet {
+  width: 500px; height: 500px; bottom: -160px; left: -120px;
+  background: radial-gradient(circle, rgba(129, 74, 146, 0.85), transparent 70%);
+  animation: orbDrift2 24s ease-in-out infinite;
 }
+.orb--plum {
+  width: 340px; height: 340px; top: 42%; left: 52%;
+  background: radial-gradient(circle, rgba(158, 62, 84, 0.6), transparent 70%);
+  animation: orbDrift3 28s ease-in-out infinite;
+}
+.auth-grain {
+  position: absolute; inset: 0;
+  opacity: 0.045;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.7) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: overlay;
+}
+@keyframes orbDrift1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-46px, 34px); } }
+@keyframes orbDrift2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(44px, -34px); } }
+@keyframes orbDrift3 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-32px, -22px) scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .auth-bg .orb { animation: none; } }
 
-.auth-main { display: flex; flex-direction: column; background: var(--bg); }
-.auth-main__bar { display: flex; align-items: center; justify-content: space-between; padding: 1.4rem 2rem; }
-.auth-main__brand { text-decoration: none; }
-/* la marca del top solo se ve en móvil, cuando se oculta el panel lateral */
-.auth-main__brand { visibility: hidden; }
-.auth-main__center { flex: 1; display: flex; align-items: center; justify-content: center; padding: 1.5rem 2rem 2.5rem; }
-.auth-card { width: 100%; max-width: 400px; }
-.auth-title { font-size: 2rem; margin: 0.7rem 0 0; }
-.auth-subtitle { color: var(--text-muted); margin: 0.5rem 0 1.8rem; font-size: 0.96rem; }
-.auth-main__foot {
+/* barra superior */
+.auth-topbar {
+  position: relative; z-index: 2;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 1.2rem 2rem; border-top: 1px solid var(--line);
-  font-size: 0.78rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.6rem;
+  padding: 1.5rem 2rem;
 }
-.auth-main__foot-links { display: flex; gap: 1.2rem; }
-.auth-main__foot-links a { text-decoration: none; color: var(--text-muted); }
-.auth-main__foot-links a:hover { color: var(--text); }
+.auth-back {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-size: 0.83rem; color: rgba(244, 236, 255, 0.8); text-decoration: none;
+  padding: 0.5rem 0.95rem; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.auth-back svg { width: 16px; height: 16px; }
+.auth-back:hover { color: #fff; border-color: rgba(226, 197, 132, 0.5); }
 
-.auth-switch { margin-top: 1.6rem; text-align: center; font-size: 0.9rem; color: var(--text-muted); }
-.auth-switch a { color: var(--accent); font-weight: 600; text-decoration: none; }
+/* escenario centrado */
+.auth-stage {
+  position: relative; z-index: 2;
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1.3rem;
+  padding: 1rem 1.5rem 3rem;
+}
+
+/* panel de cristal */
+.glass-panel {
+  position: relative;
+  width: 100%; max-width: 440px;
+  padding: 2.5rem;
+  border-radius: 26px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.045));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 40px 90px -30px rgba(0, 0, 0, 0.8),
+    0 8px 30px -12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(30px) saturate(1.7);
+  animation: glassIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* filo de luz superior */
+.glass-panel::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 26px; padding: 1px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 42%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.6;
+}
+@keyframes glassIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .glass-panel { animation: none; } }
+
+.glass-panel .eyebrow { color: var(--oro-300); }
+.auth-title { font-size: 1.95rem; margin: 0.7rem 0 0; color: #fdfaf3; }
+.auth-subtitle { color: rgba(244, 236, 255, 0.72); margin: 0.5rem 0 1.7rem; font-size: 0.95rem; }
+.auth-legal { position: relative; z-index: 2; font-size: 0.75rem; color: rgba(244, 236, 255, 0.45); letter-spacing: 0.02em; }
+
+.auth-switch { margin-top: 1.5rem; text-align: center; font-size: 0.9rem; color: rgba(244, 236, 255, 0.72); }
+.auth-switch a { color: var(--oro-300); font-weight: 600; text-decoration: none; }
 .auth-switch a:hover { text-decoration: underline; }
 
 /* =========================================================================
-   Formularios
+   Formularios (sobre cristal)
    ========================================================================= */
-.auth-form { display: flex; flex-direction: column; gap: 1.1rem; }
+.auth-form { display: flex; flex-direction: column; gap: 1.05rem; }
 .field { display: flex; flex-direction: column; gap: 0.45rem; }
-.field label { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.field label { font-size: 0.8rem; font-weight: 600; color: rgba(244, 236, 255, 0.92); }
 .field-row { display: flex; align-items: baseline; justify-content: space-between; }
-.field-link { font-size: 0.78rem; color: var(--gold); text-decoration: none; }
+.field-link { font-size: 0.78rem; color: var(--oro-300); text-decoration: none; }
 .field-link:hover { text-decoration: underline; }
 
 .field input,
 .input-wrap input {
   width: 100%;
-  padding: 0.72rem 0.85rem;
+  padding: 0.78rem 0.9rem;
   font: inherit;
   font-size: 0.92rem;
-  color: var(--text);
-  background: var(--bg-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  color: #fdfaf3;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .field input::placeholder,
-.input-wrap input::placeholder { color: var(--piedra-500); }
+.input-wrap input::placeholder { color: rgba(244, 236, 255, 0.4); }
 .field input:focus,
 .input-wrap input:focus {
   outline: none;
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--ring);
+  border-color: rgba(226, 197, 132, 0.75);
+  box-shadow: 0 0 0 3px rgba(226, 197, 132, 0.22);
+  background: rgba(255, 255, 255, 0.11);
 }
 
 .input-wrap { position: relative; display: flex; align-items: center; }
 .input-wrap input { padding-right: 5.2rem; }
 .input-affix {
-  position: absolute; right: 0.4rem;
+  position: absolute; right: 0.45rem;
   border: none; background: transparent;
   font: inherit; font-size: 0.78rem; font-weight: 600;
-  color: var(--text-muted); cursor: pointer;
+  color: rgba(244, 236, 255, 0.62); cursor: pointer;
   padding: 0.35rem 0.55rem; border-radius: 6px;
 }
-.input-affix:hover { color: var(--text); background: var(--bg-sunken); }
+.input-affix:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
 
-.checkbox { display: flex; align-items: center; gap: 0.55rem; font-size: 0.86rem; color: var(--text-muted); cursor: pointer; }
-.checkbox input { width: 16px; height: 16px; accent-color: var(--accent); }
+.checkbox { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.84rem; color: rgba(244, 236, 255, 0.78); cursor: pointer; line-height: 1.4; }
+.checkbox input { width: 16px; height: 16px; margin-top: 0.15rem; accent-color: var(--oro-500); flex: none; }
+.checkbox a { color: var(--oro-300); text-decoration: none; }
+.checkbox a:hover { text-decoration: underline; }
 
-.fineprint { font-size: 0.76rem; color: var(--text-muted); text-align: center; margin: 0.2rem 0 0; line-height: 1.5; }
+.fineprint { font-size: 0.76rem; color: rgba(244, 236, 255, 0.5); text-align: center; margin: 0.2rem 0 0; line-height: 1.5; }
 
-/* banners */
-.banner { border-radius: var(--radius-sm); padding: 0.75rem 0.9rem; font-size: 0.85rem; line-height: 1.45; border: 1px solid transparent; }
-.banner code { font-size: 0.82em; padding: 0.05rem 0.3rem; border-radius: 4px; background: rgba(0,0,0,0.08); }
-.banner--info { background: var(--info-bg); color: var(--info-fg); }
-.banner--error { background: var(--err-bg); color: var(--err-fg); }
-.banner--success { background: var(--ok-bg); color: var(--ok-fg); }
+/* botón dorado premium dentro del cristal */
+.glass-panel .btn-primary {
+  background: linear-gradient(180deg, #ecd6a0 0%, #c6a04d 100%);
+  color: #2c1636;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 12px 28px -10px rgba(198, 160, 77, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  margin-top: 0.3rem;
+}
+.glass-panel .btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #f2e0b2 0%, #d3ac5a 100%); }
+.glass-panel .btn-primary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* banners translúcidos sobre cristal */
+.banner { border-radius: 12px; padding: 0.75rem 0.9rem; font-size: 0.85rem; line-height: 1.45; border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(6px); }
+.banner code { font-size: 0.82em; padding: 0.05rem 0.3rem; border-radius: 4px; background: rgba(0, 0, 0, 0.22); }
+.banner--info { background: rgba(226, 197, 132, 0.16); color: #f2e2b6; }
+.banner--error { background: rgba(206, 86, 86, 0.2); color: #ffc9c4; }
+.banner--success { background: rgba(120, 186, 132, 0.2); color: #cbedcf; }
 
 /* =========================================================================
    Estado de carga de ruta protegida
@@ -520,14 +585,14 @@ h1, h2, h3,
   .audience-grid { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
   .nav-links { display: none; }
-
-  .auth-shell { grid-template-columns: 1fr; }
-  .auth-aside { display: none; }
-  .auth-main__brand { visibility: visible; }
 }
 @media (max-width: 560px) {
   .wrap { padding: 0 1.25rem; }
   .feature-grid { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr; }
   .trust .wrap { flex-direction: column; align-items: flex-start; gap: 1rem; }
+
+  .auth-topbar { padding: 1.1rem 1.25rem; }
+  .glass-panel { padding: 1.9rem 1.5rem; border-radius: 22px; }
+  .auth-title { font-size: 1.7rem; }
 }
