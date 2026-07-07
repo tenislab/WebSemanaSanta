@@ -26,6 +26,8 @@ interface AuthContextValue {
   loading: boolean
   configured: boolean
   signIn: (email: string, password: string) => Promise<AuthResult>
+  /** Entra con el usuario de prueba en un clic (solo existe en modo demostración). */
+  signInDemo: () => Promise<AuthResult>
   signUp: (
     email: string,
     password: string,
@@ -54,6 +56,10 @@ function readDemoUser(): AppUser | null {
   } catch {
     return null
   }
+}
+
+function buildDemoUser(email: string, hermandad: string, nombre: string): AppUser {
+  return { id: `demo-${email.trim().toLowerCase()}`, email: email.trim(), user_metadata: { hermandad, nombre } }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -99,11 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email.trim().toLowerCase() === DEMO_EMAIL &&
           password === DEMO_PASSWORD
         ) {
-          const u: AppUser = {
-            id: 'demo-user',
-            email: DEMO_EMAIL,
-            user_metadata: { hermandad: 'Hermandad de prueba', nombre: 'Usuario Demo' },
-          }
+          const u = buildDemoUser(DEMO_EMAIL, 'Hermandad de prueba', 'Usuario Demo')
           sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
           setDemoUser(u)
           return { error: null }
@@ -111,6 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return {
           error: `Estás en modo demostración. Usa el usuario de prueba: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`,
         }
+      },
+
+      async signInDemo() {
+        if (supabase) return { error: 'Supabase ya está conectado: usa una cuenta real.' }
+        const u = buildDemoUser(DEMO_EMAIL, 'Hermandad de prueba', 'Usuario Demo')
+        sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
+        setDemoUser(u)
+        return { error: null }
       },
 
       async signUp(email, password, meta) {
@@ -128,11 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Sin Supabase no hay verificación real: se crea una sesión de
         // demostración local con los datos introducidos y se entra directo.
-        const u: AppUser = {
-          id: `demo-${email.trim().toLowerCase()}`,
-          email: email.trim(),
-          user_metadata: { hermandad: meta.hermandad, nombre: meta.nombre },
-        }
+        const u = buildDemoUser(email, meta.hermandad, meta.nombre)
         sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
         setDemoUser(u)
         return { error: null, needsConfirmation: false }

@@ -7,7 +7,7 @@ type Mode = 'login' | 'signup' | 'reset'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function AuthForm({ mode }: { mode: Mode }) {
-  const { signIn, signUp, resetPassword, configured } = useAuth()
+  const { signIn, signInDemo, signUp, resetPassword, configured } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/app'
@@ -94,6 +94,22 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     }
   }
 
+  async function handleDemoLogin() {
+    setError(null)
+    setNotice(null)
+    setSubmitting(true)
+    try {
+      const { error } = await signInDemo()
+      if (error) {
+        setError(error)
+        return
+      }
+      navigate(redirectTo, { replace: true })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const submitLabel = isReset
     ? 'Enviar enlace'
     : isSignup
@@ -103,9 +119,18 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   return (
     <form className="auth-form" onSubmit={handleSubmit} noValidate>
       {!configured && mode === 'login' && (
-        <div className="banner banner--info" role="status">
-          <strong>Modo demostración.</strong> Entra con el usuario de prueba:{' '}
-          <code>demo@cabildo.app</code> / <code>demo1234</code>
+        <div className="banner banner--info banner--demo" role="status">
+          <div>
+            <strong>Modo demostración.</strong> Prueba la app sin escribir nada.
+          </div>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm banner--demo__btn"
+            onClick={handleDemoLogin}
+            disabled={submitting}
+          >
+            Entrar con el usuario de prueba
+          </button>
         </div>
       )}
       {!configured && isSignup && (

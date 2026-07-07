@@ -612,6 +612,19 @@ h1, h2, h3,
 .banner--error { background: rgba(206, 86, 86, 0.2); color: #ffc9c4; }
 .banner--success { background: rgba(120, 186, 132, 0.2); color: #cbedcf; }
 
+/* banner con acción (botón de entrada rápida en modo demostración) */
+.banner--demo { display: flex; flex-direction: column; gap: 0.7rem; }
+.banner--demo__btn {
+  align-self: flex-start;
+  color: #fdfaf3 !important;
+  border-color: rgba(255, 255, 255, 0.32) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.banner--demo__btn:hover:not(:disabled) {
+  border-color: rgba(226, 197, 132, 0.75) !important;
+  background: rgba(255, 255, 255, 0.11) !important;
+}
+
 /* =========================================================================
    Estado de carga de ruta protegida
    ========================================================================= */
