@@ -42,6 +42,11 @@ export default function Papeletas() {
       ? tramoDePuesto(puestoNum, tramos)
       : null
 
+  const tramoDeSelected = useMemo(
+    () => (selected?.tramo ? (tramos.find((t) => t.nombre === selected.tramo) ?? null) : null),
+    [selected, tramos],
+  )
+
   const hermanoDe = useMemo(() => {
     const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
@@ -351,7 +356,8 @@ export default function Papeletas() {
                     </div>
                     {pendingPuesto.trim() && tramoResuelto && (
                       <p className="form-hint form-hint--ok">
-                        El puesto {puestoNum} corresponde a «{tramoResuelto.nombre}».
+                        El puesto {puestoNum} corresponde a «{tramoResuelto.nombre}»
+                        {tramoResuelto.tipo && ` (${tramoResuelto.tipo})`}.
                       </p>
                     )}
                     {pendingPuesto.trim() && !tramoResuelto && (
@@ -368,7 +374,7 @@ export default function Papeletas() {
                   </div>
                 )}
 
-                <PapeletaTicket papeleta={selected} hermano={h} hermandad={hermandad} />
+                <PapeletaTicket papeleta={selected} hermano={h} hermandad={hermandad} tramo={tramoDeSelected} />
 
                 {(selected.estado === 'Solicitada' || selected.estado === 'Asignada') && (
                   <button type="button" className="ticket-cancel" onClick={() => anular(selected.id)}>

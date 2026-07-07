@@ -611,7 +611,9 @@ export default function Cortejo() {
             return (
               <div className="cortejo-orden__tramo" key={t.id}>
                 <h3>
-                  {t.nombre} <span className="table-subtle">· {reparto.length}/{capacidadDe(t)}</span>
+                  {t.nombre}
+                  {t.tipo && <span className="table-subtle"> · {t.tipo}</span>}{' '}
+                  <span className="table-subtle">· {reparto.length}/{capacidadDe(t)}</span>
                 </h3>
                 {reparto.length === 0 ? (
                   <p className="form-hint">Sin hermanos asignados todavía.</p>
@@ -619,7 +621,8 @@ export default function Cortejo() {
                   <ol>
                     {reparto.map((a) => (
                       <li key={a.papeleta.id}>
-                        {a.hermano.nombre} <span className="table-subtle">· nº {a.hermano.numero}</span>
+                        Puesto {a.papeleta.puesto ?? '—'} · {a.hermano.nombre}{' '}
+                        <span className="table-subtle">· nº {a.hermano.numero}</span>
                       </li>
                     ))}
                   </ol>
@@ -710,6 +713,7 @@ function TramoCard({
     <article className={`tramo-card${lleno ? ' tramo-card--full' : ''}`} onClick={onAbrir}>
       <span className="tramo-card__index">{String(indice).padStart(2, '0')}</span>
       <h3 className="tramo-card__title">{tramo.nombre}</h3>
+      {tramo.tipo && <span className="tramo-card__tipo">{tramo.tipo}</span>}
 
       <div className="meter" aria-hidden="true">
         <span
@@ -791,6 +795,7 @@ function TramoFicha({
       </div>
       <p className="dash-head__lead">
         {ocupados}/{capacidad} puestos ocupados · orden de desfile {tramo.desde}–{tramo.hasta}
+        {tramo.tipo && ` · ${tramo.tipo}`}
       </p>
 
       <dl className="ficha__list">
@@ -898,6 +903,39 @@ function TramoFicha({
       </dl>
 
       <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Cabildo</p>
+
+      {/* Documento imprimible: solo aparece en el papel, no en la ficha en pantalla (ver .screen-hidden). */}
+      <div className="cortejo-orden screen-hidden print-doc">
+        <div className="cortejo-orden__head">
+          <span className="ticket-doc__logo">
+            {hermandad.logoDataUrl ? <img src={hermandad.logoDataUrl} alt="" /> : <LogoMark size={26} />}
+          </span>
+          <div>
+            <b>{hermandad.nombreLegal || 'Tu hermandad'}</b>
+            <p className="eyebrow">Listado de tramo · Edición {EDICION_ACTUAL}</p>
+          </div>
+        </div>
+        <div className="cortejo-orden__tramo">
+          <h3>
+            {tramo.nombre}
+            {tramo.tipo && <span className="table-subtle"> · {tramo.tipo}</span>}{' '}
+            <span className="table-subtle">· {ocupados}/{capacidad}</span>
+          </h3>
+          {dentro.length === 0 ? (
+            <p className="form-hint">Sin hermanos asignados todavía.</p>
+          ) : (
+            <ol>
+              {dentro.map((a) => (
+                <li key={a.papeleta.id}>
+                  Puesto {a.papeleta.puesto ?? '—'} · {a.hermano.nombre}{' '}
+                  <span className="table-subtle">· nº {a.hermano.numero}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+        <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Cabildo</p>
+      </div>
     </div>
   )
 }

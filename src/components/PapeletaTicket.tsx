@@ -3,6 +3,7 @@ import QrPreview from './QrPreview'
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import type { HermandadSettings } from '../lib/hermandadSettings'
+import type { Tramo } from '../lib/tramos'
 import { formatCurrency } from '../lib/format'
 
 function estadoPillClass(estado: Papeleta['estado']) {
@@ -15,10 +16,12 @@ interface PapeletaTicketProps {
   papeleta: Papeleta
   hermano: Hermano
   hermandad: HermandadSettings
+  /** Tramo resuelto a partir de papeleta.tramo, para mostrar qué se porta en ese tramo (cirio, insignia…). */
+  tramo?: Tramo | null
 }
 
 /** La papeleta de sitio, personalizada con los datos de la hermandad y del hermano. */
-export default function PapeletaTicket({ papeleta, hermano, hermandad }: PapeletaTicketProps) {
+export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo }: PapeletaTicketProps) {
   return (
     <div className="ticket-doc print-doc">
       <div className="ticket-doc__head">
@@ -44,10 +47,13 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad }: Papelet
 
           <span className="recibo-doc__label ticket-doc__tramo-label">Tramo asignado</span>
           {papeleta.tramo ? (
-            <b>
-              {papeleta.tramo}
-              {papeleta.puesto != null && <span className="table-subtle"> · puesto {papeleta.puesto}</span>}
-            </b>
+            <>
+              <b>
+                {papeleta.tramo}
+                {papeleta.puesto != null && <span className="table-subtle"> · puesto {papeleta.puesto}</span>}
+              </b>
+              {tramo?.tipo && <span className="pill pill--info ticket-doc__tipo">{tramo.tipo}</span>}
+            </>
           ) : (
             <span className="ticket-doc__pending">Pendiente de asignar</span>
           )}

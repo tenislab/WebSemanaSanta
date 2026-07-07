@@ -938,7 +938,7 @@ h1, h2, h3,
 .tramos-card { max-width: 760px; margin-top: 1.1rem; }
 .tramos-editor { display: flex; flex-direction: column; gap: 0.5rem; }
 .tramo-row {
-  display: grid; grid-template-columns: 1fr 90px 90px 34px; gap: 0.6rem; align-items: center;
+  display: grid; grid-template-columns: 1fr 130px 80px 80px 34px; gap: 0.6rem; align-items: center;
 }
 .tramo-row--head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 .tramo-row input {
@@ -1075,6 +1075,7 @@ h1, h2, h3,
 .ticket-doc__info b { color: var(--text); font-size: 1rem; }
 .ticket-doc__info > span { font-size: 0.84rem; color: var(--text-muted); }
 .ticket-doc__tramo-label { margin-top: 0.6rem; }
+.ticket-doc__tipo { margin-top: 0.3rem; align-self: flex-start; }
 .ticket-doc__pending { font-size: 0.9rem; color: var(--text-muted); font-style: italic; }
 .ticket-doc__row { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.7rem; }
 .ticket-doc__importe { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
@@ -1105,6 +1106,14 @@ h1, h2, h3,
   .print-doc { position: absolute; inset: 0; margin: 1.5cm; border: none; box-shadow: none; }
 }
 
+/* documentos imprimibles que van dentro de un panel con controles interactivos
+   (p. ej. el listado de un tramo dentro de su ficha): no se ven en pantalla,
+   solo aparecen al imprimir, para no mezclar botones/inputs con el documento */
+.screen-hidden { display: none; }
+@media print {
+  .screen-hidden.print-doc { display: block; }
+}
+
 /* =========================================================================
    Cortejo — reparto de puestos por tramo, día de salida
    ========================================================================= */
@@ -1128,6 +1137,7 @@ h1, h2, h3,
 .tramo-card--full { border-color: var(--line-strong); }
 .tramo-card__index { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .tramo-card__title { font-size: 0.98rem; margin: 0; line-height: 1.3; }
+.tramo-card__tipo { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gold); font-weight: 600; }
 .tramo-card__count { font-size: 0.78rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .tramo-card__badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .tramo-card__pase { align-self: flex-start; margin-top: 0.2rem; }
@@ -1210,7 +1220,8 @@ h1, h2, h3,
   .recibo-doc__head { flex-direction: column; }
   .recibo-doc__meta { text-align: left; }
 
-  .tramo-row { grid-template-columns: 1fr 70px 70px 30px; gap: 0.4rem; }
+  .tramo-row { grid-template-columns: 1fr; gap: 0.4rem; padding: 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  .tramo-row--head { display: none; }
   .settings-card__head { flex-direction: column; align-items: stretch; }
   .tramos-grid { grid-template-columns: 1fr; }
   .dash-head__actions { flex-direction: column; align-items: stretch; }

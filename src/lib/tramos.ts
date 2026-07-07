@@ -5,6 +5,8 @@ export interface Tramo {
   desde: number
   /** Puesto final del rango (inclusive). */
   hasta: number
+  /** Qué se porta en este tramo (cirio, insignia, vara, presidencia…); lo define cada hermandad, texto libre. */
+  tipo?: string
 }
 
 const STORAGE_KEY = 'cabildo-tramos'
@@ -16,14 +18,14 @@ const STORAGE_KEY = 'cabildo-tramos'
  * puesto 1000 queda más lejos del primer paso que uno 100.
  */
 const TRAMOS_POR_DEFECTO: Tramo[] = [
-  { id: 't1', nombre: 'Cristo — Cruz de guía', desde: 1, hasta: 3 },
-  { id: 't2', nombre: 'Cristo — Insignias', desde: 4, hasta: 11 },
-  { id: 't3', nombre: 'Cristo — Cirio 1º tramo', desde: 12, hasta: 51 },
-  { id: 't4', nombre: 'Cristo — Cirio 2º tramo', desde: 52, hasta: 91 },
-  { id: 't5', nombre: 'Música', desde: 92, hasta: 116 },
-  { id: 't6', nombre: 'Virgen — Cirio 1º tramo', desde: 117, hasta: 156 },
-  { id: 't7', nombre: 'Virgen — Cirio 2º tramo', desde: 157, hasta: 196 },
-  { id: 't8', nombre: 'Virgen — Presidencia', desde: 197, hasta: 204 },
+  { id: 't1', nombre: 'Cristo — Cruz de guía', desde: 1, hasta: 3, tipo: 'Insignia' },
+  { id: 't2', nombre: 'Cristo — Insignias', desde: 4, hasta: 11, tipo: 'Insignia' },
+  { id: 't3', nombre: 'Cristo — Cirio 1º tramo', desde: 12, hasta: 51, tipo: 'Cirio' },
+  { id: 't4', nombre: 'Cristo — Cirio 2º tramo', desde: 52, hasta: 91, tipo: 'Cirio' },
+  { id: 't5', nombre: 'Música', desde: 92, hasta: 116, tipo: 'Música' },
+  { id: 't6', nombre: 'Virgen — Cirio 1º tramo', desde: 117, hasta: 156, tipo: 'Cirio' },
+  { id: 't7', nombre: 'Virgen — Cirio 2º tramo', desde: 157, hasta: 196, tipo: 'Cirio' },
+  { id: 't8', nombre: 'Virgen — Presidencia', desde: 197, hasta: 204, tipo: 'Presidencia' },
 ]
 
 export function getTramos(): Tramo[] {

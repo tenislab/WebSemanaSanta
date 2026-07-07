@@ -60,7 +60,7 @@ export default function Configuracion() {
     const maxHasta = tramos.reduce((m, t) => Math.max(m, t.hasta), 0)
     setTramos((prev) => [
       ...prev,
-      { id: `t-${Date.now()}`, nombre: 'Nuevo tramo', desde: maxHasta + 1, hasta: maxHasta + 50 },
+      { id: `t-${Date.now()}`, nombre: 'Nuevo tramo', desde: maxHasta + 1, hasta: maxHasta + 50, tipo: '' },
     ])
     setTramosSaved(false)
   }
@@ -238,7 +238,9 @@ export default function Configuracion() {
         <p className="form-hint">
           Define cuántos tramos hay y qué rango de puestos cubre cada uno. Al asignar una papeleta
           de sitio, basta con escribir el número de puesto: el tramo se calcula solo. Un puesto más
-          alto queda más lejos de la cruz de guía que uno más bajo.
+          alto queda más lejos de la cruz de guía que uno más bajo. El «tipo» es lo que se porta en
+          ese tramo (cirio, insignia, vara, presidencia…) y se muestra en la papeleta de sitio: lo
+          define cada hermandad, escribe lo que uséis en la vuestra.
         </p>
 
         {overlaps.length > 0 && (
@@ -256,6 +258,7 @@ export default function Configuracion() {
         <div className="tramos-editor">
           <div className="tramo-row tramo-row--head">
             <span>Nombre del tramo</span>
+            <span>Tipo de puesto</span>
             <span>Desde</span>
             <span>Hasta</span>
             <span></span>
@@ -267,6 +270,12 @@ export default function Configuracion() {
                 value={t.nombre}
                 onChange={(e) => updateTramo(t.id, 'nombre', e.target.value)}
                 placeholder="Ej. Cristo — Cirio 1º tramo"
+              />
+              <input
+                type="text"
+                value={t.tipo ?? ''}
+                onChange={(e) => updateTramo(t.id, 'tipo', e.target.value)}
+                placeholder="Cirio, Insignia…"
               />
               <input
                 type="number"
