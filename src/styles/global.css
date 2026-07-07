@@ -1106,6 +1106,62 @@ h1, h2, h3,
 }
 
 /* =========================================================================
+   Cortejo — reparto de puestos por tramo, día de salida
+   ========================================================================= */
+.dash-head__actions { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+
+.banner-inline--accent { background: var(--info-bg); color: var(--gold); border-color: var(--line-strong); }
+
+.cortejo-daymode-toggle { margin: -0.4rem 0 1.1rem; }
+
+.cortejo-cuerpo { margin-bottom: 1.8rem; }
+.cortejo-cuerpo__title { font-size: 1.1rem; margin: 0 0 0.9rem; }
+
+.tramos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; }
+
+.tramo-card {
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.1rem; display: flex; flex-direction: column; gap: 0.65rem; cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.tramo-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.tramo-card--full { border-color: var(--line-strong); }
+.tramo-card__index { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.tramo-card__title { font-size: 0.98rem; margin: 0; line-height: 1.3; }
+.tramo-card__count { font-size: 0.78rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.tramo-card__badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.tramo-card__pase { align-self: flex-start; margin-top: 0.2rem; }
+
+.meter { height: 6px; border-radius: 999px; background: var(--bg-sunken); border: 1px solid var(--line); overflow: hidden; }
+.meter--lg { height: 9px; margin-bottom: 0.7rem; }
+.meter__fill { display: block; height: 100%; border-radius: inherit; transition: width 0.25s ease; }
+.meter__fill--ok { background: var(--ok-fg); }
+.meter__fill--warn { background: var(--warn-fg); }
+.meter__fill--full { background: var(--err-fg); }
+
+.avatar-stack { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem; min-height: 30px; }
+.avatar-stack__item { font-size: 0.66rem; }
+.avatar-stack__more { color: var(--text-muted); font-weight: 700; background: var(--bg-sunken); }
+
+.cortejo-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.cortejo-roster li { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.cortejo-roster .row-person { flex: 1; min-width: 0; }
+
+.cortejo-override { display: flex; align-items: center; gap: 0.4rem; flex: 1; flex-wrap: wrap; }
+.cortejo-override input {
+  flex: 1; min-width: 140px; padding: 0.45rem 0.6rem; font: inherit; font-size: 0.82rem;
+  color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.cortejo-override input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+
+.cortejo-orden__head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1.2rem; }
+.cortejo-orden__tramo { margin-bottom: 1.2rem; }
+.cortejo-orden__tramo h3 { font-size: 0.94rem; margin: 0 0 0.4rem; }
+.cortejo-orden__tramo ol { margin: 0; padding-left: 1.3rem; font-size: 0.86rem; display: flex; flex-direction: column; gap: 0.25rem; }
+
+.drawer--sm { max-width: 380px; }
+
+/* =========================================================================
    Responsive
    ========================================================================= */
 @media (max-width: 900px) {
@@ -1156,4 +1212,6 @@ h1, h2, h3,
 
   .tramo-row { grid-template-columns: 1fr 70px 70px 30px; gap: 0.4rem; }
   .settings-card__head { flex-direction: column; align-items: stretch; }
+  .tramos-grid { grid-template-columns: 1fr; }
+  .dash-head__actions { flex-direction: column; align-items: stretch; }
 }

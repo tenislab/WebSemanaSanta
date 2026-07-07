@@ -19,8 +19,10 @@ export interface Hermano {
  * Censo de ejemplo. Lo comparten el módulo de Hermanos y el de Cuotas
  * (cada recibo se emite a nombre de uno de estos hermanos), para que los
  * datos no diverjan entre pantallas mientras no hay base de datos real.
- * Tres hermanos (h6, h7, h11) se dejan sin IBAN a propósito, para poder
- * mostrar qué pasa cuando no se puede domiciliar una cuota.
+ * Algunos hermanos (h6, h7, h11, h14) se dejan sin IBAN a propósito, para
+ * poder mostrar qué pasa cuando no se puede domiciliar una cuota. h13, h14
+ * y h15 comparten tramo con Ana Sánchez (h1) para poder mostrar una lista
+ * de espera real en Cortejo cuando el aforo del tramo se supera.
  */
 export const HERMANOS_INICIALES: Hermano[] = [
   { id: 'h1', numero: 89, nombre: 'Ana Sánchez del Río', estado: 'Activo', antiguedad: 1991, email: 'ana.sanchez@example.com', telefono: '622 104 558', direccion: 'C/ Alfarería, 12', tramo: 'Cristo — Cruz de guía', cuotaAlDia: true, iban: 'ES47 2100 0813 6102 0012 3456' },
@@ -35,6 +37,9 @@ export const HERMANOS_INICIALES: Hermano[] = [
   { id: 'h10', numero: 690, nombre: 'Pedro Molina Aguilar', estado: 'Activo', antiguedad: 2014, email: 'pedro.molina@example.com', telefono: '612 776 480', direccion: 'C/ Evangelista, 18', tramo: 'Cristo — Insignias', cuotaAlDia: false, iban: 'ES38 2038 6109 9930 0012 3459' },
   { id: 'h11', numero: 731, nombre: 'Rocío Domínguez Vargas', estado: 'Nuevo', antiguedad: 2026, email: 'rocio.dominguez@example.com', telefono: '691 220 667', direccion: 'C/ Pagés del Corro, 55', tramo: 'Sin asignar', cuotaAlDia: true, iban: null },
   { id: 'h12', numero: 302, nombre: 'José Antonio Reina', estado: 'Activo', antiguedad: 2001, email: 'joseantonio.reina@example.com', telefono: '666 803 512', direccion: 'C/ Dos de Mayo, 7', tramo: 'Virgen — Cirio 1º tramo', cuotaAlDia: true, iban: 'ES55 0081 0345 6100 0123 4560' },
+  { id: 'h13', numero: 45, nombre: 'Rafael Ortiz Bermejo', estado: 'Activo', antiguedad: 1988, email: 'rafael.ortiz@example.com', telefono: '655 019 442', direccion: 'C/ Águilas, 6', tramo: 'Cristo — Cruz de guía', cuotaAlDia: true, iban: 'ES19 0128 0257 3801 0012 3461' },
+  { id: 'h14', numero: 610, nombre: 'Diego Fernández Ríos', estado: 'Activo', antiguedad: 2020, email: 'diego.fernandez@example.com', telefono: '622 887 015', direccion: 'C/ Bailén, 14', tramo: 'Cristo — Cruz de guía', cuotaAlDia: true, iban: null },
+  { id: 'h15', numero: 520, nombre: 'Beatriz Muñoz Casas', estado: 'Activo', antiguedad: 2021, email: 'beatriz.munoz@example.com', telefono: '611 340 928', direccion: 'C/ Pureza, 55', tramo: 'Cristo — Cruz de guía', cuotaAlDia: false, iban: 'ES40 2100 5731 1502 0012 3462' },
 ]
 
 export function initials(name: string) {

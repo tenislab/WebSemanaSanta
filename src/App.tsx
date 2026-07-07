@@ -8,6 +8,7 @@ import DashboardHome from './pages/app/DashboardHome'
 import Hermanos from './pages/app/Hermanos'
 import Cuotas from './pages/app/Cuotas'
 import Papeletas from './pages/app/Papeletas'
+import Cortejo from './pages/app/Cortejo'
 import Configuracion from './pages/app/Configuracion'
 import ComingSoon from './pages/app/ComingSoon'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -30,16 +31,7 @@ export default function App() {
       >
         <Route index element={<DashboardHome />} />
         <Route path="hermanos" element={<Hermanos />} />
-        <Route
-          path="cortejo"
-          element={
-            <ComingSoon
-              title="Cortejo"
-              phase="Próxima fase"
-              description="Tramos, puestos e insignias, asignación por antigüedad, túnicas y enseres, listados con QR."
-            />
-          }
-        />
+        <Route path="cortejo" element={<Cortejo />} />
         <Route path="cuotas" element={<Cuotas />} />
         <Route path="papeletas" element={<Papeletas />} />
         <Route
