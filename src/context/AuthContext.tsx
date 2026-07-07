@@ -6,14 +6,23 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 type AuthResult = { error: string | null }
 
+/** Forma mínima de usuario que usa el resto de la app (real o de demostración). */
+interface AppUser {
+  id: string
+  email?: string
+  user_metadata: Record<string, unknown>
+}
+interface AppSession {
+  user: AppUser
+}
+
 interface AuthContextValue {
-  session: Session | null
-  user: User | null
+  session: AppSession | null
+  user: AppUser | null
   loading: boolean
   configured: boolean
   signIn: (email: string, password: string) => Promise<AuthResult>
@@ -28,70 +37,128 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-const NOT_CONFIGURED_MSG =
-  'Supabase todavía no está conectado. Añade tus claves en el archivo .env para activar el acceso.'
+/**
+ * Usuario de demostración: solo existe mientras Supabase no está conectado
+ * (`isSupabaseConfigured` es false). En cuanto se añaden las claves de
+ * Supabase, esta rama deja de usarse por completo — no hace falta borrar
+ * nada a mano.
+ */
+const DEMO_EMAIL = 'demo@cabildo.app'
+const DEMO_PASSWORD = 'demo1234'
+const DEMO_STORAGE_KEY = 'cabildo-demo-user'
+
+function readDemoUser(): AppUser | null {
+  try {
+    const raw = sessionStorage.getItem(DEMO_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as AppUser) : null
+  } catch {
+    return null
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
+  const [realUser, setRealUser] = useState<AppUser | null>(null)
+  const [demoUser, setDemoUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!supabase) {
+      setDemoUser(readDemoUser())
       setLoading(false)
       return
     }
 
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+      setRealUser(data.session ? mapSupabaseUser(data.session.user) : null)
       setLoading(false)
     })
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession)
+      setRealUser(newSession ? mapSupabaseUser(newSession.user) : null)
     })
 
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  const activeUser = isSupabaseConfigured ? realUser : demoUser
+
   const value = useMemo<AuthContextValue>(
     () => ({
-      session,
-      user: session?.user ?? null,
+      session: activeUser ? { user: activeUser } : null,
+      user: activeUser,
       loading,
       configured: isSupabaseConfigured,
 
       async signIn(email, password) {
-        if (!supabase) return { error: NOT_CONFIGURED_MSG }
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        return { error: error ? translateError(error.message) : null }
+        if (supabase) {
+          const { error } = await supabase.auth.signInWithPassword({ email, password })
+          return { error: error ? translateError(error.message) : null }
+        }
+
+        if (
+          email.trim().toLowerCase() === DEMO_EMAIL &&
+          password === DEMO_PASSWORD
+        ) {
+          const u: AppUser = {
+            id: 'demo-user',
+            email: DEMO_EMAIL,
+            user_metadata: { hermandad: 'Hermandad de prueba', nombre: 'Usuario Demo' },
+          }
+          sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
+          setDemoUser(u)
+          return { error: null }
+        }
+        return {
+          error: `Estás en modo demostración. Usa el usuario de prueba: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`,
+        }
       },
 
       async signUp(email, password, meta) {
-        if (!supabase) return { error: NOT_CONFIGURED_MSG }
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { hermandad: meta.hermandad, nombre: meta.nombre } },
-        })
-        if (error) return { error: translateError(error.message) }
-        // Si la confirmación por email está activada, no hay sesión todavía.
-        const needsConfirmation = !data.session
-        return { error: null, needsConfirmation }
+        if (supabase) {
+          const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { hermandad: meta.hermandad, nombre: meta.nombre } },
+          })
+          if (error) return { error: translateError(error.message) }
+          // Si la confirmación por email está activada, no hay sesión todavía.
+          const needsConfirmation = !data.session
+          return { error: null, needsConfirmation }
+        }
+
+        // Sin Supabase no hay verificación real: se crea una sesión de
+        // demostración local con los datos introducidos y se entra directo.
+        const u: AppUser = {
+          id: `demo-${email.trim().toLowerCase()}`,
+          email: email.trim(),
+          user_metadata: { hermandad: meta.hermandad, nombre: meta.nombre },
+        }
+        sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
+        setDemoUser(u)
+        return { error: null, needsConfirmation: false }
       },
 
       async resetPassword(email) {
-        if (!supabase) return { error: NOT_CONFIGURED_MSG }
-        const redirectTo = `${window.location.origin}/login`
-        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
-        return { error: error ? translateError(error.message) : null }
+        if (supabase) {
+          const redirectTo = `${window.location.origin}/login`
+          const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+          return { error: error ? translateError(error.message) : null }
+        }
+        return {
+          error: `En modo demostración no se envían correos. Inicia sesión con el usuario de prueba: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`,
+        }
       },
 
       async signOut() {
-        if (!supabase) return
-        await supabase.auth.signOut()
+        if (supabase) {
+          await supabase.auth.signOut()
+          return
+        }
+        sessionStorage.removeItem(DEMO_STORAGE_KEY)
+        setDemoUser(null)
       },
     }),
-    [session, loading],
+    [activeUser, loading],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -102,6 +169,10 @@ export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth debe usarse dentro de <AuthProvider>')
   return ctx
+}
+
+function mapSupabaseUser(u: { id: string; email?: string; user_metadata: Record<string, unknown> }): AppUser {
+  return { id: u.id, email: u.email, user_metadata: u.user_metadata ?? {} }
 }
 
 /** Traduce los mensajes de error más comunes de Supabase Auth al español. */

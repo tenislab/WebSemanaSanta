@@ -102,10 +102,22 @@ export default function AuthForm({ mode }: { mode: Mode }) {
 
   return (
     <form className="auth-form" onSubmit={handleSubmit} noValidate>
-      {!configured && (
+      {!configured && mode === 'login' && (
         <div className="banner banner--info" role="status">
-          <strong>Modo demostración.</strong> Conecta Supabase (variables <code>VITE_SUPABASE_*</code>)
-          para activar el acceso real.
+          <strong>Modo demostración.</strong> Entra con el usuario de prueba:{' '}
+          <code>demo@cabildo.app</code> / <code>demo1234</code>
+        </div>
+      )}
+      {!configured && isSignup && (
+        <div className="banner banner--info" role="status">
+          <strong>Modo demostración.</strong> Puedes rellenar cualquier dato: se creará una
+          hermandad de prueba local (no se guarda) y entrarás directamente.
+        </div>
+      )}
+      {!configured && isReset && (
+        <div className="banner banner--info" role="status">
+          <strong>Modo demostración.</strong> No se envían correos; usa el usuario de prueba en{' '}
+          <Link to="/login">iniciar sesión</Link>.
         </div>
       )}
 
