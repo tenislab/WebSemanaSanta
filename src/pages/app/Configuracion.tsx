@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { LogoMark } from '../../components/Logo'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -6,6 +6,7 @@ import {
   saveHermandadSettings,
   type HermandadSettings,
 } from '../../lib/hermandadSettings'
+import { getTramos, saveTramos, solapes, type Tramo } from '../../lib/tramos'
 
 const MAX_LOGO_BYTES = 800_000
 
@@ -44,6 +45,35 @@ export default function Configuracion() {
     saveHermandadSettings(settings)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
+  }
+
+  const [tramos, setTramos] = useState<Tramo[]>(() => getTramos())
+  const [tramosSaved, setTramosSaved] = useState(false)
+  const overlaps = useMemo(() => solapes(tramos), [tramos])
+
+  function updateTramo<K extends keyof Tramo>(id: string, key: K, value: Tramo[K]) {
+    setTramos((prev) => prev.map((t) => (t.id === id ? { ...t, [key]: value } : t)))
+    setTramosSaved(false)
+  }
+
+  function addTramo() {
+    const maxHasta = tramos.reduce((m, t) => Math.max(m, t.hasta), 0)
+    setTramos((prev) => [
+      ...prev,
+      { id: `t-${Date.now()}`, nombre: 'Nuevo tramo', desde: maxHasta + 1, hasta: maxHasta + 50 },
+    ])
+    setTramosSaved(false)
+  }
+
+  function removeTramo(id: string) {
+    setTramos((prev) => prev.filter((t) => t.id !== id))
+    setTramosSaved(false)
+  }
+
+  function handleSaveTramos() {
+    saveTramos(tramos)
+    setTramosSaved(true)
+    setTimeout(() => setTramosSaved(false), 3000)
   }
 
   return (
@@ -197,6 +227,81 @@ export default function Configuracion() {
           </button>
         </div>
       </form>
+
+      <section className="settings-card tramos-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Tramos del cortejo</h2>
+          <button type="button" className="btn btn-outline btn-sm" onClick={addTramo}>
+            + Añadir tramo
+          </button>
+        </div>
+        <p className="form-hint">
+          Define cuántos tramos hay y qué rango de puestos cubre cada uno. Al asignar una papeleta
+          de sitio, basta con escribir el número de puesto: el tramo se calcula solo. Un puesto más
+          alto queda más lejos de la cruz de guía que uno más bajo.
+        </p>
+
+        {overlaps.length > 0 && (
+          <div className="banner-inline banner-inline--warn">
+            Estos tramos se solapan y pueden dar resultados ambiguos:{' '}
+            {overlaps.map(([a, b], i) => (
+              <span key={`${a.id}-${b.id}`}>
+                {i > 0 && ', '}«{a.nombre}» y «{b.nombre}»
+              </span>
+            ))}
+            .
+          </div>
+        )}
+
+        <div className="tramos-editor">
+          <div className="tramo-row tramo-row--head">
+            <span>Nombre del tramo</span>
+            <span>Desde</span>
+            <span>Hasta</span>
+            <span></span>
+          </div>
+          {tramos.map((t) => (
+            <div className="tramo-row" key={t.id}>
+              <input
+                type="text"
+                value={t.nombre}
+                onChange={(e) => updateTramo(t.id, 'nombre', e.target.value)}
+                placeholder="Ej. Cristo — Cirio 1º tramo"
+              />
+              <input
+                type="number"
+                min="1"
+                value={t.desde}
+                onChange={(e) => updateTramo(t.id, 'desde', Number(e.target.value) || 0)}
+              />
+              <input
+                type="number"
+                min="1"
+                value={t.hasta}
+                onChange={(e) => updateTramo(t.id, 'hasta', Number(e.target.value) || 0)}
+              />
+              <button
+                type="button"
+                className="icon-btn"
+                title="Quitar tramo"
+                onClick={() => removeTramo(t.id)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            </div>
+          ))}
+          {tramos.length === 0 && (
+            <p className="form-hint">No hay tramos configurados todavía. Añade el primero.</p>
+          )}
+        </div>
+
+        <div className="settings-actions">
+          {tramosSaved && <span className="alert-item alert-item--ok">Tramos guardados</span>}
+          <button type="button" className="btn btn-primary" onClick={handleSaveTramos}>
+            Guardar tramos
+          </button>
+        </div>
+      </section>
     </div>
   )
 }

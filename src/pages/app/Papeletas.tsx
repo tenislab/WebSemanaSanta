@@ -4,17 +4,11 @@ import Drawer from '../../components/Drawer'
 import PapeletaTicket from '../../components/PapeletaTicket'
 import HermanoPicker from '../../components/HermanoPicker'
 import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
-import {
-  IMPORTE_PAPELETA,
-  PAPELETAS_INICIALES,
-  TRAMOS_DISPONIBLES,
-  type EstadoPapeleta,
-  type Papeleta,
-} from '../../data/papeletas'
+import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type EstadoPapeleta, type Papeleta } from '../../data/papeletas'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
-
-const currency = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
+import { formatCurrency } from '../../lib/format'
+import { getTramos, tramoDePuesto } from '../../lib/tramos'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -32,14 +26,21 @@ export default function Papeletas() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
+  const tramos = useMemo(() => getTramos(), [])
 
   const [papeletas, setPapeletas] = useState<Papeleta[]>(PAPELETAS_INICIALES)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todas')
   const [selected, setSelected] = useState<Papeleta | null>(null)
-  const [pendingTramo, setPendingTramo] = useState('')
+  const [pendingPuesto, setPendingPuesto] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
+
+  const puestoNum = Number(pendingPuesto)
+  const tramoResuelto =
+    pendingPuesto.trim() && Number.isFinite(puestoNum) && puestoNum > 0
+      ? tramoDePuesto(puestoNum, tramos)
+      : null
 
   const hermanoDe = useMemo(() => {
     const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
@@ -72,13 +73,17 @@ export default function Papeletas() {
 
   function openDetail(p: Papeleta) {
     setSelected(p)
-    setPendingTramo('')
+    setPendingPuesto('')
   }
 
-  function asignarTramo(id: string, tramo: string) {
-    setPapeletas((prev) => prev.map((p) => (p.id === id ? { ...p, tramo, estado: 'Asignada' } : p)))
-    setSelected((prev) => (prev && prev.id === id ? { ...prev, tramo, estado: 'Asignada' } : prev))
-    setPendingTramo('')
+  function asignarPuesto(id: string, puesto: number, tramo: string) {
+    setPapeletas((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, puesto, tramo, estado: 'Asignada' } : p)),
+    )
+    setSelected((prev) =>
+      prev && prev.id === id ? { ...prev, puesto, tramo, estado: 'Asignada' } : prev,
+    )
+    setPendingPuesto('')
   }
 
   function marcarPagada(id: string) {
@@ -112,6 +117,7 @@ export default function Papeletas() {
       id: `p-${Date.now()}`,
       numero: nextNumero,
       hermanoId,
+      puesto: null,
       tramo: null,
       importe: IMPORTE_PAPELETA,
       estado: 'Solicitada',
@@ -222,12 +228,19 @@ export default function Papeletas() {
                     </div>
                   </td>
                   <td>
-                    {p.tramo ?? <span className="table-muted">Sin asignar</span>}
+                    {p.tramo ? (
+                      <>
+                        {p.tramo}
+                        {p.puesto != null && <span className="table-subtle"> · puesto {p.puesto}</span>}
+                      </>
+                    ) : (
+                      <span className="table-muted">Sin asignar</span>
+                    )}
                   </td>
                   <td>
                     <span className={`pill ${estadoClass(p.estado)}`}>{p.estado}</span>
                   </td>
-                  <td className="num">{currency.format(p.importe)}</td>
+                  <td className="num">{formatCurrency(p.importe)}</td>
                   <td className="num">{p.fechaSolicitud}</td>
                   <td>
                     <div className="row-actions">
@@ -315,29 +328,43 @@ export default function Papeletas() {
               <>
                 {selected.estado === 'Solicitada' && (
                   <div className="assign-box">
-                    <label htmlFor="tramoAsignar">Asignar tramo del cortejo</label>
+                    <label htmlFor="puestoAsignar">Asignar puesto en el cortejo</label>
                     <div className="assign-box__row">
-                      <select
-                        id="tramoAsignar"
-                        value={pendingTramo}
-                        onChange={(e) => setPendingTramo(e.target.value)}
-                      >
-                        <option value="">Elige un tramo</option>
-                        {TRAMOS_DISPONIBLES.map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        id="puestoAsignar"
+                        type="number"
+                        min="1"
+                        placeholder="Nº de puesto"
+                        value={pendingPuesto}
+                        onChange={(e) => setPendingPuesto(e.target.value)}
+                      />
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        disabled={!pendingTramo}
-                        onClick={() => asignarTramo(selected.id, pendingTramo)}
+                        disabled={!tramoResuelto}
+                        onClick={() =>
+                          tramoResuelto && asignarPuesto(selected.id, puestoNum, tramoResuelto.nombre)
+                        }
                       >
                         Asignar
                       </button>
                     </div>
+                    {pendingPuesto.trim() && tramoResuelto && (
+                      <p className="form-hint form-hint--ok">
+                        El puesto {puestoNum} corresponde a «{tramoResuelto.nombre}».
+                      </p>
+                    )}
+                    {pendingPuesto.trim() && !tramoResuelto && (
+                      <p className="form-hint form-hint--error">
+                        Ese puesto no pertenece a ningún tramo configurado.{' '}
+                        <Link to="/app/configuracion">Revisa los tramos en Configuración</Link>.
+                      </p>
+                    )}
+                    {!pendingPuesto.trim() && (
+                      <p className="form-hint">
+                        El tramo se calcula solo a partir del número de puesto.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -377,7 +404,7 @@ export default function Papeletas() {
           </div>
           <p className="form-hint">
             La solicitud queda «Sin asignar» hasta que se le reparta un tramo del cortejo. El
-            importe estándar es de {currency.format(IMPORTE_PAPELETA)}.
+            importe estándar es de {formatCurrency(IMPORTE_PAPELETA)}.
           </p>
         </form>
       </Drawer>

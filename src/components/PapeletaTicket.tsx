@@ -3,8 +3,7 @@ import QrPreview from './QrPreview'
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import type { HermandadSettings } from '../lib/hermandadSettings'
-
-const currency = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
+import { formatCurrency } from '../lib/format'
 
 function estadoPillClass(estado: Papeleta['estado']) {
   if (estado === 'Entregada' || estado === 'Pagada') return 'pill--ok'
@@ -45,14 +44,17 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad }: Papelet
 
           <span className="recibo-doc__label ticket-doc__tramo-label">Tramo asignado</span>
           {papeleta.tramo ? (
-            <b>{papeleta.tramo}</b>
+            <b>
+              {papeleta.tramo}
+              {papeleta.puesto != null && <span className="table-subtle"> · puesto {papeleta.puesto}</span>}
+            </b>
           ) : (
             <span className="ticket-doc__pending">Pendiente de asignar</span>
           )}
 
           <div className="ticket-doc__row">
             <span className={`pill ${estadoPillClass(papeleta.estado)}`}>{papeleta.estado}</span>
-            <span className="ticket-doc__importe">{currency.format(papeleta.importe)}</span>
+            <span className="ticket-doc__importe">{formatCurrency(papeleta.importe)}</span>
           </div>
         </div>
 

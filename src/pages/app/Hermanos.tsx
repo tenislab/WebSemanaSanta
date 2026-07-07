@@ -1,6 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
+import { isPlausibleIban, maskIban } from '../../lib/format'
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -15,6 +16,16 @@ export default function Hermanos() {
   const [selected, setSelected] = useState<Hermano | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
+
+  const [ibanDraft, setIbanDraft] = useState('')
+  const [ibanError, setIbanError] = useState<string | null>(null)
+  const [ibanSaved, setIbanSaved] = useState(false)
+
+  useEffect(() => {
+    setIbanDraft(selected?.iban ?? '')
+    setIbanError(null)
+    setIbanSaved(false)
+  }, [selected?.id])
 
   const filtered = useMemo(() => {
     return hermanos
@@ -43,6 +54,9 @@ export default function Hermanos() {
     const email = String(data.get('email') ?? '').trim()
     if (!nombre || !email) return
 
+    const ibanRaw = String(data.get('iban') ?? '').trim()
+    const iban = ibanRaw && isPlausibleIban(ibanRaw) ? ibanRaw : null
+
     const nextNumero = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
     const nuevo: Hermano = {
       id: `h-${Date.now()}`,
@@ -55,6 +69,7 @@ export default function Hermanos() {
       direccion: String(data.get('direccion') ?? '') || 'Sin datos',
       tramo: 'Sin asignar',
       cuotaAlDia: false,
+      iban,
     }
     setHermanos((prev) => [...prev, nuevo])
     setJustAddedId(nuevo.id)
@@ -63,6 +78,21 @@ export default function Hermanos() {
     setQuery('')
     form.reset()
     setTimeout(() => setJustAddedId(null), 3000)
+  }
+
+  function guardarIban() {
+    if (!selected) return
+    const trimmed = ibanDraft.trim()
+    if (trimmed && !isPlausibleIban(trimmed)) {
+      setIbanError('Ese IBAN no parece válido. Revísalo (ej. ES91 2100 0418 4502 0005 1332).')
+      return
+    }
+    const nuevoIban = trimmed || null
+    setHermanos((prev) => prev.map((h) => (h.id === selected.id ? { ...h, iban: nuevoIban } : h)))
+    setSelected((prev) => (prev ? { ...prev, iban: nuevoIban } : prev))
+    setIbanError(null)
+    setIbanSaved(true)
+    setTimeout(() => setIbanSaved(false), 2500)
   }
 
   return (
@@ -215,6 +245,37 @@ export default function Hermanos() {
               <div><dt>Tramo en el cortejo</dt><dd>{selected.tramo}</dd></div>
             </dl>
 
+            <div className="assign-box">
+              <label htmlFor="ibanHermano">
+                Cuenta bancaria (para domiciliar sus cuotas)
+              </label>
+              <div className="assign-box__row">
+                <input
+                  id="ibanHermano"
+                  type="text"
+                  placeholder="ES00 0000 0000 0000 0000 0000"
+                  value={ibanDraft}
+                  onChange={(e) => {
+                    setIbanDraft(e.target.value)
+                    setIbanError(null)
+                  }}
+                />
+                <button type="button" className="btn btn-primary btn-sm" onClick={guardarIban}>
+                  Guardar
+                </button>
+              </div>
+              {ibanError && <p className="form-hint form-hint--error">{ibanError}</p>}
+              {ibanSaved && !ibanError && <p className="form-hint form-hint--ok">Cuenta guardada.</p>}
+              {!selected.iban && !ibanDraft && !ibanError && (
+                <p className="form-hint">
+                  Sin cuenta registrada, sus cuotas no se pueden domiciliar todavía.
+                </p>
+              )}
+              {selected.iban && !ibanError && ibanDraft === selected.iban && (
+                <p className="form-hint">Cuenta actual: {maskIban(selected.iban)}</p>
+              )}
+            </div>
+
             <p className="ficha__note">
               Este es un módulo de ejemplo: los documentos, el histórico de papeletas y el
               detalle de pagos de {selected.nombre.split(' ')[0]} se conectarán en próximas fases.
@@ -257,9 +318,14 @@ export default function Hermanos() {
             <label htmlFor="direccion">Dirección</label>
             <input id="direccion" name="direccion" type="text" placeholder="Calle y número" />
           </div>
-          <p className="fineprint" style={{ textAlign: 'left' }}>
+          <div className="form-row">
+            <label htmlFor="iban">Cuenta bancaria (opcional)</label>
+            <input id="iban" name="iban" type="text" placeholder="ES00 0000 0000 0000 0000 0000" />
+          </div>
+          <p className="form-hint">
             Se le asignará automáticamente el siguiente número de hermano disponible y quedará en
-            estado «Nuevo».
+            estado «Nuevo». Sin cuenta bancaria, sus cuotas no podrán domiciliarse hasta que la
+            añada.
           </p>
         </form>
       </Drawer>

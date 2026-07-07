@@ -6,6 +6,8 @@ interface HermanoPickerProps {
   name: string
   id?: string
   placeholder?: string
+  /** Se llama con el hermano elegido, o null si se borra/cambia la búsqueda. */
+  onSelect?: (hermano: Hermano | null) => void
 }
 
 /**
@@ -14,7 +16,7 @@ interface HermanoPickerProps {
  * igual que haría un <select>, pero permite escribir para filtrar en vez de
  * desplazarse por una lista larga.
  */
-export default function HermanoPicker({ hermanos, name, id, placeholder }: HermanoPickerProps) {
+export default function HermanoPicker({ hermanos, name, id, placeholder, onSelect }: HermanoPickerProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState('')
@@ -40,12 +42,14 @@ export default function HermanoPicker({ hermanos, name, id, placeholder }: Herma
     setSelectedId(h.id)
     setQuery(`${h.numero} — ${h.nombre}`)
     setOpen(false)
+    onSelect?.(h)
   }
 
   function handleQueryChange(v: string) {
     setQuery(v)
     setSelectedId('')
     setOpen(true)
+    onSelect?.(null)
   }
 
   return (

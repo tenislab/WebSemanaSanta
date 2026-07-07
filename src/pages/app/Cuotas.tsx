@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import Recibo from '../../components/Recibo'
 import HermanoPicker from '../../components/HermanoPicker'
-import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
+import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import {
   CONCEPTOS,
   CUOTAS_INICIALES,
@@ -14,11 +14,24 @@ import {
 } from '../../data/cuotas'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
-
-const currency = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
+import { formatCurrency } from '../../lib/format'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/** Fecha por defecto del primer cobro: hoy + 15 días (margen de aviso típico de una domiciliación SEPA). */
+function fechaCobroPorDefecto() {
+  const d = new Date()
+  d.setDate(d.getDate() + 15)
+  return d.toISOString().slice(0, 10)
+}
+
+function formatearFechaInput(value: string) {
+  if (!value) return hoy()
+  const d = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return hoy()
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function estadoClass(estado: EstadoCuota) {
@@ -38,6 +51,8 @@ export default function Cuotas() {
   const [selected, setSelected] = useState<Cuota | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
+  const [hermanoNuevaCuota, setHermanoNuevaCuota] = useState<Hermano | null>(null)
+  const [domiciliarNuevaCuota, setDomiciliarNuevaCuota] = useState(true)
 
   const hermanoDe = useMemo(() => {
     const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
@@ -76,6 +91,17 @@ export default function Cuotas() {
     setSelected((prev) => (prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy() } : prev))
   }
 
+  function abrirNuevaCuota() {
+    setHermanoNuevaCuota(null)
+    setDomiciliarNuevaCuota(true)
+    setFormOpen(true)
+  }
+
+  function cerrarNuevaCuota() {
+    setFormOpen(false)
+    setHermanoNuevaCuota(null)
+  }
+
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = e.currentTarget
@@ -84,6 +110,9 @@ export default function Cuotas() {
     const concepto = String(data.get('concepto') ?? '') as ConceptoCuota
     const importeRaw = String(data.get('importe') ?? '')
     const importe = Number(importeRaw.replace(',', '.'))
+    const fechaCobroRaw = String(data.get('fechaCobro') ?? '')
+    const hermano = HERMANOS_INICIALES.find((h) => h.id === hermanoId)
+    const domiciliada = data.get('domiciliada') === 'on' && Boolean(hermano?.iban)
     if (!hermanoId || !concepto || !Number.isFinite(importe) || importe <= 0) return
 
     const nextNumero = Math.max(0, ...cuotas.map((c) => c.numero)) + 1
@@ -95,10 +124,12 @@ export default function Cuotas() {
       importe,
       estado: 'Pendiente',
       fechaEmision: hoy(),
+      fechaCobro: formatearFechaInput(fechaCobroRaw),
+      domiciliada,
     }
     setCuotas((prev) => [nueva, ...prev])
     setJustAddedId(nueva.id)
-    setFormOpen(false)
+    cerrarNuevaCuota()
     setFilter('Todas')
     setQuery('')
     form.reset()
@@ -119,7 +150,7 @@ export default function Cuotas() {
             </Link>
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setFormOpen(true)}>
+        <button className="btn btn-primary" onClick={abrirNuevaCuota}>
           + Nueva cuota
         </button>
       </div>
@@ -132,12 +163,12 @@ export default function Cuotas() {
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Cobrado</span>
-          <span className="stat-tile__value">{currency.format(stats.cobrado)}</span>
+          <span className="stat-tile__value">{formatCurrency(stats.cobrado)}</span>
           <span className="stat-tile__trend stat-tile__trend--ok">{stats.alDia}% al día</span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Pendiente de cobro</span>
-          <span className="stat-tile__value">{currency.format(stats.pendiente)}</span>
+          <span className="stat-tile__value">{formatCurrency(stats.pendiente)}</span>
           <span className="stat-tile__trend stat-tile__trend--warn">Por regularizar</span>
         </div>
         <div className="stat-tile">
@@ -177,7 +208,7 @@ export default function Cuotas() {
               <th>Concepto</th>
               <th>Estado</th>
               <th>Importe</th>
-              <th>Emisión</th>
+              <th>Cobro</th>
               <th></th>
             </tr>
           </thead>
@@ -205,8 +236,15 @@ export default function Cuotas() {
                   <td>
                     <span className={`pill ${estadoClass(c.estado)}`}>{c.estado}</span>
                   </td>
-                  <td className="num">{currency.format(c.importe)}</td>
-                  <td className="num">{c.fechaEmision}</td>
+                  <td className="num">{formatCurrency(c.importe)}</td>
+                  <td>
+                    <span className="cobro-cell">
+                      <span className="num">{c.fechaCobro}</span>
+                      <span className={`cobro-tag${c.domiciliada ? ' cobro-tag--bank' : ''}`}>
+                        {c.domiciliada ? 'Domiciliada' : 'Manual'}
+                      </span>
+                    </span>
+                  </td>
                   <td>
                     <div className="row-actions">
                       <button
@@ -279,12 +317,12 @@ export default function Cuotas() {
       {/* Nueva cuota */}
       <Drawer
         open={formOpen}
-        onClose={() => setFormOpen(false)}
+        onClose={cerrarNuevaCuota}
         title="Nueva cuota"
         subtitle="Emitir recibo"
         footer={
           <>
-            <button className="btn btn-ghost" onClick={() => setFormOpen(false)}>
+            <button className="btn btn-ghost" onClick={cerrarNuevaCuota}>
               Cancelar
             </button>
             <button className="btn btn-primary" form="cuota-form" type="submit">
@@ -296,7 +334,12 @@ export default function Cuotas() {
         <form id="cuota-form" className="app-form" onSubmit={handleCreate}>
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
-            <HermanoPicker hermanos={HERMANOS_INICIALES} name="hermanoId" id="hermanoId" />
+            <HermanoPicker
+              hermanos={HERMANOS_INICIALES}
+              name="hermanoId"
+              id="hermanoId"
+              onSelect={setHermanoNuevaCuota}
+            />
           </div>
           <div className="form-row">
             <label htmlFor="concepto">Concepto</label>
@@ -329,6 +372,40 @@ export default function Cuotas() {
               required
             />
           </div>
+          <div className="form-row">
+            <label htmlFor="fechaCobro">Fecha de cobro</label>
+            <input id="fechaCobro" name="fechaCobro" type="date" defaultValue={fechaCobroPorDefecto()} />
+          </div>
+
+          <div className="assign-box">
+            <label className="checkbox-row" htmlFor="domiciliada">
+              <input
+                id="domiciliada"
+                name="domiciliada"
+                type="checkbox"
+                checked={domiciliarNuevaCuota && Boolean(hermanoNuevaCuota?.iban)}
+                disabled={!hermanoNuevaCuota?.iban}
+                onChange={(e) => setDomiciliarNuevaCuota(e.target.checked)}
+              />
+              Domiciliar por banco
+            </label>
+            {!hermanoNuevaCuota && (
+              <p className="form-hint">Elige un hermano para saber si tiene cuenta registrada.</p>
+            )}
+            {hermanoNuevaCuota && !hermanoNuevaCuota.iban && (
+              <p className="form-hint form-hint--error">
+                {hermanoNuevaCuota.nombre.split(' ')[0]} no tiene cuenta bancaria registrada — esta
+                cuota se cobrará de forma manual. Puedes añadirle una cuenta desde su ficha en
+                Hermanos.
+              </p>
+            )}
+            {hermanoNuevaCuota?.iban && (
+              <p className="form-hint">
+                Se cargará en su cuenta el día indicado arriba, si la domiciliación queda marcada.
+              </p>
+            )}
+          </div>
+
           <p className="form-hint">
             El recibo se emitirá con la fecha de hoy y quedará como «Pendiente» hasta que se
             registre el pago.

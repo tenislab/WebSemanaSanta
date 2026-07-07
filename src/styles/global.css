@@ -864,6 +864,19 @@ h1, h2, h3,
 
 .form-hint { font-size: 0.8rem; color: var(--text-muted); margin: 0; line-height: 1.5; }
 .form-hint--error { color: var(--err-fg); }
+.form-hint--ok { color: var(--ok-fg); }
+
+.checkbox-row { display: flex; align-items: center; gap: 0.55rem; font-size: 0.86rem; font-weight: 600; color: var(--text); cursor: pointer; }
+.checkbox-row input { width: 16px; height: 16px; accent-color: var(--accent); }
+.checkbox-row input:disabled { cursor: not-allowed; }
+
+/* columna "Cobro" de la tabla de cuotas: fecha + etiqueta domiciliada/manual */
+.cobro-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; }
+.cobro-tag {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
+  color: var(--text-muted);
+}
+.cobro-tag--bank { color: var(--ok-fg); }
 
 @keyframes rowFlash { from { background: var(--ok-bg); } to { background: transparent; } }
 .row--flash td { animation: rowFlash 2.4s ease-out; }
@@ -919,7 +932,27 @@ h1, h2, h3,
 .settings-layout { display: flex; flex-direction: column; gap: 1.1rem; max-width: 640px; }
 .settings-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.4rem 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; }
 .settings-card__title { font-size: 1rem; font-weight: 600; margin: 0; }
+.settings-card__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+
+.tramos-card { max-width: 760px; margin-top: 1.1rem; }
+.tramos-editor { display: flex; flex-direction: column; gap: 0.5rem; }
+.tramo-row {
+  display: grid; grid-template-columns: 1fr 90px 90px 34px; gap: 0.6rem; align-items: center;
+}
+.tramo-row--head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.tramo-row input {
+  width: 100%; padding: 0.55rem 0.65rem; font: inherit; font-size: 0.86rem;
+  color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.tramo-row input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+.tramo-row input[type='number'] { font-variant-numeric: tabular-nums; text-align: right; }
+
+.banner-inline {
+  border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.84rem; line-height: 1.5;
+  border: 1px solid transparent;
+}
+.banner-inline--warn { background: var(--warn-bg); color: var(--warn-fg); }
 
 .logo-uploader { display: flex; align-items: flex-start; gap: 1.1rem; }
 .logo-preview {
@@ -974,6 +1007,7 @@ h1, h2, h3,
 
 .recibo-doc__foot { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
 .recibo-doc__iban { font-size: 0.8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.recibo-doc__iban--warn { color: var(--warn-fg); font-variant-numeric: normal; }
 .recibo-doc__note { text-align: center; font-size: 0.74rem; color: var(--text-muted); margin: 0; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
 
 /* =========================================================================
@@ -1004,6 +1038,7 @@ h1, h2, h3,
    Papeleta de sitio (ticket con QR de vista previa)
    ========================================================================= */
 .table-muted { color: var(--text-muted); font-style: italic; }
+.table-subtle { color: var(--text-muted); font-size: 0.82rem; }
 
 .assign-box {
   background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -1011,11 +1046,13 @@ h1, h2, h3,
 }
 .assign-box label { font-size: 0.8rem; font-weight: 600; color: var(--text); }
 .assign-box__row { display: flex; gap: 0.6rem; }
-.assign-box__row select {
+.assign-box__row select,
+.assign-box__row input[type='text'] {
   flex: 1; padding: 0.6rem 0.7rem; font: inherit; font-size: 0.88rem;
   color: var(--text); background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
 }
-.assign-box__row select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+.assign-box__row select:focus,
+.assign-box__row input[type='text']:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
 
 .ticket-doc {
   background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
@@ -1116,4 +1153,7 @@ h1, h2, h3,
   .logo-uploader { flex-direction: column; }
   .recibo-doc__head { flex-direction: column; }
   .recibo-doc__meta { text-align: left; }
+
+  .tramo-row { grid-template-columns: 1fr 70px 70px 30px; gap: 0.4rem; }
+  .settings-card__head { flex-direction: column; align-items: stretch; }
 }

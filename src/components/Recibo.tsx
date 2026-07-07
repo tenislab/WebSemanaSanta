@@ -2,19 +2,12 @@ import { LogoMark } from './Logo'
 import type { Hermano } from '../data/hermanos'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import type { Cuota } from '../data/cuotas'
-
-const currency = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
+import { formatCurrency, maskIban } from '../lib/format'
 
 function estadoPillClass(estado: Cuota['estado']) {
   if (estado === 'Pagada') return 'pill--ok'
   if (estado === 'Pendiente') return 'pill--warn'
   return 'pill--err'
-}
-
-function maskIban(iban: string) {
-  const compact = iban.replace(/\s+/g, '')
-  if (compact.length <= 8) return iban
-  return `${compact.slice(0, 4)} •••• •••• ${compact.slice(-4)}`
 }
 
 interface ReciboProps {
@@ -75,14 +68,14 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
         <tbody>
           <tr>
             <td>{cuota.concepto}</td>
-            <td className="num">{currency.format(cuota.importe)}</td>
+            <td className="num">{formatCurrency(cuota.importe)}</td>
           </tr>
         </tbody>
       </table>
 
       <div className="recibo-doc__total">
         <span>Total</span>
-        <b>{currency.format(cuota.importe)}</b>
+        <b>{formatCurrency(cuota.importe)}</b>
       </div>
 
       <div className="recibo-doc__foot">
@@ -90,8 +83,24 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
           {cuota.estado}
           {cuota.fechaPago ? ` · ${cuota.fechaPago}` : ''}
         </span>
-        {hermandad.iban && (
-          <span className="recibo-doc__iban">Domiciliado en {maskIban(hermandad.iban)}</span>
+        {cuota.domiciliada && hermano.iban && (
+          <span className="recibo-doc__iban">
+            Domiciliado en tu cuenta {maskIban(hermano.iban)} · cobro previsto el {cuota.fechaCobro}
+          </span>
+        )}
+        {cuota.domiciliada && !hermano.iban && (
+          <span className="recibo-doc__iban recibo-doc__iban--warn">
+            Marcada como domiciliada, pero {hermano.nombre.split(' ')[0]} no tiene cuenta bancaria
+            registrada
+          </span>
+        )}
+        {!cuota.domiciliada && hermandad.iban && (
+          <span className="recibo-doc__iban">
+            Pago manual · puedes transferir a {maskIban(hermandad.iban)}
+          </span>
+        )}
+        {!cuota.domiciliada && !hermandad.iban && (
+          <span className="recibo-doc__iban">Pago manual · previsto el {cuota.fechaCobro}</span>
         )}
       </div>
 
