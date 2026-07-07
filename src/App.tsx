@@ -7,6 +7,7 @@ import AppShell from './components/AppShell'
 import DashboardHome from './pages/app/DashboardHome'
 import Hermanos from './pages/app/Hermanos'
 import Cuotas from './pages/app/Cuotas'
+import Papeletas from './pages/app/Papeletas'
 import Configuracion from './pages/app/Configuracion'
 import ComingSoon from './pages/app/ComingSoon'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -40,16 +41,7 @@ export default function App() {
           }
         />
         <Route path="cuotas" element={<Cuotas />} />
-        <Route
-          path="papeletas"
-          element={
-            <ComingSoon
-              title="Papeletas de sitio"
-              phase="Próxima fase"
-              description="Solicitud, asignación, pago, código QR, impresión, entrega e histórico de papeletas."
-            />
-          }
-        />
+        <Route path="papeletas" element={<Papeletas />} />
         <Route
           path="tesoreria"
           element={

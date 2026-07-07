@@ -976,11 +976,96 @@ h1, h2, h3,
 .recibo-doc__iban { font-size: 0.8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .recibo-doc__note { text-align: center; font-size: 0.74rem; color: var(--text-muted); margin: 0; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
 
-/* al imprimir (botón "Imprimir / Descargar"), solo se ve el recibo */
+/* =========================================================================
+   Selector de hermano con búsqueda (Cuotas, Papeletas…)
+   ========================================================================= */
+.hermano-picker { position: relative; }
+.hermano-picker input[type='text'] {
+  width: 100%; padding: 0.68rem 0.85rem; font: inherit; font-size: 0.9rem;
+  color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.hermano-picker input[type='text']:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+.hermano-picker__list {
+  position: absolute; z-index: 40; top: calc(100% + 0.35rem); left: 0; right: 0;
+  max-height: 220px; overflow-y: auto;
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow); list-style: none; margin: 0; padding: 0.35rem;
+}
+.hermano-picker__opt {
+  width: 100%; display: flex; align-items: baseline; gap: 0.5rem;
+  padding: 0.5rem 0.6rem; border: none; background: transparent; border-radius: 6px;
+  cursor: pointer; text-align: left; font: inherit; font-size: 0.86rem; color: var(--text);
+}
+.hermano-picker__opt:hover { background: var(--bg-sunken); }
+.hermano-picker__num { font-size: 0.74rem; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; }
+.hermano-picker__empty { padding: 0.6rem; font-size: 0.82rem; color: var(--text-muted); }
+
+/* =========================================================================
+   Papeleta de sitio (ticket con QR de vista previa)
+   ========================================================================= */
+.table-muted { color: var(--text-muted); font-style: italic; }
+
+.assign-box {
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 1rem; margin-bottom: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem;
+}
+.assign-box label { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.assign-box__row { display: flex; gap: 0.6rem; }
+.assign-box__row select {
+  flex: 1; padding: 0.6rem 0.7rem; font: inherit; font-size: 0.88rem;
+  color: var(--text); background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.assign-box__row select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+
+.ticket-doc {
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.4rem; display: flex; flex-direction: column; gap: 1.1rem; position: relative;
+}
+.ticket-doc__head { display: flex; align-items: center; gap: 0.7rem; }
+.ticket-doc__logo {
+  width: 30px; height: 30px; border-radius: 8px; flex: none; overflow: hidden;
+  background: var(--morado-700); color: var(--oro-300);
+  display: flex; align-items: center; justify-content: center;
+}
+.ticket-doc__logo img { width: 100%; height: 100%; object-fit: contain; }
+.ticket-doc__brand-text { flex: 1; display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.ticket-doc__brand-text b { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.ticket-doc__brand-text span { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.ticket-doc__num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text); flex: none; }
+
+.ticket-doc__body { display: flex; justify-content: space-between; gap: 1.2rem; padding-top: 0.3rem; flex-wrap: wrap; }
+.ticket-doc__info { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.ticket-doc__info b { color: var(--text); font-size: 1rem; }
+.ticket-doc__info > span { font-size: 0.84rem; color: var(--text-muted); }
+.ticket-doc__tramo-label { margin-top: 0.6rem; }
+.ticket-doc__pending { font-size: 0.9rem; color: var(--text-muted); font-style: italic; }
+.ticket-doc__row { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.7rem; }
+.ticket-doc__importe { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+
+.ticket-doc__qr { flex: none; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+.qr-preview { border-radius: 6px; border: 1px solid var(--line); }
+.ticket-doc__qr span { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.ticket-doc__perf {
+  height: 1px; margin: 0 -1.4rem;
+  background-image: radial-gradient(circle, var(--line) 1.5px, transparent 1.5px);
+  background-size: 10px 1px; background-repeat: repeat-x;
+}
+
+.ticket-doc__foot { display: flex; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-muted); }
+
+.ticket-cancel {
+  display: block; width: 100%; text-align: center; margin-top: -0.4rem;
+  background: none; border: none; color: var(--text-muted); font-size: 0.82rem; cursor: pointer;
+  padding: 0.4rem;
+}
+.ticket-cancel:hover { color: var(--err-fg); text-decoration: underline; }
+
+/* al imprimir (botón "Imprimir / Descargar"), solo se ve el documento activo */
 @media print {
   body * { visibility: hidden; }
-  .recibo-doc, .recibo-doc * { visibility: visible; }
-  .recibo-doc { position: absolute; inset: 0; margin: 1.5cm; border: none; box-shadow: none; }
+  .print-doc, .print-doc * { visibility: visible; }
+  .print-doc { position: absolute; inset: 0; margin: 1.5cm; border: none; box-shadow: none; }
 }
 
 /* =========================================================================

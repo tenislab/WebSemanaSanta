@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import Recibo from '../../components/Recibo'
+import HermanoPicker from '../../components/HermanoPicker'
 import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
 import {
   CONCEPTOS,
@@ -295,16 +296,7 @@ export default function Cuotas() {
         <form id="cuota-form" className="app-form" onSubmit={handleCreate}>
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
-            <select id="hermanoId" name="hermanoId" defaultValue="" required>
-              <option value="" disabled>
-                Selecciona un hermano
-              </option>
-              {HERMANOS_INICIALES.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.numero} — {h.nombre}
-                </option>
-              ))}
-            </select>
+            <HermanoPicker hermanos={HERMANOS_INICIALES} name="hermanoId" id="hermanoId" />
           </div>
           <div className="form-row">
             <label htmlFor="concepto">Concepto</label>

@@ -34,7 +34,7 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
     .join(', ')
 
   return (
-    <div className="recibo-doc">
+    <div className="recibo-doc print-doc">
       <div className="recibo-doc__head">
         <div className="recibo-doc__brand">
           <span className="recibo-doc__logo">
