@@ -6,6 +6,8 @@ import ForgotPassword from './pages/ForgotPassword'
 import AppShell from './components/AppShell'
 import DashboardHome from './pages/app/DashboardHome'
 import Hermanos from './pages/app/Hermanos'
+import Cuotas from './pages/app/Cuotas'
+import Configuracion from './pages/app/Configuracion'
 import ComingSoon from './pages/app/ComingSoon'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -37,16 +39,7 @@ export default function App() {
             />
           }
         />
-        <Route
-          path="cuotas"
-          element={
-            <ComingSoon
-              title="Cuotas"
-              phase="Próxima fase"
-              description="Tipos de cuota, generación de recibos, pagos, remesas SEPA, devueltos, fraccionamientos y recordatorios."
-            />
-          }
-        />
+        <Route path="cuotas" element={<Cuotas />} />
         <Route
           path="papeletas"
           element={
@@ -107,16 +100,7 @@ export default function App() {
             />
           }
         />
-        <Route
-          path="configuracion"
-          element={
-            <ComingSoon
-              title="Configuración"
-              phase="Próxima fase"
-              description="Datos de la hermandad, usuarios y roles, personalización, integraciones y copias de seguridad."
-            />
-          }
-        />
+        <Route path="configuracion" element={<Configuracion />} />
       </Route>
 
       {/* Cualquier ruta desconocida vuelve a la portada */}

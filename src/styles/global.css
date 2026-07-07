@@ -847,6 +847,7 @@ h1, h2, h3,
 .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .pill--ok { background: var(--ok-bg); color: var(--ok-fg); }
 .pill--warn { background: var(--warn-bg); color: var(--warn-fg); }
+.pill--err { background: var(--err-bg); color: var(--err-fg); }
 .pill--off { background: var(--info-bg); color: var(--text-muted); }
 .pill--info { background: var(--info-bg); color: var(--gold); }
 
@@ -856,6 +857,13 @@ h1, h2, h3,
 }
 .icon-btn svg { width: 15px; height: 15px; }
 .icon-btn:hover { border-color: var(--gold); color: var(--text); }
+.row-actions { display: flex; gap: 0.35rem; }
+
+.dash-head__link { color: var(--gold); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.dash-head__link:hover { text-decoration: underline; }
+
+.form-hint { font-size: 0.8rem; color: var(--text-muted); margin: 0; line-height: 1.5; }
+.form-hint--error { color: var(--err-fg); }
 
 @keyframes rowFlash { from { background: var(--ok-bg); } to { background: transparent; } }
 .row--flash td { animation: rowFlash 2.4s ease-out; }
@@ -906,6 +914,76 @@ h1, h2, h3,
 }
 
 /* =========================================================================
+   Panel — Configuración (datos de la hermandad para los recibos)
+   ========================================================================= */
+.settings-layout { display: flex; flex-direction: column; gap: 1.1rem; max-width: 640px; }
+.settings-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.4rem 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; }
+.settings-card__title { font-size: 1rem; font-weight: 600; margin: 0; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+
+.logo-uploader { display: flex; align-items: flex-start; gap: 1.1rem; }
+.logo-preview {
+  width: 64px; height: 64px; border-radius: 12px; flex: none;
+  border: 1px solid var(--line); background: var(--bg-sunken);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  color: var(--gold);
+}
+.logo-preview img { width: 100%; height: 100%; object-fit: contain; }
+.logo-uploader__info { flex: 1; min-width: 0; }
+.logo-uploader__actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+.settings-actions { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
+
+/* =========================================================================
+   Recibo de cuota (personalizado con los datos de la hermandad)
+   ========================================================================= */
+.recibo-doc {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  display: flex; flex-direction: column; gap: 1.3rem;
+}
+.recibo-doc__head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.recibo-doc__brand { display: flex; gap: 0.7rem; align-items: flex-start; min-width: 0; }
+.recibo-doc__logo {
+  width: 38px; height: 38px; border-radius: 9px; flex: none; overflow: hidden;
+  background: var(--morado-700); color: var(--oro-300);
+  display: flex; align-items: center; justify-content: center;
+}
+.recibo-doc__logo img { width: 100%; height: 100%; object-fit: contain; }
+.recibo-doc__brand-text { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.8rem; color: var(--text-muted); min-width: 0; }
+.recibo-doc__brand-text b { color: var(--text); font-size: 0.94rem; font-weight: 600; }
+.recibo-doc__meta { text-align: right; display: flex; flex-direction: column; gap: 0.2rem; flex: none; }
+.recibo-doc__num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text); }
+.recibo-doc__date { font-size: 0.8rem; color: var(--text-muted); }
+
+.recibo-doc__to { padding: 1rem 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); display: flex; flex-direction: column; gap: 0.15rem; }
+.recibo-doc__label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.2rem; }
+.recibo-doc__to b { color: var(--text); }
+.recibo-doc__to span { font-size: 0.86rem; color: var(--text-muted); }
+
+.recibo-doc__table { width: 100%; border-collapse: collapse; }
+.recibo-doc__table th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding-bottom: 0.5rem; border-bottom: 1px solid var(--line); }
+.recibo-doc__table th:last-child, .recibo-doc__table td:last-child { text-align: right; }
+.recibo-doc__table td { padding: 0.6rem 0 0; font-size: 0.92rem; }
+.recibo-doc__table td.num { font-variant-numeric: tabular-nums; }
+
+.recibo-doc__total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 0.9rem; border-top: 1px solid var(--line); font-size: 0.95rem; }
+.recibo-doc__total b { font-size: 1.5rem; font-variant-numeric: tabular-nums; font-family: 'Iowan Old Style', Palatino, Georgia, serif; }
+
+.recibo-doc__foot { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
+.recibo-doc__iban { font-size: 0.8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.recibo-doc__note { text-align: center; font-size: 0.74rem; color: var(--text-muted); margin: 0; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
+
+/* al imprimir (botón "Imprimir / Descargar"), solo se ve el recibo */
+@media print {
+  body * { visibility: hidden; }
+  .recibo-doc, .recibo-doc * { visibility: visible; }
+  .recibo-doc { position: absolute; inset: 0; margin: 1.5cm; border: none; box-shadow: none; }
+}
+
+/* =========================================================================
    Responsive
    ========================================================================= */
 @media (max-width: 900px) {
@@ -948,4 +1026,9 @@ h1, h2, h3,
   .toolbar { flex-direction: column; align-items: stretch; }
   .search-box { max-width: none; }
   .drawer { max-width: 100%; }
+
+  .form-grid-2 { grid-template-columns: 1fr; }
+  .logo-uploader { flex-direction: column; }
+  .recibo-doc__head { flex-direction: column; }
+  .recibo-doc__meta { text-align: left; }
 }
