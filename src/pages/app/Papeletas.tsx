@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
 import { getTramos, tramosDeCuerpo, etiquetaTramo, type Cuerpo } from '../../lib/tramos'
-import { repartoDeCuerpo, type Asignacion } from '../../lib/cortejo'
+import { repartoDeTramo, type Asignacion } from '../../lib/cortejo'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -34,7 +34,7 @@ export default function Papeletas() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todas')
   const [selected, setSelected] = useState<Papeleta | null>(null)
-  const [pendingCuerpo, setPendingCuerpo] = useState('')
+  const [pendingCuerpo, setPendingCuerpo] = useState<Cuerpo | ''>('')
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
 
@@ -43,18 +43,32 @@ export default function Papeletas() {
     return (id: string) => map.get(id)
   }, [])
 
-  const cuerposDisponibles = useMemo(() => CUERPOS.filter((c) => tramos.some((t) => t.cuerpo === c)), [tramos])
+  const tramoDe = (tramoId: string | null) => (tramoId ? (tramos.find((t) => t.id === tramoId) ?? null) : null)
 
-  // El tramo de cada papeleta no se guarda: se calcula solo a partir del
-  // cuerpo elegido y del número de hermano de quien la porta.
+  const cuerposDisponibles = useMemo(() => CUERPOS.filter((c) => tramos.some((t) => t.cuerpo === c)), [tramos])
+  const tramosDelCuerpoElegido = useMemo(
+    () => (pendingCuerpo ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
+    [pendingCuerpo, tramos],
+  )
+
+  // El puesto de cada papeleta no se guarda: se calcula solo a partir del
+  // tramo elegido y del número de hermano de quien la porta.
   const asignacionPorPapeleta = useMemo(() => {
     const map = new Map<string, Asignacion>()
-    CUERPOS.forEach((c) => {
-      const reparto = repartoDeCuerpo(c, papeletas, hermanoDe, tramosDeCuerpo(c, tramos), new Set())
-      reparto.forEach((a) => map.set(a.papeleta.id, a))
+    tramos.forEach((t) => {
+      repartoDeTramo(t, papeletas, hermanoDe, new Set()).forEach((a) => map.set(a.papeleta.id, a))
     })
     return map
   }, [papeletas, hermanoDe, tramos])
+
+  const ocupadosPorTramo = useMemo(() => {
+    const map = new Map<string, number>()
+    asignacionPorPapeleta.forEach((a) => {
+      if (a.estado === 'Excede aforo' || !a.papeleta.tramoId) return
+      map.set(a.papeleta.tramoId, (map.get(a.papeleta.tramoId) ?? 0) + 1)
+    })
+    return map
+  }, [asignacionPorPapeleta])
 
   const filtered = useMemo(() => {
     return papeletas
@@ -85,9 +99,9 @@ export default function Papeletas() {
     setPendingCuerpo('')
   }
 
-  function asignarCuerpo(id: string, cuerpo: Cuerpo) {
-    setPapeletas((prev) => prev.map((p) => (p.id === id ? { ...p, cuerpo, estado: 'Asignada' } : p)))
-    setSelected((prev) => (prev && prev.id === id ? { ...prev, cuerpo, estado: 'Asignada' } : prev))
+  function asignarTramo(id: string, tramoId: string) {
+    setPapeletas((prev) => prev.map((p) => (p.id === id ? { ...p, tramoId, estado: 'Asignada' } : p)))
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, tramoId, estado: 'Asignada' } : prev))
     setPendingCuerpo('')
   }
 
@@ -122,7 +136,7 @@ export default function Papeletas() {
       id: `p-${Date.now()}`,
       numero: nextNumero,
       hermanoId,
-      cuerpo: null,
+      tramoId: null,
       importe: IMPORTE_PAPELETA,
       estado: 'Solicitada',
       fechaSolicitud: hoy(),
@@ -215,6 +229,7 @@ export default function Papeletas() {
             {filtered.map((p) => {
               const h = hermanoDe(p.hermanoId)
               const a = asignacionPorPapeleta.get(p.id)
+              const tramo = tramoDe(p.tramoId)
               return (
                 <tr
                   key={p.id}
@@ -233,13 +248,12 @@ export default function Papeletas() {
                     </div>
                   </td>
                   <td>
-                    {a?.tramo ? (
+                    {tramo ? (
                       <>
-                        {etiquetaTramo(a.tramo)}
-                        <span className="table-subtle"> · puesto {a.puesto}</span>
+                        {etiquetaTramo(tramo)}
+                        <span className="table-subtle"> · puesto {a?.puesto}</span>
+                        {a?.estado === 'Excede aforo' && <span className="table-subtle"> · excede aforo</span>}
                       </>
-                    ) : p.cuerpo ? (
-                      <span className="table-muted">Supera el aforo de {p.cuerpo}</span>
                     ) : (
                       <span className="table-muted">Sin asignar</span>
                     )}
@@ -332,36 +346,49 @@ export default function Papeletas() {
             const h = hermanoDe(selected.hermanoId)
             if (!h) return <p className="dash-head__lead">No se encuentra el hermano de esta papeleta.</p>
             const a = asignacionPorPapeleta.get(selected.id)
+            const tramo = tramoDe(selected.tramoId)
             return (
               <>
                 {selected.estado === 'Solicitada' && (
                   <div className="assign-box">
                     <label htmlFor="cuerpoAsignar">Asignar al cortejo</label>
-                    <div className="assign-box__row">
+                    <div className="form-grid-2">
                       <select
                         id="cuerpoAsignar"
                         value={pendingCuerpo}
-                        onChange={(e) => setPendingCuerpo(e.target.value)}
+                        onChange={(e) => setPendingCuerpo(e.target.value as Cuerpo)}
                       >
-                        <option value="">Elige un cuerpo</option>
+                        <option value="">Cristo / Virgen</option>
                         {cuerposDisponibles.map((c) => (
                           <option key={c} value={c}>
                             {c}
                           </option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
+                      <select
+                        id="tramoAsignar"
+                        defaultValue=""
                         disabled={!pendingCuerpo}
-                        onClick={() => pendingCuerpo && asignarCuerpo(selected.id, pendingCuerpo as Cuerpo)}
+                        key={pendingCuerpo}
+                        onChange={(e) => e.target.value && asignarTramo(selected.id, e.target.value)}
                       >
-                        Asignar
-                      </button>
+                        <option value="" disabled>
+                          {pendingCuerpo ? 'Vara, cruz de guía…' : 'Elige antes un cuerpo'}
+                        </option>
+                        {tramosDelCuerpoElegido.map((t) => {
+                          const ocupados = ocupadosPorTramo.get(t.id) ?? 0
+                          return (
+                            <option key={t.id} value={t.id}>
+                              {t.nombre}
+                              {t.tipo ? ` (${t.tipo})` : ''} — {ocupados}/{t.capacidad}
+                              {ocupados >= t.capacidad ? ' · completo' : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
                     </div>
                     <p className="form-hint">
-                      El tramo se calcula solo, repartiendo por número de hermano según el aforo de
-                      cada tramo.{' '}
+                      El puesto se calcula solo, por número de hermano dentro del tramo elegido.{' '}
                       <Link to="/app/configuracion">Revisa los tramos en Configuración</Link>.
                     </p>
                   </div>
@@ -371,8 +398,9 @@ export default function Papeletas() {
                   papeleta={selected}
                   hermano={h}
                   hermandad={hermandad}
-                  tramo={a?.tramo ?? null}
+                  tramo={tramo}
                   puesto={a?.puesto ?? null}
+                  excedeAforo={a?.estado === 'Excede aforo'}
                 />
 
                 {(selected.estado === 'Solicitada' || selected.estado === 'Asignada') && (

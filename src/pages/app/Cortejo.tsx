@@ -6,8 +6,8 @@ import { LogoMark } from '../../components/Logo'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { INCIDENCIAS_INICIALES, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
-import { aforoDeCuerpo, etiquetaTramo, getTramos, rangoDeTramo, tramosDeCuerpo, type Cuerpo, type Tramo } from '../../lib/tramos'
-import { repartoDeCuerpo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
+import { etiquetaTramo, getTramos, tramosDeCuerpo, type Cuerpo, type Tramo } from '../../lib/tramos'
+import { repartoDeTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
 
@@ -17,13 +17,12 @@ const EDICION_ACTUAL = 2026
 const TIPOS_INCIDENCIA: TipoIncidencia[] = ['Ausencia', 'Indisposición', 'Retraso', 'Sustitución', 'Otra']
 const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
-type FilaEstado = EstadoAsignacion | 'Pendiente' | 'Excede aforo' | 'Baja'
+type FilaEstado = EstadoAsignacion | 'Pendiente' | 'Baja'
 
 interface Fila {
   papeleta: Papeleta
   hermano: Hermano
   tramo: Tramo | null
-  cuerpo: Cuerpo | null
   puesto: number | null
   estado: FilaEstado
 }
@@ -74,6 +73,7 @@ export default function Cortejo() {
   const [tramoAbiertoId, setTramoAbiertoId] = useState<string | null>(null)
   const [asignarOpen, setAsignarOpen] = useState(false)
   const [asignarError, setAsignarError] = useState<string | null>(null)
+  const [asignarCuerpo, setAsignarCuerpo] = useState<Cuerpo | ''>('')
   const [ordenOpen, setOrdenOpen] = useState(false)
   const [incidenciaPara, setIncidenciaPara] = useState<string | null>(null)
 
@@ -87,36 +87,29 @@ export default function Cortejo() {
     [incidencias],
   )
 
-  // Reparto derivado por cuerpo: cada hermano con papeleta activa se ordena
-  // por su número de hermano y se reparte por los tramos de su cuerpo según
-  // el aforo de cada uno. tramo === null si supera el aforo total del cuerpo.
-  const repartosPorCuerpo = useMemo(() => {
-    const map = new Map<Cuerpo, Asignacion[]>()
-    CUERPOS.forEach((c) => {
-      map.set(c, repartoDeCuerpo(c, papeletas, hermanoDe, tramosDeCuerpo(c, tramos), incidenciasAbiertas))
-    })
+  // Reparto derivado por tramo: el hermano elige el tramo (cruz de guía,
+  // vara, cirio…) al sacar su papeleta, y el puesto dentro de él se calcula
+  // solo por número de hermano. Si un tramo recibe más papeletas de las que
+  // caben, las que sobran quedan marcadas "Excede aforo" en vez de generar
+  // una cola.
+  const repartos = useMemo(() => {
+    const map = new Map<string, Asignacion[]>()
+    tramos.forEach((t) => map.set(t.id, repartoDeTramo(t, papeletas, hermanoDe, incidenciasAbiertas)))
     return map
   }, [tramos, papeletas, hermanoDe, incidenciasAbiertas])
 
-  const repartos = useMemo(() => {
-    const map = new Map<string, Asignacion[]>()
-    tramos.forEach((t) => map.set(t.id, []))
-    repartosPorCuerpo.forEach((asigs) => {
-      asigs.forEach((a) => {
-        if (a.tramo) map.get(a.tramo.id)?.push(a)
+  const excedeAforo = useMemo(() => {
+    const out: Array<{ asignacion: Asignacion; tramo: Tramo }> = []
+    tramos.forEach((t) => {
+      ;(repartos.get(t.id) ?? []).forEach((a) => {
+        if (a.estado === 'Excede aforo') out.push({ asignacion: a, tramo: t })
       })
     })
-    return map
-  }, [tramos, repartosPorCuerpo])
-
-  const excedeAforo = useMemo(() => {
-    const out: Asignacion[] = []
-    repartosPorCuerpo.forEach((asigs) => asigs.forEach((a) => { if (!a.tramo) out.push(a) }))
     return out
-  }, [repartosPorCuerpo])
+  }, [tramos, repartos])
 
   const pendientes = useMemo(
-    () => papeletas.filter((p) => p.estado === 'Solicitada' && !p.cuerpo),
+    () => papeletas.filter((p) => p.estado === 'Solicitada' && !p.tramoId),
     [papeletas],
   )
 
@@ -130,7 +123,7 @@ export default function Cortejo() {
     let total = 0
     let completos = 0
     tramos.forEach((t) => {
-      const reparto = repartos.get(t.id) ?? []
+      const reparto = (repartos.get(t.id) ?? []).filter((a) => a.estado !== 'Excede aforo')
       cubiertos += reparto.length
       total += t.capacidad
       if (reparto.length >= t.capacidad) completos += 1
@@ -148,38 +141,31 @@ export default function Cortejo() {
   // ---------- filas combinadas (para la vista tabla y para filtrar tarjetas) ----------
   const filas = useMemo(() => {
     const out: Fila[] = []
-    CUERPOS.forEach((c) => {
-      ;(repartosPorCuerpo.get(c) ?? []).forEach((a) => {
-        out.push({
-          papeleta: a.papeleta,
-          hermano: a.hermano,
-          tramo: a.tramo,
-          cuerpo: c,
-          puesto: a.puesto,
-          estado: a.tramo ? a.estado : 'Excede aforo',
-        })
+    tramos.forEach((t) => {
+      ;(repartos.get(t.id) ?? []).forEach((a) => {
+        out.push({ papeleta: a.papeleta, hermano: a.hermano, tramo: t, puesto: a.puesto, estado: a.estado })
       })
     })
     pendientes.forEach((p) => {
       const h = hermanoDe(p.hermanoId)
-      if (h) out.push({ papeleta: p, hermano: h, tramo: null, cuerpo: null, puesto: null, estado: 'Pendiente' })
+      if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Pendiente' })
     })
     papeletas
       .filter((p) => p.estado === 'Anulada')
       .forEach((p) => {
         const h = hermanoDe(p.hermanoId)
-        if (h) out.push({ papeleta: p, hermano: h, tramo: null, cuerpo: null, puesto: null, estado: 'Baja' })
+        if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Baja' })
       })
     return out
-  }, [repartosPorCuerpo, pendientes, papeletas, hermanoDe])
+  }, [tramos, repartos, pendientes, papeletas, hermanoDe])
 
-  function pasaFiltros(cuerpo: Cuerpo | null, tramo: Tramo | null, filaEstado: FilaEstado, textoBusqueda: string) {
-    if (cuerpoFiltro !== 'Todos' && cuerpo !== cuerpoFiltro) return false
+  function pasaFiltros(tramo: Tramo | null, filaEstado: FilaEstado, textoBusqueda: string) {
+    if (cuerpoFiltro !== 'Todos' && tramo?.cuerpo !== cuerpoFiltro) return false
     if (estadoFiltro === 'Con incidencia' && filaEstado !== 'Con incidencia') return false
     if (estadoFiltro === 'Excede aforo' && filaEstado !== 'Excede aforo') return false
     if (estadoFiltro === 'Con hueco' || estadoFiltro === 'Completo') {
       if (!tramo) return false
-      const reparto = repartos.get(tramo.id) ?? []
+      const reparto = (repartos.get(tramo.id) ?? []).filter((a) => a.estado !== 'Excede aforo')
       const estado = reparto.length >= tramo.capacidad ? 'Completo' : 'Con hueco'
       if (estado !== estadoFiltro) return false
     }
@@ -192,24 +178,27 @@ export default function Cortejo() {
     return tramos.filter((t) => {
       const reparto = repartos.get(t.id) ?? []
       const texto = `${etiquetaTramo(t)} ${reparto.map((a) => `${a.hermano.nombre} ${a.hermano.numero}`).join(' ')}`
-      const filaEstado: FilaEstado = reparto.some((a) => a.estado === 'Con incidencia') ? 'Con incidencia' : 'Reservada'
-      return pasaFiltros(t.cuerpo, t, filaEstado, texto)
+      const filaEstado: FilaEstado = reparto.some((a) => a.estado === 'Con incidencia')
+        ? 'Con incidencia'
+        : reparto.some((a) => a.estado === 'Excede aforo')
+          ? 'Excede aforo'
+          : 'Reservada'
+      return pasaFiltros(t, filaEstado, texto)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tramos, repartos, cuerpoFiltro, estadoFiltro, query])
 
   const filasFiltradas = useMemo(() => {
-    return filas.filter((f) =>
-      pasaFiltros(f.cuerpo, f.tramo, f.estado, `${f.hermano.nombre} ${f.hermano.numero} ${f.tramo ? etiquetaTramo(f.tramo) : ''}`),
-    )
+    return filas.filter((f) => pasaFiltros(f.tramo, f.estado, `${f.hermano.nombre} ${f.hermano.numero} ${f.tramo ? etiquetaTramo(f.tramo) : ''}`))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filas, cuerpoFiltro, estadoFiltro, query])
 
   const tramoAbierto = tramos.find((t) => t.id === tramoAbiertoId) ?? null
   const repartoAbierto = tramoAbierto ? (repartos.get(tramoAbierto.id) ?? []) : []
-  const rangoAbierto = useMemo(
-    () => (tramoAbierto ? rangoDeTramo(tramoAbierto, tramosDeCuerpo(tramoAbierto.cuerpo, tramos)) : null),
-    [tramoAbierto, tramos],
+
+  const tramosDelCuerpoElegido = useMemo(
+    () => (asignarCuerpo ? tramosDeCuerpo(asignarCuerpo, tramos) : []),
+    [asignarCuerpo, tramos],
   )
 
   // ---------- acciones ----------
@@ -245,18 +234,25 @@ export default function Cortejo() {
     }
   }
 
+  function abrirAsignar() {
+    setAsignarError(null)
+    setAsignarCuerpo(cuerposPresentes.length === 1 ? cuerposPresentes[0] : '')
+    setAsignarOpen(true)
+  }
+
   function handleAsignarHermano(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const data = new FormData(e.currentTarget)
     const hermanoId = String(data.get('hermanoId') ?? '')
-    const cuerpo = String(data.get('cuerpo') ?? '') as Cuerpo | ''
+    const tramoId = String(data.get('tramoId') ?? '')
     const hermano = HERMANOS_INICIALES.find((h) => h.id === hermanoId)
+    const tramo = tramos.find((t) => t.id === tramoId)
     if (!hermano) {
       setAsignarError('Elige un hermano de la lista.')
       return
     }
-    if (!cuerpo) {
-      setAsignarError('Elige un cuerpo.')
+    if (!tramo) {
+      setAsignarError('Elige un tramo.')
       return
     }
     if (hermano.antiguedad === EDICION_ACTUAL) {
@@ -271,7 +267,7 @@ export default function Cortejo() {
       if (existente) {
         return prev.map((p) =>
           p.id === existente.id
-            ? { ...p, cuerpo, estado: p.estado === 'Solicitada' ? 'Asignada' : p.estado }
+            ? { ...p, tramoId: tramo.id, estado: p.estado === 'Solicitada' ? 'Asignada' : p.estado }
             : p,
         )
       }
@@ -280,7 +276,7 @@ export default function Cortejo() {
         id: `p-${Date.now()}`,
         numero: nextNumero,
         hermanoId,
-        cuerpo,
+        tramoId: tramo.id,
         importe: IMPORTE_PAPELETA,
         estado: 'Asignada',
         fechaSolicitud: hoy(),
@@ -308,13 +304,7 @@ export default function Cortejo() {
           <button className="btn btn-outline" onClick={() => setOrdenOpen(true)}>
             Imprimir orden del cortejo
           </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setAsignarError(null)
-              setAsignarOpen(true)
-            }}
-          >
+          <button className="btn btn-primary" onClick={abrirAsignar}>
             + Asignar hermano
           </button>
         </div>
@@ -322,8 +312,8 @@ export default function Cortejo() {
 
       {excedeAforo.length > 0 && (
         <div className="banner-inline banner-inline--warn">
-          {excedeAforo.length} hermano{excedeAforo.length > 1 ? 's' : ''} no caben en ningún tramo
-          configurado de {[...new Set(excedeAforo.map((a) => a.papeleta.cuerpo))].join(', ')}.{' '}
+          {excedeAforo.length} hermano{excedeAforo.length > 1 ? 's' : ''} superan el aforo de su
+          tramo elegido: {[...new Set(excedeAforo.map((x) => etiquetaTramo(x.tramo)))].join(', ')}.{' '}
           <Link to="/app/configuracion">Amplía el aforo en Configuración</Link>.
         </div>
       )}
@@ -462,7 +452,7 @@ export default function Cortejo() {
                       </span>
                     </div>
                   </td>
-                  {cuerposPresentes.length > 1 && <td>{f.cuerpo ?? '—'}</td>}
+                  {cuerposPresentes.length > 1 && <td>{f.tramo?.cuerpo ?? '—'}</td>}
                   <td>{f.tramo ? etiquetaTramo(f.tramo) : <span className="table-muted">Sin asignar</span>}</td>
                   <td className="num">{String(f.papeleta.numero).padStart(4, '0')}</td>
                   <td>
@@ -507,7 +497,7 @@ export default function Cortejo() {
         open={!!tramoAbierto}
         onClose={() => setTramoAbiertoId(null)}
         title={tramoAbierto ? etiquetaTramo(tramoAbierto) : ''}
-        subtitle={tramoAbierto && rangoAbierto ? `Puestos ${rangoAbierto[0]}–${rangoAbierto[1]}` : undefined}
+        subtitle={tramoAbierto ? `Aforo ${tramoAbierto.capacidad}${tramoAbierto.tipo ? ` · ${tramoAbierto.tipo}` : ''}` : undefined}
         footer={
           tramoAbierto && (
             <>
@@ -521,10 +511,9 @@ export default function Cortejo() {
           )
         }
       >
-        {tramoAbierto && rangoAbierto && (
+        {tramoAbierto && (
           <TramoFicha
             tramo={tramoAbierto}
-            rango={rangoAbierto}
             reparto={repartoAbierto}
             hermandad={hermandad}
             diaDeSalida={diaDeSalida}
@@ -559,25 +548,46 @@ export default function Cortejo() {
             <label htmlFor="hermanoId">Hermano</label>
             <HermanoPicker hermanos={HERMANOS_INICIALES} name="hermanoId" id="hermanoId" />
           </div>
-          <div className="form-row">
-            <label htmlFor="cuerpo">Cuerpo</label>
-            <select id="cuerpo" name="cuerpo" defaultValue="">
-              <option value="" disabled>
-                Elige un cuerpo
-              </option>
-              {cuerposPresentes.map((c) => {
-                const ocupados = (repartosPorCuerpo.get(c) ?? []).filter((a) => a.tramo).length
-                return (
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor="cuerpoSelector">Cuerpo</label>
+              <select
+                id="cuerpoSelector"
+                value={asignarCuerpo}
+                onChange={(e) => setAsignarCuerpo(e.target.value as Cuerpo)}
+              >
+                <option value="" disabled>
+                  Cristo / Virgen
+                </option>
+                {cuerposPresentes.map((c) => (
                   <option key={c} value={c}>
-                    {c} ({ocupados}/{aforoDeCuerpo(c, tramos)})
+                    {c}
                   </option>
-                )
-              })}
-            </select>
+                ))}
+              </select>
+            </div>
+            <div className="form-row">
+              <label htmlFor="tramoId">Tramo</label>
+              <select id="tramoId" name="tramoId" defaultValue="" disabled={!asignarCuerpo} key={asignarCuerpo}>
+                <option value="" disabled>
+                  {asignarCuerpo ? 'Vara, cruz de guía…' : 'Elige antes un cuerpo'}
+                </option>
+                {tramosDelCuerpoElegido.map((t) => {
+                  const ocupados = (repartos.get(t.id) ?? []).filter((a) => a.estado !== 'Excede aforo').length
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                      {t.tipo ? ` (${t.tipo})` : ''} — {ocupados}/{t.capacidad}
+                      {ocupados >= t.capacidad ? ' · completo' : ''}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
           </div>
           <p className="form-hint">
-            El tramo y el puesto se calculan solos a partir de su número de hermano: cuanto más
-            bajo, más cerca de la cruz de guía.
+            El puesto dentro del tramo se calcula solo a partir de su número de hermano: cuanto
+            más bajo, más cerca de la cabeza del tramo.
           </p>
         </form>
       </Drawer>
@@ -610,7 +620,7 @@ export default function Cortejo() {
             </div>
           </div>
           {tramos.map((t) => {
-            const reparto = repartos.get(t.id) ?? []
+            const reparto = (repartos.get(t.id) ?? []).filter((a) => a.estado !== 'Excede aforo')
             return (
               <div className="cortejo-orden__tramo" key={t.id}>
                 <h3>
@@ -703,12 +713,14 @@ function TramoCard({
   diaDeSalida: boolean
   onAbrir: () => void
 }) {
-  const ocupados = reparto.length
+  const confirmados = reparto.filter((a) => a.estado !== 'Excede aforo')
+  const ocupados = confirmados.length
   const capacidad = tramo.capacidad
   const conIncidencia = reparto.filter((a) => a.estado === 'Con incidencia').length
+  const excede = reparto.filter((a) => a.estado === 'Excede aforo').length
   const pct = capacidad > 0 ? Math.min(100, Math.round((ocupados / capacidad) * 100)) : 0
   const lleno = ocupados >= capacidad
-  const visibles = reparto.slice(0, 5)
+  const visibles = confirmados.slice(0, 5)
   const resto = ocupados - visibles.length
 
   return (
@@ -737,9 +749,10 @@ function TramoCard({
         {ocupados === 0 && <span className="table-muted">Sin hermanos asignados</span>}
       </div>
 
-      {conIncidencia > 0 && (
+      {(conIncidencia > 0 || excede > 0) && (
         <div className="tramo-card__badges">
-          <span className="pill pill--err">{conIncidencia} incidencia{conIncidencia > 1 ? 's' : ''}</span>
+          {conIncidencia > 0 && <span className="pill pill--err">{conIncidencia} incidencia{conIncidencia > 1 ? 's' : ''}</span>}
+          {excede > 0 && <span className="pill pill--err">{excede} excede{excede > 1 ? 'n' : ''} aforo</span>}
         </div>
       )}
 
@@ -761,7 +774,6 @@ function TramoCard({
 
 function TramoFicha({
   tramo,
-  rango,
   reparto,
   hermandad,
   diaDeSalida,
@@ -771,7 +783,6 @@ function TramoFicha({
   onPagada,
 }: {
   tramo: Tramo
-  rango: [number, number]
   reparto: Asignacion[]
   hermandad: HermandadSettings
   diaDeSalida: boolean
@@ -780,7 +791,9 @@ function TramoFicha({
   onResolver: (papeletaId: string, comoBaja: boolean) => void
   onPagada: (papeletaId: string) => void
 }) {
-  const ocupados = reparto.length
+  const confirmados = reparto.filter((a) => a.estado !== 'Excede aforo')
+  const excedidos = reparto.filter((a) => a.estado === 'Excede aforo')
+  const ocupados = confirmados.length
   const capacidad = tramo.capacidad
   const pct = capacidad > 0 ? Math.min(100, Math.round((ocupados / capacidad) * 100)) : 0
 
@@ -790,8 +803,7 @@ function TramoFicha({
         <span className={`meter__fill meter__fill--${pct >= 100 ? 'full' : pct >= 75 ? 'warn' : 'ok'}`} style={{ width: `${pct}%` }} />
       </div>
       <p className="dash-head__lead">
-        {ocupados}/{capacidad} puestos ocupados · orden de desfile {rango[0]}–{rango[1]}
-        {tramo.tipo && ` · ${tramo.tipo}`}
+        {ocupados}/{capacidad} puestos ocupados{tramo.tipo && ` · ${tramo.tipo}`}
       </p>
 
       <dl className="ficha__list">
@@ -822,7 +834,7 @@ function TramoFicha({
                       </button>
                     </span>
                   )}
-                  {diaDeSalida && a.estado !== 'Con incidencia' && (
+                  {diaDeSalida && a.estado !== 'Con incidencia' && a.estado !== 'Excede aforo' && (
                     <span className="row-actions">
                       <button className="icon-btn" title="Marcar presente" onClick={() => onPresente(a.papeleta.id)}>
                         <CheckIcon />
@@ -840,6 +852,12 @@ function TramoFicha({
                 </li>
               ))}
             </ul>
+            {excedidos.length > 0 && (
+              <p className="form-hint form-hint--error">
+                {excedidos.length} hermano{excedidos.length > 1 ? 's' : ''} de más para el aforo de
+                este tramo. Amplía la capacidad en Configuración o reasígnalos a otro tramo.
+              </p>
+            )}
           </dd>
         </div>
       </dl>
@@ -863,11 +881,11 @@ function TramoFicha({
             {tramo.tipo && <span className="table-subtle"> · {tramo.tipo}</span>}{' '}
             <span className="table-subtle">· {ocupados}/{capacidad}</span>
           </h3>
-          {reparto.length === 0 ? (
+          {confirmados.length === 0 ? (
             <p className="form-hint">Sin hermanos asignados todavía.</p>
           ) : (
             <ol>
-              {reparto.map((a) => (
+              {confirmados.map((a) => (
                 <li key={a.papeleta.id}>
                   Puesto {a.puesto} · {a.hermano.nombre}{' '}
                   <span className="table-subtle">· nº {a.hermano.numero}</span>

@@ -16,14 +16,16 @@ interface PapeletaTicketProps {
   papeleta: Papeleta
   hermano: Hermano
   hermandad: HermandadSettings
-  /** Tramo que le corresponde por su número de hermano, calculado en el momento (null si supera el aforo). */
+  /** Tramo elegido para el cortejo (cruz de guía, vara, cirio…). */
   tramo?: Tramo | null
-  /** Puesto dentro de su cuerpo (1 = justo detrás de la cruz de guía), calculado en el momento. */
+  /** Puesto dentro del tramo (1 = el hermano con el número más bajo), calculado en el momento. */
   puesto?: number | null
+  /** Si el tramo elegido ya recibió más papeletas de las que caben. */
+  excedeAforo?: boolean
 }
 
 /** La papeleta de sitio, personalizada con los datos de la hermandad y del hermano. */
-export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto }: PapeletaTicketProps) {
+export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto, excedeAforo }: PapeletaTicketProps) {
   return (
     <div className="ticket-doc print-doc">
       <div className="ticket-doc__head">
@@ -55,9 +57,8 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
                 {puesto != null && <span className="table-subtle"> · puesto {puesto}</span>}
               </b>
               {tramo.tipo && <span className="pill pill--info ticket-doc__tipo">{tramo.tipo}</span>}
+              {excedeAforo && <span className="pill pill--err ticket-doc__tipo">Excede aforo</span>}
             </>
-          ) : papeleta.cuerpo ? (
-            <span className="ticket-doc__pending">Supera el aforo de {papeleta.cuerpo}</span>
           ) : (
             <span className="ticket-doc__pending">Pendiente de asignar</span>
           )}

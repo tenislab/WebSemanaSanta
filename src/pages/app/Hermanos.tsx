@@ -3,10 +3,8 @@ import Drawer from '../../components/Drawer'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
-import { getTramos, tramosDeCuerpo, etiquetaTramo, type Cuerpo } from '../../lib/tramos'
-import { repartoDeCuerpo } from '../../lib/cortejo'
-
-const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
+import { getTramos, etiquetaTramo } from '../../lib/tramos'
+import { repartoDeTramo } from '../../lib/cortejo'
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -60,9 +58,9 @@ export default function Hermanos() {
   }, [hermanos])
   const tramoPorHermano = useMemo(() => {
     const map = new Map<string, string>()
-    CUERPOS.forEach((c) => {
-      const reparto = repartoDeCuerpo(c, PAPELETAS_INICIALES, hermanoDe, tramosDeCuerpo(c, tramos), new Set())
-      reparto.forEach((a) => map.set(a.hermano.id, a.tramo ? etiquetaTramo(a.tramo) : 'Supera el aforo'))
+    tramos.forEach((t) => {
+      const reparto = repartoDeTramo(t, PAPELETAS_INICIALES, hermanoDe, new Set())
+      reparto.forEach((a) => map.set(a.hermano.id, a.estado === 'Excede aforo' ? `${etiquetaTramo(t)} (excede aforo)` : etiquetaTramo(t)))
     })
     return map
   }, [tramos, hermanoDe])

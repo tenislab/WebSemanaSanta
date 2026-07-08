@@ -63,14 +63,3 @@ export function aforoDeCuerpo(cuerpo: Cuerpo, tramos: Tramo[]): number {
 export function etiquetaTramo(tramo: Tramo): string {
   return tramo.cuerpo === 'Único' ? tramo.nombre : `${tramo.cuerpo} — ${tramo.nombre}`
 }
-
-/** Rango de puestos [desde, hasta] que cubre un tramo dentro de su cuerpo, según el aforo acumulado de los tramos anteriores. */
-export function rangoDeTramo(tramo: Tramo, tramosDelCuerpo: Tramo[]): [number, number] {
-  let acumulado = 0
-  for (const t of tramosDelCuerpo) {
-    const desde = acumulado + 1
-    acumulado += t.capacidad
-    if (t.id === tramo.id) return [desde, acumulado]
-  }
-  return [0, 0]
-}
