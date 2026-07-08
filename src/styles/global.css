@@ -878,6 +878,12 @@ h1, h2, h3,
 }
 .cobro-tag--bank { color: var(--ok-fg); }
 
+/* Tesorería: etiqueta de tipo junto al concepto, e importe coloreado por ingreso/gasto */
+.tesoreria-tipo { margin-left: 0.55rem; vertical-align: middle; }
+.table-card .num.tesoreria-importe { font-weight: 600; }
+.table-card .num.tesoreria-importe--ok { color: var(--ok-fg); }
+.table-card .num.tesoreria-importe--err { color: var(--err-fg); }
+
 @keyframes rowFlash { from { background: var(--ok-bg); } to { background: transparent; } }
 .row--flash td { animation: rowFlash 2.4s ease-out; }
 @media (prefers-reduced-motion: reduce) { .row--flash td { animation: none; } }

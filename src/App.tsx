@@ -9,6 +9,8 @@ import Hermanos from './pages/app/Hermanos'
 import Cuotas from './pages/app/Cuotas'
 import Papeletas from './pages/app/Papeletas'
 import Cortejo from './pages/app/Cortejo'
+import Tesoreria from './pages/app/Tesoreria'
+import Inventario from './pages/app/Inventario'
 import Configuracion from './pages/app/Configuracion'
 import ComingSoon from './pages/app/ComingSoon'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -34,26 +36,8 @@ export default function App() {
         <Route path="cortejo" element={<Cortejo />} />
         <Route path="cuotas" element={<Cuotas />} />
         <Route path="papeletas" element={<Papeletas />} />
-        <Route
-          path="tesoreria"
-          element={
-            <ComingSoon
-              title="Tesorería"
-              phase="Próxima fase"
-              description="Caja e ingresos, gastos, cuentas bancarias, conciliación, presupuesto, facturas y balances."
-            />
-          }
-        />
-        <Route
-          path="inventario"
-          element={
-            <ComingSoon
-              title="Inventario"
-              phase="Próxima fase"
-              description="Enseres, orfebrería, textiles, túnicas, ubicación, conservación, préstamos y seguros."
-            />
-          }
-        />
+        <Route path="tesoreria" element={<Tesoreria />} />
+        <Route path="inventario" element={<Inventario />} />
         <Route
           path="archivo"
           element={
