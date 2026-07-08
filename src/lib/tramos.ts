@@ -63,3 +63,17 @@ export function aforoDeCuerpo(cuerpo: Cuerpo, tramos: Tramo[]): number {
 export function etiquetaTramo(tramo: Tramo): string {
   return tramo.cuerpo === 'Único' ? tramo.nombre : `${tramo.cuerpo} — ${tramo.nombre}`
 }
+
+/**
+ * Un tramo de cirio se llena automáticamente por número de hermano (con
+ * cascada entre los tramos de cirio del cuerpo). Los demás (cruz de guía,
+ * insignias, varas, presidencia, música…) se dan por solicitud: los reparte
+ * la hermandad entre quienes los piden, dando prioridad al de menor número.
+ */
+export function esCirio(tramo: Tramo): boolean {
+  return (tramo.tipo ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase() === 'cirio'
+}

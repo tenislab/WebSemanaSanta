@@ -11,8 +11,9 @@ import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { ENSERES_INICIALES } from '../../data/enseres'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
-import { repartoDeTramo } from '../../lib/cortejo'
+import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { getCampana } from '../../lib/campana'
 
 interface Informe {
   id: string
@@ -29,7 +30,8 @@ function construirInformes(): Informe[] {
   // sobre los de ejemplo: reflejan las altas, pagos y cambios hechos en la app.
   const hermanosActuales = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
   const cuotasActuales = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
-  const papeletasActuales = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  const anioCampana = getCampana().anio
+  const papeletasActuales = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anioCampana)
   const movimientosActuales = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
   const enseresActuales = leerPersistido(CLAVES_DATOS.enseres, ENSERES_INICIALES)
 
@@ -51,12 +53,20 @@ function construirInformes(): Informe[] {
   const entregadas = papeletasActuales.filter((p) => p.estado === 'Entregada').length
   const pendientesPapeleta = papeletasActuales.filter((p) => p.estado === 'Solicitada' || p.estado === 'Asignada').length
 
-  const filasCortejo = tramos.map((t) => {
-    const reparto = repartoDeTramo(t, papeletasActuales, hermanoDe, new Set())
-    const ocupados = reparto.filter((a) => a.estado !== 'Excede aforo').length
-    const excedidos = reparto.filter((a) => a.estado === 'Excede aforo').length
-    return { tramo: t, ocupados, excedidos }
+  const asignaciones = repartoCompleto(tramos, papeletasActuales, hermanoDe, new Set())
+  const ocupacionPorTramo = new Map<string, { ocupados: number; excedidos: number }>()
+  asignaciones.forEach((a) => {
+    if (!a.tramo) return
+    const e = ocupacionPorTramo.get(a.tramo.id) ?? { ocupados: 0, excedidos: 0 }
+    if (a.estado === 'Excede aforo') e.excedidos += 1
+    else e.ocupados += 1
+    ocupacionPorTramo.set(a.tramo.id, e)
   })
+  const filasCortejo = tramos.map((t) => ({
+    tramo: t,
+    ocupados: ocupacionPorTramo.get(t.id)?.ocupados ?? 0,
+    excedidos: ocupacionPorTramo.get(t.id)?.excedidos ?? 0,
+  }))
   const excedenAforoTotal = filasCortejo.reduce((s, f) => s + f.excedidos, 0)
   const aforoTotal = tramos.reduce((s, t) => s + t.capacidad, 0)
   const ocupadosTotal = filasCortejo.reduce((s, f) => s + f.ocupados, 0)
@@ -197,11 +207,12 @@ export default function Informes() {
   const kpis = useMemo(() => {
     const hermanos = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
     const cuotas = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
-    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+    const anio = getCampana().anio
+    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anio)
     const movimientos = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
     const totalHermanos = hermanos.length
     const cobrado = cuotas.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
-    const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada').length
+    const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada' && p.estado !== 'Renuncia').length
     const balance = movimientos.filter((m) => m.estado === 'Conciliado').reduce(
       (s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe),
       0,

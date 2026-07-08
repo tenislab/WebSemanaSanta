@@ -7,13 +7,12 @@ import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { INCIDENCIAS_INICIALES, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
 import { etiquetaTramo, getTramos, tramosDeCuerpo, type Cuerpo, type Tramo } from '../../lib/tramos'
-import { repartoDeTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
+import { repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
 import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
+import { getCampana } from '../../lib/campana'
 
-/** Año de la edición activa: un hermano dado de alta este mismo año aún no cumple el mínimo de antigüedad para salir. */
-const EDICION_ACTUAL = 2026
 
 const TIPOS_INCIDENCIA: TipoIncidencia[] = ['Ausencia', 'Indisposición', 'Retraso', 'Sustitución', 'Otra']
 const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
@@ -61,8 +60,12 @@ export default function Cortejo() {
   const registrador = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Secretaría'
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
   const tramos = useMemo(() => getTramos(), [])
+  const campana = useMemo(() => getCampana(), [])
+  const edicionActual = campana.anio
 
-  const [papeletas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  const [papeletasTodas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  // El cortejo solo trabaja con las papeletas de la campaña activa.
+  const papeletas = useMemo(() => papeletasTodas.filter((p) => p.anio === edicionActual), [papeletasTodas, edicionActual])
   const [incidencias, setIncidencias] = usePersistentState<Incidencia[]>(CLAVES_DATOS.incidencias, INCIDENCIAS_INICIALES)
 
   const [query, setQuery] = useState('')
@@ -89,26 +92,22 @@ export default function Cortejo() {
     [incidencias],
   )
 
-  // Reparto derivado por tramo: el hermano elige el tramo (cruz de guía,
-  // vara, cirio…) al sacar su papeleta, y el puesto dentro de él se calcula
-  // solo por número de hermano. Si un tramo recibe más papeletas de las que
-  // caben, las que sobran quedan marcadas "Excede aforo" en vez de generar
-  // una cola.
-  const repartos = useMemo(() => {
-    const map = new Map<string, Asignacion[]>()
-    tramos.forEach((t) => map.set(t.id, repartoDeTramo(t, papeletas, hermanoDe, incidenciasAbiertas)))
-    return map
-  }, [tramos, papeletas, hermanoDe, incidenciasAbiertas])
+  // Reparto automático por número: la hermandad define los tramos y su aforo,
+  // y la app coloca a los hermanos de cada cuerpo por número, llenando los
+  // tramos en orden (al llenarse uno, empieza el siguiente; efecto cascada).
+  const asignaciones = useMemo(
+    () => repartoCompleto(tramos, papeletas, hermanoDe, incidenciasAbiertas),
+    [tramos, papeletas, hermanoDe, incidenciasAbiertas],
+  )
+  const repartos = useMemo(() => repartoPorTramo(asignaciones), [asignaciones])
 
-  const excedeAforo = useMemo(() => {
-    const out: Array<{ asignacion: Asignacion; tramo: Tramo }> = []
-    tramos.forEach((t) => {
-      ;(repartos.get(t.id) ?? []).forEach((a) => {
-        if (a.estado === 'Excede aforo') out.push({ asignacion: a, tramo: t })
-      })
-    })
-    return out
-  }, [tramos, repartos])
+  const excedeAforo = useMemo(
+    () =>
+      asignaciones
+        .filter((a) => a.estado === 'Excede aforo' && a.tramo)
+        .map((a) => ({ asignacion: a, tramo: a.tramo as Tramo })),
+    [asignaciones],
+  )
 
   const pendientes = useMemo(
     () => papeletas.filter((p) => p.estado === 'Solicitada' && !p.tramoId),
@@ -257,7 +256,7 @@ export default function Cortejo() {
       setAsignarError('Elige un tramo.')
       return
     }
-    if (hermano.antiguedad === EDICION_ACTUAL) {
+    if (hermano.antiguedad === edicionActual) {
       setAsignarError(
         `${hermano.nombre.split(' ')[0]} es nuevo/a esta edición: hace falta al menos un año de antigüedad para salir en el cortejo.`,
       )
@@ -265,11 +264,13 @@ export default function Cortejo() {
     }
 
     setPapeletas((prev) => {
-      const existente = prev.find((p) => p.hermanoId === hermanoId && p.estado !== 'Anulada')
+      const existente = prev.find(
+        (p) => p.hermanoId === hermanoId && p.anio === edicionActual && p.estado !== 'Anulada',
+      )
       if (existente) {
         return prev.map((p) =>
           p.id === existente.id
-            ? { ...p, tramoId: tramo.id, estado: p.estado === 'Solicitada' ? 'Asignada' : p.estado }
+            ? { ...p, tramoId: tramo.id, estado: p.estado === 'Solicitada' || p.estado === 'Renuncia' ? 'Asignada' : p.estado }
             : p,
         )
       }
@@ -278,6 +279,7 @@ export default function Cortejo() {
         id: `p-${Date.now()}`,
         numero: nextNumero,
         hermanoId,
+        anio: edicionActual,
         tramoId: tramo.id,
         importe: IMPORTE_PAPELETA,
         estado: 'Asignada',
@@ -296,7 +298,7 @@ export default function Cortejo() {
           <p className="eyebrow">Cortejo</p>
           <h1>Reparto y organización del cortejo</h1>
           <p className="dash-head__lead">
-            {stats.cubiertos}/{stats.total} puestos cubiertos · Edición {EDICION_ACTUAL} ·{' '}
+            {stats.cubiertos}/{stats.total} puestos cubiertos · Edición {edicionActual} ·{' '}
             <Link to="/app/configuracion" className="dash-head__link">
               Editar tramos
             </Link>
@@ -314,8 +316,9 @@ export default function Cortejo() {
 
       {excedeAforo.length > 0 && (
         <div className="banner-inline banner-inline--warn">
-          {excedeAforo.length} hermano{excedeAforo.length > 1 ? 's' : ''} superan el aforo de su
-          tramo elegido: {[...new Set(excedeAforo.map((x) => etiquetaTramo(x.tramo)))].join(', ')}.{' '}
+          {excedeAforo.length} hermano{excedeAforo.length > 1 ? 's' : ''} super{excedeAforo.length > 1 ? 'an' : 'a'} el
+          aforo de su tramo: {[...new Set(excedeAforo.map((x) => etiquetaTramo(x.tramo)))].join(', ')}. En los cirios se
+          reparten solos; en los puestos designados se lo queda el de menor número.{' '}
           <Link to="/app/configuracion">Amplía el aforo en Configuración</Link>.
         </div>
       )}
@@ -599,7 +602,7 @@ export default function Cortejo() {
         open={ordenOpen}
         onClose={() => setOrdenOpen(false)}
         title="Orden del cortejo"
-        subtitle={`Documento maestro · Edición ${EDICION_ACTUAL}`}
+        subtitle={`Documento maestro · Edición ${edicionActual}`}
         footer={
           <>
             <button className="btn btn-primary" onClick={() => window.print()}>
@@ -618,7 +621,7 @@ export default function Cortejo() {
             </span>
             <div>
               <b>{hermandad.nombreLegal || 'Tu hermandad'}</b>
-              <p className="eyebrow">Orden del cortejo · Edición {EDICION_ACTUAL}</p>
+              <p className="eyebrow">Orden del cortejo · Edición {edicionActual}</p>
             </div>
           </div>
           {tramos.map((t) => {
@@ -793,6 +796,7 @@ function TramoFicha({
   onResolver: (papeletaId: string, comoBaja: boolean) => void
   onPagada: (papeletaId: string) => void
 }) {
+  const edicionActual = getCampana().anio
   const confirmados = reparto.filter((a) => a.estado !== 'Excede aforo')
   const excedidos = reparto.filter((a) => a.estado === 'Excede aforo')
   const ocupados = confirmados.length
@@ -874,7 +878,7 @@ function TramoFicha({
           </span>
           <div>
             <b>{hermandad.nombreLegal || 'Tu hermandad'}</b>
-            <p className="eyebrow">Listado de tramo · Edición {EDICION_ACTUAL}</p>
+            <p className="eyebrow">Listado de tramo · Edición {edicionActual}</p>
           </div>
         </div>
         <div className="cortejo-orden__tramo">

@@ -39,12 +39,12 @@
   --restricted-bg: #f0dde1; --restricted-fg: #6b1e2b;
 
   /* superficies de cristal (liquid glass) del panel de gestión */
-  --glass-surface: rgba(255, 255, 255, 0.6);
-  --glass-surface-strong: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-surface: rgba(255, 255, 255, 0.82);
+  --glass-surface-strong: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(44, 22, 54, 0.1);
   --glass-shadow: 0 24px 50px -30px rgba(44, 22, 54, 0.35);
-  --glass-bloom-1: rgba(217, 189, 130, 0.2);
-  --glass-bloom-2: rgba(106, 58, 111, 0.12);
+  --glass-bloom-1: rgba(217, 189, 130, 0.18);
+  --glass-bloom-2: rgba(106, 58, 111, 0.1);
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -73,12 +73,12 @@
     --info-bg: #2a2330; --info-fg: #cbbda3;
     --restricted-bg: #3a1620; --restricted-fg: #d98ea0;
 
-    --glass-surface: rgba(35, 26, 40, 0.62);
-    --glass-surface-strong: rgba(35, 26, 40, 0.82);
-    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-surface: rgba(37, 28, 43, 0.9);
+    --glass-surface-strong: rgba(37, 28, 43, 0.95);
+    --glass-border: rgba(217, 189, 130, 0.2);
     --glass-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.65);
-    --glass-bloom-1: rgba(217, 189, 130, 0.1);
-    --glass-bloom-2: rgba(106, 58, 111, 0.22);
+    --glass-bloom-1: rgba(217, 189, 130, 0.08);
+    --glass-bloom-2: rgba(106, 58, 111, 0.16);
   }
 }
 
@@ -102,12 +102,12 @@
   --info-bg: #2a2330; --info-fg: #cbbda3;
   --restricted-bg: #3a1620; --restricted-fg: #d98ea0;
 
-  --glass-surface: rgba(35, 26, 40, 0.62);
-  --glass-surface-strong: rgba(35, 26, 40, 0.82);
-  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-surface: rgba(37, 28, 43, 0.9);
+  --glass-surface-strong: rgba(37, 28, 43, 0.95);
+  --glass-border: rgba(217, 189, 130, 0.2);
   --glass-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.65);
-  --glass-bloom-1: rgba(217, 189, 130, 0.1);
-  --glass-bloom-2: rgba(106, 58, 111, 0.22);
+  --glass-bloom-1: rgba(217, 189, 130, 0.08);
+  --glass-bloom-2: rgba(106, 58, 111, 0.16);
 }
 
 :root[data-theme='light'] {
@@ -130,12 +130,12 @@
   --info-bg: #ece4d4; --info-fg: #7a6a45;
   --restricted-bg: #f0dde1; --restricted-fg: #6b1e2b;
 
-  --glass-surface: rgba(255, 255, 255, 0.6);
-  --glass-surface-strong: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-surface: rgba(255, 255, 255, 0.82);
+  --glass-surface-strong: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(44, 22, 54, 0.1);
   --glass-shadow: 0 24px 50px -30px rgba(44, 22, 54, 0.35);
-  --glass-bloom-1: rgba(217, 189, 130, 0.2);
-  --glass-bloom-2: rgba(106, 58, 111, 0.12);
+  --glass-bloom-1: rgba(217, 189, 130, 0.18);
+  --glass-bloom-2: rgba(106, 58, 111, 0.1);
 }
 
 /* ---------- reset ligero ---------- */
@@ -682,7 +682,7 @@ h1, h2, h3,
 }
 
 .app-side {
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 55%), rgba(44, 22, 54, 0.82);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.015) 55%), rgba(44, 22, 54, 0.95);
   color: var(--marfil-100);
   display: flex; flex-direction: column;
   padding: 1.2rem 0.9rem;
@@ -1119,7 +1119,7 @@ h1, h2, h3,
   padding: 1rem; margin-bottom: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem;
 }
 .assign-box label { font-size: 0.8rem; font-weight: 600; color: var(--text); }
-.assign-box__row { display: flex; gap: 0.6rem; }
+.assign-box__row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .assign-box__row select,
 .assign-box__row input[type='text'] {
   flex: 1; padding: 0.6rem 0.7rem; font: inherit; font-size: 0.88rem;

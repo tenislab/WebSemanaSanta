@@ -7,6 +7,7 @@ import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { DOCUMENTOS_INICIALES } from '../../data/documentos'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
 import { formatCurrency } from '../../lib/format'
 
 const QUICK_ACTIONS = [
@@ -59,12 +60,15 @@ export default function DashboardHome() {
     const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
     const movimientos = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
     const documentos = leerPersistido(CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES)
+    const campana = getCampana()
+    const papeletasCampana = papeletas.filter((p) => p.anio === campana.anio)
 
     const activos = hermanos.filter((h) => h.estado === 'Activo').length
     const nuevos = hermanos.filter((h) => h.estado === 'Nuevo').length
     const cuotasPendientes = cuotas.filter((c) => c.estado === 'Pendiente').length
     const pctPendientes = cuotas.length ? Math.round((cuotasPendientes / cuotas.length) * 100) : 0
-    const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada').length
+    const papeletasEmitidas = papeletasCampana.filter((p) => p.estado !== 'Anulada' && p.estado !== 'Renuncia').length
+    const porRenovar = hermanos.filter((h) => renovacionDeHermano(h.id, papeletas, campana).estado === 'Por renovar').length
     const saldo = movimientos
       .filter((m) => m.estado === 'Conciliado')
       .reduce((s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe), 0)
@@ -73,7 +77,7 @@ export default function DashboardHome() {
     const stats = [
       { label: 'Hermanos activos', value: String(activos), trend: nuevos > 0 ? `+${nuevos} nuevos` : 'Censo al día', tone: 'ok' as const },
       { label: 'Cuotas pendientes', value: String(cuotasPendientes), trend: `${pctPendientes}% del total`, tone: cuotasPendientes > 0 ? ('warn' as const) : ('ok' as const) },
-      { label: 'Papeletas emitidas', value: String(papeletasEmitidas), trend: 'Campaña abierta', tone: 'neutral' as const },
+      { label: `Papeletas ${campana.anio}`, value: String(papeletasEmitidas), trend: ventanaAbierta(campana) ? 'Renovación abierta' : 'Renovación cerrada', tone: 'neutral' as const },
       { label: 'Saldo conciliado', value: formatCurrency(saldo), trend: porConciliar > 0 ? `${porConciliar} por conciliar` : 'Todo conciliado', tone: saldo >= 0 ? ('ok' as const) : ('warn' as const) },
     ]
 
@@ -88,12 +92,15 @@ export default function DashboardHome() {
           when: c.fechaPago ?? '',
           tone: 'ok' as const,
         })),
-      ...papeletas.slice(0, 2).map((p) => ({
-        who: hermanos.find((h) => h.id === p.hermanoId)?.nombre ?? 'Un hermano',
-        what: `tiene la papeleta nº ${String(p.numero).padStart(4, '0')} (${p.estado.toLowerCase()})`,
-        when: p.fechaSolicitud,
-        tone: 'neutral' as const,
-      })),
+      ...papeletasCampana
+        .filter((p) => p.estado !== 'Renuncia')
+        .slice(0, 2)
+        .map((p) => ({
+          who: hermanos.find((h) => h.id === p.hermanoId)?.nombre ?? 'Un hermano',
+          what: `tiene la papeleta nº ${String(p.numero).padStart(4, '0')} (${p.estado.toLowerCase()})`,
+          when: p.fechaSolicitud,
+          tone: 'neutral' as const,
+        })),
       ...movimientos.slice(0, 1).map((m) => ({
         who: 'Tesorería',
         what: `registró ${m.tipo === 'Gasto' ? 'un gasto' : 'un ingreso'}: ${m.concepto} (${formatCurrency(m.importe)})`,
@@ -103,15 +110,14 @@ export default function DashboardHome() {
     ].slice(0, 5)
 
     // Alertas: derivadas de datos reales, con enlace al módulo que las resuelve.
-    const sinAsignar = papeletas.filter((p) => p.estado === 'Solicitada').length
     const contratosPorVencer = documentos.filter(
       (d) => d.categoria === 'Contrato' && d.vigenciaHasta && diasHasta(d.vigenciaHasta) <= 60,
     ).length
     const alertas: { text: string; level: 'warn' | 'ok'; to: string }[] = []
     if (cuotasPendientes > 0)
       alertas.push({ text: `${cuotasPendientes} cuotas siguen pendientes de cobro`, level: 'warn', to: '/app/cuotas' })
-    if (sinAsignar > 0)
-      alertas.push({ text: `${sinAsignar} papeletas por asignar al cortejo`, level: 'warn', to: '/app/papeletas' })
+    if (porRenovar > 0 && ventanaAbierta(campana))
+      alertas.push({ text: `${porRenovar} hermanos por renovar su sitio antes de la fecha límite`, level: 'warn', to: '/app/papeletas' })
     if (contratosPorVencer > 0)
       alertas.push({ text: `${contratosPorVencer} contratos vencidos o a punto de vencer`, level: 'warn', to: '/app/archivo' })
     if (porConciliar > 0)
