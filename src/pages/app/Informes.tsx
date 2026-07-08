@@ -12,6 +12,7 @@ import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { ENSERES_INICIALES } from '../../data/enseres'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoDeTramo } from '../../lib/cortejo'
+import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 
 interface Informe {
   id: string
@@ -24,26 +25,34 @@ interface Informe {
 }
 
 function construirInformes(): Informe[] {
-  const hermanoDe = (id: string) => HERMANOS_INICIALES.find((h) => h.id === id)
+  // Los informes se calculan sobre los datos guardados (localStorage), no
+  // sobre los de ejemplo: reflejan las altas, pagos y cambios hechos en la app.
+  const hermanosActuales = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+  const cuotasActuales = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+  const papeletasActuales = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  const movimientosActuales = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
+  const enseresActuales = leerPersistido(CLAVES_DATOS.enseres, ENSERES_INICIALES)
+
+  const hermanoDe = (id: string) => hermanosActuales.find((h) => h.id === id)
   const tramos = getTramos()
 
-  const activos = HERMANOS_INICIALES.filter((h) => h.estado === 'Activo').length
-  const nuevos = HERMANOS_INICIALES.filter((h) => h.estado === 'Nuevo').length
-  const bajas = HERMANOS_INICIALES.filter((h) => h.estado === 'Baja').length
-  const alDia = HERMANOS_INICIALES.filter((h) => h.cuotaAlDia).length
-  const sinIban = HERMANOS_INICIALES.filter((h) => !h.iban).length
+  const activos = hermanosActuales.filter((h) => h.estado === 'Activo').length
+  const nuevos = hermanosActuales.filter((h) => h.estado === 'Nuevo').length
+  const bajas = hermanosActuales.filter((h) => h.estado === 'Baja').length
+  const alDia = hermanosActuales.filter((h) => h.cuotaAlDia).length
+  const sinIban = hermanosActuales.filter((h) => !h.iban).length
 
-  const cobrado = CUOTAS_INICIALES.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
-  const pendiente = CUOTAS_INICIALES.filter((c) => c.estado === 'Pendiente').reduce((s, c) => s + c.importe, 0)
-  const devuelto = CUOTAS_INICIALES.filter((c) => c.estado === 'Devuelta').reduce((s, c) => s + c.importe, 0)
-  const domiciliadas = CUOTAS_INICIALES.filter((c) => c.domiciliada).length
+  const cobrado = cuotasActuales.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
+  const pendiente = cuotasActuales.filter((c) => c.estado === 'Pendiente').reduce((s, c) => s + c.importe, 0)
+  const devuelto = cuotasActuales.filter((c) => c.estado === 'Devuelta').reduce((s, c) => s + c.importe, 0)
+  const domiciliadas = cuotasActuales.filter((c) => c.domiciliada).length
 
-  const recaudadoPapeletas = PAPELETAS_INICIALES.filter((p) => p.estado !== 'Anulada').reduce((s, p) => s + p.importe, 0)
-  const entregadas = PAPELETAS_INICIALES.filter((p) => p.estado === 'Entregada').length
-  const pendientesPapeleta = PAPELETAS_INICIALES.filter((p) => p.estado === 'Solicitada' || p.estado === 'Asignada').length
+  const recaudadoPapeletas = papeletasActuales.filter((p) => p.estado !== 'Anulada').reduce((s, p) => s + p.importe, 0)
+  const entregadas = papeletasActuales.filter((p) => p.estado === 'Entregada').length
+  const pendientesPapeleta = papeletasActuales.filter((p) => p.estado === 'Solicitada' || p.estado === 'Asignada').length
 
   const filasCortejo = tramos.map((t) => {
-    const reparto = repartoDeTramo(t, PAPELETAS_INICIALES, hermanoDe, new Set())
+    const reparto = repartoDeTramo(t, papeletasActuales, hermanoDe, new Set())
     const ocupados = reparto.filter((a) => a.estado !== 'Excede aforo').length
     const excedidos = reparto.filter((a) => a.estado === 'Excede aforo').length
     return { tramo: t, ocupados, excedidos }
@@ -52,20 +61,20 @@ function construirInformes(): Informe[] {
   const aforoTotal = tramos.reduce((s, t) => s + t.capacidad, 0)
   const ocupadosTotal = filasCortejo.reduce((s, f) => s + f.ocupados, 0)
 
-  const ingresos = MOVIMIENTOS_INICIALES.filter((m) => m.tipo === 'Ingreso').reduce((s, m) => s + m.importe, 0)
-  const gastos = MOVIMIENTOS_INICIALES.filter((m) => m.tipo === 'Gasto').reduce((s, m) => s + m.importe, 0)
-  const balanceConciliado = MOVIMIENTOS_INICIALES.filter((m) => m.estado === 'Conciliado').reduce(
+  const ingresos = movimientosActuales.filter((m) => m.tipo === 'Ingreso').reduce((s, m) => s + m.importe, 0)
+  const gastos = movimientosActuales.filter((m) => m.tipo === 'Gasto').reduce((s, m) => s + m.importe, 0)
+  const balanceConciliado = movimientosActuales.filter((m) => m.estado === 'Conciliado').reduce(
     (s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe),
     0,
   )
-  const porConciliar = MOVIMIENTOS_INICIALES.filter((m) => m.estado === 'Pendiente').length
+  const porConciliar = movimientosActuales.filter((m) => m.estado === 'Pendiente').length
 
-  const valorAsegurado = ENSERES_INICIALES.filter((e) => e.valorAsegurado !== null).reduce(
+  const valorAsegurado = enseresActuales.filter((e) => e.valorAsegurado !== null).reduce(
     (s, e) => s + (e.valorAsegurado ?? 0),
     0,
   )
-  const enPrestamo = ENSERES_INICIALES.filter((e) => e.prestadoA !== null).length
-  const necesitaRestauracion = ENSERES_INICIALES.filter((e) => e.estadoConservacion === 'Necesita restauración').length
+  const enPrestamo = enseresActuales.filter((e) => e.prestadoA !== null).length
+  const necesitaRestauracion = enseresActuales.filter((e) => e.estadoConservacion === 'Necesita restauración').length
 
   return [
     {
@@ -74,7 +83,7 @@ function construirInformes(): Informe[] {
       modulo: 'Hermanos',
       descripcion: 'Censo completo con estado, antigüedad y contacto.',
       resumen: [
-        { etiqueta: 'Total', valor: String(HERMANOS_INICIALES.length) },
+        { etiqueta: 'Total', valor: String(hermanosActuales.length) },
         { etiqueta: 'Activos', valor: String(activos) },
         { etiqueta: 'Nuevos', valor: String(nuevos) },
         { etiqueta: 'Bajas', valor: String(bajas) },
@@ -82,7 +91,7 @@ function construirInformes(): Informe[] {
         { etiqueta: 'Sin IBAN', valor: String(sinIban) },
       ],
       columnas: ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota al día'],
-      filas: HERMANOS_INICIALES.map((h) => [
+      filas: hermanosActuales.map((h) => [
         h.numero, h.nombre, h.estado, h.antiguedad, h.email, h.telefono, h.cuotaAlDia ? 'Sí' : 'No',
       ]),
     },
@@ -95,10 +104,10 @@ function construirInformes(): Informe[] {
         { etiqueta: 'Cobrado', valor: formatCurrency(cobrado) },
         { etiqueta: 'Pendiente', valor: formatCurrency(pendiente) },
         { etiqueta: 'Devuelto', valor: formatCurrency(devuelto) },
-        { etiqueta: 'Domiciliadas', valor: `${domiciliadas} de ${CUOTAS_INICIALES.length}` },
+        { etiqueta: 'Domiciliadas', valor: `${domiciliadas} de ${cuotasActuales.length}` },
       ],
       columnas: ['Nº recibo', 'Hermano', 'Concepto', 'Importe', 'Estado', 'Emisión', 'Cobro'],
-      filas: CUOTAS_INICIALES.map((c) => [
+      filas: cuotasActuales.map((c) => [
         c.numero, hermanoDe(c.hermanoId)?.nombre ?? '—', c.concepto, formatCurrency(c.importe), c.estado, c.fechaEmision, c.fechaCobro,
       ]),
     },
@@ -108,13 +117,13 @@ function construirInformes(): Informe[] {
       modulo: 'Papeletas',
       descripcion: 'Papeletas emitidas por tramo, con su importe y estado.',
       resumen: [
-        { etiqueta: 'Emitidas', valor: String(PAPELETAS_INICIALES.length) },
+        { etiqueta: 'Emitidas', valor: String(papeletasActuales.length) },
         { etiqueta: 'Recaudado', valor: formatCurrency(recaudadoPapeletas) },
         { etiqueta: 'Entregadas', valor: String(entregadas) },
         { etiqueta: 'Pendientes', valor: String(pendientesPapeleta) },
       ],
       columnas: ['Nº', 'Hermano', 'Tramo', 'Importe', 'Estado', 'Solicitud'],
-      filas: PAPELETAS_INICIALES.map((p) => {
+      filas: papeletasActuales.map((p) => {
         const tramo = tramos.find((t) => t.id === p.tramoId)
         return [
           p.numero, hermanoDe(p.hermanoId)?.nombre ?? '—', tramo ? etiquetaTramo(tramo) : 'Sin tramo',
@@ -150,7 +159,7 @@ function construirInformes(): Informe[] {
         { etiqueta: 'Por conciliar', valor: String(porConciliar) },
       ],
       columnas: ['Nº', 'Fecha', 'Concepto', 'Categoría', 'Tipo', 'Importe', 'Cuenta', 'Estado'],
-      filas: MOVIMIENTOS_INICIALES.map((m) => [
+      filas: movimientosActuales.map((m) => [
         m.numero, m.fecha, m.concepto, m.categoria, m.tipo,
         `${m.tipo === 'Gasto' ? '−' : '+'}${formatCurrency(m.importe)}`, m.cuenta, m.estado,
       ]),
@@ -161,13 +170,13 @@ function construirInformes(): Informe[] {
       modulo: 'Inventario',
       descripcion: 'Enseres registrados, su valor asegurado y su estado de conservación.',
       resumen: [
-        { etiqueta: 'Total enseres', valor: String(ENSERES_INICIALES.length) },
+        { etiqueta: 'Total enseres', valor: String(enseresActuales.length) },
         { etiqueta: 'Valor asegurado', valor: formatCurrency(valorAsegurado) },
         { etiqueta: 'En préstamo', valor: String(enPrestamo) },
         { etiqueta: 'Necesitan restauración', valor: String(necesitaRestauracion) },
       ],
       columnas: ['Nº', 'Nombre', 'Categoría', 'Ubicación', 'Conservación', 'Valor asegurado', 'Prestado a'],
-      filas: ENSERES_INICIALES.map((e) => [
+      filas: enseresActuales.map((e) => [
         e.numero, e.nombre, e.categoria, e.ubicacion, e.estadoConservacion,
         e.valorAsegurado !== null ? formatCurrency(e.valorAsegurado) : 'Sin asegurar', e.prestadoA ?? '—',
       ]),
@@ -186,10 +195,14 @@ export default function Informes() {
   const generadoEl = useMemo(() => formatDate(new Date()), [])
 
   const kpis = useMemo(() => {
-    const totalHermanos = HERMANOS_INICIALES.length
-    const cobrado = CUOTAS_INICIALES.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
-    const papeletasEmitidas = PAPELETAS_INICIALES.filter((p) => p.estado !== 'Anulada').length
-    const balance = MOVIMIENTOS_INICIALES.filter((m) => m.estado === 'Conciliado').reduce(
+    const hermanos = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+    const cuotas = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+    const movimientos = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
+    const totalHermanos = hermanos.length
+    const cobrado = cuotas.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
+    const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada').length
+    const balance = movimientos.filter((m) => m.estado === 'Conciliado').reduce(
       (s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe),
       0,
     )
@@ -208,7 +221,7 @@ export default function Informes() {
           <p className="eyebrow">Informes</p>
           <h1>Informes y exportación</h1>
           <p className="dash-head__lead">
-            {informes.length} informes · calculados a partir de los datos de ejemplo mientras conectamos la base de datos.
+            {informes.length} informes · calculados en vivo a partir de los datos guardados en este navegador.
           </p>
         </div>
       </div>

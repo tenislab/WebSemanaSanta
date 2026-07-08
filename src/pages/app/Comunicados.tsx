@@ -13,6 +13,7 @@ import {
   type RedSocial,
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
+import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
 
 function fmt(iso: string | null) {
   if (!iso) return '—'
@@ -42,8 +43,8 @@ const INICIAL_RED: Record<RedSocial, string> = {
 }
 
 export default function Comunicados() {
-  const [comunicados, setComunicados] = useState<Comunicado[]>(COMUNICADOS_INICIALES)
-  const [cuentas, setCuentas] = useState<CuentaSocial[]>(CUENTAS_SOCIALES_INICIALES)
+  const [comunicados, setComunicados] = usePersistentState<Comunicado[]>(CLAVES_DATOS.comunicados, COMUNICADOS_INICIALES)
+  const [cuentas, setCuentas] = usePersistentState<CuentaSocial[]>(CLAVES_DATOS.cuentasSociales, CUENTAS_SOCIALES_INICIALES)
   const [query, setQuery] = useState('')
   const [filtroCanal, setFiltroCanal] = useState<'Todos' | Canal>('Todos')
   const [selected, setSelected] = useState<Comunicado | null>(null)

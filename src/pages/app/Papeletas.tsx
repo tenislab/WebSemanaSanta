@@ -10,6 +10,7 @@ import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
 import { getTramos, tramosDeCuerpo, etiquetaTramo, type Cuerpo } from '../../lib/tramos'
 import { repartoDeTramo, type Asignacion } from '../../lib/cortejo'
+import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -30,7 +31,7 @@ export default function Papeletas() {
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
   const tramos = useMemo(() => getTramos(), [])
 
-  const [papeletas, setPapeletas] = useState<Papeleta[]>(PAPELETAS_INICIALES)
+  const [papeletas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todas')
   const [selected, setSelected] = useState<Papeleta | null>(null)
@@ -38,10 +39,11 @@ export default function Papeletas() {
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
 
+  const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanoDe = useMemo(() => {
-    const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
+    const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
-  }, [])
+  }, [hermanos])
 
   const tramoDe = (tramoId: string | null) => (tramoId ? (tramos.find((t) => t.id === tramoId) ?? null) : null)
 
@@ -433,7 +435,7 @@ export default function Papeletas() {
         <form id="papeleta-form" className="app-form" onSubmit={handleCreate}>
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
-            <HermanoPicker hermanos={HERMANOS_INICIALES} name="hermanoId" id="hermanoId" />
+            <HermanoPicker hermanos={hermanos} name="hermanoId" id="hermanoId" />
           </div>
           <p className="form-hint">
             La solicitud queda «Sin asignar» hasta que se le reparta un tramo del cortejo. El

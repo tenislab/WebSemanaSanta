@@ -10,6 +10,7 @@ import { etiquetaTramo, getTramos, tramosDeCuerpo, type Cuerpo, type Tramo } fro
 import { repartoDeTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
+import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
 
 /** Año de la edición activa: un hermano dado de alta este mismo año aún no cumple el mínimo de antigüedad para salir. */
 const EDICION_ACTUAL = 2026
@@ -61,8 +62,8 @@ export default function Cortejo() {
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
   const tramos = useMemo(() => getTramos(), [])
 
-  const [papeletas, setPapeletas] = useState<Papeleta[]>(PAPELETAS_INICIALES)
-  const [incidencias, setIncidencias] = useState<Incidencia[]>(INCIDENCIAS_INICIALES)
+  const [papeletas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  const [incidencias, setIncidencias] = usePersistentState<Incidencia[]>(CLAVES_DATOS.incidencias, INCIDENCIAS_INICIALES)
 
   const [query, setQuery] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<'Todos' | 'Con hueco' | 'Completo' | 'Con incidencia' | 'Excede aforo'>('Todos')
@@ -77,10 +78,11 @@ export default function Cortejo() {
   const [ordenOpen, setOrdenOpen] = useState(false)
   const [incidenciaPara, setIncidenciaPara] = useState<string | null>(null)
 
+  const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanoDe = useMemo(() => {
-    const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
+    const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
-  }, [])
+  }, [hermanos])
 
   const incidenciasAbiertas = useMemo(
     () => new Set(incidencias.filter((i) => !i.resuelta).map((i) => i.papeletaId)),
@@ -245,7 +247,7 @@ export default function Cortejo() {
     const data = new FormData(e.currentTarget)
     const hermanoId = String(data.get('hermanoId') ?? '')
     const tramoId = String(data.get('tramoId') ?? '')
-    const hermano = HERMANOS_INICIALES.find((h) => h.id === hermanoId)
+    const hermano = hermanos.find((h) => h.id === hermanoId)
     const tramo = tramos.find((t) => t.id === tramoId)
     if (!hermano) {
       setAsignarError('Elige un hermano de la lista.')
@@ -546,7 +548,7 @@ export default function Cortejo() {
           {asignarError && <div className="form-hint form-hint--error">{asignarError}</div>}
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
-            <HermanoPicker hermanos={HERMANOS_INICIALES} name="hermanoId" id="hermanoId" />
+            <HermanoPicker hermanos={hermanos} name="hermanoId" id="hermanoId" />
           </div>
           <div className="form-grid-2">
             <div className="form-row">

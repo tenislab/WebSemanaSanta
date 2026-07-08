@@ -7,6 +7,7 @@ import {
   type HermandadSettings,
 } from '../../lib/hermandadSettings'
 import { getTramos, saveTramos, aforoDeCuerpo, type Cuerpo, type Tramo } from '../../lib/tramos'
+import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
 
 const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
@@ -348,6 +349,30 @@ export default function Configuracion() {
           {tramosSaved && <span className="alert-item alert-item--ok">Tramos guardados</span>}
           <button type="button" className="btn btn-primary" onClick={handleSaveTramos}>
             Guardar tramos
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Datos guardados en este navegador</h2>
+        </div>
+        <p className="form-hint">
+          Todo lo que haces en la app (altas de hermanos, pagos, papeletas, movimientos…) queda
+          guardado en este navegador y sobrevive a recargas. Si quieres empezar de cero con los
+          datos de ejemplo, puedes restablecerlos aquí. Esta acción no se puede deshacer.
+        </p>
+        <div className="settings-actions">
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => {
+              if (window.confirm('¿Borrar todos los datos guardados y volver a los de ejemplo?')) {
+                restablecerDatosDeEjemplo()
+              }
+            }}
+          >
+            Restablecer datos de ejemplo
           </button>
         </div>
       </section>

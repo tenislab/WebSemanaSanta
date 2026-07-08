@@ -5,6 +5,7 @@ import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoDeTramo } from '../../lib/cortejo'
+import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -13,7 +14,7 @@ function estadoClass(estado: EstadoHermano) {
 }
 
 export default function Hermanos() {
-  const [hermanos, setHermanos] = useState<Hermano[]>(HERMANOS_INICIALES)
+  const [hermanos, setHermanos] = usePersistentState<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'Todos' | EstadoHermano>('Todos')
   const [selected, setSelected] = useState<Hermano | null>(null)
@@ -57,9 +58,10 @@ export default function Hermanos() {
     return (id: string) => map.get(id)
   }, [hermanos])
   const tramoPorHermano = useMemo(() => {
+    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
     const map = new Map<string, string>()
     tramos.forEach((t) => {
-      const reparto = repartoDeTramo(t, PAPELETAS_INICIALES, hermanoDe, new Set())
+      const reparto = repartoDeTramo(t, papeletas, hermanoDe, new Set())
       reparto.forEach((a) => map.set(a.hermano.id, a.estado === 'Excede aforo' ? `${etiquetaTramo(t)} (excede aforo)` : etiquetaTramo(t)))
     })
     return map

@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
+import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -32,7 +33,7 @@ export default function Tesoreria() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
 
-  const [movimientos, setMovimientos] = useState<Movimiento[]>(MOVIMIENTOS_INICIALES)
+  const [movimientos, setMovimientos] = usePersistentState<Movimiento[]>(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todos')
   const [selected, setSelected] = useState<Movimiento | null>(null)

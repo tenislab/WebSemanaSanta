@@ -12,6 +12,7 @@ import {
 } from '../../data/documentos'
 import { useAuth } from '../../context/AuthContext'
 import { formatDate } from '../../lib/format'
+import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
 
 function fmt(iso: string) {
   return formatDate(new Date(`${iso}T00:00:00`))
@@ -59,7 +60,7 @@ export default function Archivo() {
   const { user } = useAuth()
   const nombreUsuario = (user?.user_metadata?.nombre as string | undefined) ?? ''
 
-  const [documentos, setDocumentos] = useState<Documento[]>(DOCUMENTOS_INICIALES)
+  const [documentos, setDocumentos] = usePersistentState<Documento[]>(CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES)
   const [query, setQuery] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<'Todos' | CategoriaDocumento>('Todos')
   const [viewAsCargo, setViewAsCargo] = useState<Cargo>('Hermano Mayor')

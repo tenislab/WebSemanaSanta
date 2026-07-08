@@ -15,6 +15,8 @@ import {
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
+import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
+import { descargarArchivo, toCsv } from '../../lib/csv'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -45,7 +47,7 @@ export default function Cuotas() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
 
-  const [cuotas, setCuotas] = useState<Cuota[]>(CUOTAS_INICIALES)
+  const [cuotas, setCuotas] = usePersistentState<Cuota[]>(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'Todas' | EstadoCuota>('Todas')
   const [selected, setSelected] = useState<Cuota | null>(null)
@@ -54,10 +56,11 @@ export default function Cuotas() {
   const [hermanoNuevaCuota, setHermanoNuevaCuota] = useState<Hermano | null>(null)
   const [domiciliarNuevaCuota, setDomiciliarNuevaCuota] = useState(true)
 
+  const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanoDe = useMemo(() => {
-    const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
+    const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
-  }, [])
+  }, [hermanos])
 
   const filtered = useMemo(() => {
     return cuotas
@@ -91,6 +94,25 @@ export default function Cuotas() {
     setSelected((prev) => (prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy() } : prev))
   }
 
+  /**
+   * Remesa bancaria: listado CSV de todos los recibos pendientes y
+   * domiciliados, con el IBAN de cada hermano, para presentarlo al banco.
+   * (El fichero SEPA XML real llegará con la conexión a la base de datos.)
+   */
+  const recibosRemesables = useMemo(
+    () => cuotas.filter((c) => c.estado === 'Pendiente' && c.domiciliada && hermanoDe(c.hermanoId)?.iban),
+    [cuotas, hermanoDe],
+  )
+
+  function exportarRemesa() {
+    const filas = recibosRemesables.map((c) => {
+      const h = hermanoDe(c.hermanoId)!
+      return [c.numero, h.nombre, h.iban ?? '', c.concepto, c.importe.toFixed(2).replace('.', ','), c.fechaCobro]
+    })
+    const csv = toCsv(['Nº recibo', 'Hermano', 'IBAN', 'Concepto', 'Importe (€)', 'Fecha de cobro'], filas)
+    descargarArchivo(`remesa-cuotas-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+  }
+
   function abrirNuevaCuota() {
     setHermanoNuevaCuota(null)
     setDomiciliarNuevaCuota(true)
@@ -111,7 +133,7 @@ export default function Cuotas() {
     const importeRaw = String(data.get('importe') ?? '')
     const importe = Number(importeRaw.replace(',', '.'))
     const fechaCobroRaw = String(data.get('fechaCobro') ?? '')
-    const hermano = HERMANOS_INICIALES.find((h) => h.id === hermanoId)
+    const hermano = hermanos.find((h) => h.id === hermanoId)
     const domiciliada = data.get('domiciliada') === 'on' && Boolean(hermano?.iban)
     if (!hermanoId || !concepto || !Number.isFinite(importe) || importe <= 0) return
 
@@ -150,9 +172,23 @@ export default function Cuotas() {
             </Link>
           </p>
         </div>
-        <button className="btn btn-primary" onClick={abrirNuevaCuota}>
-          + Nueva cuota
-        </button>
+        <div className="dash-head__actions">
+          <button
+            className="btn btn-outline"
+            onClick={exportarRemesa}
+            disabled={recibosRemesables.length === 0}
+            title={
+              recibosRemesables.length === 0
+                ? 'No hay recibos pendientes domiciliados con IBAN'
+                : `${recibosRemesables.length} recibos pendientes domiciliados`
+            }
+          >
+            Exportar remesa ({recibosRemesables.length})
+          </button>
+          <button className="btn btn-primary" onClick={abrirNuevaCuota}>
+            + Nueva cuota
+          </button>
+        </div>
       </div>
 
       <section className="stat-grid">
@@ -335,7 +371,7 @@ export default function Cuotas() {
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
             <HermanoPicker
-              hermanos={HERMANOS_INICIALES}
+              hermanos={hermanos}
               name="hermanoId"
               id="hermanoId"
               onSelect={setHermanoNuevaCuota}

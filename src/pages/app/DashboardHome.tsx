@@ -1,12 +1,13 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-
-const STATS = [
-  { label: 'Hermanos activos', value: '1.204', trend: '+18 este mes', tone: 'ok' as const },
-  { label: 'Cuotas pendientes', value: '47', trend: '6% del total', tone: 'warn' as const },
-  { label: 'Papeletas emitidas', value: '812', trend: 'Campaña abierta', tone: 'neutral' as const },
-  { label: 'Saldo en tesorería', value: '18.420 €', trend: '+2.180 € este mes', tone: 'ok' as const },
-]
+import { HERMANOS_INICIALES } from '../../data/hermanos'
+import { CUOTAS_INICIALES } from '../../data/cuotas'
+import { PAPELETAS_INICIALES } from '../../data/papeletas'
+import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
+import { DOCUMENTOS_INICIALES } from '../../data/documentos'
+import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { formatCurrency } from '../../lib/format'
 
 const QUICK_ACTIONS = [
   { to: '/app/hermanos', label: 'Nuevo hermano', icon: 'user' as const },
@@ -30,20 +31,6 @@ const ICONS: Record<string, JSX.Element> = {
   ),
 }
 
-const ACTIVITY = [
-  { who: 'Ana Sánchez del Río', what: 'pagó su cuota anual', when: 'hace 12 min', tone: 'ok' as const },
-  { who: 'Secretaría', what: 'emitió la papeleta nº 0416 a Carmen Pérez', when: 'hace 1 h', tone: 'neutral' as const },
-  { who: 'Francisco Gómez Nieto', what: 'solicitó cambio de tramo en el cortejo', when: 'hace 3 h', tone: 'warn' as const },
-  { who: 'Juan Luis Cabrera', what: 'se dio de alta como nuevo hermano', when: 'ayer', tone: 'ok' as const },
-  { who: 'Tesorería', what: 'registró un gasto de flores: 640 €', when: 'ayer', tone: 'neutral' as const },
-]
-
-const ALERTS = [
-  { text: '47 cuotas siguen pendientes de cobro este trimestre', level: 'warn' as const },
-  { text: '12 papeletas por asignar antes del Cabildo General', level: 'warn' as const },
-  { text: 'Copia de seguridad realizada correctamente', level: 'ok' as const },
-]
-
 const AGENDA = [
   { day: '14 MAR', title: 'Cabildo General de Salida', time: '21:00' },
   { day: '15 MAR', title: 'Función Principal de Instituto', time: '12:00' },
@@ -54,9 +41,85 @@ function toneClass(tone: 'ok' | 'warn' | 'neutral') {
   return tone === 'ok' ? 'dot--ok' : tone === 'warn' ? 'dot--warn' : 'dot--neutral'
 }
 
+function diasHasta(iso: string) {
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  return Math.round((new Date(`${iso}T00:00:00`).getTime() - hoy.getTime()) / 86_400_000)
+}
+
 export default function DashboardHome() {
   const { user } = useAuth()
   const nombre = (user?.user_metadata?.nombre as string | undefined)?.split(' ')[0]
+
+  // Todo lo que muestra el Inicio se calcula en vivo de los mismos datos que
+  // gestionan los módulos (guardados en este navegador), no de cifras fijas.
+  const { stats, actividad, alertas } = useMemo(() => {
+    const hermanos = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+    const cuotas = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+    const movimientos = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
+    const documentos = leerPersistido(CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES)
+
+    const activos = hermanos.filter((h) => h.estado === 'Activo').length
+    const nuevos = hermanos.filter((h) => h.estado === 'Nuevo').length
+    const cuotasPendientes = cuotas.filter((c) => c.estado === 'Pendiente').length
+    const pctPendientes = cuotas.length ? Math.round((cuotasPendientes / cuotas.length) * 100) : 0
+    const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada').length
+    const saldo = movimientos
+      .filter((m) => m.estado === 'Conciliado')
+      .reduce((s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe), 0)
+    const porConciliar = movimientos.filter((m) => m.estado === 'Pendiente').length
+
+    const stats = [
+      { label: 'Hermanos activos', value: String(activos), trend: nuevos > 0 ? `+${nuevos} nuevos` : 'Censo al día', tone: 'ok' as const },
+      { label: 'Cuotas pendientes', value: String(cuotasPendientes), trend: `${pctPendientes}% del total`, tone: cuotasPendientes > 0 ? ('warn' as const) : ('ok' as const) },
+      { label: 'Papeletas emitidas', value: String(papeletasEmitidas), trend: 'Campaña abierta', tone: 'neutral' as const },
+      { label: 'Saldo conciliado', value: formatCurrency(saldo), trend: porConciliar > 0 ? `${porConciliar} por conciliar` : 'Todo conciliado', tone: saldo >= 0 ? ('ok' as const) : ('warn' as const) },
+    ]
+
+    // Actividad: los últimos registros reales de cada colección.
+    const actividad = [
+      ...cuotas
+        .filter((c) => c.estado === 'Pagada' && c.fechaPago)
+        .slice(0, 2)
+        .map((c) => ({
+          who: hermanos.find((h) => h.id === c.hermanoId)?.nombre ?? 'Un hermano',
+          what: `pagó su ${c.concepto.toLowerCase()} (${formatCurrency(c.importe)})`,
+          when: c.fechaPago ?? '',
+          tone: 'ok' as const,
+        })),
+      ...papeletas.slice(0, 2).map((p) => ({
+        who: hermanos.find((h) => h.id === p.hermanoId)?.nombre ?? 'Un hermano',
+        what: `tiene la papeleta nº ${String(p.numero).padStart(4, '0')} (${p.estado.toLowerCase()})`,
+        when: p.fechaSolicitud,
+        tone: 'neutral' as const,
+      })),
+      ...movimientos.slice(0, 1).map((m) => ({
+        who: 'Tesorería',
+        what: `registró ${m.tipo === 'Gasto' ? 'un gasto' : 'un ingreso'}: ${m.concepto} (${formatCurrency(m.importe)})`,
+        when: m.fecha,
+        tone: 'neutral' as const,
+      })),
+    ].slice(0, 5)
+
+    // Alertas: derivadas de datos reales, con enlace al módulo que las resuelve.
+    const sinAsignar = papeletas.filter((p) => p.estado === 'Solicitada').length
+    const contratosPorVencer = documentos.filter(
+      (d) => d.categoria === 'Contrato' && d.vigenciaHasta && diasHasta(d.vigenciaHasta) <= 60,
+    ).length
+    const alertas: { text: string; level: 'warn' | 'ok'; to: string }[] = []
+    if (cuotasPendientes > 0)
+      alertas.push({ text: `${cuotasPendientes} cuotas siguen pendientes de cobro`, level: 'warn', to: '/app/cuotas' })
+    if (sinAsignar > 0)
+      alertas.push({ text: `${sinAsignar} papeletas por asignar al cortejo`, level: 'warn', to: '/app/papeletas' })
+    if (contratosPorVencer > 0)
+      alertas.push({ text: `${contratosPorVencer} contratos vencidos o a punto de vencer`, level: 'warn', to: '/app/archivo' })
+    if (porConciliar > 0)
+      alertas.push({ text: `${porConciliar} movimientos de tesorería por conciliar`, level: 'warn', to: '/app/tesoreria' })
+    if (alertas.length === 0) alertas.push({ text: 'Todo en orden: sin tareas pendientes', level: 'ok', to: '/app' })
+
+    return { stats, actividad, alertas }
+  }, [])
 
   return (
     <div className="dash">
@@ -65,14 +128,14 @@ export default function DashboardHome() {
           <p className="eyebrow">Inicio</p>
           <h1>{nombre ? `Hola, ${nombre}` : 'Bienvenido a tu hermandad'}</h1>
           <p className="dash-head__lead">
-            Esto es lo más relevante hoy. Los datos que ves son de ejemplo mientras conectamos la
-            base de datos.
+            Esto es lo más relevante hoy, calculado en vivo con los datos guardados en este
+            navegador.
           </p>
         </div>
       </div>
 
       <section className="stat-grid">
-        {STATS.map((s) => (
+        {stats.map((s) => (
           <div className="stat-tile" key={s.label}>
             <span className="stat-tile__label">{s.label}</span>
             <span className="stat-tile__value">{s.value}</span>
@@ -96,7 +159,7 @@ export default function DashboardHome() {
             <h2>Actividad reciente</h2>
           </div>
           <ul className="activity-list">
-            {ACTIVITY.map((a, i) => (
+            {actividad.map((a, i) => (
               <li key={i}>
                 <span className={`dot ${toneClass(a.tone)}`} />
                 <span className="activity-text">
@@ -114,9 +177,11 @@ export default function DashboardHome() {
               <h2>Alertas y tareas</h2>
             </div>
             <ul className="alert-list">
-              {ALERTS.map((a, i) => (
+              {alertas.map((a, i) => (
                 <li key={i} className={`alert-item alert-item--${a.level}`}>
-                  {a.text}
+                  <Link to={a.to} className="alert-item__link">
+                    {a.text}
+                  </Link>
                 </li>
               ))}
             </ul>

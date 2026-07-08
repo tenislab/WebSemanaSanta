@@ -8,6 +8,7 @@ import {
   type EstadoConservacion,
 } from '../../data/enseres'
 import { formatCurrency } from '../../lib/format'
+import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { year: 'numeric' })
@@ -22,7 +23,7 @@ function estadoClass(estado: EstadoConservacion) {
 const ESTADOS_CONSERVACION: EstadoConservacion[] = ['Bueno', 'Regular', 'Necesita restauración']
 
 export default function Inventario() {
-  const [enseres, setEnseres] = useState<Enser[]>(ENSERES_INICIALES)
+  const [enseres, setEnseres] = usePersistentState<Enser[]>(CLAVES_DATOS.enseres, ENSERES_INICIALES)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'Todos' | CategoriaEnser>('Todos')
   const [selected, setSelected] = useState<Enser | null>(null)
