@@ -36,6 +36,7 @@
   --warn-bg: #f4e6ce; --warn-fg: #8a5a22;
   --err-bg: #f5e0df; --err-fg: #973030;
   --info-bg: #ece4d4; --info-fg: #7a6a45;
+  --restricted-bg: #f0dde1; --restricted-fg: #6b1e2b;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -62,6 +63,7 @@
     --warn-bg: #3a2e17; --warn-fg: #e0b067;
     --err-bg: #3a1f22; --err-fg: #e79a95;
     --info-bg: #2a2330; --info-fg: #cbbda3;
+    --restricted-bg: #3a1620; --restricted-fg: #d98ea0;
   }
 }
 
@@ -83,6 +85,7 @@
   --warn-bg: #3a2e17; --warn-fg: #e0b067;
   --err-bg: #3a1f22; --err-fg: #e79a95;
   --info-bg: #2a2330; --info-fg: #cbbda3;
+  --restricted-bg: #3a1620; --restricted-fg: #d98ea0;
 }
 
 :root[data-theme='light'] {
@@ -103,6 +106,7 @@
   --warn-bg: #f4e6ce; --warn-fg: #8a5a22;
   --err-bg: #f5e0df; --err-fg: #973030;
   --info-bg: #ece4d4; --info-fg: #7a6a45;
+  --restricted-bg: #f0dde1; --restricted-fg: #6b1e2b;
 }
 
 /* ---------- reset ligero ---------- */
@@ -850,6 +854,9 @@ h1, h2, h3,
 .pill--err { background: var(--err-bg); color: var(--err-fg); }
 .pill--off { background: var(--info-bg); color: var(--text-muted); }
 .pill--info { background: var(--info-bg); color: var(--gold); }
+.pill--restricted { background: var(--restricted-bg); color: var(--restricted-fg); }
+.pill--restricted::before { content: none; }
+.pill--restricted svg { width: 11px; height: 11px; }
 
 .icon-btn {
   width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: transparent;
@@ -887,6 +894,9 @@ h1, h2, h3,
 @keyframes rowFlash { from { background: var(--ok-bg); } to { background: transparent; } }
 .row--flash td { animation: rowFlash 2.4s ease-out; }
 @media (prefers-reduced-motion: reduce) { .row--flash td { animation: none; } }
+
+/* Archivo documental: fila que el cargo simulado actualmente no puede abrir */
+.row--restricted { opacity: 0.55; }
 
 /* =========================================================================
    Panel — drawer lateral (ficha, alta de hermano…)
@@ -959,9 +969,14 @@ h1, h2, h3,
 
 .banner-inline {
   border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.84rem; line-height: 1.5;
-  border: 1px solid transparent;
+  border: 1px solid transparent; margin-bottom: 1.1rem;
 }
 .banner-inline--warn { background: var(--warn-bg); color: var(--warn-fg); }
+.banner-inline select {
+  padding: 0.3rem 0.5rem; font: inherit; font-size: 0.84rem; font-weight: 600;
+  color: inherit; background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.banner-inline select:focus { outline: none; box-shadow: 0 0 0 3px var(--ring); }
 
 .logo-uploader { display: flex; align-items: flex-start; gap: 1.1rem; }
 .logo-preview {
@@ -1172,6 +1187,11 @@ h1, h2, h3,
 .cortejo-orden__tramo ol { margin: 0; padding-left: 1.3rem; font-size: 0.86rem; display: flex; flex-direction: column; gap: 0.25rem; }
 
 .drawer--sm { max-width: 380px; }
+
+/* =========================================================================
+   Archivo documental — permisos por cargo (simulados, sin autenticación real)
+   ========================================================================= */
+.archivo-cargos { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin-top: 0.5rem; }
 
 /* =========================================================================
    Responsive

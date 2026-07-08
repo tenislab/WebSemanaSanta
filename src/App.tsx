@@ -11,6 +11,7 @@ import Papeletas from './pages/app/Papeletas'
 import Cortejo from './pages/app/Cortejo'
 import Tesoreria from './pages/app/Tesoreria'
 import Inventario from './pages/app/Inventario'
+import Archivo from './pages/app/Archivo'
 import Configuracion from './pages/app/Configuracion'
 import ComingSoon from './pages/app/ComingSoon'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -38,16 +39,7 @@ export default function App() {
         <Route path="papeletas" element={<Papeletas />} />
         <Route path="tesoreria" element={<Tesoreria />} />
         <Route path="inventario" element={<Inventario />} />
-        <Route
-          path="archivo"
-          element={
-            <ComingSoon
-              title="Archivo documental"
-              phase="Próxima fase"
-              description="Actas, reglas, contratos, boletines, expedientes y archivo histórico, con permisos por cargo."
-            />
-          }
-        />
+        <Route path="archivo" element={<Archivo />} />
         <Route
           path="comunicados"
           element={
