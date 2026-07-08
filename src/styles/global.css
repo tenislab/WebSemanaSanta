@@ -38,6 +38,14 @@
   --info-bg: #ece4d4; --info-fg: #7a6a45;
   --restricted-bg: #f0dde1; --restricted-fg: #6b1e2b;
 
+  /* superficies de cristal (liquid glass) del panel de gestión */
+  --glass-surface: rgba(255, 255, 255, 0.6);
+  --glass-surface-strong: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 24px 50px -30px rgba(44, 22, 54, 0.35);
+  --glass-bloom-1: rgba(217, 189, 130, 0.2);
+  --glass-bloom-2: rgba(106, 58, 111, 0.12);
+
   --radius: 12px;
   --radius-sm: 8px;
   --maxw: 1180px;
@@ -64,6 +72,13 @@
     --err-bg: #3a1f22; --err-fg: #e79a95;
     --info-bg: #2a2330; --info-fg: #cbbda3;
     --restricted-bg: #3a1620; --restricted-fg: #d98ea0;
+
+    --glass-surface: rgba(35, 26, 40, 0.62);
+    --glass-surface-strong: rgba(35, 26, 40, 0.82);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.65);
+    --glass-bloom-1: rgba(217, 189, 130, 0.1);
+    --glass-bloom-2: rgba(106, 58, 111, 0.22);
   }
 }
 
@@ -86,6 +101,13 @@
   --err-bg: #3a1f22; --err-fg: #e79a95;
   --info-bg: #2a2330; --info-fg: #cbbda3;
   --restricted-bg: #3a1620; --restricted-fg: #d98ea0;
+
+  --glass-surface: rgba(35, 26, 40, 0.62);
+  --glass-surface-strong: rgba(35, 26, 40, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.65);
+  --glass-bloom-1: rgba(217, 189, 130, 0.1);
+  --glass-bloom-2: rgba(106, 58, 111, 0.22);
 }
 
 :root[data-theme='light'] {
@@ -107,6 +129,13 @@
   --err-bg: #f5e0df; --err-fg: #973030;
   --info-bg: #ece4d4; --info-fg: #7a6a45;
   --restricted-bg: #f0dde1; --restricted-fg: #6b1e2b;
+
+  --glass-surface: rgba(255, 255, 255, 0.6);
+  --glass-surface-strong: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 24px 50px -30px rgba(44, 22, 54, 0.35);
+  --glass-bloom-1: rgba(217, 189, 130, 0.2);
+  --glass-bloom-2: rgba(106, 58, 111, 0.12);
 }
 
 /* ---------- reset ligero ---------- */
@@ -644,14 +673,23 @@ h1, h2, h3,
    Usa el sistema de tokens claro/oscuro de la app (herramienta de uso
    diario: prioriza la lectura y el escaneo sobre el efecto visual).
    ========================================================================= */
-.app-shell { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; background: var(--bg-sunken); }
+.app-shell {
+  min-height: 100vh; display: grid; grid-template-columns: 260px 1fr;
+  background:
+    radial-gradient(60% 50% at 10% -8%, var(--glass-bloom-1), transparent 60%),
+    radial-gradient(55% 45% at 100% 22%, var(--glass-bloom-2), transparent 55%),
+    var(--bg-sunken);
+}
 
 .app-side {
-  background: var(--morado-900);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 55%), rgba(44, 22, 54, 0.82);
   color: var(--marfil-100);
   display: flex; flex-direction: column;
   padding: 1.2rem 0.9rem;
   position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  border-right: 1px solid rgba(217, 189, 130, 0.14);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
 }
 .app-side__brand {
   display: flex; align-items: center; gap: 0.65rem;
@@ -702,8 +740,10 @@ h1, h2, h3,
 .app-main { display: flex; flex-direction: column; min-width: 0; }
 .app-topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  padding: 0.85rem 1.6rem; background: var(--bg-raised); border-bottom: 1px solid var(--line);
+  padding: 0.85rem 1.6rem; background: var(--glass-surface-strong); border-bottom: 1px solid var(--glass-border);
   position: sticky; top: 0; z-index: 20;
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
 }
 .app-topbar__right { display: flex; align-items: center; gap: 0.8rem; }
 .app-menu-btn {
@@ -724,8 +764,11 @@ h1, h2, h3,
 
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.4rem; }
 .stat-tile {
-  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--glass-surface); border: 1px solid var(--glass-border); border-radius: var(--radius);
   padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 0.3rem;
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
 }
 .stat-tile__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 .stat-tile__value { font-size: 1.7rem; font-variant-numeric: tabular-nums; font-family: 'Iowan Old Style', Palatino, Georgia, serif; }
@@ -737,9 +780,11 @@ h1, h2, h3,
 .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem; margin-bottom: 1.8rem; }
 .quick-action {
   display: flex; align-items: center; gap: 0.7rem;
-  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--glass-surface); border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
   padding: 0.85rem 1rem; text-decoration: none; color: var(--text); font-size: 0.86rem; font-weight: 600;
   transition: border-color 0.15s ease, transform 0.15s ease;
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
 }
 .quick-action:hover { border-color: var(--gold); transform: translateY(-1px); }
 .quick-action__ic {
@@ -755,7 +800,7 @@ h1, h2, h3,
 .dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.2rem; align-items: start; }
 .dash-side { display: flex; flex-direction: column; gap: 1.2rem; }
 
-.panel { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.3rem 1.4rem; }
+.panel { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.3rem 1.4rem; box-shadow: var(--glass-shadow); }
 .panel__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
 .panel__head h2 { font-size: 1.02rem; font-weight: 600; font-family: inherit; }
 .panel__link { font-size: 0.78rem; color: var(--gold); text-decoration: none; }
@@ -824,7 +869,7 @@ h1, h2, h3,
 .chip:hover { border-color: var(--gold); color: var(--text); }
 .chip--active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
-.table-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+.table-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; box-shadow: var(--glass-shadow); }
 .table-card table { width: 100%; border-collapse: collapse; min-width: 720px; }
 .table-card thead th {
   text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
@@ -905,9 +950,11 @@ h1, h2, h3,
 .drawer-scrim { position: absolute; inset: 0; background: rgba(15, 9, 19, 0.5); border: none; animation: drawerFade 0.18s ease; }
 .drawer {
   position: relative; width: 100%; max-width: 440px; height: 100%;
-  background: var(--bg-raised); border-left: 1px solid var(--line);
+  background: var(--glass-surface-strong); border-left: 1px solid var(--glass-border);
   display: flex; flex-direction: column;
-  box-shadow: -30px 0 60px -30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--glass-shadow), -30px 0 60px -30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
   animation: drawerIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes drawerFade { from { opacity: 0; } to { opacity: 1; } }
@@ -946,7 +993,7 @@ h1, h2, h3,
    Panel — Configuración (datos de la hermandad para los recibos)
    ========================================================================= */
 .settings-layout { display: flex; flex-direction: column; gap: 1.1rem; max-width: 640px; }
-.settings-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.4rem 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; }
+.settings-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.4rem 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; box-shadow: var(--glass-shadow); }
 .settings-card__title { font-size: 1rem; font-weight: 600; margin: 0; }
 .settings-card__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
@@ -969,8 +1016,9 @@ h1, h2, h3,
 
 .banner-inline {
   border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.84rem; line-height: 1.5;
-  border: 1px solid transparent; margin-bottom: 1.1rem;
+  border: 1px solid transparent;
 }
+.dash > .banner-inline { margin-bottom: 1.1rem; }
 .banner-inline--warn { background: var(--warn-bg); color: var(--warn-fg); }
 .banner-inline select {
   padding: 0.3rem 0.5rem; font: inherit; font-size: 0.84rem; font-weight: 600;
@@ -1191,7 +1239,52 @@ h1, h2, h3,
 /* =========================================================================
    Archivo documental — permisos por cargo (simulados, sin autenticación real)
    ========================================================================= */
-.archivo-cargos { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin-top: 0.5rem; }
+.archivo-cargos { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; }
+.archivo-visibilidad-group { display: flex; flex-direction: column; gap: 0.6rem; }
+
+/* =========================================================================
+   Comunicados — conexión (simulada) con redes sociales
+   ========================================================================= */
+.redes-card {
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.1rem 1.3rem; margin-bottom: 1.4rem; box-shadow: var(--glass-shadow);
+}
+.redes-card__head h2 { font-size: 1rem; margin: 0 0 0.2rem; }
+.redes-card__head p { margin: 0 0 0.9rem; }
+.redes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.8rem; }
+.red-card {
+  display: flex; flex-direction: column; gap: 0.7rem; padding: 0.9rem;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.red-card__top { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
+.red-card__badge {
+  width: 34px; height: 34px; border-radius: 50%; flex: none; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700;
+}
+.red-card__name { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.red-card__name b { font-size: 0.88rem; }
+.red-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.red-card__connect-row { display: flex; gap: 0.4rem; }
+.red-card__connect-row input {
+  width: 110px; padding: 0.4rem 0.5rem; font: inherit; font-size: 0.82rem;
+  color: var(--text); background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.red-card__connect-row input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+
+/* =========================================================================
+   Informes — resumen y tabla dentro del drawer, y documento de impresión
+   ========================================================================= */
+.stat-grid--compact { grid-template-columns: repeat(2, 1fr); gap: 0.7rem; margin: 1rem 0; }
+.stat-grid--compact .stat-tile { padding: 0.8rem 0.9rem; }
+.stat-grid--compact .stat-tile__value { font-size: 1.3rem; }
+
+.table-card--in-drawer { overflow-x: auto; max-width: 100%; }
+.table-card--in-drawer table { font-size: 0.82rem; }
+
+.informe-doc__resumen { display: flex; flex-wrap: wrap; gap: 1.3rem; padding: 0.2rem 0; }
+.informe-doc__resumen > div { display: flex; flex-direction: column; gap: 0.2rem; }
+.informe-doc__resumen b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.informe-doc__table th:last-child, .informe-doc__table td:last-child { text-align: left; }
 
 /* =========================================================================
    Responsive

@@ -12,8 +12,9 @@ import Cortejo from './pages/app/Cortejo'
 import Tesoreria from './pages/app/Tesoreria'
 import Inventario from './pages/app/Inventario'
 import Archivo from './pages/app/Archivo'
+import Comunicados from './pages/app/Comunicados'
+import Informes from './pages/app/Informes'
 import Configuracion from './pages/app/Configuracion'
-import ComingSoon from './pages/app/ComingSoon'
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -40,26 +41,8 @@ export default function App() {
         <Route path="tesoreria" element={<Tesoreria />} />
         <Route path="inventario" element={<Inventario />} />
         <Route path="archivo" element={<Archivo />} />
-        <Route
-          path="comunicados"
-          element={
-            <ComingSoon
-              title="Comunicados"
-              phase="Próxima fase"
-              description="Email, SMS, WhatsApp y push segmentados, con plantillas, programación y confirmación de lectura."
-            />
-          }
-        />
-        <Route
-          path="informes"
-          element={
-            <ComingSoon
-              title="Informes"
-              phase="Próxima fase"
-              description="Informes de hermanos, cuotas, cortejo, papeletas, tesorería e inventario, exportables a PDF o Excel."
-            />
-          }
-        />
+        <Route path="comunicados" element={<Comunicados />} />
+        <Route path="informes" element={<Informes />} />
         <Route path="configuracion" element={<Configuracion />} />
       </Route>
 

@@ -34,8 +34,15 @@ function canView(doc: Documento, cargo: Cargo) {
   return doc.cargosConAcceso === null || doc.cargosConAcceso.includes(cargo)
 }
 
+function diasHasta(iso: string) {
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const objetivo = new Date(`${iso}T00:00:00`)
+  return Math.round((objetivo.getTime() - hoy.getTime()) / 86_400_000)
+}
+
 function vigenciaEstado(vigenciaHasta: string) {
-  const dias = Math.floor((new Date(`${vigenciaHasta}T00:00:00`).getTime() - Date.now()) / 86_400_000)
+  const dias = diasHasta(vigenciaHasta)
   if (dias < 0) return { texto: 'Vencido', clase: 'pill--err' }
   if (dias <= 60) return { texto: 'Vence pronto', clase: 'pill--warn' }
   return { texto: 'Vigente', clase: 'pill--ok' }
@@ -70,13 +77,14 @@ export default function Archivo() {
         const q = query.trim().toLowerCase()
         if (!q) return true
         return (
+          String(d.numero).includes(q) ||
           d.nombre.toLowerCase().includes(q) ||
           d.descripcion.toLowerCase().includes(q) ||
           (d.proveedor ?? '').toLowerCase().includes(q) ||
           (d.archivadoPor ?? '').toLowerCase().includes(q)
         )
       })
-      .sort((a, b) => (filtroCategoria === 'Todos' ? b.fechaAlta.localeCompare(a.fechaAlta) : b.fecha.localeCompare(a.fecha)))
+      .sort((a, b) => b.fechaAlta.localeCompare(a.fechaAlta))
   }, [documentos, query, filtroCategoria])
 
   const stats = useMemo(() => {
@@ -85,8 +93,7 @@ export default function Archivo() {
     const ahora = new Date()
     const contratosPorVencer = documentos.filter((d) => {
       if (d.categoria !== 'Contrato' || !d.vigenciaHasta) return false
-      const dias = Math.floor((new Date(`${d.vigenciaHasta}T00:00:00`).getTime() - ahora.getTime()) / 86_400_000)
-      return dias <= 60
+      return diasHasta(d.vigenciaHasta) <= 60
     }).length
     const incorporadosEsteMes = documentos.filter((d) => {
       const f = new Date(`${d.fechaAlta}T00:00:00`)
@@ -162,7 +169,11 @@ export default function Archivo() {
 
       <div className="banner-inline banner-inline--accent">
         Simulador de permisos — así vería el archivo un/a{' '}
-        <select value={viewAsCargo} onChange={(e) => setViewAsCargo(e.target.value as Cargo)}>
+        <select
+          aria-label="Ver el archivo como"
+          value={viewAsCargo}
+          onChange={(e) => setViewAsCargo(e.target.value as Cargo)}
+        >
           {CARGOS.map((c) => (
             <option key={c} value={c}>
               {c}
@@ -464,29 +475,31 @@ export default function Archivo() {
           </div>
 
           <div className="assign-box">
-            <label>Quién puede verlo</label>
-            <label className="checkbox-row" htmlFor="visibilidadTodos">
-              <input
-                id="visibilidadTodos"
-                type="radio"
-                name="visibilidad"
-                value="Todos"
-                checked={visibilidadNueva === 'Todos'}
-                onChange={() => setVisibilidadNueva('Todos')}
-              />
-              Todos los hermanos
-            </label>
-            <label className="checkbox-row" htmlFor="visibilidadRestringido">
-              <input
-                id="visibilidadRestringido"
-                type="radio"
-                name="visibilidad"
-                value="Restringido"
-                checked={visibilidadNueva === 'Restringido'}
-                onChange={() => setVisibilidadNueva('Restringido')}
-              />
-              Restringido a cargos concretos
-            </label>
+            <label id="visibilidadLabel">Quién puede verlo</label>
+            <div role="radiogroup" aria-labelledby="visibilidadLabel" className="archivo-visibilidad-group">
+              <label className="checkbox-row" htmlFor="visibilidadTodos">
+                <input
+                  id="visibilidadTodos"
+                  type="radio"
+                  name="visibilidad"
+                  value="Todos"
+                  checked={visibilidadNueva === 'Todos'}
+                  onChange={() => setVisibilidadNueva('Todos')}
+                />
+                Todos los hermanos
+              </label>
+              <label className="checkbox-row" htmlFor="visibilidadRestringido">
+                <input
+                  id="visibilidadRestringido"
+                  type="radio"
+                  name="visibilidad"
+                  value="Restringido"
+                  checked={visibilidadNueva === 'Restringido'}
+                  onChange={() => setVisibilidadNueva('Restringido')}
+                />
+                Restringido a cargos concretos
+              </label>
+            </div>
             {visibilidadNueva === 'Restringido' && (
               <>
                 <div className="archivo-cargos">
