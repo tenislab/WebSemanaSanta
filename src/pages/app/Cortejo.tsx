@@ -6,8 +6,8 @@ import { LogoMark } from '../../components/Logo'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { INCIDENCIAS_INICIALES, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
-import { capacidadDe, cuerpoDe, getTramos, type Tramo } from '../../lib/tramos'
-import { repartoDeTramo, ocupacionDe, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
+import { aforoDeCuerpo, etiquetaTramo, getTramos, rangoDeTramo, tramosDeCuerpo, type Cuerpo, type Tramo } from '../../lib/tramos'
+import { repartoDeCuerpo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
 
@@ -15,14 +15,16 @@ import { getHermandadSettings, type HermandadSettings } from '../../lib/hermanda
 const EDICION_ACTUAL = 2026
 
 const TIPOS_INCIDENCIA: TipoIncidencia[] = ['Ausencia', 'Indisposición', 'Retraso', 'Sustitución', 'Otra']
+const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
-type FilaEstado = EstadoAsignacion | 'Pendiente' | 'Baja'
+type FilaEstado = EstadoAsignacion | 'Pendiente' | 'Excede aforo' | 'Baja'
 
 interface Fila {
   papeleta: Papeleta
   hermano: Hermano
   tramo: Tramo | null
-  cuerpo: 'Cristo' | 'Virgen' | 'Único' | null
+  cuerpo: Cuerpo | null
+  puesto: number | null
   estado: FilaEstado
 }
 
@@ -30,11 +32,17 @@ function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function tituloCuerpo(cuerpo: Cuerpo): string {
+  if (cuerpo === 'Cristo') return 'Cortejo de Cristo'
+  if (cuerpo === 'Virgen') return 'Cortejo de la Virgen'
+  return 'Tramos'
+}
+
 function estadoPillClass(estado: FilaEstado) {
   if (estado === 'Confirmada') return 'pill--ok'
-  if (estado === 'Con incidencia') return 'pill--err'
+  if (estado === 'Con incidencia' || estado === 'Excede aforo') return 'pill--err'
   if (estado === 'Baja') return 'pill--off'
-  return 'pill--warn' // Reservada, En cola, Pendiente
+  return 'pill--warn' // Reservada, Pendiente
 }
 
 const CheckIcon = () => (
@@ -52,14 +60,14 @@ export default function Cortejo() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const registrador = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Secretaría'
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
-  const tramos = useMemo(() => [...getTramos()].sort((a, b) => a.desde - b.desde), [])
+  const tramos = useMemo(() => getTramos(), [])
 
   const [papeletas, setPapeletas] = useState<Papeleta[]>(PAPELETAS_INICIALES)
   const [incidencias, setIncidencias] = useState<Incidencia[]>(INCIDENCIAS_INICIALES)
 
   const [query, setQuery] = useState('')
-  const [estadoFiltro, setEstadoFiltro] = useState<'Todos' | 'Con hueco' | 'Completo' | 'En cola' | 'Con incidencia'>('Todos')
-  const [cuerpoFiltro, setCuerpoFiltro] = useState<'Todos' | 'Cristo' | 'Virgen'>('Todos')
+  const [estadoFiltro, setEstadoFiltro] = useState<'Todos' | 'Con hueco' | 'Completo' | 'Con incidencia' | 'Excede aforo'>('Todos')
+  const [cuerpoFiltro, setCuerpoFiltro] = useState<'Todos' | Cuerpo>('Todos')
   const [vista, setVista] = useState<'tarjetas' | 'tabla'>('tarjetas')
   const [diaDeSalida, setDiaDeSalida] = useState(false)
 
@@ -68,7 +76,6 @@ export default function Cortejo() {
   const [asignarError, setAsignarError] = useState<string | null>(null)
   const [ordenOpen, setOrdenOpen] = useState(false)
   const [incidenciaPara, setIncidenciaPara] = useState<string | null>(null)
-  const [overridePara, setOverridePara] = useState<string | null>(null)
 
   const hermanoDe = useMemo(() => {
     const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
@@ -80,78 +87,101 @@ export default function Cortejo() {
     [incidencias],
   )
 
-  const repartos = useMemo(() => {
-    const map = new Map<string, Asignacion[]>()
-    tramos.forEach((t) => map.set(t.id, repartoDeTramo(t, papeletas, hermanoDe, incidenciasAbiertas)))
+  // Reparto derivado por cuerpo: cada hermano con papeleta activa se ordena
+  // por su número de hermano y se reparte por los tramos de su cuerpo según
+  // el aforo de cada uno. tramo === null si supera el aforo total del cuerpo.
+  const repartosPorCuerpo = useMemo(() => {
+    const map = new Map<Cuerpo, Asignacion[]>()
+    CUERPOS.forEach((c) => {
+      map.set(c, repartoDeCuerpo(c, papeletas, hermanoDe, tramosDeCuerpo(c, tramos), incidenciasAbiertas))
+    })
     return map
   }, [tramos, papeletas, hermanoDe, incidenciasAbiertas])
 
+  const repartos = useMemo(() => {
+    const map = new Map<string, Asignacion[]>()
+    tramos.forEach((t) => map.set(t.id, []))
+    repartosPorCuerpo.forEach((asigs) => {
+      asigs.forEach((a) => {
+        if (a.tramo) map.get(a.tramo.id)?.push(a)
+      })
+    })
+    return map
+  }, [tramos, repartosPorCuerpo])
+
+  const excedeAforo = useMemo(() => {
+    const out: Asignacion[] = []
+    repartosPorCuerpo.forEach((asigs) => asigs.forEach((a) => { if (!a.tramo) out.push(a) }))
+    return out
+  }, [repartosPorCuerpo])
+
   const pendientes = useMemo(
-    () => papeletas.filter((p) => p.estado === 'Solicitada' && !p.tramo),
+    () => papeletas.filter((p) => p.estado === 'Solicitada' && !p.cuerpo),
     [papeletas],
   )
 
   const cuerposPresentes = useMemo(() => {
-    const set = new Set(tramos.map(cuerpoDe))
-    return { cristo: set.has('Cristo'), virgen: set.has('Virgen') }
+    const set = new Set(tramos.map((t) => t.cuerpo))
+    return CUERPOS.filter((c) => set.has(c))
   }, [tramos])
 
   const stats = useMemo(() => {
     let cubiertos = 0
     let total = 0
     let completos = 0
-    let enCola = 0
     tramos.forEach((t) => {
       const reparto = repartos.get(t.id) ?? []
-      const ocupados = ocupacionDe(reparto)
-      const cap = capacidadDe(t)
-      cubiertos += ocupados
-      total += cap
-      if (ocupados >= cap) completos += 1
-      enCola += reparto.filter((a) => a.estado === 'En cola').length
+      cubiertos += reparto.length
+      total += t.capacidad
+      if (reparto.length >= t.capacidad) completos += 1
     })
     return {
       cubiertos,
       total,
       completos,
       tramosTotal: tramos.length,
-      enCola,
+      excedeAforo: excedeAforo.length,
       incidenciasAbiertas: incidenciasAbiertas.size,
     }
-  }, [tramos, repartos, incidenciasAbiertas])
+  }, [tramos, repartos, excedeAforo, incidenciasAbiertas])
 
   // ---------- filas combinadas (para la vista tabla y para filtrar tarjetas) ----------
   const filas = useMemo(() => {
     const out: Fila[] = []
-    tramos.forEach((t) => {
-      const reparto = repartos.get(t.id) ?? []
-      reparto.forEach((a) => out.push({ papeleta: a.papeleta, hermano: a.hermano, tramo: t, cuerpo: cuerpoDe(t), estado: a.estado }))
+    CUERPOS.forEach((c) => {
+      ;(repartosPorCuerpo.get(c) ?? []).forEach((a) => {
+        out.push({
+          papeleta: a.papeleta,
+          hermano: a.hermano,
+          tramo: a.tramo,
+          cuerpo: c,
+          puesto: a.puesto,
+          estado: a.tramo ? a.estado : 'Excede aforo',
+        })
+      })
     })
     pendientes.forEach((p) => {
       const h = hermanoDe(p.hermanoId)
-      if (h) out.push({ papeleta: p, hermano: h, tramo: null, cuerpo: null, estado: 'Pendiente' })
+      if (h) out.push({ papeleta: p, hermano: h, tramo: null, cuerpo: null, puesto: null, estado: 'Pendiente' })
     })
     papeletas
       .filter((p) => p.estado === 'Anulada')
       .forEach((p) => {
         const h = hermanoDe(p.hermanoId)
-        if (h) out.push({ papeleta: p, hermano: h, tramo: null, cuerpo: null, estado: 'Baja' })
+        if (h) out.push({ papeleta: p, hermano: h, tramo: null, cuerpo: null, puesto: null, estado: 'Baja' })
       })
-    return out.sort((a, b) => a.hermano.antiguedad - b.hermano.antiguedad)
-  }, [tramos, repartos, pendientes, papeletas, hermanoDe])
+    return out
+  }, [repartosPorCuerpo, pendientes, papeletas, hermanoDe])
 
-  function tramoEstadoDerivado(t: Tramo): 'Con hueco' | 'Completo' {
-    const reparto = repartos.get(t.id) ?? []
-    return ocupacionDe(reparto) >= capacidadDe(t) ? 'Completo' : 'Con hueco'
-  }
-
-  function pasaFiltros(cuerpo: 'Cristo' | 'Virgen' | 'Único' | null, tramoNombre: string | null, filaEstado: FilaEstado, textoBusqueda: string) {
+  function pasaFiltros(cuerpo: Cuerpo | null, tramo: Tramo | null, filaEstado: FilaEstado, textoBusqueda: string) {
     if (cuerpoFiltro !== 'Todos' && cuerpo !== cuerpoFiltro) return false
-    if (estadoFiltro === 'En cola' && filaEstado !== 'En cola') return false
     if (estadoFiltro === 'Con incidencia' && filaEstado !== 'Con incidencia') return false
+    if (estadoFiltro === 'Excede aforo' && filaEstado !== 'Excede aforo') return false
     if (estadoFiltro === 'Con hueco' || estadoFiltro === 'Completo') {
-      const t = tramos.find((tr) => tr.nombre === tramoNombre)
-      if (!t || tramoEstadoDerivado(t) !== estadoFiltro) return false
+      if (!tramo) return false
+      const reparto = repartos.get(tramo.id) ?? []
+      const estado = reparto.length >= tramo.capacidad ? 'Completo' : 'Con hueco'
+      if (estado !== estadoFiltro) return false
     }
     const q = query.trim().toLowerCase()
     if (q && !textoBusqueda.toLowerCase().includes(q)) return false
@@ -161,21 +191,26 @@ export default function Cortejo() {
   const tramosFiltrados = useMemo(() => {
     return tramos.filter((t) => {
       const reparto = repartos.get(t.id) ?? []
-      const texto = `${t.nombre} ${reparto.map((a) => `${a.hermano.nombre} ${a.hermano.numero}`).join(' ')}`
-      return pasaFiltros(cuerpoDe(t), t.nombre, reparto.some((a) => a.estado === 'Con incidencia') ? 'Con incidencia' : reparto.some((a) => a.estado === 'En cola') ? 'En cola' : 'Reservada', texto)
+      const texto = `${etiquetaTramo(t)} ${reparto.map((a) => `${a.hermano.nombre} ${a.hermano.numero}`).join(' ')}`
+      const filaEstado: FilaEstado = reparto.some((a) => a.estado === 'Con incidencia') ? 'Con incidencia' : 'Reservada'
+      return pasaFiltros(t.cuerpo, t, filaEstado, texto)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tramos, repartos, cuerpoFiltro, estadoFiltro, query])
 
   const filasFiltradas = useMemo(() => {
     return filas.filter((f) =>
-      pasaFiltros(f.cuerpo, f.tramo?.nombre ?? null, f.estado, `${f.hermano.nombre} ${f.hermano.numero} ${f.tramo?.nombre ?? ''}`),
+      pasaFiltros(f.cuerpo, f.tramo, f.estado, `${f.hermano.nombre} ${f.hermano.numero} ${f.tramo ? etiquetaTramo(f.tramo) : ''}`),
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filas, cuerpoFiltro, estadoFiltro, query])
 
   const tramoAbierto = tramos.find((t) => t.id === tramoAbiertoId) ?? null
   const repartoAbierto = tramoAbierto ? (repartos.get(tramoAbierto.id) ?? []) : []
+  const rangoAbierto = useMemo(
+    () => (tramoAbierto ? rangoDeTramo(tramoAbierto, tramosDeCuerpo(tramoAbierto.cuerpo, tramos)) : null),
+    [tramoAbierto, tramos],
+  )
 
   // ---------- acciones ----------
   function marcarPagada(papeletaId: string) {
@@ -210,31 +245,18 @@ export default function Cortejo() {
     }
   }
 
-  function asignarConExcepcion(papeletaId: string, motivo: string) {
-    setPapeletas((prev) =>
-      prev.map((p) =>
-        p.id === papeletaId
-          ? { ...p, overrideAntiguedad: { motivo, registradoPor: registrador, fecha: hoy() } }
-          : p,
-      ),
-    )
-    setOverridePara(null)
-  }
-
   function handleAsignarHermano(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const data = new FormData(e.currentTarget)
     const hermanoId = String(data.get('hermanoId') ?? '')
-    const tramoId = String(data.get('tramoId') ?? '')
-    const puestoRaw = String(data.get('puesto') ?? '')
+    const cuerpo = String(data.get('cuerpo') ?? '') as Cuerpo | ''
     const hermano = HERMANOS_INICIALES.find((h) => h.id === hermanoId)
-    const tramo = tramos.find((t) => t.id === tramoId)
     if (!hermano) {
       setAsignarError('Elige un hermano de la lista.')
       return
     }
-    if (!tramo) {
-      setAsignarError('Elige un tramo.')
+    if (!cuerpo) {
+      setAsignarError('Elige un cuerpo.')
       return
     }
     if (hermano.antiguedad === EDICION_ACTUAL) {
@@ -243,15 +265,13 @@ export default function Cortejo() {
       )
       return
     }
-    const puestoNum = Number(puestoRaw)
-    const puesto = Number.isFinite(puestoNum) && puestoNum >= tramo.desde && puestoNum <= tramo.hasta ? puestoNum : tramo.desde
 
     setPapeletas((prev) => {
       const existente = prev.find((p) => p.hermanoId === hermanoId && p.estado !== 'Anulada')
       if (existente) {
         return prev.map((p) =>
           p.id === existente.id
-            ? { ...p, tramo: tramo.nombre, puesto, estado: p.estado === 'Solicitada' ? 'Asignada' : p.estado }
+            ? { ...p, cuerpo, estado: p.estado === 'Solicitada' ? 'Asignada' : p.estado }
             : p,
         )
       }
@@ -260,8 +280,7 @@ export default function Cortejo() {
         id: `p-${Date.now()}`,
         numero: nextNumero,
         hermanoId,
-        puesto,
-        tramo: tramo.nombre,
+        cuerpo,
         importe: IMPORTE_PAPELETA,
         estado: 'Asignada',
         fechaSolicitud: hoy(),
@@ -301,6 +320,14 @@ export default function Cortejo() {
         </div>
       </div>
 
+      {excedeAforo.length > 0 && (
+        <div className="banner-inline banner-inline--warn">
+          {excedeAforo.length} hermano{excedeAforo.length > 1 ? 's' : ''} no caben en ningún tramo
+          configurado de {[...new Set(excedeAforo.map((a) => a.papeleta.cuerpo))].join(', ')}.{' '}
+          <Link to="/app/configuracion">Amplía el aforo en Configuración</Link>.
+        </div>
+      )}
+
       <section className="stat-grid">
         <div className="stat-tile">
           <span className="stat-tile__label">Puestos cubiertos</span>
@@ -319,9 +346,11 @@ export default function Cortejo() {
           <span className="stat-tile__trend stat-tile__trend--neutral">Al aforo máximo</span>
         </div>
         <div className="stat-tile">
-          <span className="stat-tile__label">En lista de espera</span>
-          <span className="stat-tile__value">{stats.enCola}</span>
-          <span className="stat-tile__trend stat-tile__trend--warn">Por antigüedad</span>
+          <span className="stat-tile__label">Exceden el aforo</span>
+          <span className="stat-tile__value">{stats.excedeAforo}</span>
+          <span className={`stat-tile__trend stat-tile__trend--${stats.excedeAforo > 0 ? 'warn' : 'ok'}`}>
+            {stats.excedeAforo > 0 ? 'Amplía tramos' : 'Todo cabe'}
+          </span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Incidencias abiertas</span>
@@ -340,7 +369,7 @@ export default function Cortejo() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="filters">
-          {(['Todos', 'Con hueco', 'Completo', 'En cola', 'Con incidencia'] as const).map((f) => (
+          {(['Todos', 'Con hueco', 'Completo', 'Con incidencia', 'Excede aforo'] as const).map((f) => (
             <button
               key={f}
               className={`chip${estadoFiltro === f ? ' chip--active' : ''}`}
@@ -350,9 +379,9 @@ export default function Cortejo() {
               {f}
             </button>
           ))}
-          {cuerposPresentes.cristo && cuerposPresentes.virgen && (
+          {cuerposPresentes.length > 1 && (
             <>
-              {(['Todos', 'Cristo', 'Virgen'] as const).map((c) => (
+              {(['Todos', ...cuerposPresentes] as Array<'Todos' | Cuerpo>).map((c) => (
                 <button
                   key={c}
                   className={`chip${cuerpoFiltro === c ? ' chip--active' : ''}`}
@@ -392,33 +421,16 @@ export default function Cortejo() {
 
       {vista === 'tarjetas' ? (
         <>
-          {cuerposPresentes.cristo && (
+          {cuerposPresentes.map((c) => (
             <CuerpoSeccion
-              titulo="Cortejo de Cristo"
-              tramos={tramosFiltrados.filter((t) => cuerpoDe(t) === 'Cristo')}
+              key={c}
+              titulo={tituloCuerpo(c)}
+              tramos={tramosFiltrados.filter((t) => t.cuerpo === c)}
               repartos={repartos}
               diaDeSalida={diaDeSalida}
               onAbrir={setTramoAbiertoId}
             />
-          )}
-          {cuerposPresentes.virgen && (
-            <CuerpoSeccion
-              titulo="Cortejo de la Virgen"
-              tramos={tramosFiltrados.filter((t) => cuerpoDe(t) === 'Virgen')}
-              repartos={repartos}
-              diaDeSalida={diaDeSalida}
-              onAbrir={setTramoAbiertoId}
-            />
-          )}
-          {!cuerposPresentes.cristo && !cuerposPresentes.virgen && (
-            <CuerpoSeccion
-              titulo="Tramos"
-              tramos={tramosFiltrados}
-              repartos={repartos}
-              diaDeSalida={diaDeSalida}
-              onAbrir={setTramoAbiertoId}
-            />
-          )}
+          ))}
           {tramosFiltrados.length === 0 && (
             <p className="table-empty">No hay tramos que coincidan con la búsqueda.</p>
           )}
@@ -428,11 +440,10 @@ export default function Cortejo() {
           <table>
             <thead>
               <tr>
-                <th>Antigüedad</th>
-                <th>Hermano</th>
-                {cuerposPresentes.cristo && cuerposPresentes.virgen && <th>Cuerpo</th>}
-                <th>Tramo</th>
                 <th>Puesto</th>
+                <th>Hermano</th>
+                {cuerposPresentes.length > 1 && <th>Cuerpo</th>}
+                <th>Tramo</th>
                 <th>Papeleta</th>
                 <th>Estado</th>
                 <th></th>
@@ -441,7 +452,7 @@ export default function Cortejo() {
             <tbody>
               {filasFiltradas.map((f) => (
                 <tr key={f.papeleta.id}>
-                  <td className="num">{f.hermano.antiguedad}</td>
+                  <td className="num">{f.puesto ?? '—'}</td>
                   <td>
                     <div className="row-person">
                       <span className="row-avatar">{initials(f.hermano.nombre)}</span>
@@ -451,16 +462,15 @@ export default function Cortejo() {
                       </span>
                     </div>
                   </td>
-                  {cuerposPresentes.cristo && cuerposPresentes.virgen && <td>{f.cuerpo ?? '—'}</td>}
-                  <td>{f.tramo?.nombre ?? <span className="table-muted">Sin asignar</span>}</td>
-                  <td className="num">{f.papeleta.puesto ?? '—'}</td>
+                  {cuerposPresentes.length > 1 && <td>{f.cuerpo ?? '—'}</td>}
+                  <td>{f.tramo ? etiquetaTramo(f.tramo) : <span className="table-muted">Sin asignar</span>}</td>
                   <td className="num">{String(f.papeleta.numero).padStart(4, '0')}</td>
                   <td>
                     <span className={`pill ${estadoPillClass(f.estado)}`}>{f.estado}</span>
                   </td>
                   <td>
                     <div className="row-actions">
-                      {diaDeSalida && f.estado !== 'Pendiente' && f.estado !== 'Baja' ? (
+                      {diaDeSalida && f.estado !== 'Pendiente' && f.estado !== 'Baja' && f.estado !== 'Excede aforo' ? (
                         <>
                           <button className="icon-btn" title="Marcar presente" onClick={() => marcarPresente(f.papeleta.id)}>
                             <CheckIcon />
@@ -482,7 +492,7 @@ export default function Cortejo() {
               ))}
               {filasFiltradas.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="table-empty">
+                  <td colSpan={7} className="table-empty">
                     No hay hermanos que coincidan con la búsqueda.
                   </td>
                 </tr>
@@ -496,8 +506,8 @@ export default function Cortejo() {
       <Drawer
         open={!!tramoAbierto}
         onClose={() => setTramoAbiertoId(null)}
-        title={tramoAbierto?.nombre ?? ''}
-        subtitle={tramoAbierto ? `Puestos ${tramoAbierto.desde}–${tramoAbierto.hasta}` : undefined}
+        title={tramoAbierto ? etiquetaTramo(tramoAbierto) : ''}
+        subtitle={tramoAbierto && rangoAbierto ? `Puestos ${rangoAbierto[0]}–${rangoAbierto[1]}` : undefined}
         footer={
           tramoAbierto && (
             <>
@@ -511,15 +521,13 @@ export default function Cortejo() {
           )
         }
       >
-        {tramoAbierto && (
+        {tramoAbierto && rangoAbierto && (
           <TramoFicha
             tramo={tramoAbierto}
+            rango={rangoAbierto}
             reparto={repartoAbierto}
             hermandad={hermandad}
             diaDeSalida={diaDeSalida}
-            overridePara={overridePara}
-            onOverridePara={setOverridePara}
-            onOverrideConfirm={asignarConExcepcion}
             onPresente={marcarPresente}
             onIncidencia={setIncidenciaPara}
             onResolver={resolverIncidenciaDePapeleta}
@@ -552,29 +560,24 @@ export default function Cortejo() {
             <HermanoPicker hermanos={HERMANOS_INICIALES} name="hermanoId" id="hermanoId" />
           </div>
           <div className="form-row">
-            <label htmlFor="tramoId">Tramo</label>
-            <select id="tramoId" name="tramoId" defaultValue="">
+            <label htmlFor="cuerpo">Cuerpo</label>
+            <select id="cuerpo" name="cuerpo" defaultValue="">
               <option value="" disabled>
-                Elige un tramo
+                Elige un cuerpo
               </option>
-              {tramos.map((t) => {
-                const ocupados = ocupacionDe(repartos.get(t.id) ?? [])
-                const cap = capacidadDe(t)
+              {cuerposPresentes.map((c) => {
+                const ocupados = (repartosPorCuerpo.get(c) ?? []).filter((a) => a.tramo).length
                 return (
-                  <option key={t.id} value={t.id}>
-                    {t.nombre} ({ocupados}/{cap}
-                    {ocupados >= cap ? ' · en cola' : ''})
+                  <option key={c} value={c}>
+                    {c} ({ocupados}/{aforoDeCuerpo(c, tramos)})
                   </option>
                 )
               })}
             </select>
           </div>
-          <div className="form-row">
-            <label htmlFor="puesto">Puesto (opcional)</label>
-            <input id="puesto" name="puesto" type="number" placeholder="Se asigna el primero libre del rango" />
-          </div>
           <p className="form-hint">
-            Si el tramo ya está completo, el hermano entra en la lista de espera por antigüedad.
+            El tramo y el puesto se calculan solos a partir de su número de hermano: cuanto más
+            bajo, más cerca de la cruz de guía.
           </p>
         </form>
       </Drawer>
@@ -607,13 +610,13 @@ export default function Cortejo() {
             </div>
           </div>
           {tramos.map((t) => {
-            const reparto = (repartos.get(t.id) ?? []).filter((a) => a.estado !== 'En cola')
+            const reparto = repartos.get(t.id) ?? []
             return (
               <div className="cortejo-orden__tramo" key={t.id}>
                 <h3>
-                  {t.nombre}
+                  {etiquetaTramo(t)}
                   {t.tipo && <span className="table-subtle"> · {t.tipo}</span>}{' '}
-                  <span className="table-subtle">· {reparto.length}/{capacidadDe(t)}</span>
+                  <span className="table-subtle">· {reparto.length}/{t.capacidad}</span>
                 </h3>
                 {reparto.length === 0 ? (
                   <p className="form-hint">Sin hermanos asignados todavía.</p>
@@ -621,7 +624,7 @@ export default function Cortejo() {
                   <ol>
                     {reparto.map((a) => (
                       <li key={a.papeleta.id}>
-                        Puesto {a.papeleta.puesto ?? '—'} · {a.hermano.nombre}{' '}
+                        Puesto {a.puesto} · {a.hermano.nombre}{' '}
                         <span className="table-subtle">· nº {a.hermano.numero}</span>
                       </li>
                     ))}
@@ -700,13 +703,12 @@ function TramoCard({
   diaDeSalida: boolean
   onAbrir: () => void
 }) {
-  const capacidad = capacidadDe(tramo)
-  const ocupados = ocupacionDe(reparto)
-  const enCola = reparto.filter((a) => a.estado === 'En cola').length
+  const ocupados = reparto.length
+  const capacidad = tramo.capacidad
   const conIncidencia = reparto.filter((a) => a.estado === 'Con incidencia').length
   const pct = capacidad > 0 ? Math.min(100, Math.round((ocupados / capacidad) * 100)) : 0
   const lleno = ocupados >= capacidad
-  const visibles = reparto.filter((a) => a.estado !== 'En cola').slice(0, 5)
+  const visibles = reparto.slice(0, 5)
   const resto = ocupados - visibles.length
 
   return (
@@ -735,10 +737,11 @@ function TramoCard({
         {ocupados === 0 && <span className="table-muted">Sin hermanos asignados</span>}
       </div>
 
-      <div className="tramo-card__badges">
-        {enCola > 0 && <span className="pill pill--warn">{enCola} en cola</span>}
-        {conIncidencia > 0 && <span className="pill pill--err">{conIncidencia} incidencia{conIncidencia > 1 ? 's' : ''}</span>}
-      </div>
+      {conIncidencia > 0 && (
+        <div className="tramo-card__badges">
+          <span className="pill pill--err">{conIncidencia} incidencia{conIncidencia > 1 ? 's' : ''}</span>
+        </div>
+      )}
 
       {diaDeSalida && (
         <button
@@ -758,35 +761,28 @@ function TramoCard({
 
 function TramoFicha({
   tramo,
+  rango,
   reparto,
   hermandad,
   diaDeSalida,
-  overridePara,
-  onOverridePara,
-  onOverrideConfirm,
   onPresente,
   onIncidencia,
   onResolver,
   onPagada,
 }: {
   tramo: Tramo
+  rango: [number, number]
   reparto: Asignacion[]
   hermandad: HermandadSettings
   diaDeSalida: boolean
-  overridePara: string | null
-  onOverridePara: (id: string | null) => void
-  onOverrideConfirm: (papeletaId: string, motivo: string) => void
   onPresente: (papeletaId: string) => void
   onIncidencia: (papeletaId: string) => void
   onResolver: (papeletaId: string, comoBaja: boolean) => void
   onPagada: (papeletaId: string) => void
 }) {
-  const capacidad = capacidadDe(tramo)
-  const ocupados = ocupacionDe(reparto)
+  const ocupados = reparto.length
+  const capacidad = tramo.capacidad
   const pct = capacidad > 0 ? Math.min(100, Math.round((ocupados / capacidad) * 100)) : 0
-  const dentro = reparto.filter((a) => a.estado !== 'En cola')
-  const cola = reparto.filter((a) => a.estado === 'En cola')
-  const [motivo, setMotivo] = useState('')
 
   return (
     <div className="ficha">
@@ -794,24 +790,24 @@ function TramoFicha({
         <span className={`meter__fill meter__fill--${pct >= 100 ? 'full' : pct >= 75 ? 'warn' : 'ok'}`} style={{ width: `${pct}%` }} />
       </div>
       <p className="dash-head__lead">
-        {ocupados}/{capacidad} puestos ocupados · orden de desfile {tramo.desde}–{tramo.hasta}
+        {ocupados}/{capacidad} puestos ocupados · orden de desfile {rango[0]}–{rango[1]}
         {tramo.tipo && ` · ${tramo.tipo}`}
       </p>
 
       <dl className="ficha__list">
         <div>
-          <dt>Roster confirmado, por antigüedad</dt>
+          <dt>Roster, por número de hermano</dt>
           <dd>
-            {dentro.length === 0 && <span className="table-muted">Nadie asignado todavía.</span>}
+            {reparto.length === 0 && <span className="table-muted">Nadie asignado todavía.</span>}
             <ul className="cortejo-roster">
-              {dentro.map((a) => (
+              {reparto.map((a) => (
                 <li key={a.papeleta.id}>
                   <span className="row-person">
                     <span className="row-avatar">{initials(a.hermano.nombre)}</span>
                     <span>
                       <span className="row-person__name">{a.hermano.nombre}</span>
                       <span className="row-person__sub">
-                        Nº {a.hermano.numero} · hermano desde {a.hermano.antiguedad}
+                        Nº {a.hermano.numero} · puesto {a.puesto}
                       </span>
                     </span>
                   </span>
@@ -846,60 +842,6 @@ function TramoFicha({
             </ul>
           </dd>
         </div>
-
-        {cola.length > 0 && (
-          <div>
-            <dt>En cola, por antigüedad</dt>
-            <dd>
-              <ul className="cortejo-roster">
-                {cola.map((a, i) => (
-                  <li key={a.papeleta.id}>
-                    <span className="row-person">
-                      <span className="row-avatar">{initials(a.hermano.nombre)}</span>
-                      <span>
-                        <span className="row-person__name">{a.hermano.nombre}</span>
-                        <span className="row-person__sub">
-                          Nº {a.hermano.numero} · puesto {i + 1} en la cola
-                        </span>
-                      </span>
-                    </span>
-                    {overridePara === a.papeleta.id ? (
-                      <span className="cortejo-override">
-                        <input
-                          type="text"
-                          placeholder="Motivo de la excepción"
-                          value={motivo}
-                          onChange={(e) => setMotivo(e.target.value)}
-                        />
-                        <button
-                          className="btn btn-primary btn-sm"
-                          disabled={!motivo.trim()}
-                          onClick={() => {
-                            onOverrideConfirm(a.papeleta.id, motivo.trim())
-                            setMotivo('')
-                          }}
-                        >
-                          Confirmar
-                        </button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => onOverridePara(null)}>
-                          Cancelar
-                        </button>
-                      </span>
-                    ) : (
-                      <button className="ticket-cancel" onClick={() => onOverridePara(a.papeleta.id)}>
-                        Asignar de todos modos
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <p className="form-hint">
-                Entran automáticamente por antigüedad si se libera un hueco. Saltarse el orden
-                exige un motivo, que queda registrado.
-              </p>
-            </dd>
-          </div>
-        )}
       </dl>
 
       <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Cabildo</p>
@@ -917,17 +859,17 @@ function TramoFicha({
         </div>
         <div className="cortejo-orden__tramo">
           <h3>
-            {tramo.nombre}
+            {etiquetaTramo(tramo)}
             {tramo.tipo && <span className="table-subtle"> · {tramo.tipo}</span>}{' '}
             <span className="table-subtle">· {ocupados}/{capacidad}</span>
           </h3>
-          {dentro.length === 0 ? (
+          {reparto.length === 0 ? (
             <p className="form-hint">Sin hermanos asignados todavía.</p>
           ) : (
             <ol>
-              {dentro.map((a) => (
+              {reparto.map((a) => (
                 <li key={a.papeleta.id}>
-                  Puesto {a.papeleta.puesto ?? '—'} · {a.hermano.nombre}{' '}
+                  Puesto {a.puesto} · {a.hermano.nombre}{' '}
                   <span className="table-subtle">· nº {a.hermano.numero}</span>
                 </li>
               ))}

@@ -935,18 +935,21 @@ h1, h2, h3,
 .settings-card__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
 
-.tramos-card { max-width: 760px; margin-top: 1.1rem; }
+.tramos-card { max-width: 880px; margin-top: 1.1rem; }
 .tramos-editor { display: flex; flex-direction: column; gap: 0.5rem; }
 .tramo-row {
-  display: grid; grid-template-columns: 1fr 130px 80px 80px 34px; gap: 0.6rem; align-items: center;
+  display: grid; grid-template-columns: 1fr 110px 120px 76px 60px 34px; gap: 0.6rem; align-items: center;
 }
 .tramo-row--head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-.tramo-row input {
+.tramo-row input, .tramo-row select {
   width: 100%; padding: 0.55rem 0.65rem; font: inherit; font-size: 0.86rem;
   color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
 }
-.tramo-row input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+.tramo-row input:focus, .tramo-row select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
 .tramo-row input[type='number'] { font-variant-numeric: tabular-nums; text-align: right; }
+.tramo-row__mover { display: flex; gap: 0.25rem; }
+.tramo-row__mover .icon-btn { width: 26px; height: 26px; }
+.tramo-row__mover .icon-btn svg { width: 13px; height: 13px; }
 
 .banner-inline {
   border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.84rem; line-height: 1.5;
@@ -1156,13 +1159,6 @@ h1, h2, h3,
 .cortejo-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
 .cortejo-roster li { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .cortejo-roster .row-person { flex: 1; min-width: 0; }
-
-.cortejo-override { display: flex; align-items: center; gap: 0.4rem; flex: 1; flex-wrap: wrap; }
-.cortejo-override input {
-  flex: 1; min-width: 140px; padding: 0.45rem 0.6rem; font: inherit; font-size: 0.82rem;
-  color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-}
-.cortejo-override input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
 
 .cortejo-orden__head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1.2rem; }
 .cortejo-orden__tramo { margin-bottom: 1.2rem; }

@@ -33,7 +33,7 @@ const FEATURES = [
   },
   {
     title: 'Cortejo',
-    text: 'Tramos, puestos e insignias, asignación por antigüedad, túnicas y enseres. Organiza la cofradía y genera listados con QR.',
+    text: 'Tramos, puestos e insignias, reparto automático por número de hermano, túnicas y enseres. Organiza la cofradía y genera listados con QR.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3v18M6 8v13M18 8v13M4 21h16" /><circle cx="12" cy="3" r="1.4" /></svg>
     ),

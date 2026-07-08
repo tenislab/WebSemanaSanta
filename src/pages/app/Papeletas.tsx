@@ -8,7 +8,8 @@ import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type EstadoPapeleta, type Papele
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
-import { getTramos, tramoDePuesto } from '../../lib/tramos'
+import { getTramos, tramosDeCuerpo, etiquetaTramo, type Cuerpo } from '../../lib/tramos'
+import { repartoDeCuerpo, type Asignacion } from '../../lib/cortejo'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -21,6 +22,7 @@ function estadoClass(estado: EstadoPapeleta) {
 }
 
 const FILTROS = ['Todas', 'Solicitada', 'Asignada', 'Pagada', 'Entregada', 'Anulada'] as const
+const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
 export default function Papeletas() {
   const { user } = useAuth()
@@ -32,25 +34,27 @@ export default function Papeletas() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todas')
   const [selected, setSelected] = useState<Papeleta | null>(null)
-  const [pendingPuesto, setPendingPuesto] = useState('')
+  const [pendingCuerpo, setPendingCuerpo] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
-
-  const puestoNum = Number(pendingPuesto)
-  const tramoResuelto =
-    pendingPuesto.trim() && Number.isFinite(puestoNum) && puestoNum > 0
-      ? tramoDePuesto(puestoNum, tramos)
-      : null
-
-  const tramoDeSelected = useMemo(
-    () => (selected?.tramo ? (tramos.find((t) => t.nombre === selected.tramo) ?? null) : null),
-    [selected, tramos],
-  )
 
   const hermanoDe = useMemo(() => {
     const map = new Map(HERMANOS_INICIALES.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
   }, [])
+
+  const cuerposDisponibles = useMemo(() => CUERPOS.filter((c) => tramos.some((t) => t.cuerpo === c)), [tramos])
+
+  // El tramo de cada papeleta no se guarda: se calcula solo a partir del
+  // cuerpo elegido y del número de hermano de quien la porta.
+  const asignacionPorPapeleta = useMemo(() => {
+    const map = new Map<string, Asignacion>()
+    CUERPOS.forEach((c) => {
+      const reparto = repartoDeCuerpo(c, papeletas, hermanoDe, tramosDeCuerpo(c, tramos), new Set())
+      reparto.forEach((a) => map.set(a.papeleta.id, a))
+    })
+    return map
+  }, [papeletas, hermanoDe, tramos])
 
   const filtered = useMemo(() => {
     return papeletas
@@ -78,17 +82,13 @@ export default function Papeletas() {
 
   function openDetail(p: Papeleta) {
     setSelected(p)
-    setPendingPuesto('')
+    setPendingCuerpo('')
   }
 
-  function asignarPuesto(id: string, puesto: number, tramo: string) {
-    setPapeletas((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, puesto, tramo, estado: 'Asignada' } : p)),
-    )
-    setSelected((prev) =>
-      prev && prev.id === id ? { ...prev, puesto, tramo, estado: 'Asignada' } : prev,
-    )
-    setPendingPuesto('')
+  function asignarCuerpo(id: string, cuerpo: Cuerpo) {
+    setPapeletas((prev) => prev.map((p) => (p.id === id ? { ...p, cuerpo, estado: 'Asignada' } : p)))
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, cuerpo, estado: 'Asignada' } : prev))
+    setPendingCuerpo('')
   }
 
   function marcarPagada(id: string) {
@@ -122,8 +122,7 @@ export default function Papeletas() {
       id: `p-${Date.now()}`,
       numero: nextNumero,
       hermanoId,
-      puesto: null,
-      tramo: null,
+      cuerpo: null,
       importe: IMPORTE_PAPELETA,
       estado: 'Solicitada',
       fechaSolicitud: hoy(),
@@ -215,6 +214,7 @@ export default function Papeletas() {
           <tbody>
             {filtered.map((p) => {
               const h = hermanoDe(p.hermanoId)
+              const a = asignacionPorPapeleta.get(p.id)
               return (
                 <tr
                   key={p.id}
@@ -233,11 +233,13 @@ export default function Papeletas() {
                     </div>
                   </td>
                   <td>
-                    {p.tramo ? (
+                    {a?.tramo ? (
                       <>
-                        {p.tramo}
-                        {p.puesto != null && <span className="table-subtle"> · puesto {p.puesto}</span>}
+                        {etiquetaTramo(a.tramo)}
+                        <span className="table-subtle"> · puesto {a.puesto}</span>
                       </>
+                    ) : p.cuerpo ? (
+                      <span className="table-muted">Supera el aforo de {p.cuerpo}</span>
                     ) : (
                       <span className="table-muted">Sin asignar</span>
                     )}
@@ -329,52 +331,49 @@ export default function Papeletas() {
           (() => {
             const h = hermanoDe(selected.hermanoId)
             if (!h) return <p className="dash-head__lead">No se encuentra el hermano de esta papeleta.</p>
+            const a = asignacionPorPapeleta.get(selected.id)
             return (
               <>
                 {selected.estado === 'Solicitada' && (
                   <div className="assign-box">
-                    <label htmlFor="puestoAsignar">Asignar puesto en el cortejo</label>
+                    <label htmlFor="cuerpoAsignar">Asignar al cortejo</label>
                     <div className="assign-box__row">
-                      <input
-                        id="puestoAsignar"
-                        type="number"
-                        min="1"
-                        placeholder="Nº de puesto"
-                        value={pendingPuesto}
-                        onChange={(e) => setPendingPuesto(e.target.value)}
-                      />
+                      <select
+                        id="cuerpoAsignar"
+                        value={pendingCuerpo}
+                        onChange={(e) => setPendingCuerpo(e.target.value)}
+                      >
+                        <option value="">Elige un cuerpo</option>
+                        {cuerposDisponibles.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        disabled={!tramoResuelto}
-                        onClick={() =>
-                          tramoResuelto && asignarPuesto(selected.id, puestoNum, tramoResuelto.nombre)
-                        }
+                        disabled={!pendingCuerpo}
+                        onClick={() => pendingCuerpo && asignarCuerpo(selected.id, pendingCuerpo as Cuerpo)}
                       >
                         Asignar
                       </button>
                     </div>
-                    {pendingPuesto.trim() && tramoResuelto && (
-                      <p className="form-hint form-hint--ok">
-                        El puesto {puestoNum} corresponde a «{tramoResuelto.nombre}»
-                        {tramoResuelto.tipo && ` (${tramoResuelto.tipo})`}.
-                      </p>
-                    )}
-                    {pendingPuesto.trim() && !tramoResuelto && (
-                      <p className="form-hint form-hint--error">
-                        Ese puesto no pertenece a ningún tramo configurado.{' '}
-                        <Link to="/app/configuracion">Revisa los tramos en Configuración</Link>.
-                      </p>
-                    )}
-                    {!pendingPuesto.trim() && (
-                      <p className="form-hint">
-                        El tramo se calcula solo a partir del número de puesto.
-                      </p>
-                    )}
+                    <p className="form-hint">
+                      El tramo se calcula solo, repartiendo por número de hermano según el aforo de
+                      cada tramo.{' '}
+                      <Link to="/app/configuracion">Revisa los tramos en Configuración</Link>.
+                    </p>
                   </div>
                 )}
 
-                <PapeletaTicket papeleta={selected} hermano={h} hermandad={hermandad} tramo={tramoDeSelected} />
+                <PapeletaTicket
+                  papeleta={selected}
+                  hermano={h}
+                  hermandad={hermandad}
+                  tramo={a?.tramo ?? null}
+                  puesto={a?.puesto ?? null}
+                />
 
                 {(selected.estado === 'Solicitada' || selected.estado === 'Asignada') && (
                   <button type="button" className="ticket-cancel" onClick={() => anular(selected.id)}>

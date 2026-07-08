@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
+import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
+import { getTramos, tramosDeCuerpo, etiquetaTramo, type Cuerpo } from '../../lib/tramos'
+import { repartoDeCuerpo } from '../../lib/cortejo'
+
+const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -46,6 +51,22 @@ export default function Hermanos() {
     return { total, activos, nuevos, pendientes }
   }, [hermanos])
 
+  // El tramo de cada hermano no se guarda: se calcula solo a partir de su
+  // número de hermano y del aforo de los tramos configurados (ver Cortejo).
+  const tramos = useMemo(() => getTramos(), [])
+  const hermanoDe = useMemo(() => {
+    const map = new Map(hermanos.map((h) => [h.id, h]))
+    return (id: string) => map.get(id)
+  }, [hermanos])
+  const tramoPorHermano = useMemo(() => {
+    const map = new Map<string, string>()
+    CUERPOS.forEach((c) => {
+      const reparto = repartoDeCuerpo(c, PAPELETAS_INICIALES, hermanoDe, tramosDeCuerpo(c, tramos), new Set())
+      reparto.forEach((a) => map.set(a.hermano.id, a.tramo ? etiquetaTramo(a.tramo) : 'Supera el aforo'))
+    })
+    return map
+  }, [tramos, hermanoDe])
+
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = e.currentTarget
@@ -67,7 +88,6 @@ export default function Hermanos() {
       email,
       telefono: String(data.get('telefono') ?? '') || 'Sin datos',
       direccion: String(data.get('direccion') ?? '') || 'Sin datos',
-      tramo: 'Sin asignar',
       cuotaAlDia: false,
       iban,
     }
@@ -186,7 +206,9 @@ export default function Hermanos() {
                     </span>
                   </div>
                 </td>
-                <td>{h.tramo}</td>
+                <td>
+                  {tramoPorHermano.get(h.id) ?? <span className="table-muted">Sin papeleta</span>}
+                </td>
                 <td>
                   <span className={`pill ${estadoClass(h.estado)}`}>{h.estado}</span>
                 </td>
@@ -242,7 +264,7 @@ export default function Hermanos() {
               <div><dt>Teléfono</dt><dd>{selected.telefono}</dd></div>
               <div><dt>Dirección</dt><dd>{selected.direccion}</dd></div>
               <div><dt>Hermano desde</dt><dd>{selected.antiguedad}</dd></div>
-              <div><dt>Tramo en el cortejo</dt><dd>{selected.tramo}</dd></div>
+              <div><dt>Tramo en el cortejo</dt><dd>{tramoPorHermano.get(selected.id) ?? 'Sin papeleta este año'}</dd></div>
             </dl>
 
             <div className="assign-box">

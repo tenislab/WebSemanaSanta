@@ -3,7 +3,7 @@ import QrPreview from './QrPreview'
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import type { HermandadSettings } from '../lib/hermandadSettings'
-import type { Tramo } from '../lib/tramos'
+import { etiquetaTramo, type Tramo } from '../lib/tramos'
 import { formatCurrency } from '../lib/format'
 
 function estadoPillClass(estado: Papeleta['estado']) {
@@ -16,12 +16,14 @@ interface PapeletaTicketProps {
   papeleta: Papeleta
   hermano: Hermano
   hermandad: HermandadSettings
-  /** Tramo resuelto a partir de papeleta.tramo, para mostrar qué se porta en ese tramo (cirio, insignia…). */
+  /** Tramo que le corresponde por su número de hermano, calculado en el momento (null si supera el aforo). */
   tramo?: Tramo | null
+  /** Puesto dentro de su cuerpo (1 = justo detrás de la cruz de guía), calculado en el momento. */
+  puesto?: number | null
 }
 
 /** La papeleta de sitio, personalizada con los datos de la hermandad y del hermano. */
-export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo }: PapeletaTicketProps) {
+export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto }: PapeletaTicketProps) {
   return (
     <div className="ticket-doc print-doc">
       <div className="ticket-doc__head">
@@ -46,14 +48,16 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo }: 
           <span>Hermano nº {hermano.numero} · Hermano desde {hermano.antiguedad}</span>
 
           <span className="recibo-doc__label ticket-doc__tramo-label">Tramo asignado</span>
-          {papeleta.tramo ? (
+          {tramo ? (
             <>
               <b>
-                {papeleta.tramo}
-                {papeleta.puesto != null && <span className="table-subtle"> · puesto {papeleta.puesto}</span>}
+                {etiquetaTramo(tramo)}
+                {puesto != null && <span className="table-subtle"> · puesto {puesto}</span>}
               </b>
-              {tramo?.tipo && <span className="pill pill--info ticket-doc__tipo">{tramo.tipo}</span>}
+              {tramo.tipo && <span className="pill pill--info ticket-doc__tipo">{tramo.tipo}</span>}
             </>
+          ) : papeleta.cuerpo ? (
+            <span className="ticket-doc__pending">Supera el aforo de {papeleta.cuerpo}</span>
           ) : (
             <span className="ticket-doc__pending">Pendiente de asignar</span>
           )}
