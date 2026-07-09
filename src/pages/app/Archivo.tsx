@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../../context/AuthContext'
 import { formatDate } from '../../lib/format'
 import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
+import { borrarArchivo, formatearTamano, guardarArchivo, leerArchivo } from '../../lib/filestore'
 
 function fmt(iso: string) {
   return formatDate(new Date(`${iso}T00:00:00`))
@@ -55,6 +56,12 @@ const EyeIcon = () => (
 const LockIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
 )
+const ClipIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05 12.25 20.24a5.5 5.5 0 0 1-7.78-7.78l8.59-8.59a3.67 3.67 0 0 1 5.19 5.19l-8.6 8.59a1.83 1.83 0 0 1-2.6-2.6l7.94-7.94" /></svg>
+)
+const DownloadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13m0 0-4-4m4 4 4-4M4 21h16" /></svg>
+)
 
 export default function Archivo() {
   const { user } = useAuth()
@@ -70,6 +77,9 @@ export default function Archivo() {
 
   const [categoriaNueva, setCategoriaNueva] = useState<CategoriaDocumento>('Acta')
   const [visibilidadNueva, setVisibilidadNueva] = useState<'Todos' | 'Restringido'>('Todos')
+  const [guardandoArchivo, setGuardandoArchivo] = useState(false)
+  const [urlArchivo, setUrlArchivo] = useState<string | null>(null)
+  const [cargandoArchivo, setCargandoArchivo] = useState(false)
 
   const filtered = useMemo(() => {
     return documentos
@@ -109,7 +119,7 @@ export default function Archivo() {
     setFormOpen(true)
   }
 
-  function handleCreate(e: FormEvent<HTMLFormElement>) {
+  async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = e.currentTarget
     const data = new FormData(form)
@@ -128,6 +138,9 @@ export default function Archivo() {
     const vigenciaHasta = categoria === 'Contrato' ? String(data.get('vigenciaHasta') ?? '') || null : null
     const estadoExpediente = categoria === 'Expediente' ? (String(data.get('estadoExpediente') ?? 'Abierto') as EstadoExpediente) : null
 
+    const archivo = data.get('archivo')
+    const tieneArchivo = archivo instanceof File && archivo.size > 0
+
     const nextNumero = Math.max(0, ...documentos.map((d) => d.numero)) + 1
     const nuevo: Documento = {
       id: `doc-${Date.now()}`,
@@ -143,7 +156,26 @@ export default function Archivo() {
       proveedor,
       vigenciaHasta,
       estadoExpediente,
+      archivoNombre: tieneArchivo ? (archivo as File).name : null,
+      archivoTipo: tieneArchivo ? (archivo as File).type || null : null,
+      archivoTamano: tieneArchivo ? (archivo as File).size : null,
     }
+
+    if (tieneArchivo) {
+      setGuardandoArchivo(true)
+      try {
+        await guardarArchivo(nuevo.id, archivo as File)
+      } catch {
+        // Si falla el guardado del archivo (p. ej. IndexedDB no disponible),
+        // el documento se guarda igualmente, solo que sin adjunto.
+        nuevo.archivoNombre = null
+        nuevo.archivoTipo = null
+        nuevo.archivoTamano = null
+      } finally {
+        setGuardandoArchivo(false)
+      }
+    }
+
     setDocumentos((prev) => [nuevo, ...prev])
     setJustAddedId(nuevo.id)
     setFormOpen(false)
@@ -151,6 +183,42 @@ export default function Archivo() {
     setQuery('')
     form.reset()
     setTimeout(() => setJustAddedId(null), 3000)
+  }
+
+  function abrirFicha(doc: Documento) {
+    if (urlArchivo) URL.revokeObjectURL(urlArchivo)
+    setUrlArchivo(null)
+    setSelected(doc)
+  }
+
+  function cerrarFicha() {
+    setSelected(null)
+    if (urlArchivo) URL.revokeObjectURL(urlArchivo)
+    setUrlArchivo(null)
+  }
+
+  async function abrirArchivoAdjunto(doc: Documento) {
+    setCargandoArchivo(true)
+    try {
+      const blob = await leerArchivo(doc.id)
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      setUrlArchivo((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return url
+      })
+      window.open(url, '_blank', 'noopener')
+    } finally {
+      setCargandoArchivo(false)
+    }
+  }
+
+  async function eliminarArchivoAdjunto(doc: Documento) {
+    await borrarArchivo(doc.id)
+    setDocumentos((prev) =>
+      prev.map((d) => (d.id === doc.id ? { ...d, archivoNombre: null, archivoTipo: null, archivoTamano: null } : d)),
+    )
+    setSelected((prev) => (prev && prev.id === doc.id ? { ...prev, archivoNombre: null, archivoTipo: null, archivoTamano: null } : prev))
   }
 
   return (
@@ -251,12 +319,17 @@ export default function Archivo() {
                 <tr
                   key={d.id}
                   className={`${d.id === justAddedId ? 'row--flash ' : ''}${!visible ? 'row--restricted' : ''}`.trim() || undefined}
-                  onClick={() => setSelected(d)}
+                  onClick={() => abrirFicha(d)}
                   style={{ cursor: 'pointer' }}
                 >
                   <td className="num">{d.numero}</td>
                   <td>
                     <span className="row-person__name">{d.nombre}</span>
+                    {d.archivoNombre && (
+                      <span className="archivo-adjunto__marca" title={`Adjunto: ${d.archivoNombre}`}>
+                        <ClipIcon />
+                      </span>
+                    )}
                     <br />
                     <span className="table-subtle">{d.categoria}</span>
                   </td>
@@ -277,7 +350,7 @@ export default function Archivo() {
                       title={visible ? 'Ver ficha' : `Solo visible para: ${d.cargosConAcceso?.join(', ')}`}
                       onClick={(e) => {
                         e.stopPropagation()
-                        setSelected(d)
+                        abrirFicha(d)
                       }}
                     >
                       {visible ? <EyeIcon /> : <LockIcon />}
@@ -300,7 +373,7 @@ export default function Archivo() {
       {/* Ficha del documento */}
       <Drawer
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={cerrarFicha}
         title={selected?.nombre ?? ''}
         subtitle={selected ? `Documento nº ${selected.numero}` : undefined}
       >
@@ -382,6 +455,40 @@ export default function Archivo() {
                     )}
                   </dl>
                 )}
+
+                {visible && (
+                  <div className="assign-box">
+                    <label>Archivo adjunto</label>
+                    {selected.archivoNombre ? (
+                      <>
+                        <div className="archivo-adjunto__fila">
+                          <ClipIcon />
+                          <span>
+                            {selected.archivoNombre}
+                            {selected.archivoTamano != null && (
+                              <span className="table-subtle"> · {formatearTamano(selected.archivoTamano)}</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="assign-box__row">
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => abrirArchivoAdjunto(selected)}
+                            disabled={cargandoArchivo}
+                          >
+                            <DownloadIcon /> {cargandoArchivo ? 'Abriendo…' : 'Ver / descargar'}
+                          </button>
+                          <button type="button" className="btn btn-ghost" onClick={() => eliminarArchivoAdjunto(selected)}>
+                            Quitar adjunto
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="form-hint">Este documento no tiene ningún archivo adjunto todavía.</p>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -395,11 +502,11 @@ export default function Archivo() {
         subtitle="Archivo documental"
         footer={
           <>
-            <button className="btn btn-ghost" onClick={() => setFormOpen(false)}>
+            <button className="btn btn-ghost" onClick={() => setFormOpen(false)} disabled={guardandoArchivo}>
               Cancelar
             </button>
-            <button className="btn btn-primary" form="documento-form" type="submit">
-              Guardar
+            <button className="btn btn-primary" form="documento-form" type="submit" disabled={guardandoArchivo}>
+              {guardandoArchivo ? 'Guardando…' : 'Guardar'}
             </button>
           </>
         }
@@ -473,6 +580,11 @@ export default function Archivo() {
           <div className="form-row">
             <label htmlFor="archivadoPor">Archivado por</label>
             <input id="archivadoPor" name="archivadoPor" type="text" defaultValue={nombreUsuario} />
+          </div>
+          <div className="form-row">
+            <label htmlFor="archivo">Archivo (PDF, imagen…)</label>
+            <input id="archivo" name="archivo" type="file" accept=".pdf,image/*" />
+            <p className="form-hint">Opcional. Se guarda en este navegador; con la base de datos pasará a almacenamiento en la nube.</p>
           </div>
 
           <div className="assign-box">

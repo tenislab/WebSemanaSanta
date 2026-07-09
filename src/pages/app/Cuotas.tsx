@@ -17,6 +17,7 @@ import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
 import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
 import { descargarArchivo, toCsv } from '../../lib/csv'
+import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -55,6 +56,8 @@ export default function Cuotas() {
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [hermanoNuevaCuota, setHermanoNuevaCuota] = useState<Hermano | null>(null)
   const [domiciliarNuevaCuota, setDomiciliarNuevaCuota] = useState(true)
+  const [remesaOpen, setRemesaOpen] = useState(false)
+  const [fechaRemesa, setFechaRemesa] = useState('')
 
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanoDe = useMemo(() => {
@@ -94,23 +97,50 @@ export default function Cuotas() {
     setSelected((prev) => (prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy() } : prev))
   }
 
-  /**
-   * Remesa bancaria: listado CSV de todos los recibos pendientes y
-   * domiciliados, con el IBAN de cada hermano, para presentarlo al banco.
-   * (El fichero SEPA XML real llegará con la conexión a la base de datos.)
-   */
+  // Remesa bancaria: recibos pendientes y domiciliados con IBAN, listos para
+  // presentar al banco. El CSV es un listado de trabajo; el XML es el
+  // fichero de adeudo directo SEPA (pain.008.001.02) que exige el banco.
   const recibosRemesables = useMemo(
     () => cuotas.filter((c) => c.estado === 'Pendiente' && c.domiciliada && hermanoDe(c.hermanoId)?.iban),
     [cuotas, hermanoDe],
   )
 
-  function exportarRemesa() {
+  const acreedor = useMemo(
+    () => ({ nombre: hermandad.nombreLegal, iban: hermandad.iban, identificadorAcreedor: hermandad.identificadorAcreedor }),
+    [hermandad],
+  )
+  const avisoAcreedor = useMemo(() => acreedorIncompleto(acreedor), [acreedor])
+
+  function abrirRemesa() {
+    const dentroCincoDias = new Date()
+    dentroCincoDias.setDate(dentroCincoDias.getDate() + 5)
+    setFechaRemesa(dentroCincoDias.toISOString().slice(0, 10))
+    setRemesaOpen(true)
+  }
+
+  function exportarRemesaCsv() {
     const filas = recibosRemesables.map((c) => {
       const h = hermanoDe(c.hermanoId)!
       return [c.numero, h.nombre, h.iban ?? '', c.concepto, c.importe.toFixed(2).replace('.', ','), c.fechaCobro]
     })
     const csv = toCsv(['Nº recibo', 'Hermano', 'IBAN', 'Concepto', 'Importe (€)', 'Fecha de cobro'], filas)
     descargarArchivo(`remesa-cuotas-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+  }
+
+  function descargarSepaXml() {
+    if (avisoAcreedor || !fechaRemesa) return
+    const recibos = recibosRemesables.map((c) => {
+      const h = hermanoDe(c.hermanoId)!
+      return {
+        numero: c.numero,
+        importe: c.importe,
+        concepto: `${c.concepto} — ${hermandad.nombreLegal || 'Hermandad'}`,
+        deudor: { nombre: h.nombre, iban: h.iban ?? '', numeroHermano: h.numero, antiguedad: h.antiguedad },
+      }
+    })
+    const xml = buildSepaXml(acreedor, recibos, new Date(`${fechaRemesa}T00:00:00`), new Date())
+    descargarArchivo(`remesa-sepa-${fechaRemesa}.xml`, xml, 'application/xml;charset=utf-8;')
+    setRemesaOpen(false)
   }
 
   function abrirNuevaCuota() {
@@ -175,7 +205,7 @@ export default function Cuotas() {
         <div className="dash-head__actions">
           <button
             className="btn btn-outline"
-            onClick={exportarRemesa}
+            onClick={abrirRemesa}
             disabled={recibosRemesables.length === 0}
             title={
               recibosRemesables.length === 0
@@ -183,7 +213,7 @@ export default function Cuotas() {
                 : `${recibosRemesables.length} recibos pendientes domiciliados`
             }
           >
-            Exportar remesa ({recibosRemesables.length})
+            Remesa ({recibosRemesables.length})
           </button>
           <button className="btn btn-primary" onClick={abrirNuevaCuota}>
             + Nueva cuota
@@ -447,6 +477,66 @@ export default function Cuotas() {
             registre el pago.
           </p>
         </form>
+      </Drawer>
+
+      {/* Remesa bancaria */}
+      <Drawer
+        open={remesaOpen}
+        onClose={() => setRemesaOpen(false)}
+        title="Remesa bancaria"
+        subtitle={`${recibosRemesables.length} recibos pendientes domiciliados`}
+        footer={
+          <>
+            <button className="btn btn-ghost" onClick={exportarRemesaCsv}>
+              Solo CSV
+            </button>
+            <button className="btn btn-primary" onClick={descargarSepaXml} disabled={!!avisoAcreedor || !fechaRemesa}>
+              Descargar XML SEPA
+            </button>
+          </>
+        }
+      >
+        <div className="app-form">
+          {avisoAcreedor && <div className="banner-inline banner-inline--warn">{avisoAcreedor}</div>}
+          <div className="form-row">
+            <label htmlFor="fechaRemesa">Fecha de cobro</label>
+            <input
+              id="fechaRemesa"
+              type="date"
+              value={fechaRemesa}
+              onChange={(e) => setFechaRemesa(e.target.value)}
+            />
+            <p className="form-hint">
+              La misma fecha para todos los recibos del lote: es la fecha en la que el banco
+              presentará el cobro a cada hermano.
+            </p>
+          </div>
+          <div className="table-card table-card--in-drawer">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nº</th>
+                  <th>Hermano</th>
+                  <th>Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recibosRemesables.map((c) => (
+                  <tr key={c.id}>
+                    <td className="num">{c.numero}</td>
+                    <td>{hermanoDe(c.hermanoId)?.nombre ?? '—'}</td>
+                    <td className="num">{formatCurrency(c.importe)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="form-hint">
+            El XML es un fichero de adeudo directo SEPA CORE (pain.008.001.02) real, listo para
+            subir a la banca online. El «Solo CSV» es un listado de trabajo para revisar antes de
+            enviarlo.
+          </p>
+        </div>
       </Drawer>
     </div>
   )

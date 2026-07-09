@@ -7,6 +7,8 @@ export interface HermandadSettings {
   telefono: string
   email: string
   iban: string
+  /** Identificador de acreedor SEPA (p. ej. ES23000B12345678), para las remesas de adeudo directo. */
+  identificadorAcreedor: string
   /** Imagen del logo como data URL (subida desde el navegador, sin backend). */
   logoDataUrl: string | null
 }
@@ -22,6 +24,7 @@ const EMPTY: HermandadSettings = {
   telefono: '',
   email: '',
   iban: '',
+  identificadorAcreedor: '',
   logoDataUrl: null,
 }
 

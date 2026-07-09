@@ -226,14 +226,26 @@ export default function Configuracion() {
             />
           </div>
 
-          <div className="form-row">
-            <label htmlFor="iban">IBAN para domiciliaciones</label>
-            <input
-              id="iban"
-              value={settings.iban}
-              onChange={(e) => update('iban', e.target.value)}
-              placeholder="ES00 0000 0000 0000 0000 0000"
-            />
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor="iban">IBAN para domiciliaciones</label>
+              <input
+                id="iban"
+                value={settings.iban}
+                onChange={(e) => update('iban', e.target.value)}
+                placeholder="ES00 0000 0000 0000 0000 0000"
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="identificadorAcreedor">Identificador de acreedor SEPA</label>
+              <input
+                id="identificadorAcreedor"
+                value={settings.identificadorAcreedor}
+                onChange={(e) => update('identificadorAcreedor', e.target.value)}
+                placeholder="ES23000B12345678"
+              />
+              <p className="form-hint">Lo asigna tu banco al dar de alta el adeudo directo SEPA. Hace falta para generar la remesa.</p>
+            </div>
           </div>
         </section>
 

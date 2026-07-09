@@ -1243,6 +1243,10 @@ h1, h2, h3,
    ========================================================================= */
 .archivo-cargos { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; }
 .archivo-visibilidad-group { display: flex; flex-direction: column; gap: 0.6rem; }
+.archivo-adjunto__marca { display: inline-flex; margin-left: 0.4rem; color: var(--text-muted); vertical-align: middle; }
+.archivo-adjunto__marca svg { width: 13px; height: 13px; }
+.archivo-adjunto__fila { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; }
+.archivo-adjunto__fila svg { width: 15px; height: 15px; flex: none; color: var(--text-muted); }
 
 /* =========================================================================
    Comunicados — conexión (simulada) con redes sociales

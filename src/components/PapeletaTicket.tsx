@@ -1,5 +1,5 @@
 import { LogoMark } from './Logo'
-import QrPreview from './QrPreview'
+import QrCode from './QrCode'
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import type { HermandadSettings } from '../lib/hermandadSettings'
@@ -70,8 +70,12 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
         </div>
 
         <div className="ticket-doc__qr">
-          <QrPreview seed={`PAP-${papeleta.numero}`} />
-          <span>Vista previa</span>
+          <QrCode
+            value={`Papeleta nº ${papeleta.numero} · ${hermano.nombre} (nº ${hermano.numero}) · ${
+              tramo ? etiquetaTramo(tramo) : 'Sin tramo'
+            } · ${hermandad.nombreLegal || 'Tu hermandad'}`}
+          />
+          <span>Escanéalo para leer los datos</span>
         </div>
       </div>
 
@@ -83,8 +87,8 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
       </div>
 
       <p className="recibo-doc__note">
-        Documento generado por Cabildo · el código QR verificable se activará con la base de
-        datos
+        Documento generado por Cabildo · el código QR es real y contiene los datos de la papeleta;
+        la verificación automática al escanear llegará con la base de datos
       </p>
     </div>
   )
