@@ -14,14 +14,7 @@ import { formatCurrency, formatDate } from '../lib/format'
 import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
 import { descargarArchivo } from '../lib/csv'
 import { estiloTema, inicialesHermandad } from '../lib/color'
-import {
-  ID_HERMANDAD_PRINCIPAL,
-  HERMANDADES_MUESTRA,
-  HERMANOS_MUESTRA,
-  buscarHermandades,
-  type HermandadDirectorio,
-  type HermanoDirectorio,
-} from '../lib/hermandades'
+import { ID_HERMANDAD_PRINCIPAL, HERMANDADES_MUESTRA, HERMANOS_MUESTRA, type HermanoDirectorio } from '../lib/hermandades'
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
@@ -89,9 +82,6 @@ export default function HermanoPortal() {
   const campana = useMemo(() => getCampana(), [])
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
-  const [paso, setPaso] = useState<'buscar' | 'clave'>('buscar')
-  const [queryHermandad, setQueryHermandad] = useState('')
-  const [hermandadElegida, setHermandadElegida] = useState<HermandadDirectorio | null>(null)
   const [dniInput, setDniInput] = useState('')
   const [claveInput, setClaveInput] = useState('')
   const [errorLogin, setErrorLogin] = useState<string | null>(null)
@@ -101,21 +91,6 @@ export default function HermanoPortal() {
   const [consent, setConsent] = useState<boolean>(() => localStorage.getItem(CONSENT_KEY) === 'si')
   const [claveError, setClaveError] = useState<string | null>(null)
   const [claveGuardada, setClaveGuardada] = useState(false)
-
-  const datosPrincipalDirectorio = useMemo(
-    () => ({
-      nombre: nombrePrincipal,
-      ciudad: hermandadPrincipal.ciudad,
-      color: hermandadPrincipal.colorPrimario,
-      telefono: hermandadPrincipal.telefono,
-      email: hermandadPrincipal.email,
-    }),
-    [nombrePrincipal, hermandadPrincipal],
-  )
-  const opcionesHermandad = useMemo(
-    () => buscarHermandades(queryHermandad, datosPrincipalDirectorio),
-    [queryHermandad, datosPrincipalDirectorio],
-  )
 
   const esPrincipal = sesion?.hermandadId === ID_HERMANDAD_PRINCIPAL
   const hermanoPrincipal = useMemo(
@@ -138,48 +113,36 @@ export default function HermanoPortal() {
   const contactoActivo = esPrincipal
     ? { telefono: hermandadPrincipal.telefono, email: hermandadPrincipal.email }
     : { telefono: hermandadMuestra?.telefono ?? '', email: hermandadMuestra?.email ?? '' }
-  const colorPreview = paso === 'clave' && hermandadElegida ? hermandadElegida.color : undefined
 
-  function elegirHermandad(h: HermandadDirectorio) {
-    setHermandadElegida(h)
-    setPaso('clave')
-    setErrorLogin(null)
-    setDniInput('')
-    setClaveInput('')
-  }
-
-  function volverABuscar() {
-    setPaso('buscar')
-    setHermandadElegida(null)
-    setErrorLogin(null)
-  }
-
+  /** Un único paso: DNI + contraseña. Busca primero en el censo de tu hermandad y, si no coincide,
+   * en el resto de hermandades registradas — así el hermano no tiene que elegir nada, la app le
+   * lleva directo a la hermandad que le dio de alta. */
   function identificar(e: FormEvent) {
     e.preventDefault()
-    if (!hermandadElegida) return
     const dni = normaliza(dniInput)
 
-    if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
-      const encontrado = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
-      if (!encontrado) {
-        setErrorLogin('DNI o contraseña incorrectos.')
-        return
-      }
-      const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: encontrado.id }
+    const enPrincipal = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
+    if (enPrincipal) {
+      const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: enPrincipal.id }
       guardarSesion(nueva)
       setSesion(nueva)
-    } else {
-      const censo = censosMuestra[hermandadElegida.id]?.[0] ?? []
-      const encontrado = censo.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
-      if (!encontrado) {
-        setErrorLogin('DNI o contraseña incorrectos.')
-        return
-      }
-      const nueva = { hermandadId: hermandadElegida.id, hermanoId: encontrado.id }
-      guardarSesion(nueva)
-      setSesion(nueva)
+      setErrorLogin(null)
+      return
     }
-    setErrorLogin(null)
+
+    for (const h of HERMANDADES_MUESTRA) {
+      const censo = censosMuestra[h.id]?.[0] ?? []
+      const encontrado = censo.find((c) => normaliza(c.dni) === dni && c.claveAcceso === claveInput)
+      if (encontrado) {
+        const nueva = { hermandadId: h.id, hermanoId: encontrado.id }
+        guardarSesion(nueva)
+        setSesion(nueva)
+        setErrorLogin(null)
+        return
+      }
+    }
+
+    setErrorLogin('DNI o contraseña incorrectos.')
   }
 
   function entrarComoDemo() {
@@ -195,9 +158,8 @@ export default function HermanoPortal() {
   function salir() {
     sessionStorage.removeItem(SESION_KEY)
     setSesion(null)
-    setPaso('buscar')
-    setHermandadElegida(null)
-    setQueryHermandad('')
+    setDniInput('')
+    setClaveInput('')
     setPendingCuerpo('')
     setDatosGuardados(false)
     setBajaMuestraSolicitada(false)
@@ -375,102 +337,49 @@ export default function HermanoPortal() {
   // ===================== Pantalla de identificación =====================
   if (!hermanoActivo) {
     return (
-      <div className="portal" style={colorPreview ? estiloTema(colorPreview) : undefined}>
-        <PortalHead hermandad={hermandadElegida?.nombre ?? 'Cabildo'} logo={null} color={colorPreview} />
+      <div className="portal">
+        <PortalHead hermandad="Cabildo" logo={null} />
         <main className="portal__stage">
           <div className="portal__card">
             <p className="eyebrow">Área del hermano</p>
             <h1>Entra en tu área</h1>
+            <p className="portal__lead">Entra con tu DNI y tu contraseña; te llevaremos directo a tu hermandad.</p>
 
-            {paso === 'buscar' && (
-              <>
-                <div className="banner banner--info banner--demo portal__demo-banner" role="status">
-                  <div>
-                    <strong>Modo demostración.</strong> Prueba el área del hermano sin buscar tu hermandad.
-                  </div>
-                  <button type="button" className="btn btn-outline btn-sm banner--demo__btn" onClick={entrarComoDemo}>
-                    Entrar con hermano de prueba
-                  </button>
-                </div>
-                {errorLogin && <p className="form-hint form-hint--error">{errorLogin}</p>}
-
-                <p className="portal__lead">Busca tu hermandad para entrar con tu DNI y contraseña.</p>
-                <div className="form-row">
-                  <label htmlFor="buscarHermandad">Tu hermandad</label>
-                  <input
-                    id="buscarHermandad"
-                    type="text"
-                    placeholder="Escribe el nombre o la ciudad…"
-                    value={queryHermandad}
-                    onChange={(e) => setQueryHermandad(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-                <ul className="portal__picker">
-                  {opcionesHermandad.map((h) => (
-                    <li key={h.id}>
-                      <button type="button" className="portal__picker-item" onClick={() => elegirHermandad(h)}>
-                        <span className="portal__picker-dot" style={{ background: h.color }} aria-hidden="true" />
-                        <span>
-                          <b>{h.nombre}</b>
-                          {h.ciudad && <small>{h.ciudad}</small>}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                  {opcionesHermandad.length === 0 && (
-                    <li className="portal__picker-empty">No encontramos ninguna hermandad con ese nombre.</li>
-                  )}
-                </ul>
-              </>
-            )}
-
-            {paso === 'clave' && hermandadElegida && (
-              <>
-                <button type="button" className="portal__back" onClick={volverABuscar}>
-                  ← Cambiar de hermandad
-                </button>
-                <div className="portal__chosen" style={{ borderColor: hermandadElegida.color }}>
-                  <span className="portal__picker-dot" style={{ background: hermandadElegida.color }} aria-hidden="true" />
-                  <span>
-                    <b>{hermandadElegida.nombre}</b>
-                    {hermandadElegida.ciudad && <small>{hermandadElegida.ciudad}</small>}
-                  </span>
-                </div>
-                <form className="app-form" onSubmit={identificar}>
-                  <div className="form-row">
-                    <label htmlFor="dniHermano">DNI / NIE</label>
-                    <input
-                      id="dniHermano"
-                      type="text"
-                      value={dniInput}
-                      onChange={(e) => setDniInput(e.target.value)}
-                      placeholder="12345678A"
-                      autoFocus
-                      required
-                    />
-                  </div>
-                  <div className="form-row">
-                    <label htmlFor="claveHermano">Contraseña</label>
-                    <input
-                      id="claveHermano"
-                      type="password"
-                      value={claveInput}
-                      onChange={(e) => setClaveInput(e.target.value)}
-                      placeholder="••••••••••"
-                      required
-                    />
-                  </div>
-                  {errorLogin && <p className="form-hint form-hint--error">{errorLogin}</p>}
-                  <button type="submit" className="btn btn-primary btn-block">
-                    Entrar
-                  </button>
-                </form>
-              </>
-            )}
+            <form className="app-form" onSubmit={identificar}>
+              <div className="form-row">
+                <label htmlFor="dniHermano">DNI / NIE</label>
+                <input
+                  id="dniHermano"
+                  type="text"
+                  value={dniInput}
+                  onChange={(e) => setDniInput(e.target.value)}
+                  placeholder="12345678A"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div className="form-row">
+                <label htmlFor="claveHermano">Contraseña</label>
+                <input
+                  id="claveHermano"
+                  type="password"
+                  value={claveInput}
+                  onChange={(e) => setClaveInput(e.target.value)}
+                  placeholder="En la demo: hermano123"
+                  required
+                />
+              </div>
+              {errorLogin && <p className="form-hint form-hint--error">{errorLogin}</p>}
+              <button type="submit" className="btn btn-primary btn-block">
+                Entrar
+              </button>
+            </form>
 
             <p className="portal__note">
-              En modo demostración, la contraseña de cualquier hermano es <code>hermano123</code>. <Link to="/">Volver a la portada</Link>
+              <button type="button" className="portal__link-btn" onClick={entrarComoDemo}>
+                Entra con un hermano de prueba
+              </button>{' '}
+              · <Link to="/">Volver a la portada</Link>
             </p>
           </div>
         </main>

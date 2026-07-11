@@ -1,12 +1,12 @@
 /**
- * Directorio de hermandades registradas en Cabildo, usado por el área del
- * hermano para que cada persona identifique primero su propia hermandad y
- * después entre con su DNI y contraseña. Mientras no hay backend real, la
+ * Directorio de hermandades registradas en Cabildo. El área del hermano
+ * identifica con un único DNI + contraseña y busca la coincidencia en la
  * hermandad "principal" (la que gestiona quien ha iniciado sesión como
- * secretaría en /app) vive en los datos ya persistidos de la app
- * (hermandadSettings + censo de hermanos). Las demás son hermandades de
- * muestra, con su propio censo pequeño y aislado, para demostrar que cada
- * hermandad ve solo lo suyo.
+ * secretaría en /app, con sus datos reales ya persistidos) y, si no la
+ * encuentra, en las hermandades de muestra de aquí abajo — cada una con su
+ * propio censo pequeño y aislado, para demostrar que cada hermandad ve solo
+ * lo suyo y que el hermano no tiene que elegir nada: la app le lleva
+ * directo a la hermandad que le dio de alta.
  */
 
 export interface HermanoDirectorio {
@@ -46,34 +46,4 @@ export const HERMANOS_MUESTRA: Record<string, HermanoDirectorio[]> = {
     { id: 's2', numero: 19, nombre: 'Álvaro Bautista Reyes', dni: '10111213V', claveAcceso: 'hermano123', email: 'alvaro.bautista@example.com', telefono: '633 445 566' },
     { id: 's3', numero: 33, nombre: 'Nieves Palomo Guerra', dni: '12131415W', claveAcceso: 'hermano123', email: 'nieves.palomo@example.com', telefono: '644 556 677' },
   ],
-}
-
-export interface DatosHermandadPrincipal {
-  nombre: string
-  ciudad: string
-  color: string
-  telefono: string
-  email: string
-}
-
-/** Combina la hermandad principal (con sus datos reales ya configurados) con las de muestra, para el buscador del portal. */
-export function directorioCompleto(principal: DatosHermandadPrincipal): HermandadDirectorio[] {
-  return [
-    {
-      id: ID_HERMANDAD_PRINCIPAL,
-      nombre: principal.nombre || 'Tu hermandad (modo demo)',
-      ciudad: principal.ciudad,
-      color: principal.color || '#caa24a',
-      telefono: principal.telefono,
-      email: principal.email,
-    },
-    ...HERMANDADES_MUESTRA,
-  ]
-}
-
-export function buscarHermandades(query: string, principal: DatosHermandadPrincipal): HermandadDirectorio[] {
-  const q = query.trim().toLowerCase()
-  const todas = directorioCompleto(principal)
-  if (!q) return todas
-  return todas.filter((h) => h.nombre.toLowerCase().includes(q) || h.ciudad.toLowerCase().includes(q))
 }
