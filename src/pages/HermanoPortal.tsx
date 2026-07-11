@@ -4,9 +4,19 @@ import { LogoMark } from '../components/Logo'
 import PapeletaTicket from '../components/PapeletaTicket'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
-import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type Papeleta } from '../data/papeletas'
+import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
+import { getOpcionesPapeleta, type OpcionPapeleta } from '../lib/opcionesPapeleta'
 import { getHermandadSettings } from '../lib/hermandadSettings'
-import { getTramos, tramosDeCuerpo, etiquetaTramo, esCirio, type Cuerpo } from '../lib/tramos'
+import {
+  getTramos,
+  tramosDeCuerpo,
+  etiquetaTramo,
+  esAutomatico,
+  gruposAutomaticos,
+  cuerposPresentes,
+  getPrecioBase,
+  precioDeTramo,
+} from '../lib/tramos'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../lib/campana'
 import { CLAVES_DATOS, usePersistentState } from '../lib/persistencia'
@@ -18,8 +28,10 @@ import { ID_HERMANDAD_PRINCIPAL, HERMANDADES_MUESTRA, HERMANOS_MUESTRA, type Her
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
-const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 const DNI_DEMO = 'h4' // Francisco Gómez Nieto, nº 501 · usado por el botón "hermano de prueba"
+
+/** Valor centinela del selector para «papeleta personalizada» (no puede chocar con un nombre de cuerpo). */
+const PERSONALIZADA = '__personalizada'
 
 interface Sesion {
   hermandadId: string
@@ -78,14 +90,25 @@ export default function HermanoPortal() {
     soledad: [hermanosSoledad, setHermanosSoledad],
   }
 
+  // Papeletas de cada hermandad de muestra: cada una guarda las suyas aparte,
+  // igual que en la base de datos real cada hermandad tendrá sus propias filas.
+  const [papeletasEsperanza, setPapeletasEsperanza] = usePersistentState<Papeleta[]>('cabildo-papeletas-esperanza', [])
+  const [papeletasSoledad, setPapeletasSoledad] = usePersistentState<Papeleta[]>('cabildo-papeletas-soledad', [])
+  const papeletasMuestra: Record<string, [Papeleta[], (updater: (prev: Papeleta[]) => Papeleta[]) => void]> = {
+    esperanza: [papeletasEsperanza, setPapeletasEsperanza],
+    soledad: [papeletasSoledad, setPapeletasSoledad],
+  }
+
   const tramos = useMemo(() => getTramos(), [])
   const campana = useMemo(() => getCampana(), [])
+  const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
+  const precioBase = useMemo(() => getPrecioBase(), [])
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
   const [dniInput, setDniInput] = useState('')
   const [claveInput, setClaveInput] = useState('')
   const [errorLogin, setErrorLogin] = useState<string | null>(null)
-  const [pendingCuerpo, setPendingCuerpo] = useState<Cuerpo | ''>('')
+  const [pendingCuerpo, setPendingCuerpo] = useState<string>('')
   const [datosGuardados, setDatosGuardados] = useState(false)
   const [bajaMuestraSolicitada, setBajaMuestraSolicitada] = useState(false)
   const [consent, setConsent] = useState<boolean>(() => localStorage.getItem(CONSENT_KEY) === 'si')
@@ -113,6 +136,14 @@ export default function HermanoPortal() {
   const contactoActivo = esPrincipal
     ? { telefono: hermandadPrincipal.telefono, email: hermandadPrincipal.email }
     : { telefono: hermandadMuestra?.telefono ?? '', email: hermandadMuestra?.email ?? '' }
+
+  // Papeleta activa del hermano en una hermandad de muestra (su propio subsistema).
+  const listaPapeletasMuestra = !esPrincipal && sesion ? (papeletasMuestra[sesion.hermandadId]?.[0] ?? []) : []
+  const papeletaMuestraActual = hermanoMuestra
+    ? listaPapeletasMuestra.find(
+        (p) => p.hermanoId === hermanoMuestra.id && p.anio === campana.anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia',
+      ) ?? null
+    : null
 
   /** Un único paso: DNI + contraseña. Busca primero en el censo de tu hermandad y, si no coincide,
    * en el resto de hermandades registradas — así el hermano no tiene que elegir nada, la app le
@@ -239,9 +270,9 @@ export default function HermanoPortal() {
       : undefined
   }, [papeletas, campana.anio, tramos, hermanos, renovacion])
 
-  const cuerposDisponibles = useMemo(() => CUERPOS.filter((c) => tramos.some((t) => t.cuerpo === c)), [tramos])
+  const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
   const tramosDelCuerpo = useMemo(
-    () => (pendingCuerpo ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
+    () => (pendingCuerpo && pendingCuerpo !== PERSONALIZADA ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
     [pendingCuerpo, tramos],
   )
 
@@ -251,13 +282,14 @@ export default function HermanoPortal() {
 
   function renovarSitio() {
     if (!hermanoPrincipal || !renovacion?.sitioAnterior?.tramoId) return
+    const tramoAnterior = tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)
     const nueva: Papeleta = {
       id: `p-${Date.now()}`,
       numero: nextNumeroPapeleta(),
       hermanoId: hermanoPrincipal.id,
       anio: campana.anio,
       tramoId: renovacion.sitioAnterior.tramoId,
-      importe: renovacion.sitioAnterior.importe || IMPORTE_PAPELETA,
+      importe: renovacion.sitioAnterior.importe || precioDeTramo(tramoAnterior, precioBase),
       estado: 'Asignada',
       fechaSolicitud: hoy(),
     }
@@ -281,10 +313,15 @@ export default function HermanoPortal() {
 
   function sacarEnTramo(tramoId: string) {
     if (!hermanoPrincipal) return
+    const importe = precioDeTramo(tramos.find((t) => t.id === tramoId), precioBase)
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
-        return prev.map((p) => (p.id === actual.id ? { ...p, tramoId, estado: 'Asignada', importe: IMPORTE_PAPELETA } : p))
+        return prev.map((p) =>
+          p.id === actual.id
+            ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null }
+            : p,
+        )
       }
       const nueva: Papeleta = {
         id: `p-${Date.now()}`,
@@ -292,13 +329,79 @@ export default function HermanoPortal() {
         hermanoId: hermanoPrincipal.id,
         anio: campana.anio,
         tramoId,
-        importe: IMPORTE_PAPELETA,
+        importe,
         estado: 'Asignada',
         fechaSolicitud: hoy(),
       }
       return [nueva, ...prev]
     })
     setPendingCuerpo('')
+  }
+
+  /** Saca una papeleta personalizada de la hermandad (mantilla, simbólica…), sin sitio en el cortejo. */
+  function sacarConOpcion(opcion: OpcionPapeleta) {
+    if (!hermanoPrincipal) return
+    setPapeletas((prev) => {
+      const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
+      if (actual) {
+        return prev.map((p) =>
+          p.id === actual.id
+            ? { ...p, tramoId: null, opcion: opcion.nombre, estado: 'Asignada', importe: opcion.importe, pagoComunicado: null }
+            : p,
+        )
+      }
+      const nueva: Papeleta = {
+        id: `p-${Date.now()}`,
+        numero: nextNumeroPapeleta(),
+        hermanoId: hermanoPrincipal.id,
+        anio: campana.anio,
+        tramoId: null,
+        opcion: opcion.nombre,
+        importe: opcion.importe,
+        estado: 'Asignada',
+        fechaSolicitud: hoy(),
+      }
+      return [nueva, ...prev]
+    })
+    setPendingCuerpo('')
+  }
+
+  /** El hermano avisa de que ya ha pagado su papeleta por Bizum o transferencia; la secretaría lo confirma. */
+  function comunicarPago(metodo: MetodoPago) {
+    const p = renovacion?.papeletaActual
+    if (!p) return
+    setPapeletas((prev) => prev.map((x) => (x.id === p.id ? { ...x, pagoComunicado: { metodo, fecha: hoy() } } : x)))
+  }
+
+  // ---- Papeletas de las hermandades de muestra (cada una con su propio subsistema) ----
+  function sacarMuestra(opcionId: string) {
+    if (!sesion || !hermanoMuestra || !hermandadMuestra) return
+    const op = hermandadMuestra.opcionesPapeleta.find((o) => o.id === opcionId)
+    if (!op) return
+    const [, setLista] = papeletasMuestra[sesion.hermandadId]
+    setLista((prev) => {
+      const numero = Math.max(0, ...prev.map((p) => p.numero)) + 1
+      const nueva: Papeleta = {
+        id: `pm-${Date.now()}`,
+        numero,
+        hermanoId: hermanoMuestra.id,
+        anio: campana.anio,
+        tramoId: null,
+        opcion: op.nombre,
+        importe: op.importe,
+        estado: 'Asignada',
+        fechaSolicitud: hoy(),
+      }
+      return [nueva, ...prev]
+    })
+  }
+
+  function comunicarPagoMuestra(metodo: MetodoPago) {
+    if (!sesion || !papeletaMuestraActual) return
+    const [, setLista] = papeletasMuestra[sesion.hermandadId]
+    setLista((prev) =>
+      prev.map((p) => (p.id === papeletaMuestraActual.id ? { ...p, pagoComunicado: { metodo, fecha: hoy() } } : p)),
+    )
   }
 
   // ---- RGPD ----
@@ -431,13 +534,53 @@ export default function HermanoPortal() {
           </div>
         )}
 
-        {!esPrincipal && (
-          <div className="banner-inline">
-            <span>
-              {nombreHermandadActiva} es una hermandad de muestra: aún no ha activado papeletas de sitio ni cobro de cuotas
-              online en Cabildo. Cada hermandad ve solo su propio censo y sus propios datos.
-            </span>
-          </div>
+        {/* Papeletas de una hermandad de muestra: su propio subsistema, con sus papeletas y sus datos de pago */}
+        {!esPrincipal && hermandadMuestra && hermanoMuestra && (
+          <section className="portal__section">
+            <h2>Mi papeleta de sitio · {campana.anio}</h2>
+            {papeletaMuestraActual ? (
+              <div className="portal__papeleta">
+                <div className="ficha__row">
+                  <span
+                    className={`pill ${papeletaMuestraActual.estado === 'Asignada' ? 'pill--warn' : 'pill--ok'}`}
+                  >
+                    {papeletaMuestraActual.estado === 'Asignada' ? 'Pendiente de pago' : papeletaMuestraActual.estado}
+                  </span>
+                  <span className="pill pill--info">{papeletaMuestraActual.opcion}</span>
+                  <span className="pill pill--off">Papeleta nº {papeletaMuestraActual.numero}</span>
+                </div>
+                {papeletaMuestraActual.estado === 'Asignada' ? (
+                  <PagoPapeleta
+                    papeleta={papeletaMuestraActual}
+                    bizum={hermandadMuestra.bizum}
+                    iban={hermandadMuestra.iban}
+                    nombreHermandad={nombreHermandadActiva}
+                    hermanoNombre={hermanoMuestra.nombre}
+                    onComunicar={comunicarPagoMuestra}
+                  />
+                ) : (
+                  <p className="portal__lead">
+                    Papeleta pagada. La secretaría de {nombreHermandadActiva} te avisará para recogerla.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="assign-box">
+                <label htmlFor="opcionMuestra">Sacar mi papeleta</label>
+                <select id="opcionMuestra" defaultValue="" onChange={(e) => e.target.value && sacarMuestra(e.target.value)}>
+                  <option value="" disabled>
+                    Elige tu papeleta…
+                  </option>
+                  {hermandadMuestra.opcionesPapeleta.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.nombre} — {o.importe} €
+                    </option>
+                  ))}
+                </select>
+                <p className="form-hint">Papeletas que ofrece {nombreHermandadActiva} para esta salida.</p>
+              </div>
+            )}
+          </section>
         )}
 
         {/* Mi papeleta de sitio — solo si la hermandad tiene el módulo activo */}
@@ -480,36 +623,65 @@ export default function HermanoPortal() {
                   <div className="assign-box">
                     <label htmlFor="cuerpoPortal">Sacar mi papeleta</label>
                     <div className="form-grid-2">
-                      <select id="cuerpoPortal" value={pendingCuerpo} onChange={(e) => setPendingCuerpo(e.target.value as Cuerpo)}>
-                        <option value="">Cristo / Virgen</option>
+                      <select
+                        id="cuerpoPortal"
+                        value={pendingCuerpo}
+                        onChange={(e) => setPendingCuerpo(e.target.value)}
+                      >
+                        <option value="">Elige un cuerpo</option>
                         {cuerposDisponibles.map((c) => (
                           <option key={c} value={c}>{c}</option>
                         ))}
+                        {opcionesPersonalizadas.length > 0 && (
+                          <option value={PERSONALIZADA}>Otra papeleta (mantilla, simbólica…)</option>
+                        )}
                       </select>
                       <select
                         defaultValue=""
                         disabled={!pendingCuerpo}
                         key={pendingCuerpo}
-                        onChange={(e) => e.target.value && sacarEnTramo(e.target.value)}
+                        onChange={(e) => {
+                          if (!e.target.value) return
+                          if (pendingCuerpo === PERSONALIZADA) {
+                            const op = opcionesPersonalizadas.find((o) => o.id === e.target.value)
+                            if (op) sacarConOpcion(op)
+                          } else {
+                            sacarEnTramo(e.target.value)
+                          }
+                        }}
                       >
                         <option value="" disabled>
-                          {pendingCuerpo ? 'Cirio, vara, cruz de guía…' : 'Elige antes un cuerpo'}
+                          {pendingCuerpo === PERSONALIZADA
+                            ? 'Elige tu papeleta…'
+                            : pendingCuerpo
+                              ? 'Elige tu puesto…'
+                              : 'Elige antes un cuerpo'}
                         </option>
-                        {(() => {
-                          const cirios = tramosDelCuerpo.filter((t) => esCirio(t))
-                          const designados = tramosDelCuerpo.filter((t) => !esCirio(t))
-                          return (
-                            <>
-                              {cirios.length > 0 && <option value={cirios[0].id}>Cirio (te coloca la hermandad por número)</option>}
-                              {designados.map((t) => (
-                                <option key={t.id} value={t.id}>{t.nombre}{t.tipo ? ` (${t.tipo})` : ''}</option>
-                              ))}
-                            </>
-                          )
-                        })()}
+                        {pendingCuerpo === PERSONALIZADA
+                          ? opcionesPersonalizadas.map((o) => (
+                              <option key={o.id} value={o.id}>{o.nombre} — {o.importe} €</option>
+                            ))
+                          : (() => {
+                              const grupos = gruposAutomaticos(tramosDelCuerpo)
+                              const designados = tramosDelCuerpo.filter((t) => !esAutomatico(t))
+                              return (
+                                <>
+                                  {grupos.map((g) => (
+                                    <option key={g.tramos[0].id} value={g.tramos[0].id}>
+                                      {g.etiqueta} (te coloca la hermandad por número) — {precioDeTramo(g.tramos[0], precioBase)} €
+                                    </option>
+                                  ))}
+                                  {designados.map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.nombre}{t.tipo ? ` (${t.tipo})` : ''} — {precioDeTramo(t, precioBase)} €
+                                    </option>
+                                  ))}
+                                </>
+                              )
+                            })()}
                       </select>
                     </div>
-                    <p className="form-hint">El puesto exacto lo asigna la hermandad; en los cirios, por tu número de hermano.</p>
+                    <p className="form-hint">El puesto exacto lo asigna la hermandad; en los tramos por número, según tu número de hermano.</p>
                   </div>
                 )}
 
@@ -526,7 +698,18 @@ export default function HermanoPortal() {
                       tramo={asignacion?.tramo}
                       puesto={asignacion?.puesto ?? null}
                       excedeAforo={asignacion?.estado === 'Excede aforo'}
+                      opcion={renovacion.papeletaActual.opcion}
                     />
+                    {(renovacion.papeletaActual.estado === 'Asignada' || renovacion.papeletaActual.estado === 'Solicitada') && (
+                      <PagoPapeleta
+                        papeleta={renovacion.papeletaActual}
+                        bizum={hermandadPrincipal.bizumTelefono}
+                        iban={hermandadPrincipal.iban}
+                        nombreHermandad={nombreHermandadActiva}
+                        hermanoNombre={hermanoPrincipal.nombre}
+                        onComunicar={comunicarPago}
+                      />
+                    )}
                     <div className="assign-box__row" style={{ marginTop: '1rem' }}>
                       <button type="button" className="btn btn-outline" onClick={() => window.print()}>
                         Imprimir / descargar mi papeleta
@@ -659,6 +842,83 @@ export default function HermanoPortal() {
           </p>
         )}
       </main>
+    </div>
+  )
+}
+
+/**
+ * Pago de la papeleta desde el área del hermano. El dinero va directo a la
+ * hermandad (su Bizum o su cuenta); aquí solo se le enseñan al hermano los
+ * datos y él avisa de que ya ha pagado, para que la secretaría lo confirme
+ * cuando vea el ingreso. El cobro con tarjeta desde la propia página llegará
+ * con la pasarela de pago (necesita backend).
+ */
+function PagoPapeleta({
+  papeleta,
+  bizum,
+  iban,
+  nombreHermandad,
+  hermanoNombre,
+  onComunicar,
+}: {
+  papeleta: Papeleta
+  bizum: string
+  iban: string
+  nombreHermandad: string
+  hermanoNombre: string
+  onComunicar: (metodo: MetodoPago) => void
+}) {
+  const concepto = `Papeleta ${papeleta.numero} - ${hermanoNombre}`
+
+  if (papeleta.pagoComunicado) {
+    return (
+      <div className="pago-box pago-box--ok">
+        <b>Pago comunicado por {papeleta.pagoComunicado.metodo}</b>
+        <p className="form-hint">
+          Avisaste el {papeleta.pagoComunicado.fecha} de que ya has pagado {formatCurrency(papeleta.importe)}. La
+          secretaría de {nombreHermandad} confirmará el pago en cuanto vea el ingreso en su cuenta.
+        </p>
+      </div>
+    )
+  }
+
+  if (!bizum && !iban) {
+    return (
+      <p className="form-hint">
+        {nombreHermandad} aún no ha publicado sus datos de cobro. Pregunta en secretaría cómo pagar tu papeleta
+        ({formatCurrency(papeleta.importe)}).
+      </p>
+    )
+  }
+
+  return (
+    <div className="pago-box">
+      <b>Pagar mi papeleta · {formatCurrency(papeleta.importe)}</b>
+      <p className="form-hint">
+        El pago llega directamente a {nombreHermandad}. Pon en el concepto <code>{concepto}</code> para que la
+        secretaría lo identifique.
+      </p>
+      <div className="pago-metodos">
+        {bizum && (
+          <div className="pago-metodo">
+            <span className="pago-metodo__titulo">Bizum</span>
+            <span className="pago-metodo__dato">{bizum}</span>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => onComunicar('Bizum')}>
+              Ya he enviado el Bizum
+            </button>
+          </div>
+        )}
+        {iban && (
+          <div className="pago-metodo">
+            <span className="pago-metodo__titulo">Transferencia</span>
+            <span className="pago-metodo__dato">{iban}</span>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => onComunicar('Transferencia')}>
+              Ya he hecho la transferencia
+            </button>
+          </div>
+        )}
+      </div>
+      <p className="form-hint">El pago con tarjeta desde esta misma página llegará con la pasarela de pago online.</p>
     </div>
   )
 }

@@ -1,6 +1,9 @@
 export type TipoMovimiento = 'Ingreso' | 'Gasto'
 export type EstadoMovimiento = 'Conciliado' | 'Pendiente'
-export type CuentaMovimiento = 'Cuenta bancaria' | 'Caja'
+/** Cuenta de tesorería; la lista la define cada hermandad en Configuración. */
+export type CuentaMovimiento = string
+
+export const CUENTAS_POR_DEFECTO = ['Cuenta bancaria', 'Caja'] as const
 
 export interface Movimiento {
   id: string

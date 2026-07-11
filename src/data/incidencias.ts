@@ -1,4 +1,7 @@
-export type TipoIncidencia = 'Ausencia' | 'Indisposición' | 'Retraso' | 'Sustitución' | 'Otra'
+/** Tipo de incidencia; el catálogo lo define cada hermandad en Configuración. */
+export type TipoIncidencia = string
+
+export const TIPOS_INCIDENCIA_POR_DEFECTO = ['Ausencia', 'Indisposición', 'Retraso', 'Sustitución', 'Otra'] as const
 
 export interface Incidencia {
   id: string

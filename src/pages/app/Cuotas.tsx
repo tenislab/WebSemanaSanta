@@ -4,14 +4,8 @@ import Drawer from '../../components/Drawer'
 import Recibo from '../../components/Recibo'
 import HermanoPicker from '../../components/HermanoPicker'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
-import {
-  CONCEPTOS,
-  CUOTAS_INICIALES,
-  IMPORTE_POR_CONCEPTO,
-  type ConceptoCuota,
-  type Cuota,
-  type EstadoCuota,
-} from '../../data/cuotas'
+import { CUOTAS_INICIALES, type ConceptoCuota, type Cuota, type EstadoCuota } from '../../data/cuotas'
+import { getConceptosCuota } from '../../lib/conceptosCuota'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
@@ -60,6 +54,7 @@ export default function Cuotas() {
   const [fechaRemesa, setFechaRemesa] = useState('')
 
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  const conceptosCuota = useMemo(() => getConceptosCuota(), [])
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
@@ -412,19 +407,23 @@ export default function Cuotas() {
             <select
               id="concepto"
               name="concepto"
-              defaultValue={CONCEPTOS[0]}
+              defaultValue={conceptosCuota[0]?.nombre ?? ''}
               onChange={(e) => {
                 const input = document.getElementById('importe') as HTMLInputElement | null
-                const concepto = e.target.value as ConceptoCuota
-                if (input) input.value = String(IMPORTE_POR_CONCEPTO[concepto] ?? '')
+                const concepto = conceptosCuota.find((c) => c.nombre === e.target.value)
+                if (input && concepto) input.value = String(concepto.importe)
               }}
             >
-              {CONCEPTOS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              {conceptosCuota.map((c) => (
+                <option key={c.id} value={c.nombre}>
+                  {c.nombre} — {c.importe} €
                 </option>
               ))}
             </select>
+            <p className="form-hint">
+              Los conceptos y sus importes los define tu hermandad en{' '}
+              <Link to="/app/configuracion">Configuración</Link>.
+            </p>
           </div>
           <div className="form-row">
             <label htmlFor="importe">Importe (€)</label>
@@ -434,7 +433,7 @@ export default function Cuotas() {
               type="number"
               min="0"
               step="0.01"
-              defaultValue={IMPORTE_POR_CONCEPTO[CONCEPTOS[0]]}
+              defaultValue={conceptosCuota[0]?.importe ?? 0}
               required
             />
           </div>

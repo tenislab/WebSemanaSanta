@@ -1,5 +1,6 @@
 export type EstadoCuota = 'Pagada' | 'Pendiente' | 'Devuelta'
-export type ConceptoCuota = 'Cuota anual' | 'Cuota trimestral' | 'Cuota extraordinaria'
+/** Nombre del concepto de cuota; los conceptos y sus importes los define cada hermandad (ver lib/conceptosCuota.ts). */
+export type ConceptoCuota = string
 
 export interface Cuota {
   id: string

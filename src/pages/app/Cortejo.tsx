@@ -4,18 +4,25 @@ import Drawer from '../../components/Drawer'
 import HermanoPicker from '../../components/HermanoPicker'
 import { LogoMark } from '../../components/Logo'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
-import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
-import { INCIDENCIAS_INICIALES, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
-import { etiquetaTramo, getTramos, tramosDeCuerpo, type Cuerpo, type Tramo } from '../../lib/tramos'
+import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
+import { INCIDENCIAS_INICIALES, TIPOS_INCIDENCIA_POR_DEFECTO, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
+import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
+import {
+  etiquetaTramo,
+  getTramos,
+  tramosDeCuerpo,
+  cuerposPresentes as cuerposDeTramos,
+  getPrecioBase,
+  precioDeTramo,
+  type Cuerpo,
+  type Tramo,
+} from '../../lib/tramos'
 import { repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
 import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
 
-
-const TIPOS_INCIDENCIA: TipoIncidencia[] = ['Ausencia', 'Indisposición', 'Retraso', 'Sustitución', 'Otra']
-const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
 type FilaEstado = EstadoAsignacion | 'Pendiente' | 'Baja'
 
@@ -34,7 +41,8 @@ function hoy() {
 function tituloCuerpo(cuerpo: Cuerpo): string {
   if (cuerpo === 'Cristo') return 'Cortejo de Cristo'
   if (cuerpo === 'Virgen') return 'Cortejo de la Virgen'
-  return 'Tramos'
+  if (cuerpo === 'Único') return 'Tramos'
+  return `Cortejo — ${cuerpo}`
 }
 
 function estadoPillClass(estado: FilaEstado) {
@@ -114,10 +122,9 @@ export default function Cortejo() {
     [papeletas],
   )
 
-  const cuerposPresentes = useMemo(() => {
-    const set = new Set(tramos.map((t) => t.cuerpo))
-    return CUERPOS.filter((c) => set.has(c))
-  }, [tramos])
+  const cuerposPresentes = useMemo(() => cuerposDeTramos(tramos), [tramos])
+  const precioBase = useMemo(() => getPrecioBase(), [])
+  const tiposIncidencia = useMemo(() => getLista(CLAVES_CATALOGOS.tiposIncidencia, TIPOS_INCIDENCIA_POR_DEFECTO), [])
 
   const stats = useMemo(() => {
     let cubiertos = 0
@@ -281,7 +288,7 @@ export default function Cortejo() {
         hermanoId,
         anio: edicionActual,
         tramoId: tramo.id,
-        importe: IMPORTE_PAPELETA,
+        importe: precioDeTramo(tramo, precioBase),
         estado: 'Asignada',
         fechaSolicitud: hoy(),
       }
@@ -317,8 +324,8 @@ export default function Cortejo() {
       {excedeAforo.length > 0 && (
         <div className="banner-inline banner-inline--warn">
           {excedeAforo.length} hermano{excedeAforo.length > 1 ? 's' : ''} super{excedeAforo.length > 1 ? 'an' : 'a'} el
-          aforo de su tramo: {[...new Set(excedeAforo.map((x) => etiquetaTramo(x.tramo)))].join(', ')}. En los cirios se
-          reparten solos; en los puestos designados se lo queda el de menor número.{' '}
+          aforo de su tramo: {[...new Set(excedeAforo.map((x) => etiquetaTramo(x.tramo)))].join(', ')}. En los tramos
+          por número se reparten solos; en los de solicitud se lo queda el de menor número.{' '}
           <Link to="/app/configuracion">Amplía el aforo en Configuración</Link>.
         </div>
       )}
@@ -562,7 +569,7 @@ export default function Cortejo() {
                 onChange={(e) => setAsignarCuerpo(e.target.value as Cuerpo)}
               >
                 <option value="" disabled>
-                  Cristo / Virgen
+                  Elige un cuerpo
                 </option>
                 {cuerposPresentes.map((c) => (
                   <option key={c} value={c}>
@@ -655,6 +662,7 @@ export default function Cortejo() {
       {/* ---------------- Mini-formulario: registrar incidencia ---------------- */}
       {incidenciaPara && (
         <IncidenciaForm
+          tipos={tiposIncidencia}
           papeleta={papeletas.find((p) => p.id === incidenciaPara) ?? null}
           hermano={(() => {
             const p = papeletas.find((pp) => pp.id === incidenciaPara)
@@ -907,17 +915,19 @@ function TramoFicha({
 }
 
 function IncidenciaForm({
+  tipos,
   papeleta,
   hermano,
   onCancel,
   onConfirm,
 }: {
+  tipos: string[]
   papeleta: Papeleta | null
   hermano: Hermano | undefined
   onCancel: () => void
   onConfirm: (tipo: TipoIncidencia, descripcion: string) => void
 }) {
-  const [tipo, setTipo] = useState<TipoIncidencia>('Ausencia')
+  const [tipo, setTipo] = useState<TipoIncidencia>(tipos[0] ?? 'Otra')
   const [descripcion, setDescripcion] = useState('')
 
   if (!papeleta || !hermano) return null
@@ -942,7 +952,7 @@ function IncidenciaForm({
           <div className="form-row">
             <label htmlFor="tipoIncidencia">Tipo</label>
             <select id="tipoIncidencia" value={tipo} onChange={(e) => setTipo(e.target.value as TipoIncidencia)}>
-              {TIPOS_INCIDENCIA.map((t) => (
+              {tipos.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>

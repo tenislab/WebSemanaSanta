@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
+import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
 import {
   CANALES,
   COMUNICADOS_INICIALES,
@@ -45,13 +46,15 @@ const INICIAL_RED: Record<RedSocial, string> = {
 export default function Comunicados() {
   const [comunicados, setComunicados] = usePersistentState<Comunicado[]>(CLAVES_DATOS.comunicados, COMUNICADOS_INICIALES)
   const [cuentas, setCuentas] = usePersistentState<CuentaSocial[]>(CLAVES_DATOS.cuentasSociales, CUENTAS_SOCIALES_INICIALES)
+  const canales = useMemo(() => getLista(CLAVES_CATALOGOS.canalesComunicado, CANALES), [])
+  const segmentos = useMemo(() => getLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS), [])
   const [query, setQuery] = useState('')
   const [filtroCanal, setFiltroCanal] = useState<'Todos' | Canal>('Todos')
   const [selected, setSelected] = useState<Comunicado | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
 
-  const [canalNuevo, setCanalNuevo] = useState<Canal>('Email')
+  const [canalNuevo, setCanalNuevo] = useState<Canal>(() => canales[0] ?? 'Email')
   const [estadoNuevo, setEstadoNuevo] = useState<EstadoComunicado>('Borrador')
 
   const [conectando, setConectando] = useState<RedSocial | null>(null)
@@ -88,7 +91,7 @@ export default function Comunicados() {
   }, [comunicados, cuentasConectadas])
 
   function abrirNuevo() {
-    setCanalNuevo('Email')
+    setCanalNuevo(canales[0] ?? 'Email')
     setEstadoNuevo('Borrador')
     setFormOpen(true)
   }
@@ -111,7 +114,7 @@ export default function Comunicados() {
     const titulo = String(data.get('titulo') ?? '').trim()
     const cuerpo = String(data.get('cuerpo') ?? '').trim()
     const canal = String(data.get('canal') ?? '') as Canal
-    const destinatarios = String(data.get('destinatarios') ?? SEGMENTOS[0])
+    const destinatarios = String(data.get('destinatarios') ?? segmentos[0])
     const estado = String(data.get('estado') ?? 'Borrador') as EstadoComunicado
     if (!titulo || !cuerpo || !canal) return
 
@@ -250,7 +253,7 @@ export default function Comunicados() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="filters">
-          {(['Todos', ...CANALES] as const).map((f) => (
+          {['Todos', ...canales].map((f) => (
             <button
               key={f}
               className={`chip${filtroCanal === f ? ' chip--active' : ''}`}
@@ -404,15 +407,15 @@ export default function Comunicados() {
             <div className="form-row">
               <label htmlFor="canal">Canal</label>
               <select id="canal" name="canal" value={canalNuevo} onChange={(e) => setCanalNuevo(e.target.value as Canal)}>
-                {CANALES.map((c) => (
+                {canales.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
             <div className="form-row">
               <label htmlFor="destinatarios">Destinatarios</label>
-              <select id="destinatarios" name="destinatarios" defaultValue={SEGMENTOS[0]}>
-                {SEGMENTOS.map((s) => (
+              <select id="destinatarios" name="destinatarios" defaultValue={segmentos[0]}>
+                {segmentos.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>

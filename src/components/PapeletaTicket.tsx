@@ -22,10 +22,12 @@ interface PapeletaTicketProps {
   puesto?: number | null
   /** Si el tramo elegido ya recibió más papeletas de las que caben. */
   excedeAforo?: boolean
+  /** Papeleta personalizada de la hermandad (mantilla, simbólica…), cuando no va en un tramo. */
+  opcion?: string | null
 }
 
 /** La papeleta de sitio, personalizada con los datos de la hermandad y del hermano. */
-export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto, excedeAforo }: PapeletaTicketProps) {
+export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto, excedeAforo, opcion }: PapeletaTicketProps) {
   return (
     <div className="ticket-doc print-doc">
       <div className="ticket-doc__head">
@@ -49,7 +51,7 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
           <b>{hermano.nombre}</b>
           <span>Hermano nº {hermano.numero} · Hermano desde {hermano.antiguedad}</span>
 
-          <span className="recibo-doc__label ticket-doc__tramo-label">Tramo asignado</span>
+          <span className="recibo-doc__label ticket-doc__tramo-label">{tramo ? 'Tramo asignado' : opcion ? 'Papeleta' : 'Tramo asignado'}</span>
           {tramo ? (
             <>
               <b>
@@ -59,6 +61,8 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
               {tramo.tipo && <span className="pill pill--info ticket-doc__tipo">{tramo.tipo}</span>}
               {excedeAforo && <span className="pill pill--err ticket-doc__tipo">Excede aforo</span>}
             </>
+          ) : opcion ? (
+            <b>{opcion}</b>
           ) : (
             <span className="ticket-doc__pending">Pendiente de asignar</span>
           )}
@@ -72,7 +76,7 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
         <div className="ticket-doc__qr">
           <QrCode
             value={`Papeleta nº ${papeleta.numero} · ${hermano.nombre} (nº ${hermano.numero}) · ${
-              tramo ? etiquetaTramo(tramo) : 'Sin tramo'
+              tramo ? etiquetaTramo(tramo) : opcion ?? 'Sin tramo'
             } · ${hermandad.nombreLegal || 'Tu hermandad'}`}
           />
           <span>Escanéalo para leer los datos</span>

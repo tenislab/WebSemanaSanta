@@ -53,6 +53,10 @@ export function usePersistentState<T>(clave: string, inicial: T) {
 
 /** Borra todos los datos guardados y vuelve a los de ejemplo (recarga incluida). */
 export function restablecerDatosDeEjemplo() {
-  Object.values(CLAVES_DATOS).forEach((clave) => localStorage.removeItem(clave))
+  // Todas las claves de la app (colecciones, configuración, catálogos, tramos,
+  // campaña…) comparten el prefijo cabildo-; se barre todo salvo la sesión demo.
+  Object.keys(localStorage)
+    .filter((clave) => clave.startsWith('cabildo-') && clave !== 'cabildo-demo-user')
+    .forEach((clave) => localStorage.removeItem(clave))
   window.location.reload()
 }

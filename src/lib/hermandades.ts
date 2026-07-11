@@ -8,6 +8,7 @@
  * lo suyo y que el hermano no tiene que elegir nada: la app le lleva
  * directo a la hermandad que le dio de alta.
  */
+import type { OpcionPapeleta } from './opcionesPapeleta'
 
 export interface HermanoDirectorio {
   id: string
@@ -26,13 +27,47 @@ export interface HermandadDirectorio {
   color: string
   telefono: string
   email: string
+  /** Teléfono del Bizum de la hermandad, al que los hermanos pagan sus papeletas. */
+  bizum: string
+  /** Cuenta de la hermandad para pagos por transferencia. */
+  iban: string
+  /** Papeletas que esta hermandad ofrece, con su nombre y precio propios. */
+  opcionesPapeleta: OpcionPapeleta[]
 }
 
 export const ID_HERMANDAD_PRINCIPAL = 'principal'
 
 export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
-  { id: 'esperanza', nombre: 'Hermandad de Ntra. Sra. de la Esperanza', ciudad: 'Triana, Sevilla', color: '#2f7a4f', telefono: '954 11 22 33', email: 'secretaria@esperanza-triana.example' },
-  { id: 'soledad', nombre: 'Hermandad de la Soledad', ciudad: 'Écija', color: '#5a4fc4', telefono: '955 44 55 66', email: 'secretaria@soledad-ecija.example' },
+  {
+    id: 'esperanza',
+    nombre: 'Hermandad de Ntra. Sra. de la Esperanza',
+    ciudad: 'Triana, Sevilla',
+    color: '#2f7a4f',
+    telefono: '954 11 22 33',
+    email: 'secretaria@esperanza-triana.example',
+    bizum: '683 45 67 89',
+    iban: 'ES21 1465 0100 7220 3087 6545',
+    opcionesPapeleta: [
+      { id: 'e-op1', nombre: 'Cirio', importe: 12 },
+      { id: 'e-op2', nombre: 'Mantilla', importe: 15 },
+      { id: 'e-op3', nombre: 'Papeleta simbólica', importe: 5 },
+    ],
+  },
+  {
+    id: 'soledad',
+    nombre: 'Hermandad de la Soledad',
+    ciudad: 'Écija',
+    color: '#5a4fc4',
+    telefono: '955 44 55 66',
+    email: 'secretaria@soledad-ecija.example',
+    bizum: '644 98 76 54',
+    iban: 'ES76 2100 0813 6101 2345 6789',
+    opcionesPapeleta: [
+      { id: 's-op1', nombre: 'Nazareno con cirio', importe: 10 },
+      { id: 's-op2', nombre: 'Penitente con cruz', importe: 10 },
+      { id: 's-op3', nombre: 'Papeleta de recuerdo', importe: 3 },
+    ],
+  },
 ]
 
 export const HERMANOS_MUESTRA: Record<string, HermanoDirectorio[]> = {

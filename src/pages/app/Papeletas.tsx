@@ -3,11 +3,21 @@ import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import PapeletaTicket from '../../components/PapeletaTicket'
 import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
-import { IMPORTE_PAPELETA, PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
+import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatDate } from '../../lib/format'
-import { getTramos, tramosDeCuerpo, etiquetaTramo, esCirio, type Cuerpo } from '../../lib/tramos'
+import {
+  getTramos,
+  tramosDeCuerpo,
+  etiquetaTramo,
+  esAutomatico,
+  gruposAutomaticos,
+  cuerposPresentes,
+  getPrecioBase,
+  precioDeTramo,
+} from '../../lib/tramos'
+import { getOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../../lib/cortejo'
 import {
   getCampana,
@@ -36,8 +46,10 @@ function claseEstado(estado: EstadoRenovacion) {
   return 'pill--off'
 }
 
-const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 const FILTROS = ['Todos', 'Por renovar', 'Renovadas', 'Nuevas', 'No renovadas', 'Sin papeleta'] as const
+
+/** Valor centinela del selector para «papeleta personalizada» (no puede chocar con un nombre de cuerpo). */
+const PERSONALIZADA = '__personalizada'
 
 export default function Papeletas() {
   const { user } = useAuth()
@@ -45,13 +57,15 @@ export default function Papeletas() {
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
   const tramos = useMemo(() => getTramos(), [])
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
+  const precioBase = useMemo(() => getPrecioBase(), [])
 
   const [papeletas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
   const [campana, setCampanaState] = useState<Campana>(() => getCampana())
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todos')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [pendingCuerpo, setPendingCuerpo] = useState<Cuerpo | ''>('')
+  const [pendingCuerpo, setPendingCuerpo] = useState<string>('')
   const [ajustesOpen, setAjustesOpen] = useState(false)
 
   function guardarCampana(next: Campana) {
@@ -66,9 +80,9 @@ export default function Papeletas() {
 
   const tramoDe = (tramoId: string | null) => (tramoId ? (tramos.find((t) => t.id === tramoId) ?? null) : null)
 
-  const cuerposDisponibles = useMemo(() => CUERPOS.filter((c) => tramos.some((t) => t.cuerpo === c)), [tramos])
+  const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
   const tramosDelCuerpoElegido = useMemo(
-    () => (pendingCuerpo ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
+    () => (pendingCuerpo && pendingCuerpo !== PERSONALIZADA ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
     [pendingCuerpo, tramos],
   )
 
@@ -173,11 +187,14 @@ export default function Papeletas() {
    * reutiliza; si no, crea una nueva.
    */
   function sacarEnTramo(hermanoId: string, tramoId: string) {
+    const importe = precioDeTramo(tramos.find((t) => t.id === tramoId), precioBase)
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
         return prev.map((p) =>
-          p.id === actual.id ? { ...p, tramoId, estado: 'Asignada', importe: IMPORTE_PAPELETA } : p,
+          p.id === actual.id
+            ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null }
+            : p,
         )
       }
       const nueva: Papeleta = {
@@ -186,7 +203,34 @@ export default function Papeletas() {
         hermanoId,
         anio: campana.anio,
         tramoId,
-        importe: IMPORTE_PAPELETA,
+        importe,
+        estado: 'Asignada',
+        fechaSolicitud: hoy(),
+      }
+      return [nueva, ...prev]
+    })
+    setPendingCuerpo('')
+  }
+
+  /** Emite una papeleta personalizada de la hermandad (mantilla, simbólica…), sin tramo en el cortejo. */
+  function sacarConOpcion(hermanoId: string, opcion: OpcionPapeleta) {
+    setPapeletas((prev) => {
+      const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
+      if (actual) {
+        return prev.map((p) =>
+          p.id === actual.id
+            ? { ...p, tramoId: null, opcion: opcion.nombre, estado: 'Asignada', importe: opcion.importe, pagoComunicado: null }
+            : p,
+        )
+      }
+      const nueva: Papeleta = {
+        id: `p-${Date.now()}`,
+        numero: nextNumero(),
+        hermanoId,
+        anio: campana.anio,
+        tramoId: null,
+        opcion: opcion.nombre,
+        importe: opcion.importe,
         estado: 'Asignada',
         fechaSolicitud: hoy(),
       }
@@ -335,6 +379,11 @@ export default function Papeletas() {
                           <span className="table-subtle"> · excede aforo</span>
                         )}
                       </>
+                    ) : r.papeletaActual?.opcion && r.papeletaActual.estado !== 'Renuncia' ? (
+                      <>
+                        {r.papeletaActual.opcion}
+                        <span className="table-subtle"> · personalizada</span>
+                      </>
                     ) : (
                       <span className="table-muted">—</span>
                     )}
@@ -401,7 +450,7 @@ export default function Papeletas() {
                     <div className="assign-box__row">
                       <button
                         className="btn btn-primary"
-                        onClick={() => renovar(h.id, r.sitioAnterior!.tramoId!, r.sitioAnterior!.importe || IMPORTE_PAPELETA)}
+                        onClick={() => renovar(h.id, r.sitioAnterior!.tramoId!, r.sitioAnterior!.importe || precioDeTramo(tramoAnterior, precioBase))}
                       >
                         Renovar {etiquetaTramo(tramoAnterior)}
                       </button>
@@ -422,55 +471,79 @@ export default function Papeletas() {
                       <select
                         id="cuerpoSacar"
                         value={pendingCuerpo}
-                        onChange={(e) => setPendingCuerpo(e.target.value as Cuerpo)}
+                        onChange={(e) => setPendingCuerpo(e.target.value)}
                       >
-                        <option value="">Cristo / Virgen</option>
+                        <option value="">Elige un cuerpo</option>
                         {cuerposDisponibles.map((c) => (
                           <option key={c} value={c}>{c}</option>
                         ))}
+                        {opcionesPersonalizadas.length > 0 && (
+                          <option value={PERSONALIZADA}>Papeleta personalizada</option>
+                        )}
                       </select>
                       <select
                         id="tramoSacar"
                         defaultValue=""
                         disabled={!pendingCuerpo}
                         key={pendingCuerpo}
-                        onChange={(e) => e.target.value && sacarEnTramo(h.id, e.target.value)}
+                        onChange={(e) => {
+                          if (!e.target.value) return
+                          if (pendingCuerpo === PERSONALIZADA) {
+                            const op = opcionesPersonalizadas.find((o) => o.id === e.target.value)
+                            if (op) sacarConOpcion(h.id, op)
+                          } else {
+                            sacarEnTramo(h.id, e.target.value)
+                          }
+                        }}
                       >
                         <option value="" disabled>
-                          {pendingCuerpo ? 'Cirio, vara, cruz de guía…' : 'Elige antes un cuerpo'}
+                          {pendingCuerpo === PERSONALIZADA
+                            ? 'Mantilla, simbólica…'
+                            : pendingCuerpo
+                              ? 'Elige el puesto…'
+                              : 'Elige antes un cuerpo'}
                         </option>
-                        {(() => {
-                          const cirios = tramosDelCuerpoElegido.filter((t) => esCirio(t))
-                          const designados = tramosDelCuerpoElegido.filter((t) => !esCirio(t))
-                          const ocupadosCirios = cirios.reduce((s, t) => s + (ocupadosPorTramo.get(t.id) ?? 0), 0)
-                          const aforoCirios = cirios.reduce((s, t) => s + t.capacidad, 0)
-                          return (
-                            <>
-                              {cirios.length > 0 && (
-                                <option value={cirios[0].id}>
-                                  Cirio (por número) — {ocupadosCirios}/{aforoCirios}
-                                  {ocupadosCirios >= aforoCirios ? ' · completo' : ''}
-                                </option>
-                              )}
-                              {designados.map((t) => {
-                                const ocupados = ocupadosPorTramo.get(t.id) ?? 0
-                                return (
-                                  <option key={t.id} value={t.id}>
-                                    {t.nombre}
-                                    {t.tipo ? ` (${t.tipo})` : ''} — {ocupados}/{t.capacidad}
-                                    {ocupados >= t.capacidad ? ' · completo' : ''}
-                                  </option>
-                                )
-                              })}
-                            </>
-                          )
-                        })()}
+                        {pendingCuerpo === PERSONALIZADA
+                          ? opcionesPersonalizadas.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.nombre} — {o.importe} €
+                              </option>
+                            ))
+                          : (() => {
+                              const grupos = gruposAutomaticos(tramosDelCuerpoElegido)
+                              const designados = tramosDelCuerpoElegido.filter((t) => !esAutomatico(t))
+                              return (
+                                <>
+                                  {grupos.map((g) => {
+                                    const ocupados = g.tramos.reduce((s, t) => s + (ocupadosPorTramo.get(t.id) ?? 0), 0)
+                                    const aforo = g.tramos.reduce((s, t) => s + t.capacidad, 0)
+                                    return (
+                                      <option key={g.tramos[0].id} value={g.tramos[0].id}>
+                                        {g.etiqueta} (por número) — {ocupados}/{aforo}
+                                        {ocupados >= aforo ? ' · completo' : ''}
+                                      </option>
+                                    )
+                                  })}
+                                  {designados.map((t) => {
+                                    const ocupados = ocupadosPorTramo.get(t.id) ?? 0
+                                    return (
+                                      <option key={t.id} value={t.id}>
+                                        {t.nombre}
+                                        {t.tipo ? ` (${t.tipo})` : ''} — {ocupados}/{t.capacidad} · {precioDeTramo(t, precioBase)} €
+                                        {ocupados >= t.capacidad ? ' · completo' : ''}
+                                      </option>
+                                    )
+                                  })}
+                                </>
+                              )
+                            })()}
                       </select>
                     </div>
                     <p className="form-hint">
-                      Los cirios se colocan solos por número de hermano; los demás puestos (vara, cruz de guía…) se dan
-                      por solicitud al de menor número.{' '}
-                      <Link to="/app/configuracion">Revisa los tramos en Configuración</Link>.
+                      Los tramos «por número» se colocan solos por número de hermano; los «por solicitud» (vara, cruz
+                      de guía…) se dan al solicitante de menor número. Las papeletas personalizadas (mantilla,
+                      simbólica…) no ocupan sitio en el cortejo.{' '}
+                      <Link to="/app/configuracion">Configura cuerpos, tramos, precios y papeletas</Link>.
                     </p>
                   </div>
                 )}
@@ -485,11 +558,19 @@ export default function Papeletas() {
                       tramo={tramoActual}
                       puesto={asig?.puesto ?? null}
                       excedeAforo={asig?.estado === 'Excede aforo'}
+                      opcion={actual.opcion}
                     />
+                    {actual.estado === 'Asignada' && actual.pagoComunicado && (
+                      <div className="banner-inline banner-inline--accent" style={{ marginTop: '1rem' }}>
+                        {h.nombre.split(' ')[0]} avisó desde su área de que pagó por{' '}
+                        <b>{actual.pagoComunicado.metodo}</b> el {actual.pagoComunicado.fecha}. Comprueba el ingreso en
+                        la cuenta de la hermandad y confírmalo abajo.
+                      </div>
+                    )}
                     <div className="assign-box__row" style={{ marginTop: '1rem' }}>
                       {actual.estado === 'Asignada' && (
                         <button className="btn btn-primary" onClick={() => actualizarPapeleta(actual.id, { estado: 'Pagada' })}>
-                          Marcar como pagada
+                          {actual.pagoComunicado ? 'Confirmar pago recibido' : 'Marcar como pagada'}
                         </button>
                       )}
                       {actual.estado === 'Pagada' && (

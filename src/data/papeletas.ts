@@ -1,5 +1,7 @@
 export type EstadoPapeleta = 'Solicitada' | 'Asignada' | 'Pagada' | 'Entregada' | 'Anulada' | 'Renuncia'
 
+export type MetodoPago = 'Bizum' | 'Transferencia'
+
 export interface Papeleta {
   id: string
   numero: number
@@ -8,10 +10,14 @@ export interface Papeleta {
   anio: number
   /** Tramo elegido para el cortejo (cruz de guía, vara, cirio…); el puesto dentro de él se calcula solo por número de hermano. */
   tramoId: string | null
+  /** Papeleta personalizada de la hermandad (mantilla, simbólica…) cuando no va ligada a un tramo del cortejo. */
+  opcion?: string | null
   importe: number
   estado: EstadoPapeleta
   fechaSolicitud: string
   fechaEntrega?: string
+  /** El hermano avisa desde su área de que ya ha pagado (Bizum o transferencia); la secretaría lo confirma al marcarla como pagada. */
+  pagoComunicado?: { metodo: MetodoPago; fecha: string } | null
 }
 
 export const IMPORTE_PAPELETA = 18

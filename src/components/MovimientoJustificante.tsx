@@ -70,7 +70,7 @@ export default function MovimientoJustificante({
       </div>
 
       <p className="recibo-doc__note">
-        Documento generado por Cabildo · datos de ejemplo, sin validez fiscal
+        {hermandad.textoPieDocumentos || 'Documento generado por Cabildo · datos de ejemplo, sin validez fiscal'}
       </p>
     </div>
   )

@@ -7,12 +7,16 @@ export interface HermandadSettings {
   telefono: string
   email: string
   iban: string
+  /** Teléfono asociado al Bizum de la hermandad, para que los hermanos paguen papeletas y donativos. */
+  bizumTelefono: string
   /** Identificador de acreedor SEPA (p. ej. ES23000B12345678), para las remesas de adeudo directo. */
   identificadorAcreedor: string
   /** Imagen del logo como data URL (subida desde el navegador, sin backend). */
   logoDataUrl: string | null
   /** Color de marca de la hermandad; tiñe los botones y acentos de su área del hermano. */
   colorPrimario: string
+  /** Texto legal del pie de recibos y justificantes (exención fiscal, registro…); si está vacío se usa uno genérico. */
+  textoPieDocumentos: string
 }
 
 const STORAGE_KEY = 'cabildo-hermandad-settings'
@@ -26,9 +30,11 @@ const EMPTY: HermandadSettings = {
   telefono: '',
   email: '',
   iban: '',
+  bizumTelefono: '',
   identificadorAcreedor: '',
   logoDataUrl: null,
   colorPrimario: '#caa24a',
+  textoPieDocumentos: '',
 }
 
 /**

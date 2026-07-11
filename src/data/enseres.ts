@@ -1,4 +1,5 @@
-export type CategoriaEnser = 'Orfebrería' | 'Textil' | 'Enser de culto' | 'Túnica' | 'Mobiliario' | 'Otro'
+/** Categoría del enser; el catálogo lo define cada hermandad en Configuración. */
+export type CategoriaEnser = string
 export type EstadoConservacion = 'Bueno' | 'Regular' | 'Necesita restauración'
 
 export interface Enser {

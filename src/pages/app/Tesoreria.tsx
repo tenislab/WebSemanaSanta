@@ -4,11 +4,13 @@ import MovimientoJustificante from '../../components/MovimientoJustificante'
 import {
   CATEGORIAS_GASTO,
   CATEGORIAS_INGRESO,
+  CUENTAS_POR_DEFECTO,
   MOVIMIENTOS_INICIALES,
   type CuentaMovimiento,
   type Movimiento,
   type TipoMovimiento,
 } from '../../data/movimientos'
+import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
 import { useAuth } from '../../context/AuthContext'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
@@ -26,12 +28,15 @@ function formatearFechaInput(value: string) {
 }
 
 const FILTROS = ['Todos', 'Ingreso', 'Gasto', 'Pendiente', 'Conciliado'] as const
-const CUENTAS: CuentaMovimiento[] = ['Cuenta bancaria', 'Caja']
 
 export default function Tesoreria() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
+
+  const categoriasIngreso = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasIngreso, CATEGORIAS_INGRESO), [])
+  const categoriasGasto = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasGasto, CATEGORIAS_GASTO), [])
+  const cuentas = useMemo(() => getLista(CLAVES_CATALOGOS.cuentasTesoreria, CUENTAS_POR_DEFECTO), [])
 
   const [movimientos, setMovimientos] = usePersistentState<Movimiento[]>(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
   const [query, setQuery] = useState('')
@@ -312,7 +317,7 @@ export default function Tesoreria() {
                 <option value="" disabled>
                   Elige una categoría
                 </option>
-                {(tipoNuevo === 'Ingreso' ? CATEGORIAS_INGRESO : CATEGORIAS_GASTO).map((c) => (
+                {(tipoNuevo === 'Ingreso' ? categoriasIngreso : categoriasGasto).map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -328,7 +333,7 @@ export default function Tesoreria() {
             <div className="form-row">
               <label htmlFor="cuenta">Cuenta</label>
               <select id="cuenta" name="cuenta" defaultValue="Cuenta bancaria">
-                {CUENTAS.map((c) => (
+                {cuentas.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>

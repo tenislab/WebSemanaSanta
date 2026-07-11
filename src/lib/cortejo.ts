@@ -1,6 +1,6 @@
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
-import { esCirio, type Cuerpo, type Tramo } from './tramos'
+import { cuerposPresentes, esAutomatico, gruposAutomaticos, type Cuerpo, type Tramo } from './tramos'
 
 export type EstadoAsignacion = 'Reservada' | 'Confirmada' | 'Con incidencia' | 'Excede aforo'
 
@@ -13,8 +13,6 @@ export interface Asignacion {
   puesto: number
   estado: EstadoAsignacion
 }
-
-const ORDEN_CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
 function estadoDe(papeleta: Papeleta, incidenciasAbiertas: Set<string>): EstadoAsignacion {
   if (incidenciasAbiertas.has(papeleta.id)) return 'Con incidencia'
@@ -38,17 +36,19 @@ function candidatosDe(
 }
 
 /**
- * Reparto de un cuerpo (Cristo, Virgen o Único). La hermandad define los
- * tramos, y la app los reparte según el tipo:
+ * Reparto de un cuerpo del cortejo. La hermandad define los tramos y elige
+ * cómo se llena cada uno:
  *
- *  - Tramos de cirio: automáticos por número. Todos los cirios del cuerpo se
- *    ordenan de mayor a menor número (los modernos delante, tras la cruz de
- *    guía) y se llenan en orden; al llenarse uno empieza el siguiente. Si un
- *    número entra en un cirio lleno, el más bajo de ese tramo baja al
- *    siguiente (efecto cascada).
- *  - Tramos designados (cruz de guía, insignias, varas, presidencia…): por
- *    solicitud. Cada hermano pide un tramo concreto y, entre quienes lo piden,
- *    se lo queda el de menor número (más antigüedad) hasta llenar el aforo.
+ *  - Reparto por número ('numero', el comportamiento clásico de los cirios):
+ *    automático. Los tramos del mismo tipo dentro del cuerpo forman un grupo
+ *    (Cirio 1º/2º cascadan entre sí; unos «Penitente 1º/2º» irían aparte);
+ *    los hermanos del grupo se ordenan de mayor a menor número (los modernos
+ *    delante, tras la cruz de guía) y se llenan en orden; al llenarse un
+ *    tramo empieza el siguiente. Si un número entra en un tramo lleno, el
+ *    más bajo de ese tramo baja al siguiente (efecto cascada).
+ *  - Reparto por solicitud ('solicitud'): cada hermano pide el tramo
+ *    concreto y, entre quienes lo piden, se lo queda el de menor número
+ *    (más antigüedad) hasta llenar el aforo.
  *
  * El puesto no se guarda: se recalcula cada vez a partir de las papeletas.
  */
@@ -62,9 +62,9 @@ export function repartoDeCuerpo(
   const tramosCuerpo = tramos.filter((t) => t.cuerpo === cuerpo)
   const out: Asignacion[] = []
 
-  // 1) Tramos designados: cada uno con sus solicitantes, por menor número.
+  // 1) Tramos por solicitud: cada uno con sus solicitantes, por menor número.
   tramosCuerpo
-    .filter((t) => !esCirio(t))
+    .filter((t) => !esAutomatico(t))
     .forEach((tramo) => {
       const solicitantes = candidatosDe(papeletas, (p) => p.tramoId === tramo.id, hermanoDe).sort(
         (a, b) => a.hermano.numero - b.hermano.numero || a.papeleta.id.localeCompare(b.papeleta.id),
@@ -75,40 +75,43 @@ export function repartoDeCuerpo(
       })
     })
 
-  // 2) Cirios del cuerpo: un único pool por número (mayor a menor), en cascada.
-  const cirios = tramosCuerpo.filter((t) => esCirio(t))
-  const idsCirio = new Set(cirios.map((t) => t.id))
-  const pool = candidatosDe(papeletas, (p) => p.tramoId !== null && idsCirio.has(p.tramoId), hermanoDe).sort(
-    (a, b) => b.hermano.numero - a.hermano.numero || a.papeleta.id.localeCompare(b.papeleta.id),
-  )
+  // 2) Tramos por número: un pool por grupo (mayor a menor número), en cascada.
+  gruposAutomaticos(tramosCuerpo).forEach(({ tramos: grupo }) => {
+    const idsGrupo = new Set(grupo.map((t) => t.id))
+    const pool = candidatosDe(papeletas, (p) => p.tramoId !== null && idsGrupo.has(p.tramoId), hermanoDe).sort(
+      (a, b) => b.hermano.numero - a.hermano.numero || a.papeleta.id.localeCompare(b.papeleta.id),
+    )
 
-  let idx = 0
-  for (const tramo of cirios) {
-    for (let i = 0; i < tramo.capacidad && idx < pool.length; i += 1, idx += 1) {
-      const { papeleta, hermano } = pool[idx]
-      out.push({ papeleta, hermano, tramo, puesto: i + 1, estado: estadoDe(papeleta, incidenciasAbiertas) })
+    let idx = 0
+    for (const tramo of grupo) {
+      for (let i = 0; i < tramo.capacidad && idx < pool.length; i += 1, idx += 1) {
+        const { papeleta, hermano } = pool[idx]
+        out.push({ papeleta, hermano, tramo, puesto: i + 1, estado: estadoDe(papeleta, incidenciasAbiertas) })
+      }
     }
-  }
-  const ultimoCirio = cirios[cirios.length - 1] ?? null
-  let sobra = 1
-  while (idx < pool.length) {
-    const { papeleta, hermano } = pool[idx]
-    out.push({ papeleta, hermano, tramo: ultimoCirio, puesto: sobra, estado: 'Excede aforo' })
-    idx += 1
-    sobra += 1
-  }
+    const ultimoTramo = grupo[grupo.length - 1] ?? null
+    let sobra = 1
+    while (idx < pool.length) {
+      const { papeleta, hermano } = pool[idx]
+      out.push({ papeleta, hermano, tramo: ultimoTramo, puesto: sobra, estado: 'Excede aforo' })
+      idx += 1
+      sobra += 1
+    }
+  })
   return out
 }
 
-/** Reparto de todo el cortejo: cada cuerpo presente, colocado por número con cascada. */
+/**
+ * Reparto de todo el cortejo. El orden de los cuerpos es el de desfile: el
+ * orden en que aparecen en la lista de tramos que configuró la hermandad.
+ */
 export function repartoCompleto(
   tramos: Tramo[],
   papeletas: Papeleta[],
   hermanoDe: (id: string) => Hermano | undefined,
   incidenciasAbiertas: Set<string>,
 ): Asignacion[] {
-  const cuerpos = ORDEN_CUERPOS.filter((c) => tramos.some((t) => t.cuerpo === c))
-  return cuerpos.flatMap((c) => repartoDeCuerpo(c, tramos, papeletas, hermanoDe, incidenciasAbiertas))
+  return cuerposPresentes(tramos).flatMap((c) => repartoDeCuerpo(c, tramos, papeletas, hermanoDe, incidenciasAbiertas))
 }
 
 /**

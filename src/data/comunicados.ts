@@ -1,4 +1,5 @@
-export type Canal = 'Email' | 'SMS' | 'WhatsApp' | 'Push' | 'Redes sociales'
+/** Canal de envío; la hermandad activa los suyos en Configuración. */
+export type Canal = string
 export type EstadoComunicado = 'Borrador' | 'Programado' | 'Enviado'
 export type RedSocial = 'Facebook' | 'Instagram' | 'X' | 'YouTube' | 'TikTok'
 

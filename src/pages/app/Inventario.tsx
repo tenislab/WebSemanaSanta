@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
+import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
 import {
   CATEGORIAS_ENSER,
   ENSERES_INICIALES,
@@ -25,6 +26,7 @@ const ESTADOS_CONSERVACION: EstadoConservacion[] = ['Bueno', 'Regular', 'Necesit
 export default function Inventario() {
   const [enseres, setEnseres] = usePersistentState<Enser[]>(CLAVES_DATOS.enseres, ENSERES_INICIALES)
   const [query, setQuery] = useState('')
+  const categorias = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasEnser, CATEGORIAS_ENSER), [])
   const [filter, setFilter] = useState<'Todos' | CategoriaEnser>('Todos')
   const [selected, setSelected] = useState<Enser | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -156,7 +158,7 @@ export default function Inventario() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="filters">
-          {(['Todos', ...CATEGORIAS_ENSER] as const).map((f) => (
+          {['Todos', ...categorias].map((f) => (
             <button
               key={f}
               className={`chip${filter === f ? ' chip--active' : ''}`}
@@ -316,8 +318,8 @@ export default function Inventario() {
           <div className="form-grid-2">
             <div className="form-row">
               <label htmlFor="categoria">Categoría</label>
-              <select id="categoria" name="categoria" defaultValue={CATEGORIAS_ENSER[0]}>
-                {CATEGORIAS_ENSER.map((c) => (
+              <select id="categoria" name="categoria" defaultValue={categorias[0]}>
+                {categorias.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
