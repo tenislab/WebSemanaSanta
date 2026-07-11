@@ -188,6 +188,30 @@ export default function Configuracion() {
               hidden
             />
           </div>
+
+          <div className="color-picker-row">
+            <span className="color-picker-swatch" style={{ background: settings.colorPrimario }} aria-hidden="true" />
+            <div className="form-row">
+              <label htmlFor="colorPrimario">Color de tu hermandad</label>
+              <div className="color-picker-controls">
+                <input
+                  id="colorPrimario"
+                  type="color"
+                  value={settings.colorPrimario}
+                  onChange={(e) => update('colorPrimario', e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="color-picker-hex"
+                  value={settings.colorPrimario}
+                  onChange={(e) => update('colorPrimario', e.target.value)}
+                  placeholder="#caa24a"
+                  maxLength={7}
+                />
+              </div>
+              <p className="form-hint">Tiñe los botones y acentos del área del hermano de tus hermanos/as.</p>
+            </div>
+          </div>
         </section>
 
         <section className="settings-card">

@@ -11,6 +11,8 @@ export interface HermandadSettings {
   identificadorAcreedor: string
   /** Imagen del logo como data URL (subida desde el navegador, sin backend). */
   logoDataUrl: string | null
+  /** Color de marca de la hermandad; tiñe los botones y acentos de su área del hermano. */
+  colorPrimario: string
 }
 
 const STORAGE_KEY = 'cabildo-hermandad-settings'
@@ -26,6 +28,7 @@ const EMPTY: HermandadSettings = {
   iban: '',
   identificadorAcreedor: '',
   logoDataUrl: null,
+  colorPrimario: '#caa24a',
 }
 
 /**

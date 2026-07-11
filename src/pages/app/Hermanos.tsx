@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
-import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
+import { CLAVE_DEMO_HERMANOS, HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
@@ -23,6 +23,7 @@ export default function Hermanos() {
   const [selected, setSelected] = useState<Hermano | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
+  const [dniError, setDniError] = useState<string | null>(null)
 
   const [ibanDraft, setIbanDraft] = useState('')
   const [ibanError, setIbanError] = useState<string | null>(null)
@@ -77,7 +78,14 @@ export default function Hermanos() {
     const data = new FormData(form)
     const nombre = String(data.get('nombre') ?? '').trim()
     const email = String(data.get('email') ?? '').trim()
-    if (!nombre || !email) return
+    const dni = String(data.get('dni') ?? '').trim().toUpperCase()
+    if (!nombre || !email || !dni) return
+
+    if (hermanos.some((h) => h.dni.toUpperCase() === dni)) {
+      setDniError(`Ya hay un hermano registrado con el DNI ${dni}.`)
+      return
+    }
+    setDniError(null)
 
     const ibanRaw = String(data.get('iban') ?? '').trim()
     const iban = ibanRaw && isPlausibleIban(ibanRaw) ? ibanRaw : null
@@ -94,6 +102,8 @@ export default function Hermanos() {
       direccion: String(data.get('direccion') ?? '') || 'Sin datos',
       cuotaAlDia: false,
       iban,
+      dni,
+      claveAcceso: CLAVE_DEMO_HERMANOS,
     }
     setHermanos((prev) => [...prev, nuevo])
     setJustAddedId(nuevo.id)
@@ -147,7 +157,7 @@ export default function Hermanos() {
             datos.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setFormOpen(true)}>
+        <button className="btn btn-primary" onClick={() => { setDniError(null); setFormOpen(true) }}>
           + Nuevo hermano
         </button>
       </div>
@@ -281,12 +291,16 @@ export default function Hermanos() {
             </div>
 
             <dl className="ficha__list">
+              <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>
               <div><dt>Correo electrónico</dt><dd>{selected.email}</dd></div>
               <div><dt>Teléfono</dt><dd>{selected.telefono}</dd></div>
               <div><dt>Dirección</dt><dd>{selected.direccion}</dd></div>
               <div><dt>Hermano desde</dt><dd>{selected.antiguedad}</dd></div>
               <div><dt>Tramo en el cortejo</dt><dd>{tramoPorHermano.get(selected.id) ?? 'Sin papeleta este año'}</dd></div>
             </dl>
+            <p className="form-hint">
+              Accede a su área del hermano con este DNI y la contraseña <code>hermano123</code> (modo demostración).
+            </p>
 
             <div className="assign-box">
               <label htmlFor="ibanHermano">
@@ -370,6 +384,11 @@ export default function Hermanos() {
             <input id="email" name="email" type="email" placeholder="correo@ejemplo.com" required />
           </div>
           <div className="form-row">
+            <label htmlFor="dni">DNI / NIE</label>
+            <input id="dni" name="dni" type="text" placeholder="12345678A" required />
+            {dniError && <p className="form-hint form-hint--error">{dniError}</p>}
+          </div>
+          <div className="form-row">
             <label htmlFor="telefono">Teléfono</label>
             <input id="telefono" name="telefono" type="tel" placeholder="600 000 000" />
           </div>
@@ -383,8 +402,9 @@ export default function Hermanos() {
           </div>
           <p className="form-hint">
             Se le asignará automáticamente el siguiente número de hermano disponible y quedará en
-            estado «Nuevo». Sin cuenta bancaria, sus cuotas no podrán domiciliarse hasta que la
-            añada.
+            estado «Nuevo». Con el DNI y la contraseña provisional <code>hermano123</code> podrá
+            entrar en su área del hermano. Sin cuenta bancaria, sus cuotas no podrán domiciliarse
+            hasta que la añada.
           </p>
         </form>
       </Drawer>

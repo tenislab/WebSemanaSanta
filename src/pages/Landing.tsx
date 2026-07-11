@@ -96,6 +96,9 @@ export default function Landing() {
             <a href="#precios">Precios</a>
           </nav>
           <div className="nav-cta">
+            <Link className="btn btn-outline btn-sm" to="/hermano">
+              Área del hermano
+            </Link>
             <Link className="link-login" to="/login">
               Iniciar sesión
             </Link>

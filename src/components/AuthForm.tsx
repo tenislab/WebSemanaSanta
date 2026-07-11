@@ -271,9 +271,12 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       )}
 
       {mode === 'login' && (
-        <p className="fineprint" style={{ textAlign: 'center' }}>
-          ¿Eres hermano/a? <Link to="/hermano" className="field-link">Entra en tu área</Link>
-        </p>
+        <>
+          <div className="auth-sep"><span>¿eres hermano/a?</span></div>
+          <Link to="/hermano" className="btn btn-outline btn-block">
+            Entrar en el área del hermano
+          </Link>
+        </>
       )}
     </form>
   )
