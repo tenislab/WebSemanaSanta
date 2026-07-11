@@ -3,6 +3,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
+import HermanoPortal from './pages/HermanoPortal'
 import AppShell from './components/AppShell'
 import DashboardHome from './pages/app/DashboardHome'
 import Hermanos from './pages/app/Hermanos'
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/registro" element={<Signup />} />
       <Route path="/recuperar" element={<ForgotPassword />} />
+      <Route path="/hermano" element={<HermanoPortal />} />
 
       <Route
         path="/app"

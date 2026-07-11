@@ -1247,6 +1247,8 @@ h1, h2, h3,
 .archivo-adjunto__marca svg { width: 13px; height: 13px; }
 .archivo-adjunto__fila { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; }
 .archivo-adjunto__fila svg { width: 15px; height: 15px; flex: none; color: var(--text-muted); }
+.rgpd-borrar { color: var(--err-fg); }
+.rgpd-borrar:hover { border-color: var(--err-fg); }
 
 /* =========================================================================
    Comunicados — conexión (simulada) con redes sociales
@@ -1291,6 +1293,51 @@ h1, h2, h3,
 .informe-doc__resumen > div { display: flex; flex-direction: column; gap: 0.2rem; }
 .informe-doc__resumen b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .informe-doc__table th:last-child, .informe-doc__table td:last-child { text-align: left; }
+
+/* =========================================================================
+   Área del hermano (portal self-service, distinto del panel de gestión)
+   ========================================================================= */
+.portal { min-height: 100vh; background:
+    radial-gradient(60% 50% at 10% -8%, var(--glass-bloom-1), transparent 60%),
+    radial-gradient(55% 45% at 100% 12%, var(--glass-bloom-2), transparent 55%),
+    var(--bg-sunken);
+  display: flex; flex-direction: column;
+}
+.portal__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.9rem 1.5rem; background: var(--glass-surface-strong); border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  position: sticky; top: 0; z-index: 20;
+}
+.portal__brand { display: flex; align-items: center; gap: 0.65rem; }
+.portal__logo {
+  width: 40px; height: 40px; border-radius: 10px; flex: none; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--morado-900); color: var(--oro-300);
+}
+.portal__logo img { width: 100%; height: 100%; object-fit: contain; }
+.portal__brand b { display: block; font-size: 0.95rem; }
+.portal__brand small { font-size: 0.74rem; color: var(--gold); }
+
+.portal__stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1.2rem; }
+.portal__card {
+  width: 100%; max-width: 420px; background: var(--bg-raised);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 2rem; box-shadow: var(--glass-shadow);
+}
+.portal__card h1 { font-size: 1.6rem; margin: 0.3rem 0 0.5rem; }
+.portal__lead { color: var(--text-muted); margin: 0 0 1.2rem; font-size: 0.92rem; }
+.portal__note { font-size: 0.82rem; color: var(--text-muted); margin-top: 1.2rem; }
+.portal__note a, .portal__lead a { color: var(--gold); }
+
+.portal__main { width: 100%; max-width: 900px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
+.portal__section {
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1.3rem 1.4rem; margin-bottom: 1.2rem; box-shadow: var(--glass-shadow);
+}
+.portal__section h2 { font-size: 1.1rem; margin-bottom: 0.9rem; }
+.portal__papeleta { display: flex; flex-direction: column; gap: 0.8rem; }
+.portal__consent { display: flex; align-items: center; gap: 1rem; justify-content: space-between; flex-wrap: wrap; }
+.portal__consent span { flex: 1; min-width: 240px; }
 
 /* =========================================================================
    Responsive

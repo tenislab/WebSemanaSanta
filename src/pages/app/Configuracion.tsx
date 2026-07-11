@@ -8,6 +8,8 @@ import {
 } from '../../lib/hermandadSettings'
 import { getTramos, saveTramos, aforoDeCuerpo, type Cuerpo, type Tramo } from '../../lib/tramos'
 import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
+import { crearCopia, esCopiaValida, restaurarCopia } from '../../lib/backup'
+import { descargarArchivo } from '../../lib/csv'
 
 const CUERPOS: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
 
@@ -52,6 +54,45 @@ export default function Configuracion() {
 
   const [tramos, setTramos] = useState<Tramo[]>(() => getTramos())
   const [tramosSaved, setTramosSaved] = useState(false)
+  const [copiaEstado, setCopiaEstado] = useState<string | null>(null)
+  const backupRef = useRef<HTMLInputElement>(null)
+
+  async function descargarCopia() {
+    setCopiaEstado('Preparando la copia…')
+    try {
+      const copia = await crearCopia()
+      const fecha = new Date().toISOString().slice(0, 10)
+      const slug = (settings.nombreLegal || 'hermandad').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      descargarArchivo(`copia-cabildo-${slug}-${fecha}.json`, JSON.stringify(copia), 'application/json;charset=utf-8;')
+      setCopiaEstado('Copia descargada.')
+    } catch {
+      setCopiaEstado('No se pudo crear la copia.')
+    }
+    setTimeout(() => setCopiaEstado(null), 4000)
+  }
+
+  async function restaurarDesdeArchivo(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!window.confirm('Restaurar la copia sustituirá TODOS los datos actuales de la hermandad por los del archivo. ¿Continuar?')) return
+    setCopiaEstado('Restaurando…')
+    try {
+      const texto = await file.text()
+      const obj = JSON.parse(texto)
+      if (!esCopiaValida(obj)) {
+        setCopiaEstado('El archivo no es una copia de Cabildo válida.')
+        setTimeout(() => setCopiaEstado(null), 4000)
+        return
+      }
+      await restaurarCopia(obj)
+      setCopiaEstado('Copia restaurada. Recargando…')
+      setTimeout(() => window.location.reload(), 800)
+    } catch {
+      setCopiaEstado('No se pudo leer el archivo.')
+      setTimeout(() => setCopiaEstado(null), 4000)
+    }
+  }
   const aforos = useMemo(
     () => CUERPOS.map((c) => ({ cuerpo: c, total: aforoDeCuerpo(c, tramos) })).filter((a) => a.total > 0),
     [tramos],
@@ -367,12 +408,39 @@ export default function Configuracion() {
 
       <section className="settings-card">
         <div className="settings-card__head">
-          <h2 className="settings-card__title">Datos guardados en este navegador</h2>
+          <h2 className="settings-card__title">Copia de seguridad</h2>
         </div>
         <p className="form-hint">
-          Todo lo que haces en la app (altas de hermanos, pagos, papeletas, movimientos…) queda
-          guardado en este navegador y sobrevive a recargas. Si quieres empezar de cero con los
-          datos de ejemplo, puedes restablecerlos aquí. Esta acción no se puede deshacer.
+          Mientras no conectamos la base de datos en la nube, todos los datos viven en este
+          navegador. Descarga una copia (un solo archivo, con hermanos, cuotas, papeletas,
+          tesorería, documentos y sus adjuntos) para no perderla al cambiar de ordenador o limpiar
+          el navegador, y restaúrala en otro equipo cuando quieras.
+        </p>
+        <div className="settings-actions">
+          {copiaEstado && <span className="alert-item alert-item--ok">{copiaEstado}</span>}
+          <input
+            ref={backupRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={restaurarDesdeArchivo}
+          />
+          <button type="button" className="btn btn-ghost" onClick={() => backupRef.current?.click()}>
+            Restaurar copia
+          </button>
+          <button type="button" className="btn btn-primary" onClick={descargarCopia}>
+            Descargar copia
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Restablecer datos</h2>
+        </div>
+        <p className="form-hint">
+          Si quieres empezar de cero con los datos de ejemplo, puedes restablecerlos aquí. Se borra
+          todo lo guardado en este navegador. Esta acción no se puede deshacer.
         </p>
         <div className="settings-actions">
           <button

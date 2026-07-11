@@ -269,6 +269,12 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       {isReset && (
         <p className="fineprint">Recibirás un correo con un enlace para crear una contraseña nueva.</p>
       )}
+
+      {mode === 'login' && (
+        <p className="fineprint" style={{ textAlign: 'center' }}>
+          ¿Eres hermano/a? <Link to="/hermano" className="field-link">Entra en tu área</Link>
+        </p>
+      )}
     </form>
   )
 }

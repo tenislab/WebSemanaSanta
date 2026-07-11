@@ -7,6 +7,8 @@ import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
+import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
+import { descargarArchivo } from '../../lib/csv'
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -115,6 +117,23 @@ export default function Hermanos() {
     setIbanError(null)
     setIbanSaved(true)
     setTimeout(() => setIbanSaved(false), 2500)
+  }
+
+  function descargarDatosRgpd(hermano: Hermano) {
+    const datos = recopilarDatosHermano(hermano.id)
+    if (!datos) return
+    const slug = hermano.nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    descargarArchivo(`datos-${slug}.json`, exportarDatosHermano(datos), 'application/json;charset=utf-8;')
+  }
+
+  function borrarHermanoRgpd(hermano: Hermano) {
+    const ok = window.confirm(
+      `Vas a borrar a ${hermano.nombre} y todos sus datos (cuotas, papeletas e incidencias). ` +
+        'Esta acción ejerce el derecho de supresión (RGPD) y no se puede deshacer. ¿Continuar?',
+    )
+    if (!ok) return
+    setHermanos(borrarDatosHermano(hermano.id))
+    setSelected(null)
   }
 
   return (
@@ -300,10 +319,26 @@ export default function Hermanos() {
               )}
             </div>
 
-            <p className="ficha__note">
-              Este es un módulo de ejemplo: los documentos, el histórico de papeletas y el
-              detalle de pagos de {selected.nombre.split(' ')[0]} se conectarán en próximas fases.
-            </p>
+            <div className="assign-box">
+              <label>Protección de datos (RGPD)</label>
+              <p className="form-hint">
+                {selected.nombre.split(' ')[0]} puede ejercer sus derechos sobre sus datos: descargar
+                todo lo que la hermandad guarda de él/ella, o pedir que se supriman.
+              </p>
+              <div className="assign-box__row">
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => descargarDatosRgpd(selected)}>
+                  Descargar sus datos
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => borrarHermanoRgpd(selected)}>
+                  Borrar sus datos
+                </button>
+              </div>
+              <p className="form-hint">
+                La supresión borra al hermano y sus cuotas, papeletas e incidencias. Ten en cuenta que
+                la normativa contable puede obligar a conservar ciertos registros; esa decisión es de
+                la hermandad.
+              </p>
+            </div>
           </div>
         )}
       </Drawer>

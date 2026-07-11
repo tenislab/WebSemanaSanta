@@ -58,6 +58,40 @@ export async function borrarArchivo(id: string): Promise<void> {
   db.close()
 }
 
+/** Todos los archivos guardados, con su id, para copias de seguridad. */
+export async function todosLosArchivos(): Promise<{ id: string; blob: File | Blob }[]> {
+  const db = await abrirDb()
+  const resultado = await new Promise<{ id: string; blob: File | Blob }[]>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const store = tx.objectStore(STORE_NAME)
+    const keysReq = store.getAllKeys()
+    keysReq.onsuccess = () => {
+      const claves = keysReq.result as string[]
+      const valsReq = store.getAll()
+      valsReq.onsuccess = () => {
+        const vals = valsReq.result as (File | Blob)[]
+        resolve(claves.map((id, i) => ({ id, blob: vals[i] })))
+      }
+      valsReq.onerror = () => reject(valsReq.error)
+    }
+    keysReq.onerror = () => reject(keysReq.error)
+  })
+  db.close()
+  return resultado
+}
+
+/** Borra todos los archivos guardados (al restaurar una copia). */
+export async function borrarTodosLosArchivos(): Promise<void> {
+  const db = await abrirDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    tx.objectStore(STORE_NAME).clear()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+  db.close()
+}
+
 /** Tamaño legible (KB/MB) para mostrar junto al nombre del archivo. */
 export function formatearTamano(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
