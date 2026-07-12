@@ -1,13 +1,19 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth, DEMO_EMAIL, DEMO_PASSWORD } from '../context/AuthContext'
+import { getPersonal } from '../lib/personal'
 
 type Mode = 'login' | 'signup' | 'reset'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+function inicialesDe(nombre: string) {
+  const partes = nombre.trim().split(/\s+/)
+  return partes.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
+}
+
 export default function AuthForm({ mode }: { mode: Mode }) {
-  const { signIn, signInDemo, signUp, resetPassword, configured } = useAuth()
+  const { signIn, signUp, resetPassword, configured } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/app'
@@ -95,12 +101,12 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     }
   }
 
-  async function handleDemoLogin() {
+  async function entrarComoDemo(correoDemo: string, claveDemo: string) {
     setError(null)
     setNotice(null)
     setSubmitting(true)
     try {
-      const { error } = await signInDemo()
+      const { error } = await signIn(correoDemo, claveDemo)
       if (error) {
         setError(error)
         return
@@ -110,6 +116,16 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       setSubmitting(false)
     }
   }
+
+  const cuentasDemo = useMemo(
+    () => [
+      { id: 'titular', nombre: 'Usuario Demo', cargo: 'Titular · acceso completo', email: DEMO_EMAIL, clave: DEMO_PASSWORD },
+      ...getPersonal()
+        .filter((p) => p.activo)
+        .map((p) => ({ id: p.id, nombre: p.nombre, cargo: p.cargo, email: p.email, clave: p.clave })),
+    ],
+    [],
+  )
 
   const submitLabel = isReset
     ? 'Enviar enlace'
@@ -122,16 +138,26 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       {!configured && mode === 'login' && (
         <div className="banner banner--info banner--demo" role="status">
           <div>
-            <strong>Modo demostración.</strong> Prueba la app sin escribir nada.
+            <strong>Modo demostración.</strong> Entra con un clic como cualquiera de estas
+            personas y comprueba cómo cada cargo ve solo lo que le corresponde.
           </div>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm banner--demo__btn"
-            onClick={handleDemoLogin}
-            disabled={submitting}
-          >
-            Entrar con el usuario de prueba
-          </button>
+          <div className="demo-accounts">
+            {cuentasDemo.map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                className="demo-account"
+                onClick={() => entrarComoDemo(c.email, c.clave)}
+                disabled={submitting}
+              >
+                <span className="demo-account__avatar">{inicialesDe(c.nombre)}</span>
+                <span>
+                  <b>{c.nombre}</b>
+                  <small>{c.cargo}</small>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {!configured && isSignup && (
@@ -212,7 +238,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
               id="password"
               type={showPass ? 'text' : 'password'}
               autoComplete={isSignup ? 'new-password' : 'current-password'}
-              placeholder={isSignup ? 'Crea una contraseña (mín. 6)' : '••••••••••'}
+              placeholder={isSignup ? 'Crea una contraseña (mín. 6)' : 'demo1234 · tesoro123'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />

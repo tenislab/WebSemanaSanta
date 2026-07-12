@@ -1,56 +1,41 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
 
 /**
- * Punto de entrada único: antes había que elegir entre "Área del hermano" e
- * "Iniciar sesión" sin saber cuál te tocaba. Aquí basta con escribir tu DNI
- * (hermano/a) o tu correo (secretaría) y la app te lleva directa al sitio
- * correcto — el propio dato dice qué camino es.
+ * Punto de entrada dividido en dos caminos claros — nada de adivinar qué
+ * escribió la persona: cada quien elige quién es y la app lo lleva a su
+ * sitio. El hermano/a busca su hermandad y entra o pide el alta; quien
+ * gestiona la hermandad (titular o personal con cargo) va a su acceso de
+ * siempre.
  */
 export default function EntradaUnificada() {
-  const navigate = useNavigate()
-  const [valor, setValor] = useState('')
-
-  function continuar(e: FormEvent) {
-    e.preventDefault()
-    const dato = valor.trim()
-    if (!dato) return
-    if (dato.includes('@')) {
-      navigate(`/login?correo=${encodeURIComponent(dato)}`)
-    } else {
-      navigate(`/hermano?dni=${encodeURIComponent(dato)}`)
-    }
-  }
-
   return (
     <AuthLayout
       eyebrow="Acceso"
-      title="Entra en Cabildo"
-      subtitle="Escribe tu DNI si eres hermano/a, o tu correo si gestionas la hermandad."
+      title="¿Quién eres?"
+      subtitle="Elige tu camino para entrar en Cabildo."
       footer={<>¿Tu hermandad aún no está en Cabildo? Empieza gratis desde la portada.</>}
     >
-      <form className="app-form" onSubmit={continuar}>
-        <div className="field">
-          <label htmlFor="entradaValor">DNI o correo electrónico</label>
-          <input
-            id="entradaValor"
-            type="text"
-            value={valor}
-            onChange={(e) => setValor(e.target.value)}
-            placeholder="12345678A o secretaria@tuhermandad.org"
-            autoFocus
-            autoComplete="username"
-            required
-          />
-        </div>
-        <button type="submit" className="btn btn-primary btn-block">
-          Continuar
-        </button>
-        <p className="portal__note">
-          Con DNI vas a tu área de hermano/a; con correo, a la gestión de tu hermandad.
-        </p>
-      </form>
+      <div className="entrada-opciones">
+        <Link to="/hermano" className="entrada-opcion">
+          <span className="entrada-opcion__ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" /></svg>
+          </span>
+          <span>
+            <b>Soy hermano/a</b>
+            <small>Busca tu hermandad, entra con tu DNI o pide el alta</small>
+          </span>
+        </Link>
+        <Link to="/login" className="entrada-opcion">
+          <span className="entrada-opcion__ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="7" width="18" height="14" rx="2" /><path d="M8 7V5a4 4 0 0 1 8 0v2" /></svg>
+          </span>
+          <span>
+            <b>Gestiono la hermandad</b>
+            <small>Secretaría, junta de gobierno o personal con cargo</small>
+          </span>
+        </Link>
+      </div>
     </AuthLayout>
   )
 }

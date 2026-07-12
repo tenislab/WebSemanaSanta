@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
+import EscudoHermandad from '../components/EscudoHermandad'
 import PapeletaTicket from '../components/PapeletaTicket'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
@@ -19,12 +20,21 @@ import {
 } from '../lib/tramos'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../lib/campana'
-import { CLAVES_DATOS, usePersistentState } from '../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../lib/persistencia'
 import { formatCurrency, formatDate } from '../lib/format'
 import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
 import { descargarArchivo } from '../lib/csv'
 import { estiloTema, inicialesHermandad } from '../lib/color'
-import { ID_HERMANDAD_PRINCIPAL, HERMANDADES_MUESTRA, HERMANOS_MUESTRA, type HermanoDirectorio } from '../lib/hermandades'
+import {
+  ID_HERMANDAD_PRINCIPAL,
+  HERMANDADES_MUESTRA,
+  HERMANOS_MUESTRA,
+  buscarHermandades,
+  type HermandadDirectorio,
+  type HermanoDirectorio,
+  type IconoHermandad,
+} from '../lib/hermandades'
+import { getSolicitudes, saveSolicitudes, claveSolicitudesMuestra, type SolicitudAlta } from '../lib/solicitudes'
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
@@ -70,6 +80,39 @@ function normaliza(texto: string) {
   return texto.trim().toUpperCase()
 }
 
+type TablaMuestra<T> = Record<string, [T[], (updater: (prev: T[]) => T[]) => void]>
+
+/** Censo o papeletas de cada hermandad de muestra, cada una con su clave propia — igual que en la base de datos real, cada hermandad vería solo sus filas. */
+function useTablaPorHermandad<T>(prefijoClave: string, porDefecto: (hermandadId: string) => T[]): TablaMuestra<T> {
+  const [mapa, setMapa] = useState<Record<string, T[]>>(() =>
+    Object.fromEntries(
+      HERMANDADES_MUESTRA.map((h) => [h.id, leerPersistido(`${prefijoClave}-${h.id}`, porDefecto(h.id))]),
+    ),
+  )
+  return useMemo(() => {
+    const tabla: TablaMuestra<T> = {}
+    for (const h of HERMANDADES_MUESTRA) {
+      tabla[h.id] = [
+        mapa[h.id] ?? [],
+        (updater) => {
+          setMapa((prev) => {
+            const next = updater(prev[h.id] ?? [])
+            localStorage.setItem(`${prefijoClave}-${h.id}`, JSON.stringify(next))
+            return { ...prev, [h.id]: next }
+          })
+        },
+      ]
+    }
+    return tabla
+  }, [mapa, prefijoClave])
+}
+
+function guardarSolicitudMuestra(hermandadId: string, nueva: SolicitudAlta) {
+  const clave = claveSolicitudesMuestra(hermandadId)
+  const prev = leerPersistido<SolicitudAlta[]>(clave, [])
+  localStorage.setItem(clave, JSON.stringify([nueva, ...prev]))
+}
+
 export default function HermanoPortal() {
   const hermandadPrincipal = useMemo(() => getHermandadSettings(), [])
   const nombrePrincipal = hermandadPrincipal.nombreLegal || 'Tu hermandad (modo demo)'
@@ -77,27 +120,14 @@ export default function HermanoPortal() {
   const [hermanos, setHermanos] = usePersistentState<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
   const [papeletas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
   const [cuotas] = usePersistentState<Cuota[]>(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
-  const [hermanosEsperanza, setHermanosEsperanza] = usePersistentState<HermanoDirectorio[]>(
-    'cabildo-directorio-esperanza',
-    HERMANOS_MUESTRA.esperanza,
-  )
-  const [hermanosSoledad, setHermanosSoledad] = usePersistentState<HermanoDirectorio[]>(
-    'cabildo-directorio-soledad',
-    HERMANOS_MUESTRA.soledad,
-  )
-  const censosMuestra: Record<string, [HermanoDirectorio[], (updater: (prev: HermanoDirectorio[]) => HermanoDirectorio[]) => void]> = {
-    esperanza: [hermanosEsperanza, setHermanosEsperanza],
-    soledad: [hermanosSoledad, setHermanosSoledad],
-  }
 
-  // Papeletas de cada hermandad de muestra: cada una guarda las suyas aparte,
-  // igual que en la base de datos real cada hermandad tendrá sus propias filas.
-  const [papeletasEsperanza, setPapeletasEsperanza] = usePersistentState<Papeleta[]>('cabildo-papeletas-esperanza', [])
-  const [papeletasSoledad, setPapeletasSoledad] = usePersistentState<Papeleta[]>('cabildo-papeletas-soledad', [])
-  const papeletasMuestra: Record<string, [Papeleta[], (updater: (prev: Papeleta[]) => Papeleta[]) => void]> = {
-    esperanza: [papeletasEsperanza, setPapeletasEsperanza],
-    soledad: [papeletasSoledad, setPapeletasSoledad],
-  }
+  // Censo y papeletas de cada hermandad de muestra: cada una guarda los suyos
+  // aparte, igual que en la base de datos real cada hermandad vería solo sus filas.
+  const censosMuestra = useTablaPorHermandad<HermanoDirectorio>(
+    'cabildo-directorio',
+    (id) => HERMANOS_MUESTRA[id] ?? [],
+  )
+  const papeletasMuestra = useTablaPorHermandad<Papeleta>('cabildo-papeletas', () => [])
 
   const tramos = useMemo(() => getTramos(), [])
   const campana = useMemo(() => getCampana(), [])
@@ -106,9 +136,18 @@ export default function HermanoPortal() {
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
   const [searchParams] = useSearchParams()
+
+  // ---- Identificación: buscar hermandad → iniciar sesión o solicitar alta ----
+  const [paso, setPaso] = useState<'buscar' | 'acceso'>('buscar')
+  const [queryHermandad, setQueryHermandad] = useState('')
+  const [hermandadElegida, setHermandadElegida] = useState<HermandadDirectorio | null>(null)
+  const [modoAcceso, setModoAcceso] = useState<'login' | 'solicitud'>('login')
   const [dniInput, setDniInput] = useState(() => searchParams.get('dni') ?? '')
   const [claveInput, setClaveInput] = useState('')
   const [errorLogin, setErrorLogin] = useState<string | null>(null)
+  const [solicitudEnviada, setSolicitudEnviada] = useState(false)
+  const [errorSolicitud, setErrorSolicitud] = useState<string | null>(null)
+
   const [pendingCuerpo, setPendingCuerpo] = useState<string>('')
   const [datosGuardados, setDatosGuardados] = useState(false)
   const [bajaMuestraSolicitada, setBajaMuestraSolicitada] = useState(false)
@@ -125,7 +164,7 @@ export default function HermanoPortal() {
     if (esPrincipal || !sesion) return null
     const censo = censosMuestra[sesion.hermandadId]?.[0] ?? []
     return censo.find((h) => h.id === sesion.hermanoId) ?? null
-  }, [esPrincipal, sesion, hermanosEsperanza, hermanosSoledad]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [esPrincipal, sesion, censosMuestra])
   const hermandadMuestra = useMemo(
     () => (sesion ? HERMANDADES_MUESTRA.find((h) => h.id === sesion.hermandadId) ?? null : null),
     [sesion],
@@ -146,35 +185,113 @@ export default function HermanoPortal() {
       ) ?? null
     : null
 
-  /** Un único paso: DNI + contraseña. Busca primero en el censo de tu hermandad y, si no coincide,
-   * en el resto de hermandades registradas — así el hermano no tiene que elegir nada, la app le
-   * lleva directo a la hermandad que le dio de alta. */
+  const datosPrincipalDirectorio = useMemo(
+    () => ({
+      nombre: nombrePrincipal,
+      ciudad: hermandadPrincipal.ciudad,
+      color: hermandadPrincipal.colorPrimario,
+      telefono: hermandadPrincipal.telefono,
+      email: hermandadPrincipal.email,
+    }),
+    [nombrePrincipal, hermandadPrincipal],
+  )
+  const opcionesHermandad = useMemo(
+    () => buscarHermandades(queryHermandad, datosPrincipalDirectorio),
+    [queryHermandad, datosPrincipalDirectorio],
+  )
+
+  function elegirHermandad(h: HermandadDirectorio) {
+    setHermandadElegida(h)
+    setPaso('acceso')
+    setModoAcceso('login')
+    setErrorLogin(null)
+    setErrorSolicitud(null)
+    setSolicitudEnviada(false)
+    setDniInput('')
+    setClaveInput('')
+  }
+
+  function volverABuscar() {
+    setPaso('buscar')
+    setHermandadElegida(null)
+    setErrorLogin(null)
+    setErrorSolicitud(null)
+    setSolicitudEnviada(false)
+  }
+
+  /** DNI + contraseña, ya dentro de la hermandad elegida — no hace falta adivinar dónde busca. */
   function identificar(e: FormEvent) {
     e.preventDefault()
+    if (!hermandadElegida) return
     const dni = normaliza(dniInput)
 
-    const enPrincipal = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
-    if (enPrincipal) {
-      const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: enPrincipal.id }
+    if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
+      const encontrado = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
+      if (!encontrado) {
+        setErrorLogin('DNI o contraseña incorrectos.')
+        return
+      }
+      const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: encontrado.id }
       guardarSesion(nueva)
       setSesion(nueva)
       setErrorLogin(null)
       return
     }
 
-    for (const h of HERMANDADES_MUESTRA) {
-      const censo = censosMuestra[h.id]?.[0] ?? []
-      const encontrado = censo.find((c) => normaliza(c.dni) === dni && c.claveAcceso === claveInput)
-      if (encontrado) {
-        const nueva = { hermandadId: h.id, hermanoId: encontrado.id }
-        guardarSesion(nueva)
-        setSesion(nueva)
-        setErrorLogin(null)
-        return
-      }
+    const censo = censosMuestra[hermandadElegida.id]?.[0] ?? []
+    const encontrado = censo.find((c) => normaliza(c.dni) === dni && c.claveAcceso === claveInput)
+    if (!encontrado) {
+      setErrorLogin('DNI o contraseña incorrectos.')
+      return
+    }
+    const nueva = { hermandadId: hermandadElegida.id, hermanoId: encontrado.id }
+    guardarSesion(nueva)
+    setSesion(nueva)
+    setErrorLogin(null)
+  }
+
+  /** Quien todavía no está en el censo pide el alta; la secretaría la aprueba o la rechaza desde Hermanos. */
+  function solicitarAlta(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!hermandadElegida) return
+    const data = new FormData(e.currentTarget)
+    const nombre = String(data.get('nombre') ?? '').trim()
+    const dni = normaliza(String(data.get('dni') ?? ''))
+    const email = String(data.get('email') ?? '').trim()
+    const telefono = String(data.get('telefono') ?? '').trim()
+    const clavePropuesta = String(data.get('clavePropuesta') ?? '')
+    if (!nombre || !dni || !email || clavePropuesta.length < 6) {
+      setErrorSolicitud('Rellena tu nombre, DNI, correo y una contraseña de al menos 6 caracteres.')
+      return
     }
 
-    setErrorLogin('DNI o contraseña incorrectos.')
+    const yaEsHermano =
+      hermandadElegida.id === ID_HERMANDAD_PRINCIPAL
+        ? hermanos.some((h) => normaliza(h.dni) === dni)
+        : (censosMuestra[hermandadElegida.id]?.[0] ?? []).some((h) => normaliza(h.dni) === dni)
+    if (yaEsHermano) {
+      setErrorSolicitud('Ya hay un hermano/a con ese DNI en esta hermandad. Prueba a iniciar sesión.')
+      return
+    }
+
+    const nueva: SolicitudAlta = {
+      id: `sol-${Date.now()}`,
+      nombre,
+      dni,
+      email,
+      telefono,
+      clavePropuesta,
+      fecha: hoy(),
+      estado: 'Pendiente',
+    }
+
+    if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
+      saveSolicitudes([nueva, ...getSolicitudes()])
+    } else {
+      guardarSolicitudMuestra(hermandadElegida.id, nueva)
+    }
+    setErrorSolicitud(null)
+    setSolicitudEnviada(true)
   }
 
   function entrarComoDemo() {
@@ -190,8 +307,14 @@ export default function HermanoPortal() {
   function salir() {
     sessionStorage.removeItem(SESION_KEY)
     setSesion(null)
+    setPaso('buscar')
+    setHermandadElegida(null)
+    setQueryHermandad('')
+    setModoAcceso('login')
     setDniInput('')
     setClaveInput('')
+    setSolicitudEnviada(false)
+    setErrorSolicitud(null)
     setPendingCuerpo('')
     setDatosGuardados(false)
     setBajaMuestraSolicitada(false)
@@ -442,50 +565,167 @@ export default function HermanoPortal() {
   if (!hermanoActivo) {
     return (
       <div className="portal">
-        <PortalHead hermandad="Cabildo" logo={null} />
+        <PortalHead
+          hermandad={hermandadElegida?.nombre ?? 'Cabildo'}
+          logo={null}
+          color={hermandadElegida?.color}
+          icono={hermandadElegida?.icono}
+        />
         <main className="portal__stage">
           <div className="portal__card">
-            <p className="eyebrow">Área del hermano</p>
-            <h1>Entra en tu área</h1>
-            <p className="portal__lead">Entra con tu DNI y tu contraseña; te llevaremos directo a tu hermandad.</p>
+            {paso === 'buscar' && (
+              <>
+                <p className="eyebrow">Área del hermano</p>
+                <h1>Busca tu hermandad</h1>
+                <p className="portal__lead">Escribe el nombre o la ciudad para encontrarla y entrar en tu área.</p>
 
-            <form className="app-form" onSubmit={identificar}>
-              <div className="form-row">
-                <label htmlFor="dniHermano">DNI / NIE</label>
-                <input
-                  id="dniHermano"
-                  type="text"
-                  value={dniInput}
-                  onChange={(e) => setDniInput(e.target.value)}
-                  placeholder="12345678A"
-                  autoFocus={!dniInput}
-                  required
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="claveHermano">Contraseña</label>
-                <input
-                  id="claveHermano"
-                  type="password"
-                  value={claveInput}
-                  onChange={(e) => setClaveInput(e.target.value)}
-                  placeholder="En la demo: hermano123"
-                  autoFocus={!!dniInput}
-                  required
-                />
-              </div>
-              {errorLogin && <p className="form-hint form-hint--error">{errorLogin}</p>}
-              <button type="submit" className="btn btn-primary btn-block">
-                Entrar
-              </button>
-            </form>
+                <div className="form-row">
+                  <label htmlFor="buscarHermandad">Tu hermandad</label>
+                  <input
+                    id="buscarHermandad"
+                    type="text"
+                    value={queryHermandad}
+                    onChange={(e) => setQueryHermandad(e.target.value)}
+                    placeholder="Nombre o ciudad…"
+                    autoFocus
+                  />
+                </div>
+                <ul className="portal__picker">
+                  {opcionesHermandad.map((h) => (
+                    <li key={h.id}>
+                      <button type="button" className="portal__picker-item" onClick={() => elegirHermandad(h)}>
+                        <EscudoHermandad color={h.color} icono={h.icono} size={30} />
+                        <span>
+                          <b>{h.nombre}</b>
+                          {h.ciudad && <small>{h.ciudad}</small>}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {opcionesHermandad.length === 0 && (
+                    <li className="portal__picker-empty">No encontramos ninguna hermandad con ese nombre.</li>
+                  )}
+                </ul>
 
-            <p className="portal__note">
-              <button type="button" className="portal__link-btn" onClick={entrarComoDemo}>
-                Entra con un hermano de prueba
-              </button>{' '}
-              · <Link to="/">Volver a la portada</Link>
-            </p>
+                <p className="portal__note">
+                  <button type="button" className="portal__link-btn" onClick={entrarComoDemo}>
+                    Entra con un hermano de prueba
+                  </button>{' '}
+                  · <Link to="/">Volver a la portada</Link>
+                </p>
+              </>
+            )}
+
+            {paso === 'acceso' && hermandadElegida && (
+              <>
+                <button type="button" className="portal__back" onClick={volverABuscar}>
+                  ← Cambiar de hermandad
+                </button>
+                <div className="portal__chosen" style={{ borderColor: hermandadElegida.color }}>
+                  <EscudoHermandad color={hermandadElegida.color} icono={hermandadElegida.icono} size={34} />
+                  <span>
+                    <b>{hermandadElegida.nombre}</b>
+                    {hermandadElegida.ciudad && <small>{hermandadElegida.ciudad}</small>}
+                  </span>
+                </div>
+
+                <div className="portal__tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={modoAcceso === 'login'}
+                    className={`portal__tab${modoAcceso === 'login' ? ' portal__tab--active' : ''}`}
+                    onClick={() => setModoAcceso('login')}
+                  >
+                    Ya soy hermano/a
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={modoAcceso === 'solicitud'}
+                    className={`portal__tab${modoAcceso === 'solicitud' ? ' portal__tab--active' : ''}`}
+                    onClick={() => setModoAcceso('solicitud')}
+                  >
+                    Quiero ser hermano/a
+                  </button>
+                </div>
+
+                {modoAcceso === 'login' && (
+                  <>
+                    <p className="portal__lead">Entra con tu DNI y tu contraseña.</p>
+                    <form className="app-form" onSubmit={identificar}>
+                      <div className="form-row">
+                        <label htmlFor="dniHermano">DNI / NIE</label>
+                        <input
+                          id="dniHermano"
+                          type="text"
+                          value={dniInput}
+                          onChange={(e) => setDniInput(e.target.value)}
+                          placeholder="12345678A"
+                          autoFocus
+                          required
+                        />
+                      </div>
+                      <div className="form-row">
+                        <label htmlFor="claveHermano">Contraseña</label>
+                        <input
+                          id="claveHermano"
+                          type="password"
+                          value={claveInput}
+                          onChange={(e) => setClaveInput(e.target.value)}
+                          placeholder="En la demo: hermano123"
+                          required
+                        />
+                      </div>
+                      {errorLogin && <p className="form-hint form-hint--error">{errorLogin}</p>}
+                      <button type="submit" className="btn btn-primary btn-block">
+                        Entrar
+                      </button>
+                    </form>
+                  </>
+                )}
+
+                {modoAcceso === 'solicitud' &&
+                  (solicitudEnviada ? (
+                    <div className="banner-inline banner-inline--accent">
+                      Tu solicitud se ha enviado a la secretaría de {hermandadElegida.nombre}. Te avisarán en cuanto la
+                      revisen.
+                    </div>
+                  ) : (
+                    <>
+                      <p className="portal__lead">
+                        Pide el alta como hermano/a de {hermandadElegida.nombre}. La secretaría revisará tu solicitud.
+                      </p>
+                      <form className="app-form" onSubmit={solicitarAlta}>
+                        <div className="form-row">
+                          <label htmlFor="solNombre">Nombre y apellidos</label>
+                          <input id="solNombre" name="nombre" type="text" placeholder="Nombre completo" required />
+                        </div>
+                        <div className="form-row">
+                          <label htmlFor="solDni">DNI / NIE</label>
+                          <input id="solDni" name="dni" type="text" placeholder="12345678A" required />
+                        </div>
+                        <div className="form-row">
+                          <label htmlFor="solEmail">Correo electrónico</label>
+                          <input id="solEmail" name="email" type="email" placeholder="tucorreo@ejemplo.com" required />
+                        </div>
+                        <div className="form-row">
+                          <label htmlFor="solTelefono">Teléfono</label>
+                          <input id="solTelefono" name="telefono" type="tel" placeholder="600 000 000" />
+                        </div>
+                        <div className="form-row">
+                          <label htmlFor="solClave">Elige una contraseña</label>
+                          <input id="solClave" name="clavePropuesta" type="password" placeholder="Mínimo 6 caracteres" required minLength={6} />
+                        </div>
+                        {errorSolicitud && <p className="form-hint form-hint--error">{errorSolicitud}</p>}
+                        <button type="submit" className="btn btn-primary btn-block">
+                          Enviar solicitud
+                        </button>
+                      </form>
+                    </>
+                  ))}
+              </>
+            )}
           </div>
         </main>
       </div>
@@ -502,6 +742,7 @@ export default function HermanoPortal() {
         hermandad={nombreHermandadActiva}
         logo={esPrincipal ? hermandadPrincipal.logoDataUrl : null}
         color={colorActivo}
+        icono={esPrincipal ? undefined : hermandadMuestra?.icono}
         onSalir={salir}
       />
       <main className="portal__main">
@@ -929,11 +1170,13 @@ function PortalHead({
   hermandad,
   logo,
   color,
+  icono,
   onSalir,
 }: {
   hermandad: string
   logo: string | null
   color?: string
+  icono?: IconoHermandad
   onSalir?: () => void
 }) {
   return (
@@ -942,6 +1185,8 @@ function PortalHead({
         <span className="portal__logo">
           {logo ? (
             <img src={logo} alt="" />
+          ) : color && icono ? (
+            <EscudoHermandad color={color} icono={icono} size={28} />
           ) : color ? (
             <span className="portal__logo-badge" style={{ background: color }} aria-hidden="true">
               {inicialesHermandad(hermandad)}

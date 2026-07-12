@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { getPersonal } from '../lib/personal'
 
 type AuthResult = { error: string | null }
 
@@ -45,8 +46,8 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
  * Supabase, esta rama deja de usarse por completo — no hace falta borrar
  * nada a mano.
  */
-const DEMO_EMAIL = 'demo@cabildo.app'
-const DEMO_PASSWORD = 'demo1234'
+export const DEMO_EMAIL = 'demo@cabildo.app'
+export const DEMO_PASSWORD = 'demo1234'
 const DEMO_STORAGE_KEY = 'cabildo-demo-user'
 
 function readDemoUser(): AppUser | null {
@@ -101,17 +102,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { error: error ? translateError(error.message) : null }
         }
 
-        if (
-          email.trim().toLowerCase() === DEMO_EMAIL &&
-          password === DEMO_PASSWORD
-        ) {
+        const normalizado = email.trim().toLowerCase()
+
+        if (normalizado === DEMO_EMAIL && password === DEMO_PASSWORD) {
           const u = buildDemoUser(DEMO_EMAIL, 'Hermandad de prueba', 'Usuario Demo')
           sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
           setDemoUser(u)
           return { error: null }
         }
+
+        // Personal con cargo (tesorero/a, secretaría…): mismo formulario,
+        // acceso limitado a los módulos que su cargo tenga permitidos.
+        const miembro = getPersonal().find(
+          (p) => p.activo && p.email.trim().toLowerCase() === normalizado,
+        )
+        if (miembro && miembro.clave === password) {
+          const u = buildDemoUser(miembro.email, 'Hermandad de prueba', miembro.nombre)
+          u.user_metadata.cargo = miembro.cargo
+          u.user_metadata.personalId = miembro.id
+          sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
+          setDemoUser(u)
+          return { error: null }
+        }
+
         return {
-          error: `Estás en modo demostración. Usa el usuario de prueba: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`,
+          error: `Estás en modo demostración. Usa el usuario de prueba: ${DEMO_EMAIL} / ${DEMO_PASSWORD}, o el acceso de personal que te haya dado tu hermandad.`,
         }
       },
 

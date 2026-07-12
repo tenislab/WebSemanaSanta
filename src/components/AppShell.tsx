@@ -1,17 +1,39 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Logo, { LogoMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../context/AuthContext'
+import { puedeVerModulo } from '../lib/permisos'
+import type { Cargo } from '../data/documentos'
 
 interface NavItem {
   to: string
   label: string
   icon: JSX.Element
+  /** Módulo de lib/permisos.ts que gobierna este enlace; sin él, siempre visible (p. ej. Inicio). */
+  modulo?: string
 }
 interface NavGroup {
   label?: string
   items: NavItem[]
+}
+
+/** De la ruta actual al módulo que la gobierna, para bloquear el acceso directo por URL. null = sin restricción (Inicio). */
+function moduloIdDeRuta(pathname: string): string | null {
+  const rutas: { prefix: string; modulo: string }[] = [
+    { prefix: '/app/hermanos', modulo: 'hermanos' },
+    { prefix: '/app/cortejo', modulo: 'cortejo' },
+    { prefix: '/app/cuotas', modulo: 'cuotas' },
+    { prefix: '/app/papeletas', modulo: 'papeletas' },
+    { prefix: '/app/tesoreria', modulo: 'tesoreria' },
+    { prefix: '/app/inventario', modulo: 'inventario' },
+    { prefix: '/app/archivo', modulo: 'archivo' },
+    { prefix: '/app/comunicados', modulo: 'comunicados' },
+    { prefix: '/app/informes', modulo: 'informes' },
+    { prefix: '/app/personal', modulo: 'personal' },
+    { prefix: '/app/configuracion', modulo: 'configuracion' },
+  ]
+  return rutas.find((r) => pathname.startsWith(r.prefix))?.modulo ?? null
 }
 
 const ic = {
@@ -45,6 +67,9 @@ const ic = {
   informes: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M5 21V9M12 21V4M19 21v-6" /></svg>
   ),
+  personal: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M8 14h.01M12 14h4" /></svg>
+  ),
   configuracion: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="3" /><path d="M19.4 13a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10a1.7 1.7 0 0 0 1-1.55V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10c.14.42.42.78 1.55 1H20a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" /></svg>
   ),
@@ -54,30 +79,33 @@ const NAV: NavGroup[] = [
   {
     items: [
       { to: '/app', label: 'Inicio', icon: ic.inicio },
-      { to: '/app/hermanos', label: 'Hermanos', icon: ic.hermanos },
-      { to: '/app/cortejo', label: 'Cortejo', icon: ic.cortejo },
-      { to: '/app/cuotas', label: 'Cuotas', icon: ic.cuotas },
-      { to: '/app/papeletas', label: 'Papeletas de sitio', icon: ic.papeletas },
+      { to: '/app/hermanos', label: 'Hermanos', icon: ic.hermanos, modulo: 'hermanos' },
+      { to: '/app/cortejo', label: 'Cortejo', icon: ic.cortejo, modulo: 'cortejo' },
+      { to: '/app/cuotas', label: 'Cuotas', icon: ic.cuotas, modulo: 'cuotas' },
+      { to: '/app/papeletas', label: 'Papeletas de sitio', icon: ic.papeletas, modulo: 'papeletas' },
     ],
   },
   {
     label: 'Economía',
     items: [
-      { to: '/app/tesoreria', label: 'Tesorería', icon: ic.tesoreria },
-      { to: '/app/inventario', label: 'Inventario', icon: ic.inventario },
+      { to: '/app/tesoreria', label: 'Tesorería', icon: ic.tesoreria, modulo: 'tesoreria' },
+      { to: '/app/inventario', label: 'Inventario', icon: ic.inventario, modulo: 'inventario' },
     ],
   },
   {
     label: 'Comunicación',
     items: [
-      { to: '/app/archivo', label: 'Archivo documental', icon: ic.archivo },
-      { to: '/app/comunicados', label: 'Comunicados', icon: ic.comunicados },
-      { to: '/app/informes', label: 'Informes', icon: ic.informes },
+      { to: '/app/archivo', label: 'Archivo documental', icon: ic.archivo, modulo: 'archivo' },
+      { to: '/app/comunicados', label: 'Comunicados', icon: ic.comunicados, modulo: 'comunicados' },
+      { to: '/app/informes', label: 'Informes', icon: ic.informes, modulo: 'informes' },
     ],
   },
   {
     label: 'Sistema',
-    items: [{ to: '/app/configuracion', label: 'Configuración', icon: ic.configuracion }],
+    items: [
+      { to: '/app/personal', label: 'Personal y permisos', icon: ic.personal, modulo: 'personal' },
+      { to: '/app/configuracion', label: 'Configuración', icon: ic.configuracion, modulo: 'configuracion' },
+    ],
   },
 ]
 
@@ -91,10 +119,24 @@ function initialsOf(input: string | undefined): string {
 export default function AppShell() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const hermandad = (user?.user_metadata?.hermandad as string | undefined) ?? 'Tu hermandad'
   const nombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Hermano/a'
+  const cargo = user?.user_metadata?.cargo as Cargo | undefined
+
+  const navFiltrado = useMemo(
+    () =>
+      NAV.map((group) => ({
+        ...group,
+        items: group.items.filter((item) => !item.modulo || puedeVerModulo(cargo, item.modulo)),
+      })).filter((group) => group.items.length > 0),
+    [cargo],
+  )
+
+  const moduloActual = moduloIdDeRuta(location.pathname)
+  const accesoBloqueado = moduloActual !== null && !puedeVerModulo(cargo, moduloActual)
 
   async function handleSignOut() {
     await signOut()
@@ -113,7 +155,7 @@ export default function AppShell() {
         </div>
 
         <nav className="app-nav">
-          {NAV.map((group, gi) => (
+          {navFiltrado.map((group, gi) => (
             <div className="app-nav__group" key={group.label ?? gi}>
               {group.label && <p className="app-nav__label">{group.label}</p>}
               {group.items.map((item) => (
@@ -136,7 +178,7 @@ export default function AppShell() {
           <span className="app-avatar">{initialsOf(nombre)}</span>
           <span className="app-side__who">
             <b>{nombre}</b>
-            <small>{user?.email}</small>
+            <small>{cargo ?? user?.email}</small>
           </span>
         </div>
       </aside>
@@ -162,7 +204,21 @@ export default function AppShell() {
         </header>
 
         <main className="app-content">
-          <Outlet />
+          {accesoBloqueado ? (
+            <div className="acceso-denegado">
+              <p className="eyebrow">Acceso restringido</p>
+              <h1>No tienes permiso para ver esta sección</h1>
+              <p>
+                Tu cargo{cargo ? <> (<b>{cargo}</b>)</> : ''} no incluye este módulo. Si crees que
+                deberías tener acceso, pídeselo a quien gestiona el personal de la hermandad.
+              </p>
+              <button className="btn btn-primary" onClick={() => navigate('/app')}>
+                Volver a Inicio
+              </button>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
     </div>

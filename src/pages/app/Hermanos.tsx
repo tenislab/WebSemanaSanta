@@ -9,6 +9,7 @@ import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/pers
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
 import { descargarArchivo } from '../../lib/csv'
+import { getSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -28,6 +29,45 @@ export default function Hermanos() {
   const [ibanDraft, setIbanDraft] = useState('')
   const [ibanError, setIbanError] = useState<string | null>(null)
   const [ibanSaved, setIbanSaved] = useState(false)
+
+  const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(() => getSolicitudes())
+  const [solicitudesOpen, setSolicitudesOpen] = useState(false)
+  const pendientes = useMemo(() => solicitudes.filter((s) => s.estado === 'Pendiente'), [solicitudes])
+
+  function actualizarSolicitudes(next: SolicitudAlta[]) {
+    setSolicitudesState(next)
+    saveSolicitudes(next)
+  }
+
+  function aprobarSolicitud(sol: SolicitudAlta) {
+    if (hermanos.some((h) => h.dni.toUpperCase() === sol.dni.toUpperCase())) {
+      actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Rechazada' } : s)))
+      return
+    }
+    const nextNumero = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
+    const nuevo: Hermano = {
+      id: `h-${Date.now()}`,
+      numero: nextNumero,
+      nombre: sol.nombre,
+      estado: 'Nuevo',
+      antiguedad: new Date().getFullYear(),
+      email: sol.email,
+      telefono: sol.telefono || 'Sin datos',
+      direccion: 'Sin datos',
+      cuotaAlDia: false,
+      iban: null,
+      dni: sol.dni,
+      claveAcceso: sol.clavePropuesta,
+    }
+    setHermanos((prev) => [...prev, nuevo])
+    actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Aprobada' } : s)))
+    setJustAddedId(nuevo.id)
+    setTimeout(() => setJustAddedId(null), 3000)
+  }
+
+  function rechazarSolicitud(sol: SolicitudAlta) {
+    actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Rechazada' } : s)))
+  }
 
   useEffect(() => {
     setIbanDraft(selected?.iban ?? '')
@@ -157,10 +197,27 @@ export default function Hermanos() {
             datos.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setDniError(null); setFormOpen(true) }}>
-          + Nuevo hermano
-        </button>
+        <div className="dash-head__actions">
+          {pendientes.length > 0 && (
+            <button className="btn btn-outline" onClick={() => setSolicitudesOpen(true)}>
+              Solicitudes de alta ({pendientes.length})
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => { setDniError(null); setFormOpen(true) }}>
+            + Nuevo hermano
+          </button>
+        </div>
       </div>
+
+      {pendientes.length > 0 && (
+        <div className="banner-inline banner-inline--accent">
+          {pendientes.length} persona{pendientes.length > 1 ? 's' : ''} {pendientes.length > 1 ? 'han' : 'ha'} pedido el
+          alta como hermano/a desde el área del hermano.{' '}
+          <button type="button" className="portal__link-btn" onClick={() => setSolicitudesOpen(true)}>
+            Revisar solicitudes
+          </button>
+        </div>
+      )}
 
       <section className="stat-grid">
         <div className="stat-tile">
@@ -407,6 +464,43 @@ export default function Hermanos() {
             hasta que la añada.
           </p>
         </form>
+      </Drawer>
+
+      {/* Solicitudes de alta pedidas desde el área del hermano */}
+      <Drawer
+        open={solicitudesOpen}
+        onClose={() => setSolicitudesOpen(false)}
+        title="Solicitudes de alta"
+        subtitle={`${pendientes.length} pendiente${pendientes.length === 1 ? '' : 's'}`}
+      >
+        <div className="ficha">
+          {pendientes.length === 0 ? (
+            <p className="form-hint">No hay solicitudes pendientes.</p>
+          ) : (
+            pendientes.map((sol) => (
+              <div className="assign-box" key={sol.id}>
+                <div className="ficha__row">
+                  <span className="pill pill--warn">Pendiente</span>
+                  <span className="pill pill--off">{sol.fecha}</span>
+                </div>
+                <dl className="ficha__list">
+                  <div><dt>Nombre</dt><dd>{sol.nombre}</dd></div>
+                  <div><dt>DNI / NIE</dt><dd>{sol.dni}</dd></div>
+                  <div><dt>Correo</dt><dd>{sol.email}</dd></div>
+                  <div><dt>Teléfono</dt><dd>{sol.telefono || 'Sin datos'}</dd></div>
+                </dl>
+                <div className="assign-box__row">
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSolicitud(sol)}>
+                    Aprobar y dar de alta
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => rechazarSolicitud(sol)}>
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </Drawer>
     </div>
   )

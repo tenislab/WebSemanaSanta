@@ -313,13 +313,17 @@ h1, h2, h3,
 }
 .landing-glass .btn-primary:hover:not(:disabled) { background: linear-gradient(180deg, #f2e0b2 0%, #d3ac5a 100%); filter: none; }
 .landing-glass .btn-outline {
-  color: #f4ecff;
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.05);
+  color: #f2e0b2;
+  border-color: rgba(226, 197, 132, 0.55);
+  background: rgba(226, 197, 132, 0.1);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
-.landing-glass .btn-outline:hover { border-color: #e2c584; background: rgba(255, 255, 255, 0.09); }
+.landing-glass .btn-outline:hover {
+  color: #fbf1d9;
+  border-color: #e2c584;
+  background: rgba(226, 197, 132, 0.18);
+}
 
 /* CTA "Empieza gratis": botón de cristal vivo — un brillo recorre la superficie en bucle. */
 .btn-glass-dynamic {
@@ -708,6 +712,34 @@ h1, h2, h3,
 .auth-sep::before, .auth-sep::after { content: ''; height: 1px; flex: 1; background: rgba(255, 255, 255, 0.14); }
 .auth-sep span { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(244, 236, 255, 0.5); }
 
+/* selector "¿quién eres?" en /entrar: dos caminos claros, nada de adivinar */
+.entrada-opciones { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.3rem; }
+.entrada-opcion {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 1.15rem 1.25rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.entrada-opcion:hover, .entrada-opcion:focus-visible {
+  border-color: rgba(226, 197, 132, 0.7);
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+.entrada-opcion__ic {
+  flex: none; width: 2.7rem; height: 2.7rem; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, rgba(236, 214, 160, 0.22), rgba(198, 160, 77, 0.14));
+  border: 1px solid rgba(226, 197, 132, 0.35);
+  color: var(--oro-300);
+}
+.entrada-opcion__ic svg { width: 1.35rem; height: 1.35rem; }
+.entrada-opcion b { display: block; font-size: 1rem; color: #fdfaf3; }
+.entrada-opcion small { display: block; font-size: 0.82rem; color: rgba(244, 236, 255, 0.65); margin-top: 0.15rem; }
+
 /* banners translúcidos sobre cristal */
 .banner { border-radius: 12px; padding: 0.75rem 0.9rem; font-size: 0.85rem; line-height: 1.45; border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(6px); }
 .banner code { font-size: 0.82em; padding: 0.05rem 0.3rem; border-radius: 4px; background: rgba(0, 0, 0, 0.22); }
@@ -727,6 +759,28 @@ h1, h2, h3,
   border-color: rgba(226, 197, 132, 0.75) !important;
   background: rgba(255, 255, 255, 0.11) !important;
 }
+
+/* cuentas demo: entra con un clic como el titular o cualquier cargo de personal */
+.demo-accounts { display: flex; flex-direction: column; gap: 0.5rem; }
+.demo-account {
+  display: flex; align-items: center; gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.demo-account:hover:not(:disabled) { border-color: rgba(226, 197, 132, 0.7); background: rgba(255, 255, 255, 0.1); }
+.demo-account:disabled { opacity: 0.6; cursor: default; }
+.demo-account__avatar {
+  flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 700; color: #2c1636;
+  background: linear-gradient(180deg, #ecd6a0 0%, #c6a04d 100%);
+}
+.demo-account b { display: block; font-size: 0.85rem; color: #fdfaf3; }
+.demo-account small { display: block; font-size: 0.74rem; color: rgba(244, 236, 255, 0.62); margin-top: 0.05rem; }
 
 /* =========================================================================
    Estado de carga de ruta protegida
@@ -824,6 +878,14 @@ h1, h2, h3,
 .app-menu-btn svg { width: 18px; height: 18px; }
 
 .app-content { flex: 1; padding: 1.8rem 2rem 3rem; }
+
+.acceso-denegado {
+  max-width: 480px; margin: 3rem auto; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
+}
+.acceso-denegado h1 { font-size: 1.5rem; margin: 0; }
+.acceso-denegado p { color: var(--text-muted); line-height: 1.55; margin: 0; }
+.acceso-denegado .btn { margin-top: 0.8rem; }
 
 /* =========================================================================
    Panel — Inicio (dashboard)
@@ -1437,6 +1499,39 @@ h1, h2, h3,
   color: var(--gold); cursor: pointer; text-decoration: underline;
 }
 .portal__link-btn:hover { color: var(--text); }
+
+.portal__picker { list-style: none; margin: 0.9rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; max-height: 300px; overflow-y: auto; }
+.portal__picker-item {
+  width: 100%; display: flex; align-items: center; gap: 0.7rem; text-align: left;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 0.7rem 0.85rem; cursor: pointer; font: inherit; color: inherit; transition: border-color 0.15s ease, background 0.15s ease;
+}
+.portal__picker-item:hover, .portal__picker-item:focus-visible { border-color: var(--gold); background: var(--bg-raised); }
+.portal__picker-item b { display: block; font-size: 0.92rem; }
+.portal__picker-item small { display: block; font-size: 0.78rem; color: var(--text-muted); margin-top: 0.1rem; }
+.portal__picker-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.portal__picker-empty { font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem 0.1rem; }
+
+.portal__back {
+  background: none; border: none; color: var(--text-muted); font: inherit; font-size: 0.85rem;
+  cursor: pointer; padding: 0; margin-bottom: 0.9rem; text-decoration: underline;
+}
+.portal__back:hover { color: var(--gold); }
+.portal__chosen {
+  display: flex; align-items: center; gap: 0.7rem; border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; margin-bottom: 1.2rem; background: var(--bg-sunken);
+}
+.portal__chosen b { display: block; font-size: 0.92rem; }
+.portal__chosen small { display: block; font-size: 0.78rem; color: var(--text-muted); margin-top: 0.1rem; }
+
+.portal__tabs { display: flex; gap: 0.4rem; margin-bottom: 1.1rem; background: var(--bg-sunken); border-radius: var(--radius-sm); padding: 0.3rem; }
+.portal__tab {
+  flex: 1; padding: 0.55rem 0.7rem; border: none; border-radius: calc(var(--radius-sm) - 2px);
+  background: none; color: var(--text-muted); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.portal__tab:hover { color: var(--text); }
+.portal__tab--active { background: var(--bg-raised); color: var(--gold); box-shadow: var(--glass-shadow); }
 
 .portal__main { width: 100%; max-width: 900px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .portal__resumen { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }

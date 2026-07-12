@@ -16,6 +16,7 @@ import Inventario from './pages/app/Inventario'
 import Archivo from './pages/app/Archivo'
 import Comunicados from './pages/app/Comunicados'
 import Informes from './pages/app/Informes'
+import Personal from './pages/app/Personal'
 import Configuracion from './pages/app/Configuracion'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="archivo" element={<Archivo />} />
         <Route path="comunicados" element={<Comunicados />} />
         <Route path="informes" element={<Informes />} />
+        <Route path="personal" element={<Personal />} />
         <Route path="configuracion" element={<Configuracion />} />
       </Route>
 

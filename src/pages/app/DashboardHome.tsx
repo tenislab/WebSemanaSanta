@@ -6,15 +6,17 @@ import { CUOTAS_INICIALES } from '../../data/cuotas'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { DOCUMENTOS_INICIALES } from '../../data/documentos'
+import type { Cargo } from '../../data/documentos'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
 import { formatCurrency } from '../../lib/format'
+import { puedeVerModulo } from '../../lib/permisos'
 
 const QUICK_ACTIONS = [
-  { to: '/app/hermanos', label: 'Nuevo hermano', icon: 'user' as const },
-  { to: '/app/cuotas', label: 'Registrar pago', icon: 'coin' as const },
-  { to: '/app/papeletas', label: 'Crear papeleta', icon: 'ticket' as const },
-  { to: '/app/comunicados', label: 'Enviar comunicado', icon: 'mail' as const },
+  { to: '/app/hermanos', label: 'Nuevo hermano', icon: 'user' as const, modulo: 'hermanos' },
+  { to: '/app/cuotas', label: 'Registrar pago', icon: 'coin' as const, modulo: 'cuotas' },
+  { to: '/app/papeletas', label: 'Crear papeleta', icon: 'ticket' as const, modulo: 'papeletas' },
+  { to: '/app/comunicados', label: 'Enviar comunicado', icon: 'mail' as const, modulo: 'comunicados' },
 ]
 
 const ICONS: Record<string, JSX.Element> = {
@@ -51,6 +53,7 @@ function diasHasta(iso: string) {
 export default function DashboardHome() {
   const { user } = useAuth()
   const nombre = (user?.user_metadata?.nombre as string | undefined)?.split(' ')[0]
+  const cargo = user?.user_metadata?.cargo as Cargo | undefined
 
   // Todo lo que muestra el Inicio se calcula en vivo de los mismos datos que
   // gestionan los módulos (guardados en este navegador), no de cifras fijas.
@@ -75,10 +78,10 @@ export default function DashboardHome() {
     const porConciliar = movimientos.filter((m) => m.estado === 'Pendiente').length
 
     const stats = [
-      { label: 'Hermanos activos', value: String(activos), trend: nuevos > 0 ? `+${nuevos} nuevos` : 'Censo al día', tone: 'ok' as const },
-      { label: 'Cuotas pendientes', value: String(cuotasPendientes), trend: `${pctPendientes}% del total`, tone: cuotasPendientes > 0 ? ('warn' as const) : ('ok' as const) },
-      { label: `Papeletas ${campana.anio}`, value: String(papeletasEmitidas), trend: ventanaAbierta(campana) ? 'Renovación abierta' : 'Renovación cerrada', tone: 'neutral' as const },
-      { label: 'Saldo conciliado', value: formatCurrency(saldo), trend: porConciliar > 0 ? `${porConciliar} por conciliar` : 'Todo conciliado', tone: saldo >= 0 ? ('ok' as const) : ('warn' as const) },
+      { label: 'Hermanos activos', value: String(activos), trend: nuevos > 0 ? `+${nuevos} nuevos` : 'Censo al día', tone: 'ok' as const, modulo: 'hermanos' },
+      { label: 'Cuotas pendientes', value: String(cuotasPendientes), trend: `${pctPendientes}% del total`, tone: cuotasPendientes > 0 ? ('warn' as const) : ('ok' as const), modulo: 'cuotas' },
+      { label: `Papeletas ${campana.anio}`, value: String(papeletasEmitidas), trend: ventanaAbierta(campana) ? 'Renovación abierta' : 'Renovación cerrada', tone: 'neutral' as const, modulo: 'papeletas' },
+      { label: 'Saldo conciliado', value: formatCurrency(saldo), trend: porConciliar > 0 ? `${porConciliar} por conciliar` : 'Todo conciliado', tone: saldo >= 0 ? ('ok' as const) : ('warn' as const), modulo: 'tesoreria' },
     ]
 
     // Actividad: los últimos registros reales de cada colección.
@@ -91,6 +94,7 @@ export default function DashboardHome() {
           what: `pagó su ${c.concepto.toLowerCase()} (${formatCurrency(c.importe)})`,
           when: c.fechaPago ?? '',
           tone: 'ok' as const,
+          modulo: 'cuotas',
         })),
       ...papeletasCampana
         .filter((p) => p.estado !== 'Renuncia')
@@ -100,12 +104,14 @@ export default function DashboardHome() {
           what: `tiene la papeleta nº ${String(p.numero).padStart(4, '0')} (${p.estado.toLowerCase()})`,
           when: p.fechaSolicitud,
           tone: 'neutral' as const,
+          modulo: 'papeletas',
         })),
       ...movimientos.slice(0, 1).map((m) => ({
         who: 'Tesorería',
         what: `registró ${m.tipo === 'Gasto' ? 'un gasto' : 'un ingreso'}: ${m.concepto} (${formatCurrency(m.importe)})`,
         when: m.fecha,
         tone: 'neutral' as const,
+        modulo: 'tesoreria',
       })),
     ].slice(0, 5)
 
@@ -113,19 +119,24 @@ export default function DashboardHome() {
     const contratosPorVencer = documentos.filter(
       (d) => d.categoria === 'Contrato' && d.vigenciaHasta && diasHasta(d.vigenciaHasta) <= 60,
     ).length
-    const alertas: { text: string; level: 'warn' | 'ok'; to: string }[] = []
+    const alertas: { text: string; level: 'warn' | 'ok'; to: string; modulo: string }[] = []
     if (cuotasPendientes > 0)
-      alertas.push({ text: `${cuotasPendientes} cuotas siguen pendientes de cobro`, level: 'warn', to: '/app/cuotas' })
+      alertas.push({ text: `${cuotasPendientes} cuotas siguen pendientes de cobro`, level: 'warn', to: '/app/cuotas', modulo: 'cuotas' })
     if (porRenovar > 0 && ventanaAbierta(campana))
-      alertas.push({ text: `${porRenovar} hermanos por renovar su sitio antes de la fecha límite`, level: 'warn', to: '/app/papeletas' })
+      alertas.push({ text: `${porRenovar} hermanos por renovar su sitio antes de la fecha límite`, level: 'warn', to: '/app/papeletas', modulo: 'papeletas' })
     if (contratosPorVencer > 0)
-      alertas.push({ text: `${contratosPorVencer} contratos vencidos o a punto de vencer`, level: 'warn', to: '/app/archivo' })
+      alertas.push({ text: `${contratosPorVencer} contratos vencidos o a punto de vencer`, level: 'warn', to: '/app/archivo', modulo: 'archivo' })
     if (porConciliar > 0)
-      alertas.push({ text: `${porConciliar} movimientos de tesorería por conciliar`, level: 'warn', to: '/app/tesoreria' })
-    if (alertas.length === 0) alertas.push({ text: 'Todo en orden: sin tareas pendientes', level: 'ok', to: '/app' })
+      alertas.push({ text: `${porConciliar} movimientos de tesorería por conciliar`, level: 'warn', to: '/app/tesoreria', modulo: 'tesoreria' })
 
     return { stats, actividad, alertas }
   }, [])
+
+  const statsVisibles = stats.filter((s) => puedeVerModulo(cargo, s.modulo))
+  const accionesVisibles = QUICK_ACTIONS.filter((a) => puedeVerModulo(cargo, a.modulo))
+  const actividadVisible = actividad.filter((a) => puedeVerModulo(cargo, a.modulo))
+  const alertasVisibles = alertas.filter((a) => puedeVerModulo(cargo, a.modulo))
+  const cultosVisibles = puedeVerModulo(cargo, 'cortejo')
 
   return (
     <div className="dash">
@@ -140,24 +151,28 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      <section className="stat-grid">
-        {stats.map((s) => (
-          <div className="stat-tile" key={s.label}>
-            <span className="stat-tile__label">{s.label}</span>
-            <span className="stat-tile__value">{s.value}</span>
-            <span className={`stat-tile__trend stat-tile__trend--${s.tone}`}>{s.trend}</span>
-          </div>
-        ))}
-      </section>
+      {statsVisibles.length > 0 && (
+        <section className="stat-grid">
+          {statsVisibles.map((s) => (
+            <div className="stat-tile" key={s.label}>
+              <span className="stat-tile__label">{s.label}</span>
+              <span className="stat-tile__value">{s.value}</span>
+              <span className={`stat-tile__trend stat-tile__trend--${s.tone}`}>{s.trend}</span>
+            </div>
+          ))}
+        </section>
+      )}
 
-      <section className="quick-actions">
-        {QUICK_ACTIONS.map((a) => (
-          <Link className="quick-action" to={a.to} key={a.label}>
-            <span className="quick-action__ic">{ICONS[a.icon]}</span>
-            {a.label}
-          </Link>
-        ))}
-      </section>
+      {accionesVisibles.length > 0 && (
+        <section className="quick-actions">
+          {accionesVisibles.map((a) => (
+            <Link className="quick-action" to={a.to} key={a.label}>
+              <span className="quick-action__ic">{ICONS[a.icon]}</span>
+              {a.label}
+            </Link>
+          ))}
+        </section>
+      )}
 
       <div className="dash-grid">
         <section className="panel">
@@ -165,7 +180,7 @@ export default function DashboardHome() {
             <h2>Actividad reciente</h2>
           </div>
           <ul className="activity-list">
-            {actividad.map((a, i) => (
+            {actividadVisible.map((a, i) => (
               <li key={i}>
                 <span className={`dot ${toneClass(a.tone)}`} />
                 <span className="activity-text">
@@ -174,6 +189,7 @@ export default function DashboardHome() {
                 <span className="activity-when">{a.when}</span>
               </li>
             ))}
+            {actividadVisible.length === 0 && <li className="table-empty">Sin actividad reciente en tus módulos.</li>}
           </ul>
         </section>
 
@@ -183,33 +199,38 @@ export default function DashboardHome() {
               <h2>Alertas y tareas</h2>
             </div>
             <ul className="alert-list">
-              {alertas.map((a, i) => (
+              {alertasVisibles.map((a, i) => (
                 <li key={i} className={`alert-item alert-item--${a.level}`}>
                   <Link to={a.to} className="alert-item__link">
                     {a.text}
                   </Link>
                 </li>
               ))}
+              {alertasVisibles.length === 0 && (
+                <li className="alert-item alert-item--ok">Todo en orden: sin tareas pendientes</li>
+              )}
             </ul>
           </section>
 
-          <section className="panel">
-            <div className="panel__head">
-              <h2>Próximos cultos</h2>
-              <Link to="/app/cortejo" className="panel__link">
-                Ver agenda
-              </Link>
-            </div>
-            <ul className="agenda-mini">
-              {AGENDA.map((e) => (
-                <li key={e.title}>
-                  <span className="agenda-mini__day">{e.day}</span>
-                  <span className="agenda-mini__title">{e.title}</span>
-                  <span className="agenda-mini__time">{e.time}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+          {cultosVisibles && (
+            <section className="panel">
+              <div className="panel__head">
+                <h2>Próximos cultos</h2>
+                <Link to="/app/cortejo" className="panel__link">
+                  Ver agenda
+                </Link>
+              </div>
+              <ul className="agenda-mini">
+                {AGENDA.map((e) => (
+                  <li key={e.title}>
+                    <span className="agenda-mini__day">{e.day}</span>
+                    <span className="agenda-mini__title">{e.title}</span>
+                    <span className="agenda-mini__time">{e.time}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       </div>
     </div>
