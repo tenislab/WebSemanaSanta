@@ -48,7 +48,8 @@ create table if not exists hermanos (
   cuota_al_dia boolean not null default false,
   iban text,
   dni text not null unique,
-  clave_acceso text not null, -- TODO: pasar a hash cuando el login del hermano se resuelva server-side
+  clave_acceso text not null, -- ya no se usa para entrar (ver auth_user_id); queda por compatibilidad con el modo demostración
+  auth_user_id uuid unique references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -283,17 +284,47 @@ create table if not exists catalogos (
 );
 
 -- =============================================================================
--- Seguridad a nivel de fila (RLS): cualquier persona con sesión iniciada en
--- este proyecto (titular o personal) puede leer y escribir. El cargo filtra
--- lo que se ve en la interfaz; esto es la base mínima de seguridad de datos.
+-- Seguridad a nivel de fila (RLS)
 -- =============================================================================
+-- El personal (titular, tesorero/a, secretaría…) puede leer y escribir en
+-- todo; el cargo filtra lo que ve en la interfaz. Los hermanos entran con su
+-- propia cuenta real de Supabase Auth (ver auth_user_id en `hermanos`) y solo
+-- pueden ver/tocar su propia ficha, sus propias cuotas y sus propias
+-- papeletas — nada del resto de tablas de gestión.
+
+-- Distingue una sesión de hermano de una de personal: se marca en el
+-- user_metadata al crear la cuenta (ver signUp en la app).
+create or replace function auth_es_hermano() returns boolean
+  language sql stable as $$
+    select coalesce((auth.jwt() -> 'user_metadata' ->> 'tipo') = 'hermano', false)
+  $$;
+grant execute on function auth_es_hermano() to anon, authenticated;
+
+-- Id de hermano correspondiente a la sesión activa (null si no es un hermano
+-- o no tiene cuenta vinculada todavía).
+create or replace function hermano_propio_id() returns uuid
+  language sql stable as $$
+    select id from hermanos where auth_user_id = auth.uid()
+  $$;
+grant execute on function hermano_propio_id() to authenticated;
+
+-- Resuelve el correo de un hermano a partir de su DNI, para poder iniciar
+-- sesión con Supabase Auth (que pide correo) desde un formulario de DNI +
+-- contraseña. No expone nada más: ni la contraseña ni el resto de la ficha.
+create or replace function resolver_email_hermano(p_dni text) returns text
+  language sql stable security definer set search_path = public as $$
+    select email from hermanos where upper(dni) = upper(p_dni) limit 1
+  $$;
+grant execute on function resolver_email_hermano(text) to anon, authenticated;
+
+-- Tablas de gestión: solo personal (nunca hermanos).
 do $$
 declare
   t text;
 begin
   for t in
     select unnest(array[
-      'hermandad_settings', 'hermanos', 'tramos', 'cuotas', 'papeletas', 'movimientos',
+      'hermandad_settings', 'tramos', 'movimientos',
       'incidencias', 'enseres', 'documentos', 'comunicados',
       'cuentas_sociales', 'personal', 'permisos_cargo',
       'solicitudes_alta', 'conceptos_cuota', 'opciones_papeleta', 'catalogos'
@@ -302,11 +333,55 @@ begin
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "authenticated_all" on %I', t);
     execute format(
-      'create policy "authenticated_all" on %I for all to authenticated using (true) with check (true)',
+      'create policy "authenticated_all" on %I for all to authenticated using (not auth_es_hermano()) with check (not auth_es_hermano())',
       t
     );
   end loop;
 end $$;
+
+-- Hermanos: el personal ve y gestiona a todos; cada hermano solo ve y edita
+-- su propia ficha (no puede darse de alta ni borrarse a sí mismo).
+alter table hermanos enable row level security;
+drop policy if exists "authenticated_all" on hermanos;
+drop policy if exists "hermanos_personal_all" on hermanos;
+create policy "hermanos_personal_all" on hermanos for all to authenticated
+  using (not auth_es_hermano()) with check (not auth_es_hermano());
+drop policy if exists "hermanos_propio_select" on hermanos;
+create policy "hermanos_propio_select" on hermanos for select to authenticated
+  using (auth_es_hermano() and auth_user_id = auth.uid());
+drop policy if exists "hermanos_propio_update" on hermanos;
+create policy "hermanos_propio_update" on hermanos for update to authenticated
+  using (auth_es_hermano() and auth_user_id = auth.uid())
+  with check (auth_es_hermano() and auth_user_id = auth.uid());
+
+-- Cuotas: el personal gestiona todas; cada hermano solo ve las suyas (no las
+-- puede crear ni modificar: eso es cosa de tesorería).
+alter table cuotas enable row level security;
+drop policy if exists "authenticated_all" on cuotas;
+drop policy if exists "cuotas_personal_all" on cuotas;
+create policy "cuotas_personal_all" on cuotas for all to authenticated
+  using (not auth_es_hermano()) with check (not auth_es_hermano());
+drop policy if exists "cuotas_propio_select" on cuotas;
+create policy "cuotas_propio_select" on cuotas for select to authenticated
+  using (auth_es_hermano() and hermano_id = hermano_propio_id());
+
+-- Papeletas: el personal gestiona todas; cada hermano ve, solicita y
+-- renuncia solo a las suyas.
+alter table papeletas enable row level security;
+drop policy if exists "authenticated_all" on papeletas;
+drop policy if exists "papeletas_personal_all" on papeletas;
+create policy "papeletas_personal_all" on papeletas for all to authenticated
+  using (not auth_es_hermano()) with check (not auth_es_hermano());
+drop policy if exists "papeletas_propio_select" on papeletas;
+create policy "papeletas_propio_select" on papeletas for select to authenticated
+  using (auth_es_hermano() and hermano_id = hermano_propio_id());
+drop policy if exists "papeletas_propio_insert" on papeletas;
+create policy "papeletas_propio_insert" on papeletas for insert to authenticated
+  with check (auth_es_hermano() and hermano_id = hermano_propio_id());
+drop policy if exists "papeletas_propio_update" on papeletas;
+create policy "papeletas_propio_update" on papeletas for update to authenticated
+  using (auth_es_hermano() and hermano_id = hermano_propio_id())
+  with check (auth_es_hermano() and hermano_id = hermano_propio_id());
 
 -- La tabla de solicitudes de alta también debe poder rellenarse desde el área
 -- del hermano SIN sesión iniciada (todavía no es hermano/a): se permite
