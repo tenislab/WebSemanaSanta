@@ -5,11 +5,13 @@ import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
-import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
 import { descargarArchivo } from '../../lib/csv'
-import { getSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
+import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -18,7 +20,14 @@ function estadoClass(estado: EstadoHermano) {
 }
 
 export default function Hermanos() {
-  const [hermanos, setHermanos] = usePersistentState<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+  const [hermanos, setHermanos] = useSupabaseTable<Hermano>(
+    'hermanos',
+    CLAVES_DATOS.hermanos,
+    HERMANOS_INICIALES,
+    hermanoToRow,
+    rowToHermano,
+    'numero',
+  )
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'Todos' | EstadoHermano>('Todos')
   const [selected, setSelected] = useState<Hermano | null>(null)
@@ -30,7 +39,9 @@ export default function Hermanos() {
   const [ibanError, setIbanError] = useState<string | null>(null)
   const [ibanSaved, setIbanSaved] = useState(false)
 
-  const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(() => getSolicitudes())
+  const solicitudesRemotas = useSolicitudes()
+  const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(solicitudesRemotas)
+  useEffect(() => setSolicitudesState(solicitudesRemotas), [solicitudesRemotas])
   const [solicitudesOpen, setSolicitudesOpen] = useState(false)
   const pendientes = useMemo(() => solicitudes.filter((s) => s.estado === 'Pendiente'), [solicitudes])
 
@@ -46,7 +57,7 @@ export default function Hermanos() {
     }
     const nextNumero = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
     const nuevo: Hermano = {
-      id: `h-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero,
       nombre: sol.nombre,
       estado: 'Nuevo',
@@ -132,7 +143,7 @@ export default function Hermanos() {
 
     const nextNumero = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
     const nuevo: Hermano = {
-      id: `h-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero,
       nombre,
       estado: 'Nuevo',
@@ -176,13 +187,13 @@ export default function Hermanos() {
     descargarArchivo(`datos-${slug}.json`, exportarDatosHermano(datos), 'application/json;charset=utf-8;')
   }
 
-  function borrarHermanoRgpd(hermano: Hermano) {
+  async function borrarHermanoRgpd(hermano: Hermano) {
     const ok = window.confirm(
       `Vas a borrar a ${hermano.nombre} y todos sus datos (cuotas, papeletas e incidencias). ` +
         'Esta acción ejerce el derecho de supresión (RGPD) y no se puede deshacer. ¿Continuar?',
     )
     if (!ok) return
-    setHermanos(borrarDatosHermano(hermano.id))
+    setHermanos(await borrarDatosHermano(hermano.id))
     setSelected(null)
   }
 

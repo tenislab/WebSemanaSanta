@@ -5,7 +5,7 @@ import PapeletaTicket from '../../components/PapeletaTicket'
 import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { useAuth } from '../../context/AuthContext'
-import { getHermandadSettings } from '../../lib/hermandadSettings'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatDate } from '../../lib/format'
 import {
   getTramos,
@@ -28,7 +28,9 @@ import {
   type Campana,
   type EstadoRenovacion,
 } from '../../lib/campana'
-import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -54,13 +56,19 @@ const PERSONALIZADA = '__personalizada'
 export default function Papeletas() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
-  const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
+  const hermandad = useHermandadSettings(fallbackNombre)
   const tramos = useMemo(() => getTramos(), [])
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
 
-  const [papeletas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  const [papeletas, setPapeletas] = useSupabaseTable<Papeleta>(
+    'papeletas',
+    CLAVES_DATOS.papeletas,
+    PAPELETAS_INICIALES,
+    papeletaToRow,
+    rowToPapeleta,
+  )
   const [campana, setCampanaState] = useState<Campana>(() => getCampana())
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todos')
@@ -154,7 +162,7 @@ export default function Papeletas() {
   /** Renueva el sitio del año anterior: crea la papeleta de la campaña con el mismo tramo. */
   function renovar(hermanoId: string, tramoId: string, importe: number) {
     const nueva: Papeleta = {
-      id: `p-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero(),
       hermanoId,
       anio: campana.anio,
@@ -169,7 +177,7 @@ export default function Papeletas() {
   /** El hermano renuncia a salir este año: pierde su sitio, que queda libre. */
   function noRenovar(hermanoId: string) {
     const renuncia: Papeleta = {
-      id: `p-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero(),
       hermanoId,
       anio: campana.anio,
@@ -198,7 +206,7 @@ export default function Papeletas() {
         )
       }
       const nueva: Papeleta = {
-        id: `p-${Date.now()}`,
+        id: nuevoId(),
         numero: nextNumero(),
         hermanoId,
         anio: campana.anio,
@@ -224,7 +232,7 @@ export default function Papeletas() {
         )
       }
       const nueva: Papeleta = {
-        id: `p-${Date.now()}`,
+        id: nuevoId(),
         numero: nextNumero(),
         hermanoId,
         anio: campana.anio,

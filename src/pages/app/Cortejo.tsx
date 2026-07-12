@@ -19,8 +19,11 @@ import {
 } from '../../lib/tramos'
 import { repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
-import { getHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
-import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
+import { useHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
+import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
+import { incidenciaToRow, rowToIncidencia } from '../../lib/db/incidencias'
 import { getCampana } from '../../lib/campana'
 
 
@@ -66,15 +69,27 @@ export default function Cortejo() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const registrador = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Secretaría'
-  const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
+  const hermandad = useHermandadSettings(fallbackNombre)
   const tramos = useMemo(() => getTramos(), [])
   const campana = useMemo(() => getCampana(), [])
   const edicionActual = campana.anio
 
-  const [papeletasTodas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  const [papeletasTodas, setPapeletas] = useSupabaseTable<Papeleta>(
+    'papeletas',
+    CLAVES_DATOS.papeletas,
+    PAPELETAS_INICIALES,
+    papeletaToRow,
+    rowToPapeleta,
+  )
   // El cortejo solo trabaja con las papeletas de la campaña activa.
   const papeletas = useMemo(() => papeletasTodas.filter((p) => p.anio === edicionActual), [papeletasTodas, edicionActual])
-  const [incidencias, setIncidencias] = usePersistentState<Incidencia[]>(CLAVES_DATOS.incidencias, INCIDENCIAS_INICIALES)
+  const [incidencias, setIncidencias] = useSupabaseTable<Incidencia>(
+    'incidencias',
+    CLAVES_DATOS.incidencias,
+    INCIDENCIAS_INICIALES,
+    incidenciaToRow,
+    rowToIncidencia,
+  )
 
   const [query, setQuery] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<'Todos' | 'Con hueco' | 'Completo' | 'Con incidencia' | 'Excede aforo'>('Todos')
@@ -221,7 +236,7 @@ export default function Cortejo() {
 
   function registrarIncidencia(papeletaId: string, tipo: TipoIncidencia, descripcion: string) {
     const nueva: Incidencia = {
-      id: `inc-${Date.now()}`,
+      id: nuevoId(),
       papeletaId,
       tipo,
       descripcion,
@@ -283,7 +298,7 @@ export default function Cortejo() {
       }
       const nextNumero = Math.max(0, ...prev.map((p) => p.numero)) + 1
       const nueva: Papeleta = {
-        id: `p-${Date.now()}`,
+        id: nuevoId(),
         numero: nextNumero,
         hermanoId,
         anio: edicionActual,

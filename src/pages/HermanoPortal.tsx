@@ -7,7 +7,7 @@ import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
 import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
 import { getOpcionesPapeleta, type OpcionPapeleta } from '../lib/opcionesPapeleta'
-import { getHermandadSettings } from '../lib/hermandadSettings'
+import { useHermandadSettings } from '../lib/hermandadSettings'
 import {
   getTramos,
   tramosDeCuerpo,
@@ -20,7 +20,11 @@ import {
 } from '../lib/tramos'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../lib/campana'
-import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
+import { hermanoToRow, rowToHermano } from '../lib/db/hermanos'
+import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
+import { cuotaToRow, rowToCuota } from '../lib/db/cuotas'
 import { formatCurrency, formatDate } from '../lib/format'
 import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
 import { descargarArchivo } from '../lib/csv'
@@ -34,7 +38,7 @@ import {
   type HermanoDirectorio,
   type IconoHermandad,
 } from '../lib/hermandades'
-import { getSolicitudes, saveSolicitudes, claveSolicitudesMuestra, type SolicitudAlta } from '../lib/solicitudes'
+import { crearSolicitudPrincipal, claveSolicitudesMuestra, type SolicitudAlta } from '../lib/solicitudes'
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
@@ -114,12 +118,31 @@ function guardarSolicitudMuestra(hermandadId: string, nueva: SolicitudAlta) {
 }
 
 export default function HermanoPortal() {
-  const hermandadPrincipal = useMemo(() => getHermandadSettings(), [])
+  const hermandadPrincipal = useHermandadSettings()
   const nombrePrincipal = hermandadPrincipal.nombreLegal || 'Tu hermandad (modo demo)'
 
-  const [hermanos, setHermanos] = usePersistentState<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
-  const [papeletas, setPapeletas] = usePersistentState<Papeleta[]>(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
-  const [cuotas] = usePersistentState<Cuota[]>(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+  const [hermanos, setHermanos] = useSupabaseTable<Hermano>(
+    'hermanos',
+    CLAVES_DATOS.hermanos,
+    HERMANOS_INICIALES,
+    hermanoToRow,
+    rowToHermano,
+    'numero',
+  )
+  const [papeletas, setPapeletas] = useSupabaseTable<Papeleta>(
+    'papeletas',
+    CLAVES_DATOS.papeletas,
+    PAPELETAS_INICIALES,
+    papeletaToRow,
+    rowToPapeleta,
+  )
+  const [cuotas] = useSupabaseTable<Cuota>(
+    'cuotas',
+    CLAVES_DATOS.cuotas,
+    CUOTAS_INICIALES,
+    cuotaToRow,
+    rowToCuota,
+  )
 
   // Censo y papeletas de cada hermandad de muestra: cada una guarda los suyos
   // aparte, igual que en la base de datos real cada hermandad vería solo sus filas.
@@ -275,7 +298,7 @@ export default function HermanoPortal() {
     }
 
     const nueva: SolicitudAlta = {
-      id: `sol-${Date.now()}`,
+      id: nuevoId(),
       nombre,
       dni,
       email,
@@ -286,7 +309,7 @@ export default function HermanoPortal() {
     }
 
     if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
-      saveSolicitudes([nueva, ...getSolicitudes()])
+      crearSolicitudPrincipal(nueva)
     } else {
       guardarSolicitudMuestra(hermandadElegida.id, nueva)
     }
@@ -408,7 +431,7 @@ export default function HermanoPortal() {
     if (!hermanoPrincipal || !renovacion?.sitioAnterior?.tramoId) return
     const tramoAnterior = tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)
     const nueva: Papeleta = {
-      id: `p-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumeroPapeleta(),
       hermanoId: hermanoPrincipal.id,
       anio: campana.anio,
@@ -423,7 +446,7 @@ export default function HermanoPortal() {
   function noRenovar() {
     if (!hermanoPrincipal) return
     const renuncia: Papeleta = {
-      id: `p-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumeroPapeleta(),
       hermanoId: hermanoPrincipal.id,
       anio: campana.anio,
@@ -448,7 +471,7 @@ export default function HermanoPortal() {
         )
       }
       const nueva: Papeleta = {
-        id: `p-${Date.now()}`,
+        id: nuevoId(),
         numero: nextNumeroPapeleta(),
         hermanoId: hermanoPrincipal.id,
         anio: campana.anio,
@@ -475,7 +498,7 @@ export default function HermanoPortal() {
         )
       }
       const nueva: Papeleta = {
-        id: `p-${Date.now()}`,
+        id: nuevoId(),
         numero: nextNumeroPapeleta(),
         hermanoId: hermanoPrincipal.id,
         anio: campana.anio,
@@ -506,7 +529,7 @@ export default function HermanoPortal() {
     setLista((prev) => {
       const numero = Math.max(0, ...prev.map((p) => p.numero)) + 1
       const nueva: Papeleta = {
-        id: `pm-${Date.now()}`,
+        id: nuevoId(),
         numero,
         hermanoId: hermanoMuestra.id,
         anio: campana.anio,

@@ -17,7 +17,7 @@ export interface MiembroPersonal {
   fechaAlta: string
 }
 
-const STORAGE_KEY = 'cabildo-personal'
+export const CLAVE_PERSONAL = 'cabildo-personal'
 
 const PERSONAL_DE_EJEMPLO: MiembroPersonal[] = [
   {
@@ -59,9 +59,9 @@ const PERSONAL_DE_EJEMPLO: MiembroPersonal[] = [
 ]
 
 export function getPersonal(): MiembroPersonal[] {
-  return leerPersistido<MiembroPersonal[]>(STORAGE_KEY, PERSONAL_DE_EJEMPLO)
+  return leerPersistido<MiembroPersonal[]>(CLAVE_PERSONAL, PERSONAL_DE_EJEMPLO)
 }
 
 export function savePersonal(personal: MiembroPersonal[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(personal))
+  localStorage.setItem(CLAVE_PERSONAL, JSON.stringify(personal))
 }

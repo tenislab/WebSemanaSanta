@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import Drawer from '../../components/Drawer'
 import InformeImpreso from '../../components/InformeImpreso'
 import { useAuth } from '../../context/AuthContext'
-import { getHermandadSettings } from '../../lib/hermandadSettings'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency, formatDate } from '../../lib/format'
 import { toCsv, descargarArchivo } from '../../lib/csv'
 import { HERMANOS_INICIALES } from '../../data/hermanos'
@@ -197,7 +197,7 @@ function construirInformes(): Informe[] {
 export default function Informes() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
-  const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
+  const hermandad = useHermandadSettings(fallbackNombre)
 
   const informes = useMemo(() => construirInformes(), [])
   const [selected, setSelected] = useState<Informe | null>(null)

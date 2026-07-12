@@ -1,4 +1,6 @@
 import { CLAVES_DATOS, leerPersistido } from './persistencia'
+import { supabase, isSupabaseConfigured } from './supabase'
+import { rowToHermano } from './db/hermanos'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
 import { PAPELETAS_INICIALES, type Papeleta } from '../data/papeletas'
@@ -60,11 +62,26 @@ export function exportarDatosHermano(datos: DatosHermano): string {
 
 /**
  * Borra al hermano y todos los registros que lo referencian (cuotas,
- * papeletas e incidencias). Escribe en localStorage; cada módulo leerá el
- * estado actualizado al montarse. Devuelve el censo resultante para que la
+ * papeletas e incidencias). Devuelve el censo resultante para que la
  * pantalla que lo llama actualice su propio estado.
+ *
+ * Con Supabase conectado, basta con borrar la fila de `hermanos`: sus
+ * cuotas y papeletas (y las incidencias de esas papeletas) tienen
+ * `on delete cascade` y se borran solas en la base de datos. Sin Supabase,
+ * hay que hacer esa cascada a mano sobre las cuatro colecciones en
+ * localStorage.
  */
-export function borrarDatosHermano(hermanoId: string): Hermano[] {
+export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[]> {
+  if (isSupabaseConfigured && supabase) {
+    await supabase.from('hermanos').delete().eq('id', hermanoId)
+    const { data, error } = await supabase.from('hermanos').select('*').order('numero')
+    if (error) {
+      console.error('No se pudo recargar el censo tras borrar el hermano:', error.message)
+      return []
+    }
+    return (data ?? []).map(rowToHermano)
+  }
+
   const { hermanos, cuotas, papeletas, incidencias } = todos()
   const idsPapeletas = new Set(papeletas.filter((p) => p.hermanoId === hermanoId).map((p) => p.id))
 

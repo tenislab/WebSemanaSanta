@@ -7,9 +7,11 @@ import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { CUOTAS_INICIALES, type ConceptoCuota, type Cuota, type EstadoCuota } from '../../data/cuotas'
 import { getConceptosCuota } from '../../lib/conceptosCuota'
 import { useAuth } from '../../context/AuthContext'
-import { getHermandadSettings } from '../../lib/hermandadSettings'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
-import { CLAVES_DATOS, leerPersistido, usePersistentState } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { descargarArchivo, toCsv } from '../../lib/csv'
 import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
 
@@ -40,9 +42,15 @@ function estadoClass(estado: EstadoCuota) {
 export default function Cuotas() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
-  const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
+  const hermandad = useHermandadSettings(fallbackNombre)
 
-  const [cuotas, setCuotas] = usePersistentState<Cuota[]>(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+  const [cuotas, setCuotas] = useSupabaseTable<Cuota>(
+    'cuotas',
+    CLAVES_DATOS.cuotas,
+    CUOTAS_INICIALES,
+    cuotaToRow,
+    rowToCuota,
+  )
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'Todas' | EstadoCuota>('Todas')
   const [selected, setSelected] = useState<Cuota | null>(null)
@@ -164,7 +172,7 @@ export default function Cuotas() {
 
     const nextNumero = Math.max(0, ...cuotas.map((c) => c.numero)) + 1
     const nueva: Cuota = {
-      id: `c-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero,
       hermanoId,
       concepto,

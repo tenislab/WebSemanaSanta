@@ -1,16 +1,34 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import { CARGOS, type Cargo } from '../../data/documentos'
-import { getPersonal, savePersonal, type MiembroPersonal } from '../../lib/personal'
-import { MODULOS, getPermisosPorCargo, savePermisosPorCargo } from '../../lib/permisos'
+import { CLAVE_PERSONAL, getPersonal, type MiembroPersonal } from '../../lib/personal'
+import { MODULOS, usePermisosPorCargo, savePermisosPorCargo } from '../../lib/permisos'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { personalToRow, rowToPersonal } from '../../lib/db/personal'
+import { supabase, isSupabaseConfigured } from '../../lib/supabase'
+import { useAuth } from '../../context/AuthContext'
 
 export default function Personal() {
-  const [personal, setPersonal] = useState<MiembroPersonal[]>(() => getPersonal())
+  const { user } = useAuth()
+  const nombreHermandad = (user?.user_metadata?.hermandad as string | undefined) ?? 'Tu hermandad'
+
+  const [personal, setPersonal] = useSupabaseTable<MiembroPersonal>(
+    'personal',
+    CLAVE_PERSONAL,
+    getPersonal(),
+    personalToRow,
+    rowToPersonal,
+  )
   const [selected, setSelected] = useState<MiembroPersonal | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [permisos, setPermisos] = useState<Record<Cargo, string[]>>(() => getPermisosPorCargo())
+  const permisosRemotos = usePermisosPorCargo()
+  const [permisos, setPermisos] = useState<Record<Cargo, string[]>>(permisosRemotos)
+  const [permisosTocado, setPermisosTocado] = useState(false)
+  useEffect(() => {
+    if (!permisosTocado) setPermisos(permisosRemotos)
+  }, [permisosRemotos, permisosTocado])
   const [permisosSaved, setPermisosSaved] = useState(false)
 
   const stats = useMemo(() => {
@@ -19,11 +37,6 @@ export default function Personal() {
     const cargosEnUso = new Set(personal.map((p) => p.cargo)).size
     return { total, activos, cargosEnUso }
   }, [personal])
-
-  function persist(next: MiembroPersonal[]) {
-    setPersonal(next)
-    savePersonal(next)
-  }
 
   function abrirNuevo() {
     setError(null)
@@ -50,7 +63,7 @@ export default function Personal() {
     }
 
     const nuevo: MiembroPersonal = {
-      id: `personal-${Date.now()}`,
+      id: nuevoId(),
       nombre,
       email,
       clave,
@@ -58,19 +71,28 @@ export default function Personal() {
       activo: true,
       fechaAlta: new Date().toISOString().slice(0, 10),
     }
-    persist([nuevo, ...personal])
+    setPersonal([nuevo, ...personal])
+    // Con Supabase conectado, esto le crea además una cuenta real de acceso
+    // (mismo correo y contraseña); sin él, solo entra por el modo demostración.
+    if (isSupabaseConfigured && supabase) {
+      supabase.auth
+        .signUp({ email, password: clave, options: { data: { hermandad: nombreHermandad, nombre, cargo } } })
+        .then(({ error: signUpError }) => {
+          if (signUpError) console.error('No se pudo crear el acceso real en Supabase:', signUpError.message)
+        })
+    }
     setFormOpen(false)
     setError(null)
     form.reset()
   }
 
   function toggleActivo(id: string) {
-    persist(personal.map((p) => (p.id === id ? { ...p, activo: !p.activo } : p)))
+    setPersonal(personal.map((p) => (p.id === id ? { ...p, activo: !p.activo } : p)))
     setSelected((s) => (s && s.id === id ? { ...s, activo: !s.activo } : s))
   }
 
   function eliminar(id: string) {
-    persist(personal.filter((p) => p.id !== id))
+    setPersonal(personal.filter((p) => p.id !== id))
     setSelected(null)
   }
 
@@ -82,11 +104,13 @@ export default function Personal() {
         : [...actuales, moduloId]
       return { ...prev, [cargo]: siguiente }
     })
+    setPermisosTocado(true)
     setPermisosSaved(false)
   }
 
-  function handleSavePermisos() {
-    savePermisosPorCargo(permisos)
+  async function handleSavePermisos() {
+    await savePermisosPorCargo(permisos)
+    setPermisosTocado(false)
     setPermisosSaved(true)
     setTimeout(() => setPermisosSaved(false), 3000)
   }

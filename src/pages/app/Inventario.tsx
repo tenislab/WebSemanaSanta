@@ -9,7 +9,9 @@ import {
   type EstadoConservacion,
 } from '../../data/enseres'
 import { formatCurrency } from '../../lib/format'
-import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
+import { CLAVES_DATOS } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { enserToRow, rowToEnser } from '../../lib/db/enseres'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { year: 'numeric' })
@@ -24,7 +26,13 @@ function estadoClass(estado: EstadoConservacion) {
 const ESTADOS_CONSERVACION: EstadoConservacion[] = ['Bueno', 'Regular', 'Necesita restauración']
 
 export default function Inventario() {
-  const [enseres, setEnseres] = usePersistentState<Enser[]>(CLAVES_DATOS.enseres, ENSERES_INICIALES)
+  const [enseres, setEnseres] = useSupabaseTable<Enser>(
+    'enseres',
+    CLAVES_DATOS.enseres,
+    ENSERES_INICIALES,
+    enserToRow,
+    rowToEnser,
+  )
   const [query, setQuery] = useState('')
   const categorias = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasEnser, CATEGORIAS_ENSER), [])
   const [filter, setFilter] = useState<'Todos' | CategoriaEnser>('Todos')
@@ -90,7 +98,7 @@ export default function Inventario() {
 
     const nextNumero = Math.max(0, ...enseres.map((x) => x.numero)) + 1
     const nuevo: Enser = {
-      id: `e-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero,
       nombre,
       categoria,

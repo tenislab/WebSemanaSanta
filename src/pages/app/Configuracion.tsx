@@ -1,13 +1,14 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { LogoMark } from '../../components/Logo'
 import { useAuth } from '../../context/AuthContext'
 import {
-  getHermandadSettings,
+  useHermandadSettings,
   saveHermandadSettings,
   type HermandadSettings,
 } from '../../lib/hermandadSettings'
 import {
   getTramos,
+  useTramos,
   saveTramos,
   aforoDeCuerpo,
   getCuerpos,
@@ -22,14 +23,15 @@ import {
   type ModoReparto,
   type Tramo,
 } from '../../lib/tramos'
-import { getOpcionesPapeleta, saveOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
-import { getConceptosCuota, saveConceptosCuota, type ConceptoCuotaConfig } from '../../lib/conceptosCuota'
-import { CLAVES_CATALOGOS, getLista, saveLista } from '../../lib/catalogos'
+import { useOpcionesPapeleta, saveOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
+import { useConceptosCuota, saveConceptosCuota, type ConceptoCuotaConfig } from '../../lib/conceptosCuota'
+import { CLAVES_CATALOGOS, useCatalogos, saveLista } from '../../lib/catalogos'
 import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO, CUENTAS_POR_DEFECTO } from '../../data/movimientos'
 import { TIPOS_INCIDENCIA_POR_DEFECTO } from '../../data/incidencias'
 import { CATEGORIAS_ENSER } from '../../data/enseres'
 import { CANALES, SEGMENTOS } from '../../data/comunicados'
 import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
+import { nuevoId } from '../../lib/supabaseSync'
 import { crearCopia, esCopiaValida, restaurarCopia } from '../../lib/backup'
 import { descargarArchivo } from '../../lib/csv'
 
@@ -56,16 +58,23 @@ export default function Configuracion() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
 
-  const [settings, setSettings] = useState<HermandadSettings>(() =>
-    getHermandadSettings(fallbackNombre),
-  )
+  const settingsRemotas = useHermandadSettings(fallbackNombre)
+  const [settings, setSettings] = useState<HermandadSettings>(settingsRemotas)
+  const [tocado, setTocado] = useState(false)
   const [saved, setSaved] = useState(false)
   const [logoError, setLogoError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Mientras no se haya tocado el formulario, refleja lo que traiga Supabase
+  // en cuanto llegue (la primera lectura, al montar, es solo la caché local).
+  useEffect(() => {
+    if (!tocado) setSettings(settingsRemotas)
+  }, [settingsRemotas, tocado])
+
   function update<K extends keyof HermandadSettings>(key: K, value: HermandadSettings[K]) {
     setSettings((s) => ({ ...s, [key]: value }))
     setSaved(false)
+    setTocado(true)
   }
 
   function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
@@ -82,14 +91,19 @@ export default function Configuracion() {
     reader.readAsDataURL(file)
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    saveHermandadSettings(settings)
+    await saveHermandadSettings(settings)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
 
-  const [tramos, setTramos] = useState<Tramo[]>(() => getTramos())
+  const tramosRemotos = useTramos()
+  const [tramos, setTramos] = useState<Tramo[]>(tramosRemotos)
+  const [tramosTocado, setTramosTocado] = useState(false)
+  useEffect(() => {
+    if (!tramosTocado) setTramos(tramosRemotos)
+  }, [tramosRemotos, tramosTocado])
   const [tramosSaved, setTramosSaved] = useState(false)
   const [precioBase, setPrecioBase] = useState<number>(() => getPrecioBase())
   const [copiaEstado, setCopiaEstado] = useState<string | null>(null)
@@ -126,7 +140,7 @@ export default function Configuracion() {
     setCuerposError(null)
   }
 
-  function handleSaveCuerpos() {
+  async function handleSaveCuerpos() {
     // Vaciar el nombre de un cuerpo equivale a quitarlo: misma guardia que el botón de quitar.
     const vaciadoEnUso = cuerposEdit.find(
       (c) => c.original && !c.actual.trim() && tramos.some((t) => t.cuerpo === c.original),
@@ -162,7 +176,8 @@ export default function Configuracion() {
     // ediciones sin guardar del editor de abajo); el editor en pantalla se
     // renombra también, pero sus demás cambios siguen pendientes de «Guardar tramos».
     if (renombres.size > 0) {
-      saveTramos(getTramos().map(renombra))
+      setTramosTocado(true)
+      await saveTramos(getTramos().map(renombra))
       setTramos((prev) => prev.map(renombra))
     }
     saveCuerpos(nombres)
@@ -230,6 +245,7 @@ export default function Configuracion() {
 
   function updateTramo<K extends keyof Tramo>(id: string, key: K, value: Tramo[K]) {
     setTramos((prev) => prev.map((t) => (t.id === id ? { ...t, [key]: value } : t)))
+    setTramosTocado(true)
     setTramosSaved(false)
   }
 
@@ -237,7 +253,7 @@ export default function Configuracion() {
     setTramos((prev) => [
       ...prev,
       {
-        id: `t-${Date.now()}`,
+        id: nuevoId(),
         nombre: 'Nuevo tramo',
         cuerpo: cuerposGuardados[0] ?? 'Único',
         capacidad: 20,
@@ -246,11 +262,13 @@ export default function Configuracion() {
         precio: null,
       },
     ])
+    setTramosTocado(true)
     setTramosSaved(false)
   }
 
   function removeTramo(id: string) {
     setTramos((prev) => prev.filter((t) => t.id !== id))
+    setTramosTocado(true)
     setTramosSaved(false)
   }
 
@@ -263,91 +281,116 @@ export default function Configuracion() {
       ;[next[idx], next[swapWith]] = [next[swapWith], next[idx]]
       return next
     })
+    setTramosTocado(true)
     setTramosSaved(false)
   }
 
-  function handleSaveTramos() {
+  async function handleSaveTramos() {
     // Se guarda el reparto de forma explícita (los datos antiguos lo deducían del tipo).
     const explicitos = tramos.map((t) => ({ ...t, reparto: repartoDe(t) }))
     setTramos(explicitos)
-    saveTramos(explicitos)
+    await saveTramos(explicitos)
     savePrecioBase(precioBase)
+    setTramosTocado(false)
     setTramosSaved(true)
     setTimeout(() => setTramosSaved(false), 3000)
   }
 
   // ---- Papeletas personalizadas de la hermandad (nombre + precio propios) ----
-  const [opciones, setOpciones] = useState<OpcionPapeleta[]>(() => getOpcionesPapeleta())
+  const opcionesRemotas = useOpcionesPapeleta()
+  const [opciones, setOpciones] = useState<OpcionPapeleta[]>(opcionesRemotas)
+  const [opcionesTocado, setOpcionesTocado] = useState(false)
+  useEffect(() => {
+    if (!opcionesTocado) setOpciones(opcionesRemotas)
+  }, [opcionesRemotas, opcionesTocado])
   const [opcionesSaved, setOpcionesSaved] = useState(false)
 
   function updateOpcion<K extends keyof OpcionPapeleta>(id: string, key: K, value: OpcionPapeleta[K]) {
     setOpciones((prev) => prev.map((o) => (o.id === id ? { ...o, [key]: value } : o)))
+    setOpcionesTocado(true)
     setOpcionesSaved(false)
   }
 
   function addOpcion() {
-    setOpciones((prev) => [...prev, { id: `op-${Date.now()}`, nombre: 'Nueva papeleta', importe: 10 }])
+    setOpciones((prev) => [...prev, { id: nuevoId(), nombre: 'Nueva papeleta', importe: 10 }])
+    setOpcionesTocado(true)
     setOpcionesSaved(false)
   }
 
   function removeOpcion(id: string) {
     setOpciones((prev) => prev.filter((o) => o.id !== id))
+    setOpcionesTocado(true)
     setOpcionesSaved(false)
   }
 
-  function handleSaveOpciones() {
-    saveOpcionesPapeleta(opciones)
+  async function handleSaveOpciones() {
+    await saveOpcionesPapeleta(opciones)
+    setOpcionesTocado(false)
     setOpcionesSaved(true)
     setTimeout(() => setOpcionesSaved(false), 3000)
   }
 
   // ---- Catálogos de la hermandad (conceptos de cuota + listas simples) ----
-  const [conceptosCuota, setConceptosCuota] = useState<ConceptoCuotaConfig[]>(() => getConceptosCuota())
-  const [catalogos, setCatalogos] = useState<Record<string, string[]>>(() =>
-    Object.fromEntries(CATALOGOS_DEF.map((d) => [d.k, getLista(d.clave, d.porDefecto)])),
-  )
+  const conceptosCuotaRemotos = useConceptosCuota()
+  const [conceptosCuota, setConceptosCuota] = useState<ConceptoCuotaConfig[]>(conceptosCuotaRemotos)
+  const catalogosRemotos = useCatalogos(CATALOGOS_DEF)
+  const [catalogos, setCatalogos] = useState<Record<string, string[]>>(catalogosRemotos)
+  const [catalogosTocado, setCatalogosTocado] = useState(false)
+  useEffect(() => {
+    if (!catalogosTocado) {
+      setConceptosCuota(conceptosCuotaRemotos)
+      setCatalogos(catalogosRemotos)
+    }
+  }, [conceptosCuotaRemotos, catalogosRemotos, catalogosTocado])
   const [catalogosSaved, setCatalogosSaved] = useState(false)
 
   function updateConceptoCuota<K extends keyof ConceptoCuotaConfig>(id: string, key: K, value: ConceptoCuotaConfig[K]) {
     setConceptosCuota((prev) => prev.map((c) => (c.id === id ? { ...c, [key]: value } : c)))
+    setCatalogosTocado(true)
     setCatalogosSaved(false)
   }
 
   function addConceptoCuota() {
-    setConceptosCuota((prev) => [...prev, { id: `cc-${Date.now()}`, nombre: 'Nueva cuota', importe: 10 }])
+    setConceptosCuota((prev) => [...prev, { id: nuevoId(), nombre: 'Nueva cuota', importe: 10 }])
+    setCatalogosTocado(true)
     setCatalogosSaved(false)
   }
 
   function removeConceptoCuota(id: string) {
     setConceptosCuota((prev) => prev.filter((c) => c.id !== id))
+    setCatalogosTocado(true)
     setCatalogosSaved(false)
   }
 
   function updateCatalogo(k: string, index: number, valor: string) {
     setCatalogos((prev) => ({ ...prev, [k]: prev[k].map((v, i) => (i === index ? valor : v)) }))
+    setCatalogosTocado(true)
     setCatalogosSaved(false)
   }
 
   function addCatalogoValor(k: string) {
     setCatalogos((prev) => ({ ...prev, [k]: [...prev[k], ''] }))
+    setCatalogosTocado(true)
     setCatalogosSaved(false)
   }
 
   function removeCatalogoValor(k: string, index: number) {
     setCatalogos((prev) => ({ ...prev, [k]: prev[k].filter((_, i) => i !== index) }))
+    setCatalogosTocado(true)
     setCatalogosSaved(false)
   }
 
-  function handleSaveCatalogos() {
-    saveConceptosCuota(conceptosCuota.filter((c) => c.nombre.trim()))
+  async function handleSaveCatalogos() {
+    await saveConceptosCuota(conceptosCuota.filter((c) => c.nombre.trim()))
     const limpios: Record<string, string[]> = {}
-    CATALOGOS_DEF.forEach((d) => {
+    for (const d of CATALOGOS_DEF) {
       const valores = (catalogos[d.k] ?? []).map((v) => v.trim()).filter(Boolean)
       limpios[d.k] = valores.length > 0 ? valores : [...d.porDefecto]
-      saveLista(d.clave, limpios[d.k])
-    })
+      await saveLista(d.clave, limpios[d.k])
+    }
     setCatalogos(limpios)
     setConceptosCuota((prev) => prev.filter((c) => c.nombre.trim()))
+    setCatalogosTocado(false)
     setCatalogosSaved(true)
     setTimeout(() => setCatalogosSaved(false), 3000)
   }

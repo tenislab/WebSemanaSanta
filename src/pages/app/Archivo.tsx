@@ -12,7 +12,9 @@ import {
 } from '../../data/documentos'
 import { useAuth } from '../../context/AuthContext'
 import { formatDate } from '../../lib/format'
-import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
+import { CLAVES_DATOS } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
 import { borrarArchivo, formatearTamano, guardarArchivo, leerArchivo } from '../../lib/filestore'
 
 function fmt(iso: string) {
@@ -67,7 +69,13 @@ export default function Archivo() {
   const { user } = useAuth()
   const nombreUsuario = (user?.user_metadata?.nombre as string | undefined) ?? ''
 
-  const [documentos, setDocumentos] = usePersistentState<Documento[]>(CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES)
+  const [documentos, setDocumentos] = useSupabaseTable<Documento>(
+    'documentos',
+    CLAVES_DATOS.documentos,
+    DOCUMENTOS_INICIALES,
+    documentoToRow,
+    rowToDocumento,
+  )
   const [query, setQuery] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<'Todos' | CategoriaDocumento>('Todos')
   const [viewAsCargo, setViewAsCargo] = useState<Cargo>('Hermano Mayor')
@@ -143,7 +151,7 @@ export default function Archivo() {
 
     const nextNumero = Math.max(0, ...documentos.map((d) => d.numero)) + 1
     const nuevo: Documento = {
-      id: `doc-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero,
       nombre,
       categoria,

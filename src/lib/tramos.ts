@@ -1,3 +1,7 @@
+import { useEffect, useState } from 'react'
+import { supabase, isSupabaseConfigured } from './supabase'
+import { tramoToRow, rowToTramo } from './db/tramos'
+
 /**
  * Un cuerpo es cada bloque del cortejo (un paso y su acompañamiento): Cristo,
  * Virgen, Misterio, Palio, Cautivo… Lo define cada hermandad con el nombre
@@ -70,7 +74,61 @@ export function getTramos(): Tramo[] {
   return TRAMOS_POR_DEFECTO
 }
 
-export function saveTramos(tramos: Tramo[]) {
+/** Como `getTramos`, pero con Supabase conectado trae la lista real en cuanto llega. */
+export function useTramos(): Tramo[] {
+  const [tramos, setTramosState] = useState<Tramo[]>(() => getTramos())
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return
+    let cancelado = false
+    supabase
+      .from('tramos')
+      .select('*')
+      .order('orden')
+      .then(({ data, error }) => {
+        if (cancelado || error || !data || data.length === 0) return
+        const traidos = data.map(rowToTramo)
+        setTramosState(traidos)
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(traidos))
+        } catch {
+          // sin espacio o sin localStorage: no pasa nada, ya está en memoria
+        }
+      })
+    return () => {
+      cancelado = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return tramos
+}
+
+/**
+ * Guarda los tramos. Con Supabase conectado, compara con lo que hay en la
+ * tabla y manda solo los inserts/updates/deletes que hacen falta (los
+ * tramos se editan como borrador y se guardan de una vez con el botón
+ * «Guardar tramos», no en cada tecleo).
+ */
+export async function saveTramos(tramos: Tramo[]) {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data } = await supabase.from('tramos').select('id')
+      const idsActuales = new Set((data ?? []).map((r: { id: string }) => r.id))
+      const nextIds = new Set(tramos.map((t) => t.id))
+      const eliminados = [...idsActuales].filter((id) => !nextIds.has(id))
+      const nuevos = tramos.filter((t) => !idsActuales.has(t.id))
+      const posiblesCambios = tramos.filter((t) => idsActuales.has(t.id))
+
+      if (eliminados.length > 0) await supabase.from('tramos').delete().in('id', eliminados)
+      if (nuevos.length > 0) {
+        await supabase.from('tramos').insert(nuevos.map((t, i) => tramoToRow(t, tramos.indexOf(t) ?? i)))
+      }
+      for (const t of posiblesCambios) {
+        await supabase.from('tramos').update(tramoToRow(t, tramos.indexOf(t))).eq('id', t.id)
+      }
+    } catch (err) {
+      console.error('No se pudieron guardar los tramos en Supabase:', err)
+    }
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tramos))
 }
 

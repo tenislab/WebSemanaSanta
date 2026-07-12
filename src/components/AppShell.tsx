@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Logo, { LogoMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../context/AuthContext'
-import { puedeVerModulo } from '../lib/permisos'
+import { puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
 import type { Cargo } from '../data/documentos'
 
 interface NavItem {
@@ -125,6 +125,8 @@ export default function AppShell() {
   const hermandad = (user?.user_metadata?.hermandad as string | undefined) ?? 'Tu hermandad'
   const nombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Hermano/a'
   const cargo = user?.user_metadata?.cargo as Cargo | undefined
+  // Trae los permisos reales de Supabase en cuanto cargan (no solo los que hubiera en este navegador).
+  const permisosVersion = usePermisosSincronizados()
 
   const navFiltrado = useMemo(
     () =>
@@ -132,7 +134,7 @@ export default function AppShell() {
         ...group,
         items: group.items.filter((item) => !item.modulo || puedeVerModulo(cargo, item.modulo)),
       })).filter((group) => group.items.length > 0),
-    [cargo],
+    [cargo, permisosVersion],
   )
 
   const moduloActual = moduloIdDeRuta(location.pathname)

@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
+import { isSupabaseConfigured } from './supabase'
+import { fetchPermisosPorCargoRemoto, guardarPermisosPorCargoRemoto } from './db/permisos'
 import { CARGOS, type Cargo } from '../data/documentos'
 
 export interface Modulo {
@@ -51,7 +54,45 @@ export function getPermisosPorCargo(): Record<Cargo, string[]> {
   return combinado
 }
 
-export function savePermisosPorCargo(permisos: Record<Cargo, string[]>) {
+/**
+ * Refresca la caché local de permisos desde Supabase (si está conectado) y
+ * devuelve una versión que cambia cuando llegan datos nuevos: úsala como
+ * dependencia para recalcular menús/rutas en cuanto lleguen permisos reales,
+ * no solo los que hubiera en este navegador.
+ */
+export function usePermisosSincronizados(): number {
+  const [version, setVersion] = useState(0)
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    let cancelado = false
+    fetchPermisosPorCargoRemoto(PERMISOS_POR_DEFECTO).then((remoto) => {
+      if (cancelado || !remoto) return
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto))
+      setVersion((v) => v + 1)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [])
+  return version
+}
+
+/** Como `getPermisosPorCargo`, pero con Supabase conectado trae la tabla real en cuanto llega. */
+export function usePermisosPorCargo(): Record<Cargo, string[]> {
+  const version = usePermisosSincronizados()
+  const [permisos, setPermisos] = useState<Record<Cargo, string[]>>(() => getPermisosPorCargo())
+  useEffect(() => {
+    setPermisos(getPermisosPorCargo())
+    // Se relee de localStorage (ya actualizado por usePermisosSincronizados) cada vez que llega una versión nueva.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version])
+  return permisos
+}
+
+export async function savePermisosPorCargo(permisos: Record<Cargo, string[]>) {
+  if (isSupabaseConfigured) {
+    await guardarPermisosPorCargoRemoto(permisos)
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(permisos))
 }
 

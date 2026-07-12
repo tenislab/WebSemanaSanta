@@ -4,17 +4,17 @@ import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
 import {
   CANALES,
   COMUNICADOS_INICIALES,
-  CUENTAS_SOCIALES_INICIALES,
   REDES_SOCIALES,
   SEGMENTOS,
   type Canal,
   type Comunicado,
-  type CuentaSocial,
   type EstadoComunicado,
   type RedSocial,
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
-import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
+import { CLAVES_DATOS } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
 
 function fmt(iso: string | null) {
   if (!iso) return '—'
@@ -44,8 +44,14 @@ const INICIAL_RED: Record<RedSocial, string> = {
 }
 
 export default function Comunicados() {
-  const [comunicados, setComunicados] = usePersistentState<Comunicado[]>(CLAVES_DATOS.comunicados, COMUNICADOS_INICIALES)
-  const [cuentas, setCuentas] = usePersistentState<CuentaSocial[]>(CLAVES_DATOS.cuentasSociales, CUENTAS_SOCIALES_INICIALES)
+  const [comunicados, setComunicados] = useSupabaseTable<Comunicado>(
+    'comunicados',
+    CLAVES_DATOS.comunicados,
+    COMUNICADOS_INICIALES,
+    comunicadoToRow,
+    rowToComunicado,
+  )
+  const [cuentas, setCuentas] = useCuentasSociales()
   const canales = useMemo(() => getLista(CLAVES_CATALOGOS.canalesComunicado, CANALES), [])
   const segmentos = useMemo(() => getLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS), [])
   const [query, setQuery] = useState('')
@@ -127,7 +133,7 @@ export default function Comunicados() {
     const hoy = new Date().toISOString().slice(0, 10)
     const nextNumero = Math.max(0, ...comunicados.map((c) => c.numero)) + 1
     const nuevo: Comunicado = {
-      id: `k-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero,
       titulo,
       cuerpo,

@@ -12,9 +12,11 @@ import {
 } from '../../data/movimientos'
 import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
 import { useAuth } from '../../context/AuthContext'
-import { getHermandadSettings } from '../../lib/hermandadSettings'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
-import { CLAVES_DATOS, usePersistentState } from '../../lib/persistencia'
+import { CLAVES_DATOS } from '../../lib/persistencia'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -32,13 +34,19 @@ const FILTROS = ['Todos', 'Ingreso', 'Gasto', 'Pendiente', 'Conciliado'] as cons
 export default function Tesoreria() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
-  const hermandad = useMemo(() => getHermandadSettings(fallbackNombre), [fallbackNombre])
+  const hermandad = useHermandadSettings(fallbackNombre)
 
   const categoriasIngreso = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasIngreso, CATEGORIAS_INGRESO), [])
   const categoriasGasto = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasGasto, CATEGORIAS_GASTO), [])
   const cuentas = useMemo(() => getLista(CLAVES_CATALOGOS.cuentasTesoreria, CUENTAS_POR_DEFECTO), [])
 
-  const [movimientos, setMovimientos] = usePersistentState<Movimiento[]>(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
+  const [movimientos, setMovimientos] = useSupabaseTable<Movimiento>(
+    'movimientos',
+    CLAVES_DATOS.movimientos,
+    MOVIMIENTOS_INICIALES,
+    movimientoToRow,
+    rowToMovimiento,
+  )
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todos')
   const [selected, setSelected] = useState<Movimiento | null>(null)
@@ -99,7 +107,7 @@ export default function Tesoreria() {
 
     const nextNumero = Math.max(0, ...movimientos.map((m) => m.numero)) + 1
     const nuevo: Movimiento = {
-      id: `m-${Date.now()}`,
+      id: nuevoId(),
       numero: nextNumero,
       fecha: formatearFechaInput(fechaRaw),
       concepto,

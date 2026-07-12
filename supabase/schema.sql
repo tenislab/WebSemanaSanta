@@ -69,6 +69,11 @@ create table if not exists tramos (
 -- -----------------------------------------------------------------------------
 -- Cuotas
 -- -----------------------------------------------------------------------------
+-- Las fechas de cuotas, papeletas, tesorería, etc. se guardan como texto
+-- (p. ej. "12 jul 2026"), no como `date`: la app las genera ya formateadas
+-- para mostrarlas tal cual, así que un tipo `date` real solo daría
+-- problemas al insertar. Es una simplificación consciente: no se pueden
+-- hacer consultas por rango de fechas directamente en la base de datos.
 create table if not exists cuotas (
   id uuid primary key default gen_random_uuid(),
   numero int not null,
@@ -76,10 +81,10 @@ create table if not exists cuotas (
   concepto text not null,
   importe numeric(10, 2) not null default 0,
   estado text not null default 'Pendiente' check (estado in ('Pagada', 'Pendiente', 'Devuelta')),
-  fecha_emision date not null default current_date,
-  fecha_cobro date not null default current_date,
+  fecha_emision text not null default '',
+  fecha_cobro text not null default '',
   domiciliada boolean not null default false,
-  fecha_pago date
+  fecha_pago text
 );
 create index if not exists cuotas_hermano_id_idx on cuotas(hermano_id);
 
@@ -96,10 +101,10 @@ create table if not exists papeletas (
   importe numeric(10, 2) not null default 0,
   estado text not null default 'Solicitada'
     check (estado in ('Solicitada', 'Asignada', 'Pagada', 'Entregada', 'Anulada', 'Renuncia')),
-  fecha_solicitud date not null default current_date,
-  fecha_entrega date,
+  fecha_solicitud text not null default '',
+  fecha_entrega text,
   pago_metodo text check (pago_metodo in ('Bizum', 'Transferencia')),
-  pago_fecha date
+  pago_fecha text
 );
 create index if not exists papeletas_hermano_id_idx on papeletas(hermano_id);
 create index if not exists papeletas_anio_idx on papeletas(anio);
@@ -110,7 +115,7 @@ create index if not exists papeletas_anio_idx on papeletas(anio);
 create table if not exists movimientos (
   id uuid primary key default gen_random_uuid(),
   numero int not null,
-  fecha date not null default current_date,
+  fecha text not null default '',
   concepto text not null,
   categoria text not null,
   tipo text not null check (tipo in ('Ingreso', 'Gasto')),
@@ -146,7 +151,7 @@ create table if not exists enseres (
     check (estado_conservacion in ('Bueno', 'Regular', 'Necesita restauración')),
   valor_asegurado numeric(10, 2),
   prestado_a text,
-  fecha_alta date not null default current_date,
+  fecha_alta text not null default '',
   notas text not null default ''
 );
 
@@ -159,24 +164,19 @@ create table if not exists documentos (
   nombre text not null,
   categoria text not null
     check (categoria in ('Acta', 'Regla', 'Contrato', 'Boletín', 'Expediente', 'Archivo histórico')),
-  fecha date not null default current_date,
-  fecha_alta date not null default current_date,
+  fecha text not null default '',
+  fecha_alta text not null default '',
   descripcion text not null default '',
   archivado_por text,
   tipo_cabildo text check (tipo_cabildo in ('General', 'Extraordinario', 'De Oficiales')),
   proveedor text,
-  vigencia_hasta date,
+  vigencia_hasta text,
   estado_expediente text check (estado_expediente in ('Abierto', 'Cerrado')),
   archivo_nombre text,
   archivo_tipo text,
-  archivo_tamano bigint
-);
-
--- Cargos con acceso a un documento restringido (null = visible para cualquiera autenticado)
-create table if not exists documento_cargos (
-  documento_id uuid not null references documentos(id) on delete cascade,
-  cargo text not null,
-  primary key (documento_id, cargo)
+  archivo_tamano bigint,
+  -- Cargos con acceso a un documento restringido; null = visible para cualquiera autenticado.
+  cargos_con_acceso text[]
 );
 
 -- -----------------------------------------------------------------------------
@@ -190,17 +190,13 @@ create table if not exists comunicados (
   canal text not null default 'Email',
   destinatarios text not null default 'Todos los hermanos',
   estado text not null default 'Borrador' check (estado in ('Borrador', 'Programado', 'Enviado')),
-  fecha_creacion date not null default current_date,
-  fecha_programada date,
-  fecha_envio date,
+  fecha_creacion text not null default '',
+  fecha_programada text,
+  fecha_envio text,
   autor text not null default '',
-  alcance int
-);
-
-create table if not exists comunicado_redes (
-  comunicado_id uuid not null references comunicados(id) on delete cascade,
-  red text not null check (red in ('Facebook', 'Instagram', 'X', 'YouTube', 'TikTok')),
-  primary key (comunicado_id, red)
+  alcance int,
+  -- Redes sociales en las que se publica (solo si canal = 'Redes sociales'); null si no aplica.
+  redes text[]
 );
 
 create table if not exists cuentas_sociales (
@@ -221,7 +217,7 @@ create table if not exists personal (
   clave text not null, -- TODO: en cuanto el login de personal pase por Supabase Auth, esta columna deja de hacer falta
   cargo text not null,
   activo boolean not null default true,
-  fecha_alta date not null default current_date,
+  fecha_alta text not null default '',
   auth_user_id uuid references auth.users(id) on delete set null
 );
 
@@ -257,7 +253,7 @@ create table if not exists solicitudes_alta (
   email text not null default '',
   telefono text not null default '',
   clave_propuesta text not null,
-  fecha date not null default current_date,
+  fecha text not null default '',
   estado text not null default 'Pendiente' check (estado in ('Pendiente', 'Aprobada', 'Rechazada'))
 );
 
@@ -298,8 +294,8 @@ begin
   for t in
     select unnest(array[
       'hermandad_settings', 'hermanos', 'tramos', 'cuotas', 'papeletas', 'movimientos',
-      'incidencias', 'enseres', 'documentos', 'documento_cargos', 'comunicados',
-      'comunicado_redes', 'cuentas_sociales', 'personal', 'permisos_cargo',
+      'incidencias', 'enseres', 'documentos', 'comunicados',
+      'cuentas_sociales', 'personal', 'permisos_cargo',
       'solicitudes_alta', 'conceptos_cuota', 'opciones_papeleta', 'catalogos'
     ])
   loop
