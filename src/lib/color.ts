@@ -69,11 +69,19 @@ export function temaDeColor(hex: string): TemaHermandad {
 /** Variables CSS listas para pasar como `style` en la raíz del área del hermano. */
 export function estiloTema(hex: string): Record<string, string> {
   const t = temaDeColor(hex)
+  const rgb = hexToRgb(hex || '#caa24a')
   return {
     '--accent': t.accent,
     '--accent-hover': t.accentHover,
     '--accent-ink': t.accentInk,
     '--ring': t.ring,
+    // Tiñe el fondo y la cabecera de toda la pantalla del área del hermano
+    // con el color de la hermandad, para que se note desde el primer vistazo.
+    '--portal-bloom-1': `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.5)`,
+    '--portal-bloom-2': `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.32)`,
+    '--portal-wash': `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.16)`,
+    '--portal-head-bg': `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.22)`,
+    '--portal-head-border': `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.5)`,
   }
 }
 

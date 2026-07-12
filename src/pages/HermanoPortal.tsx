@@ -564,7 +564,7 @@ export default function HermanoPortal() {
   // ===================== Pantalla de identificación =====================
   if (!hermanoActivo) {
     return (
-      <div className="portal">
+      <div className="portal" style={estiloTema(hermandadElegida?.color ?? '#caa24a')}>
         <PortalHead
           hermandad={hermandadElegida?.nombre ?? 'Cabildo'}
           logo={null}

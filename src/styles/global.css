@@ -1459,16 +1459,21 @@ h1, h2, h3,
    Área del hermano (portal self-service, distinto del panel de gestión)
    ========================================================================= */
 .portal { min-height: 100vh; background:
-    radial-gradient(60% 50% at 10% -8%, var(--glass-bloom-1), transparent 60%),
-    radial-gradient(55% 45% at 100% 12%, var(--glass-bloom-2), transparent 55%),
+    radial-gradient(85% 70% at 15% -10%, var(--portal-bloom-1, var(--glass-bloom-1)), transparent 68%),
+    radial-gradient(75% 65% at 100% 5%, var(--portal-bloom-2, var(--glass-bloom-2)), transparent 62%),
+    linear-gradient(180deg, var(--portal-wash, transparent) 0%, transparent 55%),
     var(--bg-sunken);
+  transition: background 0.4s ease;
   display: flex; flex-direction: column;
 }
 .portal__head {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  padding: 0.9rem 1.5rem; background: var(--glass-surface-strong); border-bottom: 1px solid var(--glass-border);
+  padding: 0.9rem 1.5rem;
+  background: var(--portal-head-bg, transparent), var(--glass-surface-strong);
+  border-bottom: 1px solid var(--portal-head-border, var(--glass-border));
   backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
   position: sticky; top: 0; z-index: 20;
+  transition: background 0.4s ease, border-color 0.4s ease;
 }
 .portal__brand { display: flex; align-items: center; gap: 0.65rem; }
 .portal__logo {
