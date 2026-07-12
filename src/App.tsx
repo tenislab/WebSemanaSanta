@@ -5,6 +5,7 @@ import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
 import HermanoPortal from './pages/HermanoPortal'
 import EntradaUnificada from './pages/EntradaUnificada'
+import PaginaLegal from './pages/PaginaLegal'
 import AppShell from './components/AppShell'
 import DashboardHome from './pages/app/DashboardHome'
 import Hermanos from './pages/app/Hermanos'
@@ -29,6 +30,7 @@ export default function App() {
       <Route path="/registro" element={<Signup />} />
       <Route path="/recuperar" element={<ForgotPassword />} />
       <Route path="/hermano" element={<HermanoPortal />} />
+      <Route path="/legal/:slug" element={<PaginaLegal />} />
 
       <Route
         path="/app"

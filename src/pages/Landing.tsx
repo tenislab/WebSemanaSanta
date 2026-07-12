@@ -254,6 +254,15 @@ export default function Landing() {
               <li><Link to="/registro">Crear hermandad</Link></li>
             </ul>
           </div>
+          <div>
+            <h4>Legal</h4>
+            <ul>
+              <li><Link to="/legal/aviso-legal">Aviso legal</Link></li>
+              <li><Link to="/legal/privacidad">Política de privacidad</Link></li>
+              <li><Link to="/legal/condiciones">Condiciones de uso</Link></li>
+              <li><Link to="/legal/cookies">Política de cookies</Link></li>
+            </ul>
+          </div>
         </div>
         <div className="wrap footer-bottom">
           <span>© 2026 Cabildo · Todos los derechos reservados</span>

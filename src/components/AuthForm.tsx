@@ -283,8 +283,9 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         <label className="checkbox">
           <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} />
           <span>
-            Acepto las <a href="#">condiciones del servicio</a> y la{' '}
-            <a href="#">política de privacidad</a>.
+            Acepto las{' '}
+            <a href="/legal/condiciones" target="_blank" rel="noopener noreferrer">condiciones del servicio</a> y la{' '}
+            <a href="/legal/privacidad" target="_blank" rel="noopener noreferrer">política de privacidad</a>.
           </span>
         </label>
       )}
