@@ -22,6 +22,7 @@ import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../li
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../lib/campana'
 import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
+import { isSupabaseConfigured } from '../lib/supabase'
 import { hermanoToRow, rowToHermano } from '../lib/db/hermanos'
 import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
 import { cuotaToRow, rowToCuota } from '../lib/db/cuotas'
@@ -630,12 +631,19 @@ export default function HermanoPortal() {
                   )}
                 </ul>
 
-                <p className="portal__note">
-                  <button type="button" className="portal__link-btn" onClick={entrarComoDemo}>
-                    Entra con un hermano de prueba
-                  </button>{' '}
-                  · <Link to="/">Volver a la portada</Link>
-                </p>
+                <div className="portal__foot">
+                  {!isSupabaseConfigured && (
+                    <button type="button" className="portal__link-btn" onClick={entrarComoDemo}>
+                      Entra con un hermano de prueba
+                    </button>
+                  )}
+                  <Link to="/" className="portal__foot-back">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M15 18l-6-6 6-6" />
+                    </svg>
+                    Volver a la portada
+                  </Link>
+                </div>
               </>
             )}
 
