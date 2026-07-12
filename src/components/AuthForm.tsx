@@ -238,7 +238,7 @@ export default function AuthForm({ mode }: { mode: Mode }) {
               id="password"
               type={showPass ? 'text' : 'password'}
               autoComplete={isSignup ? 'new-password' : 'current-password'}
-              placeholder={isSignup ? 'Crea una contraseña (mín. 6)' : 'demo1234 · tesoro123'}
+              placeholder={isSignup ? 'Crea una contraseña (mín. 6)' : configured ? '••••••••••' : 'demo1234 · tesoro123'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
