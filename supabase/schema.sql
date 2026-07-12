@@ -317,35 +317,150 @@ create or replace function resolver_email_hermano(p_dni text) returns text
   $$;
 grant execute on function resolver_email_hermano(text) to anon, authenticated;
 
--- Tablas de gestión: solo personal (nunca hermanos).
+-- Habilita RLS en todas las tablas de gestión (las políticas concretas se
+-- crean más abajo, por bloques).
 do $$
 declare
   t text;
 begin
   for t in
     select unnest(array[
-      'hermandad_settings', 'tramos', 'movimientos',
+      'hermandad_settings', 'hermanos', 'tramos', 'cuotas', 'papeletas', 'movimientos',
       'incidencias', 'enseres', 'documentos', 'comunicados',
       'cuentas_sociales', 'personal', 'permisos_cargo',
       'solicitudes_alta', 'conceptos_cuota', 'opciones_papeleta', 'catalogos'
     ])
   loop
     execute format('alter table %I enable row level security', t);
-    execute format('drop policy if exists "authenticated_all" on %I', t);
+  end loop;
+end $$;
+
+-- ¿Puede el personal actual ESCRIBIR en este módulo? El titular (la cuenta
+-- con la que se creó la hermandad, sin fila en `personal`) siempre puede.
+-- El personal con cargo, solo si su cargo tiene el módulo permitido en
+-- Personal y permisos y sigue activo. security definer: sin esto, la propia
+-- consulta a `personal` quedaría bloqueada por las políticas que usan esta
+-- función (personal y solicitudes_alta también restringen la LECTURA).
+create or replace function modulo_permitido(p_modulo text) returns boolean
+  language sql stable security definer set search_path = public as $$
+    select
+      not exists (select 1 from personal where auth_user_id = auth.uid())
+      or exists (
+        select 1 from personal p
+        join permisos_cargo pc on pc.cargo = p.cargo
+        where p.auth_user_id = auth.uid() and p.activo and pc.modulo_id = p_modulo
+      )
+  $$;
+grant execute on function modulo_permitido(text) to authenticated;
+
+-- Tablas de gestión "normales": la LECTURA queda abierta a todo el personal
+-- (casi toda pantalla necesita nombres/datos de otros módulos, p. ej. Cuotas
+-- muestra el nombre del hermano); ESCRIBIR (crear/editar/borrar) exige el
+-- módulo correspondiente.
+do $$
+declare
+  reg record;
+begin
+  for reg in
+    select * from (values
+      ('hermandad_settings', 'configuracion'),
+      ('tramos', 'configuracion'),
+      ('movimientos', 'tesoreria'),
+      ('incidencias', 'cortejo'),
+      ('enseres', 'inventario'),
+      ('documentos', 'archivo'),
+      ('comunicados', 'comunicados'),
+      ('cuentas_sociales', 'comunicados'),
+      ('permisos_cargo', 'personal'),
+      ('conceptos_cuota', 'configuracion'),
+      ('opciones_papeleta', 'configuracion'),
+      ('catalogos', 'configuracion')
+    ) as t(tabla, modulo)
+  loop
+    execute format('drop policy if exists "authenticated_all" on %I', reg.tabla);
+    execute format('drop policy if exists "%s_staff_select" on %I', reg.tabla, reg.tabla);
     execute format(
-      'create policy "authenticated_all" on %I for all to authenticated using (not auth_es_hermano()) with check (not auth_es_hermano())',
-      t
+      'create policy "%s_staff_select" on %I for select to authenticated using (not auth_es_hermano())',
+      reg.tabla, reg.tabla
+    );
+    execute format('drop policy if exists "%s_staff_insert" on %I', reg.tabla, reg.tabla);
+    execute format(
+      'create policy "%s_staff_insert" on %I for insert to authenticated with check (not auth_es_hermano() and modulo_permitido(%L))',
+      reg.tabla, reg.tabla, reg.modulo
+    );
+    execute format('drop policy if exists "%s_staff_update" on %I', reg.tabla, reg.tabla);
+    execute format(
+      'create policy "%s_staff_update" on %I for update to authenticated using (not auth_es_hermano() and modulo_permitido(%L)) with check (not auth_es_hermano() and modulo_permitido(%L))',
+      reg.tabla, reg.tabla, reg.modulo, reg.modulo
+    );
+    execute format('drop policy if exists "%s_staff_delete" on %I', reg.tabla, reg.tabla);
+    execute format(
+      'create policy "%s_staff_delete" on %I for delete to authenticated using (not auth_es_hermano() and modulo_permitido(%L))',
+      reg.tabla, reg.tabla, reg.modulo
     );
   end loop;
 end $$;
 
--- Hermanos: el personal ve y gestiona a todos; cada hermano solo ve y edita
--- su propia ficha (no puede darse de alta ni borrarse a sí mismo).
-alter table hermanos enable row level security;
+-- Tablas con un dato sensible propio (contraseñas en claro): también se
+-- restringe la LECTURA al módulo correspondiente, no solo la escritura.
+do $$
+declare
+  reg record;
+begin
+  for reg in
+    select * from (values
+      ('personal', 'personal'),
+      ('solicitudes_alta', 'hermanos')
+    ) as t(tabla, modulo)
+  loop
+    execute format('drop policy if exists "authenticated_all" on %I', reg.tabla);
+    execute format('drop policy if exists "%s_staff_select" on %I', reg.tabla, reg.tabla);
+    execute format(
+      'create policy "%s_staff_select" on %I for select to authenticated using (not auth_es_hermano() and modulo_permitido(%L))',
+      reg.tabla, reg.tabla, reg.modulo
+    );
+    execute format('drop policy if exists "%s_staff_insert" on %I', reg.tabla, reg.tabla);
+    execute format(
+      'create policy "%s_staff_insert" on %I for insert to authenticated with check (not auth_es_hermano() and modulo_permitido(%L))',
+      reg.tabla, reg.tabla, reg.modulo
+    );
+    execute format('drop policy if exists "%s_staff_update" on %I', reg.tabla, reg.tabla);
+    execute format(
+      'create policy "%s_staff_update" on %I for update to authenticated using (not auth_es_hermano() and modulo_permitido(%L)) with check (not auth_es_hermano() and modulo_permitido(%L))',
+      reg.tabla, reg.tabla, reg.modulo, reg.modulo
+    );
+    execute format('drop policy if exists "%s_staff_delete" on %I', reg.tabla, reg.tabla);
+    execute format(
+      'create policy "%s_staff_delete" on %I for delete to authenticated using (not auth_es_hermano() and modulo_permitido(%L))',
+      reg.tabla, reg.tabla, reg.modulo
+    );
+  end loop;
+end $$;
+
+-- La tabla de solicitudes de alta también debe poder rellenarse desde el área
+-- del hermano SIN sesión iniciada (todavía no es hermano/a): se permite
+-- insertar de forma anónima, pero no leer ni modificar sin sesión.
+drop policy if exists "anon_insert_solicitudes" on solicitudes_alta;
+create policy "anon_insert_solicitudes" on solicitudes_alta for insert to anon with check (true);
+
+-- Hermanos: el personal ve a todos (según su módulo puede además crear,
+-- editar o borrar); cada hermano solo ve y edita su propia ficha (no puede
+-- darse de alta ni borrarse a sí mismo).
 drop policy if exists "authenticated_all" on hermanos;
 drop policy if exists "hermanos_personal_all" on hermanos;
-create policy "hermanos_personal_all" on hermanos for all to authenticated
-  using (not auth_es_hermano()) with check (not auth_es_hermano());
+drop policy if exists "hermanos_staff_select" on hermanos;
+create policy "hermanos_staff_select" on hermanos for select to authenticated
+  using (not auth_es_hermano());
+drop policy if exists "hermanos_staff_insert" on hermanos;
+create policy "hermanos_staff_insert" on hermanos for insert to authenticated
+  with check (not auth_es_hermano() and modulo_permitido('hermanos'));
+drop policy if exists "hermanos_staff_update" on hermanos;
+create policy "hermanos_staff_update" on hermanos for update to authenticated
+  using (not auth_es_hermano() and modulo_permitido('hermanos'))
+  with check (not auth_es_hermano() and modulo_permitido('hermanos'));
+drop policy if exists "hermanos_staff_delete" on hermanos;
+create policy "hermanos_staff_delete" on hermanos for delete to authenticated
+  using (not auth_es_hermano() and modulo_permitido('hermanos'));
 drop policy if exists "hermanos_propio_select" on hermanos;
 create policy "hermanos_propio_select" on hermanos for select to authenticated
   using (auth_es_hermano() and auth_user_id = auth.uid());
@@ -354,24 +469,47 @@ create policy "hermanos_propio_update" on hermanos for update to authenticated
   using (auth_es_hermano() and auth_user_id = auth.uid())
   with check (auth_es_hermano() and auth_user_id = auth.uid());
 
--- Cuotas: el personal gestiona todas; cada hermano solo ve las suyas (no las
--- puede crear ni modificar: eso es cosa de tesorería).
-alter table cuotas enable row level security;
+-- Cuotas: el personal ve todas (el módulo "cuotas" hace falta para
+-- crear/editar/borrar); cada hermano solo ve las suyas (no las puede crear
+-- ni modificar: eso es cosa de tesorería).
 drop policy if exists "authenticated_all" on cuotas;
 drop policy if exists "cuotas_personal_all" on cuotas;
-create policy "cuotas_personal_all" on cuotas for all to authenticated
-  using (not auth_es_hermano()) with check (not auth_es_hermano());
+drop policy if exists "cuotas_staff_select" on cuotas;
+create policy "cuotas_staff_select" on cuotas for select to authenticated
+  using (not auth_es_hermano());
+drop policy if exists "cuotas_staff_insert" on cuotas;
+create policy "cuotas_staff_insert" on cuotas for insert to authenticated
+  with check (not auth_es_hermano() and modulo_permitido('cuotas'));
+drop policy if exists "cuotas_staff_update" on cuotas;
+create policy "cuotas_staff_update" on cuotas for update to authenticated
+  using (not auth_es_hermano() and modulo_permitido('cuotas'))
+  with check (not auth_es_hermano() and modulo_permitido('cuotas'));
+drop policy if exists "cuotas_staff_delete" on cuotas;
+create policy "cuotas_staff_delete" on cuotas for delete to authenticated
+  using (not auth_es_hermano() and modulo_permitido('cuotas'));
 drop policy if exists "cuotas_propio_select" on cuotas;
 create policy "cuotas_propio_select" on cuotas for select to authenticated
   using (auth_es_hermano() and hermano_id = hermano_propio_id());
 
--- Papeletas: el personal gestiona todas; cada hermano ve, solicita y
--- renuncia solo a las suyas.
-alter table papeletas enable row level security;
+-- Papeletas: tanto Papeletas de sitio como Cortejo escriben en esta tabla
+-- (asignar tramo, marcar pago, etc.), así que cualquiera de los dos módulos
+-- vale para crear/editar/borrar. Cada hermano ve, solicita y renuncia solo a
+-- las suyas.
 drop policy if exists "authenticated_all" on papeletas;
 drop policy if exists "papeletas_personal_all" on papeletas;
-create policy "papeletas_personal_all" on papeletas for all to authenticated
-  using (not auth_es_hermano()) with check (not auth_es_hermano());
+drop policy if exists "papeletas_staff_select" on papeletas;
+create policy "papeletas_staff_select" on papeletas for select to authenticated
+  using (not auth_es_hermano());
+drop policy if exists "papeletas_staff_insert" on papeletas;
+create policy "papeletas_staff_insert" on papeletas for insert to authenticated
+  with check (not auth_es_hermano() and (modulo_permitido('papeletas') or modulo_permitido('cortejo')));
+drop policy if exists "papeletas_staff_update" on papeletas;
+create policy "papeletas_staff_update" on papeletas for update to authenticated
+  using (not auth_es_hermano() and (modulo_permitido('papeletas') or modulo_permitido('cortejo')))
+  with check (not auth_es_hermano() and (modulo_permitido('papeletas') or modulo_permitido('cortejo')));
+drop policy if exists "papeletas_staff_delete" on papeletas;
+create policy "papeletas_staff_delete" on papeletas for delete to authenticated
+  using (not auth_es_hermano() and (modulo_permitido('papeletas') or modulo_permitido('cortejo')));
 drop policy if exists "papeletas_propio_select" on papeletas;
 create policy "papeletas_propio_select" on papeletas for select to authenticated
   using (auth_es_hermano() and hermano_id = hermano_propio_id());
@@ -382,9 +520,3 @@ drop policy if exists "papeletas_propio_update" on papeletas;
 create policy "papeletas_propio_update" on papeletas for update to authenticated
   using (auth_es_hermano() and hermano_id = hermano_propio_id())
   with check (auth_es_hermano() and hermano_id = hermano_propio_id());
-
--- La tabla de solicitudes de alta también debe poder rellenarse desde el área
--- del hermano SIN sesión iniciada (todavía no es hermano/a): se permite
--- insertar de forma anónima, pero no leer ni modificar sin sesión.
-drop policy if exists "anon_insert_solicitudes" on solicitudes_alta;
-create policy "anon_insert_solicitudes" on solicitudes_alta for insert to anon with check (true);
