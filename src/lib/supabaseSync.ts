@@ -58,23 +58,35 @@ export function useSupabaseTable<T extends { id: string }>(
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
     let cancelado = false
-    let query = supabase.from(tabla).select('*')
-    if (orderBy) query = query.order(orderBy)
-    query.then(({ data, error }) => {
-      if (cancelado) return
-      if (error) {
-        console.error(`No se pudo cargar "${tabla}":`, error.message)
-      } else {
-        const traidos = (data ?? []).map(fromRow)
-        setItemsState(traidos)
-        espejarEnLocal(claveLocal, traidos)
-      }
-      cargado.current = true
-    })
+
+    function cargar() {
+      if (!supabase) return
+      let query = supabase.from(tabla).select('*')
+      if (orderBy) query = query.order(orderBy)
+      query.then(({ data, error }) => {
+        if (cancelado) return
+        if (error) {
+          console.error(`No se pudo cargar "${tabla}":`, error.message)
+        } else {
+          const traidos = (data ?? []).map(fromRow)
+          setItemsState(traidos)
+          espejarEnLocal(claveLocal, traidos)
+        }
+        cargado.current = true
+      })
+    }
+
+    cargar()
+    // Vuelve a cargar cuando cambia la sesión: el área del hermano monta este
+    // hook antes de que el hermano haya iniciado sesión (todavía no tiene
+    // acceso a sus filas por RLS), así que la carga inicial llega vacía y
+    // hace falta repetirla en cuanto entra.
+    const { data: sub } = supabase.auth.onAuthStateChange(() => cargar())
     return () => {
       cancelado = true
+      sub.subscription.unsubscribe()
     }
-    // Solo al montar: cada página monta este hook una vez por colección.
+    // Solo al montar/cambio de sesión: cada página monta este hook una vez por colección.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabla])
 

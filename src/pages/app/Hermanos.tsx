@@ -7,11 +7,38 @@ import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
 import { descargarArchivo } from '../../lib/csv'
 import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
+
+/**
+ * Con Supabase conectado, crea además una cuenta real de acceso (mismo
+ * correo y contraseña) para que el hermano pueda entrar en su área; sin él,
+ * solo entra por el modo demostración. Devuelve el id de esa cuenta, o
+ * `null` si no hay Supabase o si algo falla (el hermano se guarda igual,
+ * solo que sin poder entrar hasta que se resuelva).
+ */
+async function crearAccesoHermano(
+  email: string,
+  password: string,
+  dni: string,
+  nombre: string,
+): Promise<string | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { tipo: 'hermano', dni, nombre } },
+  })
+  if (error) {
+    console.error('No se pudo crear el acceso real del hermano en Supabase:', error.message)
+    return null
+  }
+  return data.user?.id ?? null
+}
 
 function estadoClass(estado: EstadoHermano) {
   if (estado === 'Activo') return 'pill--ok'
@@ -50,7 +77,7 @@ export default function Hermanos() {
     saveSolicitudes(next)
   }
 
-  function aprobarSolicitud(sol: SolicitudAlta) {
+  async function aprobarSolicitud(sol: SolicitudAlta) {
     if (hermanos.some((h) => h.dni.toUpperCase() === sol.dni.toUpperCase())) {
       actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Rechazada' } : s)))
       return
@@ -69,7 +96,9 @@ export default function Hermanos() {
       iban: null,
       dni: sol.dni,
       claveAcceso: sol.clavePropuesta,
+      authUserId: null,
     }
+    nuevo.authUserId = await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
     setHermanos((prev) => [...prev, nuevo])
     actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Aprobada' } : s)))
     setJustAddedId(nuevo.id)
@@ -123,7 +152,7 @@ export default function Hermanos() {
     return map
   }, [tramos, hermanoDe])
 
-  function handleCreate(e: FormEvent<HTMLFormElement>) {
+  async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = e.currentTarget
     const data = new FormData(form)
@@ -155,7 +184,9 @@ export default function Hermanos() {
       iban,
       dni,
       claveAcceso: CLAVE_DEMO_HERMANOS,
+      authUserId: null,
     }
+    nuevo.authUserId = await crearAccesoHermano(email, CLAVE_DEMO_HERMANOS, dni, nombre)
     setHermanos((prev) => [...prev, nuevo])
     setJustAddedId(nuevo.id)
     setFormOpen(false)

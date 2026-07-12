@@ -15,6 +15,7 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
     iban: h.iban,
     dni: h.dni,
     clave_acceso: h.claveAcceso,
+    auth_user_id: h.authUserId,
   }
 }
 
@@ -32,5 +33,6 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     iban: (r.iban as string | null) ?? null,
     dni: r.dni as string,
     claveAcceso: r.clave_acceso as string,
+    authUserId: (r.auth_user_id as string | null) ?? null,
   }
 }

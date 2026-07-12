@@ -22,7 +22,7 @@ import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../li
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../lib/campana'
 import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { hermanoToRow, rowToHermano } from '../lib/db/hermanos'
 import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
 import { cuotaToRow, rowToCuota } from '../lib/db/cuotas'
@@ -244,12 +244,38 @@ export default function HermanoPortal() {
   }
 
   /** DNI + contraseña, ya dentro de la hermandad elegida — no hace falta adivinar dónde busca. */
-  function identificar(e: FormEvent) {
+  async function identificar(e: FormEvent) {
     e.preventDefault()
     if (!hermandadElegida) return
     const dni = normaliza(dniInput)
 
     if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
+      if (isSupabaseConfigured && supabase) {
+        const { data: email, error: rpcError } = await supabase.rpc('resolver_email_hermano', { p_dni: dni })
+        if (rpcError || !email) {
+          setErrorLogin('DNI o contraseña incorrectos.')
+          return
+        }
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password: claveInput,
+        })
+        if (signInError || !signInData.session) {
+          setErrorLogin('DNI o contraseña incorrectos.')
+          return
+        }
+        const { data: fila } = await supabase.from('hermanos').select('*').eq('dni', dni).maybeSingle()
+        if (!fila) {
+          setErrorLogin('No se pudo cargar tu ficha. Inténtalo de nuevo en unos segundos.')
+          return
+        }
+        const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: fila.id as string }
+        guardarSesion(nueva)
+        setSesion(nueva)
+        setErrorLogin(null)
+        return
+      }
+
       const encontrado = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
       if (!encontrado) {
         setErrorLogin('DNI o contraseña incorrectos.')
@@ -329,6 +355,9 @@ export default function HermanoPortal() {
   }
 
   function salir() {
+    if (isSupabaseConfigured && supabase) {
+      supabase.auth.signOut()
+    }
     sessionStorage.removeItem(SESION_KEY)
     setSesion(null)
     setPaso('buscar')
@@ -371,7 +400,7 @@ export default function HermanoPortal() {
     setTimeout(() => setDatosGuardados(false), 2500)
   }
 
-  function cambiarClave(e: FormEvent<HTMLFormElement>) {
+  async function cambiarClave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!sesion || !hermanoActivo) return
     const data = new FormData(e.currentTarget)
@@ -379,16 +408,38 @@ export default function HermanoPortal() {
     const nueva = String(data.get('claveNueva') ?? '')
     const confirmar = String(data.get('claveConfirmar') ?? '')
 
-    if (actual !== hermanoActivo.claveAcceso) {
-      setClaveError('La contraseña actual no es correcta.')
-      return
-    }
     if (nueva.length < 6) {
       setClaveError('La nueva contraseña debe tener al menos 6 caracteres.')
       return
     }
     if (nueva !== confirmar) {
       setClaveError('Las dos contraseñas nuevas no coinciden.')
+      return
+    }
+
+    if (esPrincipal && isSupabaseConfigured && supabase && hermanoPrincipal) {
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: hermanoPrincipal.email,
+        password: actual,
+      })
+      if (verifyError) {
+        setClaveError('La contraseña actual no es correcta.')
+        return
+      }
+      const { error: updateError } = await supabase.auth.updateUser({ password: nueva })
+      if (updateError) {
+        setClaveError('No se pudo cambiar la contraseña. Inténtalo de nuevo.')
+        return
+      }
+      setClaveError(null)
+      setClaveGuardada(true)
+      e.currentTarget.reset()
+      setTimeout(() => setClaveGuardada(false), 2500)
+      return
+    }
+
+    if (actual !== hermanoActivo.claveAcceso) {
+      setClaveError('La contraseña actual no es correcta.')
       return
     }
 

@@ -11,7 +11,7 @@ import { useAuth } from '../context/AuthContext'
  * conecte Supabase, la protección real entra en vigor automáticamente.
  */
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading, configured } = useAuth()
+  const { session, user, loading, configured } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -25,6 +25,12 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!session && configured) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  // Una cuenta de hermano (área del hermano) no es personal de la
+  // hermandad: aunque tenga sesión real de Supabase, no debe entrar aquí.
+  if (session && configured && user?.user_metadata?.tipo === 'hermano') {
+    return <Navigate to="/hermano" replace />
   }
 
   return <>{children}</>
