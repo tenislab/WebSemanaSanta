@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import PapeletaTicket from '../components/PapeletaTicket'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
@@ -105,7 +105,8 @@ export default function HermanoPortal() {
   const precioBase = useMemo(() => getPrecioBase(), [])
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
-  const [dniInput, setDniInput] = useState('')
+  const [searchParams] = useSearchParams()
+  const [dniInput, setDniInput] = useState(() => searchParams.get('dni') ?? '')
   const [claveInput, setClaveInput] = useState('')
   const [errorLogin, setErrorLogin] = useState<string | null>(null)
   const [pendingCuerpo, setPendingCuerpo] = useState<string>('')
@@ -457,7 +458,7 @@ export default function HermanoPortal() {
                   value={dniInput}
                   onChange={(e) => setDniInput(e.target.value)}
                   placeholder="12345678A"
-                  autoFocus
+                  autoFocus={!dniInput}
                   required
                 />
               </div>
@@ -469,6 +470,7 @@ export default function HermanoPortal() {
                   value={claveInput}
                   onChange={(e) => setClaveInput(e.target.value)}
                   placeholder="En la demo: hermano123"
+                  autoFocus={!!dniInput}
                   required
                 />
               </div>

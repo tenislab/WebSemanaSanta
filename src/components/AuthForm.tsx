@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 type Mode = 'login' | 'signup' | 'reset'
@@ -11,10 +11,11 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/app'
+  const [searchParams] = useSearchParams()
 
   const [hermandad, setHermandad] = useState('')
   const [nombre, setNombre] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => searchParams.get('correo') ?? '')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPass, setShowPass] = useState(false)

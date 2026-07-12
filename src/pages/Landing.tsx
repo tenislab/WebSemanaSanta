@@ -96,14 +96,8 @@ export default function Landing() {
             <a href="#precios">Precios</a>
           </nav>
           <div className="nav-cta">
-            <Link className="btn btn-outline btn-sm" to="/hermano">
-              Área del hermano
-            </Link>
-            <Link className="link-login" to="/login">
-              Iniciar sesión
-            </Link>
-            <Link className="btn btn-primary btn-sm" to="/registro">
-              Empieza gratis
+            <Link className="btn btn-outline btn-sm" to="/entrar">
+              Entrar
             </Link>
           </div>
         </div>
@@ -126,11 +120,11 @@ export default function Landing() {
               <li><Check /> Portal propio para cada hermano</li>
             </ul>
             <div className="hero-actions">
-              <Link className="btn btn-primary" to="/registro">
-                Crea tu hermandad gratis
+              <Link className="btn btn-primary btn-glass-dynamic" to="/registro">
+                <span>Crea tu hermandad gratis</span>
               </Link>
-              <Link className="btn btn-outline" to="/login">
-                Iniciar sesión
+              <Link className="btn btn-outline" to="/entrar">
+                Entrar
               </Link>
             </div>
           </div>
@@ -221,8 +215,8 @@ export default function Landing() {
           <div className="cta-inner">
             <p className="eyebrow eyebrow--gold">Empieza hoy</p>
             <h2>Lleva tu hermandad al día en una tarde</h2>
-            <Link className="btn btn-primary" to="/registro">
-              Crea tu hermandad gratis
+            <Link className="btn btn-primary btn-glass-dynamic" to="/registro">
+              <span>Crea tu hermandad gratis</span>
             </Link>
           </div>
         </div>
@@ -266,6 +260,10 @@ export default function Landing() {
           <span>Hecho con cariño para el mundo cofrade</span>
         </div>
       </footer>
+
+      <Link className="floating-cta btn btn-primary btn-glass-dynamic" to="/registro">
+        <span>+ Empieza gratis</span>
+      </Link>
     </div>
   )
 }
