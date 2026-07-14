@@ -15,6 +15,8 @@ export interface MiembroPersonal {
   cargo: Cargo
   activo: boolean
   fechaAlta: string
+  /** Id de su cuenta real de Supabase Auth, una vez creada (null en modo demostración o hasta que se cree). */
+  authUserId: string | null
 }
 
 export const CLAVE_PERSONAL = 'cabildo-personal'
@@ -28,6 +30,7 @@ const PERSONAL_DE_EJEMPLO: MiembroPersonal[] = [
     cargo: 'Secretario/a',
     activo: true,
     fechaAlta: '2026-01-01',
+    authUserId: null,
   },
   {
     id: 'personal-demo-tesorero',
@@ -37,6 +40,7 @@ const PERSONAL_DE_EJEMPLO: MiembroPersonal[] = [
     cargo: 'Tesorero/a',
     activo: true,
     fechaAlta: '2026-01-01',
+    authUserId: null,
   },
   {
     id: 'personal-demo-fiscal',
@@ -46,6 +50,7 @@ const PERSONAL_DE_EJEMPLO: MiembroPersonal[] = [
     cargo: 'Fiscal',
     activo: true,
     fechaAlta: '2026-01-01',
+    authUserId: null,
   },
   {
     id: 'personal-demo-mayordomo',
@@ -55,6 +60,7 @@ const PERSONAL_DE_EJEMPLO: MiembroPersonal[] = [
     cargo: 'Mayordomo/Prioste',
     activo: true,
     fechaAlta: '2026-01-01',
+    authUserId: null,
   },
 ]
 

@@ -9,6 +9,7 @@ export function personalToRow(p: MiembroPersonal): Record<string, unknown> {
     cargo: p.cargo,
     activo: p.activo,
     fecha_alta: p.fechaAlta,
+    auth_user_id: p.authUserId,
   }
 }
 
@@ -21,5 +22,6 @@ export function rowToPersonal(r: Record<string, unknown>): MiembroPersonal {
     cargo: r.cargo as MiembroPersonal['cargo'],
     activo: r.activo as boolean,
     fechaAlta: r.fecha_alta as string,
+    authUserId: (r.auth_user_id as string | null) ?? null,
   }
 }

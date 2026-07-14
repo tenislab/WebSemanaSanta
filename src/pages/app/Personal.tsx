@@ -43,7 +43,7 @@ export default function Personal() {
     setFormOpen(true)
   }
 
-  function handleCreate(e: FormEvent<HTMLFormElement>) {
+  async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = e.currentTarget
     const data = new FormData(form)
@@ -70,17 +70,25 @@ export default function Personal() {
       cargo,
       activo: true,
       fechaAlta: new Date().toISOString().slice(0, 10),
+      authUserId: null,
     }
-    setPersonal([nuevo, ...personal])
     // Con Supabase conectado, esto le crea además una cuenta real de acceso
     // (mismo correo y contraseña); sin él, solo entra por el modo demostración.
+    // El id de esa cuenta se guarda en authUserId: sin él, las políticas de
+    // seguridad por cargo no saben qué módulos le corresponden.
     if (isSupabaseConfigured && supabase) {
-      supabase.auth
-        .signUp({ email, password: clave, options: { data: { hermandad: nombreHermandad, nombre, cargo } } })
-        .then(({ error: signUpError }) => {
-          if (signUpError) console.error('No se pudo crear el acceso real en Supabase:', signUpError.message)
-        })
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password: clave,
+        options: { data: { hermandad: nombreHermandad, nombre, cargo } },
+      })
+      if (signUpError) {
+        console.error('No se pudo crear el acceso real en Supabase:', signUpError.message)
+      } else {
+        nuevo.authUserId = signUpData.user?.id ?? null
+      }
     }
+    setPersonal([nuevo, ...personal])
     setFormOpen(false)
     setError(null)
     form.reset()
