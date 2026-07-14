@@ -12,26 +12,37 @@ interface LogoProps {
 }
 
 /**
- * Marca de Cabildo: una hornacina / arco de capilla con un punto de luz
- * en su interior (la imagen sacra, el cirio). Evoca el mundo cofrade sin
- * atarse a una hermandad concreta.
+ * Marca de Gobergo: el perfil de un nazareno en actitud de avance, de trazo
+ * limpio y minimalista. Rompe con la sobrecarga visual tradicional del
+ * entorno barroco cofrade, sin atarse a una hermandad concreta.
  */
 export function LogoMark({ size = 34 }: { size?: number }) {
   return (
     <span className="logo-mark" style={{ width: size, height: size }}>
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <svg viewBox="0 0 100 160" fill="none" aria-hidden="true">
         <path
-          d="M4 20.5V11a8 8 0 0 1 16 0v9.5"
+          d="M58,4
+            C69,9 73,20 67,28
+            C71,31 69,35 64,33.5
+            C70,42 76,56 75,76
+            C74,98 71,116 66,132
+            L67,134 L60,150 L55,136
+            L48,150 L43,136
+            L38,138 L33,132
+            C28,116 26,98 27,78
+            C28,58 36,42 46,33
+            C41,24 44,13 58,4 Z"
           stroke="currentColor"
-          strokeWidth="1.7"
+          strokeWidth="6"
+          strokeLinejoin="round"
           strokeLinecap="round"
         />
-        <path d="M2.8 20.5h18.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-        <circle cx="12" cy="10.2" r="1.7" fill="currentColor" />
+        <circle cx="56" cy="24" r="3" fill="currentColor" />
         <path
-          d="M12 6.4c1 .8 1 1.9 0 2.7-1-.8-1-1.9 0-2.7Z"
-          fill="currentColor"
-          opacity="0.55"
+          d="M40,66 C50,68 54,76 49,84 C46,88 47,92 51,94"
+          stroke="currentColor"
+          strokeWidth="6"
+          strokeLinecap="round"
         />
       </svg>
     </span>
