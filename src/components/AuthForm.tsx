@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
 import { useAuth, DEMO_EMAIL, DEMO_PASSWORD } from '../context/AuthContext'
 import { getPersonal } from '../lib/personal'
@@ -13,7 +13,7 @@ function inicialesDe(nombre: string) {
 }
 
 export default function AuthForm({ mode }: { mode: Mode }) {
-  const { signIn, signUp, resetPassword, configured } = useAuth()
+  const { signIn, signUp, resetPassword, signOut, configured, mfaPendiente, verificarCodigoMfa } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/app'
@@ -32,8 +32,34 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  const [mfaStep, setMfaStep] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
+
   const isSignup = mode === 'signup'
   const isReset = mode === 'reset'
+
+  // Si ya hay una sesión con contraseña correcta pero pendiente del segundo
+  // paso (por ejemplo, se recargó la página a mitad del proceso), retoma
+  // directamente en el paso del código.
+  useEffect(() => {
+    if (mode === 'login' && mfaPendiente) setMfaStep(true)
+  }, [mode, mfaPendiente])
+
+  async function handleVerifyMfa(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      const { error } = await verificarCodigoMfa(mfaCode.trim())
+      if (error) {
+        setError(error)
+        return
+      }
+      navigate(redirectTo, { replace: true })
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   function validate(): string | null {
     if (!EMAIL_RE.test(email)) return 'Introduce un correo electrónico válido.'
@@ -90,9 +116,13 @@ export default function AuthForm({ mode }: { mode: Mode }) {
         return
       }
 
-      const { error } = await signIn(email, password)
+      const { error, mfaRequerido } = await signIn(email, password)
       if (error) {
         setError(error)
+        return
+      }
+      if (mfaRequerido) {
+        setMfaStep(true)
         return
       }
       navigate(redirectTo, { replace: true })
@@ -106,9 +136,13 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     setNotice(null)
     setSubmitting(true)
     try {
-      const { error } = await signIn(correoDemo, claveDemo)
+      const { error, mfaRequerido } = await signIn(correoDemo, claveDemo)
       if (error) {
         setError(error)
+        return
+      }
+      if (mfaRequerido) {
+        setMfaStep(true)
         return
       }
       navigate(redirectTo, { replace: true })
@@ -132,6 +166,51 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     : isSignup
       ? 'Crear hermandad'
       : 'Iniciar sesión'
+
+  if (mode === 'login' && mfaStep) {
+    return (
+      <form className="auth-form" onSubmit={handleVerifyMfa} noValidate>
+        <div className="banner banner--info" role="status">
+          <strong>Verificación en dos pasos.</strong> Abre tu app de autenticación (Google
+          Authenticator, Authy…) e introduce el código de 6 dígitos.
+        </div>
+        {error && (
+          <div className="banner banner--error" role="alert">
+            {error}
+          </div>
+        )}
+        <div className="field">
+          <label htmlFor="mfaCode">Código de verificación</label>
+          <input
+            id="mfaCode"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            maxLength={6}
+            value={mfaCode}
+            onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+            autoFocus
+          />
+        </div>
+        <button type="submit" className="btn btn-primary btn-block" disabled={submitting || mfaCode.length < 6}>
+          {submitting ? <span className="spinner" aria-hidden="true" /> : 'Verificar'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-block"
+          onClick={async () => {
+            await signOut()
+            setMfaStep(false)
+            setMfaCode('')
+            setError(null)
+          }}
+        >
+          Volver
+        </button>
+      </form>
+    )
+  }
 
   return (
     <form className="auth-form" onSubmit={handleSubmit} noValidate>

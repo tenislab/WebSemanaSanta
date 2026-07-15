@@ -11,7 +11,7 @@ import { useAuth } from '../context/AuthContext'
  * conecte Supabase, la protección real entra en vigor automáticamente.
  */
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, user, loading, configured } = useAuth()
+  const { session, user, loading, configured, mfaPendiente } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -24,6 +24,12 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   if (!session && configured) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  // Contraseña correcta pero falta el segundo paso (verificación en dos
+  // pasos): vuelve al login, que retoma directamente en el paso del código.
+  if (session && configured && mfaPendiente) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 

@@ -21,12 +21,18 @@ interface AppSession {
   user: AppUser
 }
 
+/** Factor de verificación en dos pasos (TOTP) ya dado de alta. */
+export interface FactorMfa {
+  id: string
+  status: 'verified' | 'unverified'
+}
+
 interface AuthContextValue {
   session: AppSession | null
   user: AppUser | null
   loading: boolean
   configured: boolean
-  signIn: (email: string, password: string) => Promise<AuthResult>
+  signIn: (email: string, password: string) => Promise<AuthResult & { mfaRequerido?: boolean }>
   /** Entra con el usuario de prueba en un clic (solo existe en modo demostración). */
   signInDemo: () => Promise<AuthResult>
   signUp: (
@@ -36,6 +42,19 @@ interface AuthContextValue {
   ) => Promise<AuthResult & { needsConfirmation?: boolean }>
   resetPassword: (email: string) => Promise<AuthResult>
   signOut: () => Promise<void>
+
+  /** Hay una sesión con contraseña correcta pero pendiente de completar el segundo paso. */
+  mfaPendiente: boolean
+  /** Completa el segundo paso al iniciar sesión, con el código de la app de autenticación. */
+  verificarCodigoMfa: (code: string) => Promise<AuthResult>
+  /** Factores TOTP ya dados de alta para la sesión activa. */
+  listarFactoresMfa: () => Promise<FactorMfa[]>
+  /** Empieza a dar de alta la verificación en dos pasos: devuelve el código QR y la clave manual. */
+  activarMfa: () => Promise<AuthResult & { factorId?: string; qrCode?: string; secret?: string }>
+  /** Confirma el alta con el primer código generado por la app de autenticación. */
+  confirmarMfa: (factorId: string, code: string) => Promise<AuthResult>
+  /** Desactiva un factor de verificación en dos pasos. */
+  desactivarMfa: (factorId: string) => Promise<AuthResult>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -67,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [realUser, setRealUser] = useState<AppUser | null>(null)
   const [demoUser, setDemoUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mfaPendiente, setMfaPendiente] = useState(false)
 
   useEffect(() => {
     if (!supabase) {
@@ -75,13 +95,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    async function sincronizarSesion(session: { user: Parameters<typeof mapSupabaseUser>[0] } | null) {
+      setRealUser(session ? mapSupabaseUser(session.user) : null)
+      if (!session || !supabase) {
+        setMfaPendiente(false)
+        return
+      }
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      setMfaPendiente(Boolean(data && data.currentLevel === 'aal1' && data.nextLevel === 'aal2'))
+    }
+
     supabase.auth.getSession().then(({ data }) => {
-      setRealUser(data.session ? mapSupabaseUser(data.session.user) : null)
-      setLoading(false)
+      sincronizarSesion(data.session).finally(() => setLoading(false))
     })
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setRealUser(newSession ? mapSupabaseUser(newSession.user) : null)
+      sincronizarSesion(newSession)
     })
 
     return () => sub.subscription.unsubscribe()
@@ -99,7 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signIn(email, password) {
         if (supabase) {
           const { error } = await supabase.auth.signInWithPassword({ email, password })
-          return { error: error ? translateError(error.message) : null }
+          if (error) return { error: translateError(error.message) }
+          const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+          const mfaRequerido = Boolean(data && data.currentLevel === 'aal1' && data.nextLevel === 'aal2')
+          return { error: null, mfaRequerido }
         }
 
         const normalizado = email.trim().toLowerCase()
@@ -178,8 +210,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem(DEMO_STORAGE_KEY)
         setDemoUser(null)
       },
+
+      mfaPendiente: isSupabaseConfigured && mfaPendiente,
+
+      async verificarCodigoMfa(code) {
+        if (!supabase) return { error: 'No disponible en modo demostración.' }
+        const { data: factores, error: listError } = await supabase.auth.mfa.listFactors()
+        if (listError) return { error: translateError(listError.message) }
+        const factor = factores?.totp.find((f) => f.status === 'verified')
+        if (!factor) return { error: 'No se encontró ningún factor de verificación activo.' }
+        const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+          factorId: factor.id,
+        })
+        if (challengeError) return { error: translateError(challengeError.message) }
+        const { error: verifyError } = await supabase.auth.mfa.verify({
+          factorId: factor.id,
+          challengeId: challenge.id,
+          code,
+        })
+        if (verifyError) return { error: 'Código incorrecto. Inténtalo de nuevo.' }
+        setMfaPendiente(false)
+        return { error: null }
+      },
+
+      async listarFactoresMfa() {
+        if (!supabase) return []
+        const { data } = await supabase.auth.mfa.listFactors()
+        return (data?.totp ?? []).map((f) => ({ id: f.id, status: f.status }))
+      },
+
+      async activarMfa() {
+        if (!supabase) return { error: 'La verificación en dos pasos necesita Supabase conectado.' }
+        const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
+        if (error) return { error: translateError(error.message) }
+        return { error: null, factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret }
+      },
+
+      async confirmarMfa(factorId, code) {
+        if (!supabase) return { error: 'No disponible en modo demostración.' }
+        const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId })
+        if (challengeError) return { error: translateError(challengeError.message) }
+        const { error: verifyError } = await supabase.auth.mfa.verify({
+          factorId,
+          challengeId: challenge.id,
+          code,
+        })
+        if (verifyError) return { error: 'Código incorrecto. Revisa la hora de tu móvil y vuelve a intentarlo.' }
+        return { error: null }
+      },
+
+      async desactivarMfa(factorId) {
+        if (!supabase) return { error: 'No disponible en modo demostración.' }
+        const { error } = await supabase.auth.mfa.unenroll({ factorId })
+        if (error) return { error: translateError(error.message) }
+        return { error: null }
+      },
     }),
-    [activeUser, loading],
+    [activeUser, loading, mfaPendiente],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

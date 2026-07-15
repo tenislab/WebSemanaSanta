@@ -19,6 +19,7 @@ import Comunicados from './pages/app/Comunicados'
 import Informes from './pages/app/Informes'
 import Personal from './pages/app/Personal'
 import Configuracion from './pages/app/Configuracion'
+import Seguridad from './pages/app/Seguridad'
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="informes" element={<Informes />} />
         <Route path="personal" element={<Personal />} />
         <Route path="configuracion" element={<Configuracion />} />
+        <Route path="seguridad" element={<Seguridad />} />
       </Route>
 
       {/* Cualquier ruta desconocida vuelve a la portada */}

@@ -73,6 +73,9 @@ const ic = {
   configuracion: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="3" /><path d="M19.4 13a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10a1.7 1.7 0 0 0 1-1.55V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10c.14.42.42.78 1.55 1H20a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" /></svg>
   ),
+  seguridad: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3l8 3.5v5c0 5-3.4 8.4-8 9.5-4.6-1.1-8-4.5-8-9.5v-5L12 3Z" /><path d="M9 12l2 2 4-4" /></svg>
+  ),
 }
 
 const NAV: NavGroup[] = [
@@ -105,6 +108,9 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/app/personal', label: 'Personal y permisos', icon: ic.personal, modulo: 'personal' },
       { to: '/app/configuracion', label: 'Configuración', icon: ic.configuracion, modulo: 'configuracion' },
+      // Sin `modulo`: es la seguridad de la propia cuenta, no un módulo de gestión de la
+      // hermandad, así que se ve pase lo que pase tenga el cargo que tenga permitido.
+      { to: '/app/seguridad', label: 'Seguridad', icon: ic.seguridad },
     ],
   },
 ]
