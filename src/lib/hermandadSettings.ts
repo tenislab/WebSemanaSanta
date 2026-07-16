@@ -7,6 +7,7 @@ export interface HermandadSettings {
   direccion: string
   codigoPostal: string
   ciudad: string
+  provincia: string
   telefono: string
   email: string
   iban: string
@@ -30,6 +31,7 @@ const EMPTY: HermandadSettings = {
   direccion: '',
   codigoPostal: '',
   ciudad: '',
+  provincia: '',
   telefono: '',
   email: '',
   iban: '',
@@ -47,6 +49,7 @@ function rowToSettings(r: Record<string, unknown>, fallbackNombre?: string): Her
     direccion: (r.direccion as string) ?? '',
     codigoPostal: (r.codigo_postal as string) ?? '',
     ciudad: (r.ciudad as string) ?? '',
+    provincia: (r.provincia as string) ?? '',
     telefono: (r.telefono as string) ?? '',
     email: (r.email as string) ?? '',
     iban: (r.iban as string) ?? '',
@@ -65,6 +68,7 @@ function settingsToRow(s: HermandadSettings): Record<string, unknown> {
     direccion: s.direccion,
     codigo_postal: s.codigoPostal,
     ciudad: s.ciudad,
+    provincia: s.provincia,
     telefono: s.telefono,
     email: s.email,
     iban: s.iban,

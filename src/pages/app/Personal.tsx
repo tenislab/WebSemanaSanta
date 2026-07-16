@@ -80,7 +80,10 @@ export default function Personal() {
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password: clave,
-        options: { data: { hermandad: nombreHermandad, nombre, cargo } },
+        options: {
+          data: { hermandad: nombreHermandad, nombre, cargo },
+          emailRedirectTo: `${window.location.origin}/login`,
+        },
       })
       if (signUpError) {
         console.error('No se pudo crear el acceso real en Supabase:', signUpError.message)

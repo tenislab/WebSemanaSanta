@@ -542,6 +542,17 @@ export default function Configuracion() {
           </div>
 
           <div className="form-row">
+            <label htmlFor="provincia">Provincia</label>
+            <input
+              id="provincia"
+              value={settings.provincia}
+              onChange={(e) => update('provincia', e.target.value)}
+              placeholder="Sevilla"
+            />
+            <p className="form-hint">Aparece en el Estado de Cuentas anual (Informes).</p>
+          </div>
+
+          <div className="form-row">
             <label htmlFor="email">Correo de contacto</label>
             <input
               id="email"

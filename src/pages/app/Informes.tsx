@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Drawer from '../../components/Drawer'
 import InformeImpreso from '../../components/InformeImpreso'
+import EstadoCuentas from '../../components/EstadoCuentas'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency, formatDate } from '../../lib/format'
@@ -204,6 +205,32 @@ export default function Informes() {
 
   const generadoEl = useMemo(() => formatDate(new Date()), [])
 
+  const movimientosEstado = useMemo(
+    () => leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES),
+    [],
+  )
+  const aniosDisponibles = useMemo(() => {
+    const anios = new Set(movimientosEstado.map((m) => Number(m.fecha.trim().slice(-4))).filter((a) => !Number.isNaN(a)))
+    anios.add(new Date().getFullYear())
+    return Array.from(anios).sort((a, b) => b - a)
+  }, [movimientosEstado])
+  const [anioEstado, setAnioEstado] = useState(() => aniosDisponibles[0] ?? new Date().getFullYear())
+  const saldoInicialEstado = useMemo(
+    () =>
+      movimientosEstado
+        .filter((m) => Number(m.fecha.trim().slice(-4)) < anioEstado)
+        .reduce((s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe), 0),
+    [movimientosEstado, anioEstado],
+  )
+  // Solo un documento de impresión a la vez: pedir el Estado de Cuentas cierra
+  // cualquier informe abierto, para que no se solapen los dos .print-doc.
+  const [imprimiendoEstado, setImprimiendoEstado] = useState(false)
+  useEffect(() => {
+    if (!imprimiendoEstado) return
+    window.print()
+    setImprimiendoEstado(false)
+  }, [imprimiendoEstado])
+
   const kpis = useMemo(() => {
     const hermanos = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
     const cuotas = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
@@ -257,6 +284,33 @@ export default function Informes() {
           <span className="stat-tile__label">Saldo conciliado</span>
           <span className="stat-tile__value">{formatCurrency(kpis.balance)}</span>
           <span className="stat-tile__trend stat-tile__trend--neutral">Tesorería</span>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <h2 className="settings-card__title">Estado de cuentas anual</h2>
+        <p className="form-hint">
+          Ingresos y gastos por partida, con el formato clásico que suelen pedir las diócesis,
+          calculado a partir de las categorías de tus movimientos de tesorería.
+        </p>
+        <div className="assign-box__row">
+          <select value={anioEstado} onChange={(e) => setAnioEstado(Number(e.target.value))} aria-label="Ejercicio">
+            {aniosDisponibles.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setSelected(null)
+              setImprimiendoEstado(true)
+            }}
+          >
+            Descargar Estado de Cuentas
+          </button>
         </div>
       </section>
 
@@ -358,6 +412,17 @@ export default function Informes() {
           resumen={selected.resumen}
           columnas={selected.columnas}
           filas={selected.filas}
+        />
+      )}
+
+      {imprimiendoEstado && (
+        <EstadoCuentas
+          className="screen-hidden"
+          hermandad={hermandad}
+          anio={anioEstado}
+          movimientos={movimientosEstado}
+          saldoInicial={saldoInicialEstado}
+          generadoEl={generadoEl}
         />
       )}
     </div>

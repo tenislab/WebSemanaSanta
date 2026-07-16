@@ -113,6 +113,13 @@ export default function Comunicados() {
     setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: false, usuario: null } : c)))
   }
 
+  function enviarAhora(c: Comunicado) {
+    const hoy = new Date().toISOString().slice(0, 10)
+    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy }
+    setComunicados((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)))
+    setSelected(actualizado)
+  }
+
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = e.currentTarget
@@ -378,6 +385,13 @@ export default function Comunicados() {
                 </div>
               )}
             </dl>
+            {selected.estado !== 'Enviado' && (
+              <div className="assign-box__row">
+                <button type="button" className="btn btn-primary" onClick={() => enviarAhora(selected)}>
+                  Enviar ahora
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Drawer>

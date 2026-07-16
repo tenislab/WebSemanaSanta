@@ -1245,6 +1245,15 @@ h1, h2, h3,
 .recibo-doc__iban--warn { color: var(--warn-fg); font-variant-numeric: normal; }
 .recibo-doc__note { text-align: center; font-size: 0.74rem; color: var(--text-muted); margin: 0; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
 
+.estado-cuentas__seccion {
+  margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--gold); text-transform: uppercase;
+}
+.estado-cuentas__table { margin-top: -0.6rem; }
+.estado-cuentas__table td { padding: 0.4rem 0; font-size: 0.88rem; border-bottom: 1px dashed var(--line); }
+.estado-cuentas__importe { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.estado-cuentas__total td { font-weight: 700; border-bottom: none; border-top: 1px solid var(--line-strong); padding-top: 0.6rem; }
+
 /* =========================================================================
    Selector de hermano con búsqueda (Cuotas, Papeletas…)
    ========================================================================= */

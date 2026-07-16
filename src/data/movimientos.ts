@@ -17,15 +17,31 @@ export interface Movimiento {
   estado: EstadoMovimiento
 }
 
-export const CATEGORIAS_INGRESO = ['Cuotas', 'Donativos', 'Subvenciones', 'Otros ingresos'] as const
+/**
+ * Coinciden a propósito con las partidas del Estado de Cuentas anual que
+ * suelen pedir las diócesis (ver EstadoCuentas.tsx): así los movimientos que
+ * se van registrando durante el año ya quedan listos para ese informe, sin
+ * tener que reclasificarlos a mano en diciembre.
+ */
+export const CATEGORIAS_INGRESO = [
+  'Cuotas Hermanos/as',
+  'Donativos, Ofrendas y Cepillos',
+  'Subvenciones',
+  'Otros ingresos',
+] as const
 export const CATEGORIAS_GASTO = [
-  'Culto',
-  'Enseres',
   'Mantenimiento',
-  'Seguros',
-  'Suministros',
-  'Caridad',
-  'Otros gastos',
+  'Secretaría',
+  'Cultos Internos',
+  'Cultos Externos',
+  'Obras Benéficas y Sociales',
+  '10% Fondo Diocesano de Solidaridad',
+  '0,7% Ayuda al Tercer Mundo',
+  'Restauraciones',
+  'Nuevas Adquisiciones',
+  'Compra y amortización de Inmuebles',
+  'Gastos varios menores',
+  'Otros gastos extraordinarios',
 ] as const
 
 /** Movimientos de ejemplo de caja: ingresos y gastos del ejercicio, mientras conectamos la base de datos. */

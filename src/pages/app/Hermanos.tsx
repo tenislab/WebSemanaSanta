@@ -31,7 +31,10 @@ async function crearAccesoHermano(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { tipo: 'hermano', dni, nombre } },
+    options: {
+      data: { tipo: 'hermano', dni, nombre },
+      emailRedirectTo: `${window.location.origin}/hermano`,
+    },
   })
   if (error) {
     console.error('No se pudo crear el acceso real del hermano en Supabase:', error.message)

@@ -21,6 +21,7 @@ create table if not exists hermandad_settings (
   direccion text not null default '',
   codigo_postal text not null default '',
   ciudad text not null default '',
+  provincia text not null default '',
   telefono text not null default '',
   email text not null default '',
   iban text not null default '',

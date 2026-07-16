@@ -175,7 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { data, error } = await supabase.auth.signUp({
             email,
             password,
-            options: { data: { hermandad: meta.hermandad, nombre: meta.nombre } },
+            options: {
+              data: { hermandad: meta.hermandad, nombre: meta.nombre },
+              emailRedirectTo: `${window.location.origin}/login`,
+            },
           })
           if (error) return { error: translateError(error.message) }
           // Si la confirmación por email está activada, no hay sesión todavía.
