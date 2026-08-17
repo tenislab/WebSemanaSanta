@@ -29,10 +29,13 @@ create table if not exists hermandad_settings (
   identificador_acreedor text not null default '',
   logo_data_url text,
   color_primario text not null default '#caa24a',
+  color_secundario text not null default '#C5A059',
   texto_pie_documentos text not null default '',
   updated_at timestamptz not null default now()
 );
 insert into hermandad_settings (id) values (1) on conflict (id) do nothing;
+-- Instalaciones anteriores: añade el segundo color si falta (idempotente).
+alter table hermandad_settings add column if not exists color_secundario text not null default '#C5A059';
 
 -- -----------------------------------------------------------------------------
 -- Censo de hermanos
@@ -124,10 +127,18 @@ create table if not exists papeletas (
   fecha_solicitud text not null default '',
   fecha_entrega text,
   pago_metodo text check (pago_metodo in ('Bizum', 'Transferencia')),
-  pago_fecha text
+  pago_fecha text,
+  -- Cobro registrado por la secretaría (método, fecha) y motivo si se anula.
+  metodo_pago text,
+  fecha_pago text,
+  motivo_anulacion text
 );
 create index if not exists papeletas_hermano_id_idx on papeletas(hermano_id);
 create index if not exists papeletas_anio_idx on papeletas(anio);
+-- Instalaciones anteriores: añade las columnas nuevas si faltan (idempotente).
+alter table papeletas add column if not exists metodo_pago text;
+alter table papeletas add column if not exists fecha_pago text;
+alter table papeletas add column if not exists motivo_anulacion text;
 
 -- -----------------------------------------------------------------------------
 -- Tesorería

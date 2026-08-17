@@ -813,6 +813,18 @@ export default function HermanoPortal() {
                         Entrar
                       </button>
                     </form>
+                    {!usarSupabase && hermandadElegida.id === ID_HERMANDAD_PRINCIPAL && (
+                      <>
+                        <div className="auth-sep"><span>o</span></div>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-block"
+                          onClick={() => entrarComoDemo()}
+                        >
+                          Entrar en modo demo (sin escribir)
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
 

@@ -5,11 +5,13 @@ import PapeletaTicket from '../../components/PapeletaTicket'
 import PapeletaModeloRender from '../../components/PapeletaModeloRender'
 import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
 import { getModeloPapeleta, type ModeloPapeleta } from '../../lib/modeloPapeleta'
-import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
-import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
+import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
+import { PAPELETAS_INICIALES, METODOS_PAGO_PAPELETA, type MetodoPagoPapeleta, type Papeleta } from '../../data/papeletas'
+import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
+import { useAjustesCuotas } from '../../lib/ajustesCuotas'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
-import { formatDate } from '../../lib/format'
+import { formatDate, formatCurrency } from '../../lib/format'
 import {
   getTramos,
   tramosDeCuerpo,
@@ -19,6 +21,7 @@ import {
   cuerposPresentes,
   getPrecioBase,
   precioDeTramo,
+  type Tramo,
 } from '../../lib/tramos'
 import { getOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../../lib/cortejo'
@@ -56,6 +59,14 @@ const FILTROS = ['Todos', 'Por renovar', 'Renovadas', 'Nuevas', 'No renovadas', 
 /** Valor centinela del selector para «papeleta personalizada» (no puede chocar con un nombre de cuerpo). */
 const PERSONALIZADA = '__personalizada'
 
+interface ItemImpresion {
+  papeleta: Papeleta
+  hermano: Hermano
+  tramo: Tramo | null
+  puesto: number | null
+  excedeAforo: boolean
+}
+
 export default function Papeletas() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
@@ -64,6 +75,22 @@ export default function Papeletas() {
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
+  const [ajustes, setAjustes] = useAjustesCuotas()
+
+  // Deuda (cuotas sin pagar) de cada hermano, para avisar al emitir su papeleta.
+  const cuotasTodas = useMemo(() => leerPersistido<Cuota[]>(CLAVES_DATOS.cuotas, CUOTAS_INICIALES), [])
+  const deudaDe = useMemo(() => {
+    const map = new Map<string, number>()
+    cuotasTodas.forEach((c) => {
+      if (c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta') {
+        map.set(c.hermanoId, (map.get(c.hermanoId) ?? 0) + c.importe)
+      }
+    })
+    return (id: string) => map.get(id) ?? 0
+  }, [cuotasTodas])
+
+  // Registro de pago de la papeleta abierta (método elegido en la ficha).
+  const [metodoPagoSel, setMetodoPagoSel] = useState<MetodoPagoPapeleta>('Efectivo')
 
   const [papeletas, setPapeletas] = useSupabaseTable<Papeleta>(
     'papeletas',
@@ -75,11 +102,15 @@ export default function Papeletas() {
   const [campana, setCampanaState] = useState<Campana>(() => getCampana())
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todos')
+  const [orden, setOrden] = useState<'numero' | 'antiguedad'>('numero')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [pendingCuerpo, setPendingCuerpo] = useState<string>('')
   const [ajustesOpen, setAjustesOpen] = useState(false)
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modelo, setModelo] = useState<ModeloPapeleta | null>(() => getModeloPapeleta())
+  const [imprimirOpen, setImprimirOpen] = useState(false)
+  const [imprimirEstados, setImprimirEstados] = useState<Record<string, boolean>>({ Asignada: true, Pagada: true, Entregada: true })
+  const [listaImpresion, setListaImpresion] = useState<ItemImpresion[] | null>(null)
 
   function guardarCampana(next: Campana) {
     setCampanaState(next)
@@ -135,10 +166,18 @@ export default function Papeletas() {
       .filter((f) => {
         const q = query.trim().toLowerCase()
         if (!q) return true
-        return f.hermano.nombre.toLowerCase().includes(q) || String(f.hermano.numero).includes(q)
+        return (
+          f.hermano.nombre.toLowerCase().includes(q) ||
+          String(f.hermano.numero).includes(q) ||
+          f.hermano.dni.toLowerCase().includes(q)
+        )
       })
-      .sort((a, b) => a.hermano.numero - b.hermano.numero)
-  }, [hermanos, papeletas, campana, filter, query])
+      .sort((a, b) =>
+        orden === 'antiguedad'
+          ? a.hermano.antiguedad - b.hermano.antiguedad || a.hermano.numero - b.hermano.numero
+          : a.hermano.numero - b.hermano.numero,
+      )
+  }, [hermanos, papeletas, campana, filter, query, orden])
 
   const stats = useMemo(() => {
     const cuenta = { conSitio: 0, porRenovar: 0, noRenovadas: 0, nuevas: 0 }
@@ -149,8 +188,28 @@ export default function Papeletas() {
       if (e === 'No renovada') cuenta.noRenovadas += 1
       if (e === 'Nueva') cuenta.nuevas += 1
     })
-    return cuenta
+
+    // Estadísticas centradas en las papeletas de la campaña activa.
+    const activas = papeletas.filter((p) => p.anio === campana.anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia')
+    const emitidas = activas.length
+    const recaudado = activas.filter((p) => p.estado === 'Pagada' || p.estado === 'Entregada').reduce((s, p) => s + p.importe, 0)
+    const entregadas = activas.filter((p) => p.estado === 'Entregada').length
+    const pendientePago = activas.filter((p) => p.estado === 'Asignada').length
+    const solicitudes = activas.filter((p) => p.estado === 'Solicitada').length
+    const anuladas = papeletas.filter((p) => p.anio === campana.anio && p.estado === 'Anulada').length
+
+    return { ...cuenta, emitidas, recaudado, entregadas, pendientePago, solicitudes, anuladas }
   }, [hermanos, papeletas, campana])
+
+  // Tramos casi completos, para el aviso de portada.
+  const tramosCasiLlenos = useMemo(() => {
+    const avisos: string[] = []
+    ocupadosPorTramo.forEach((ocupados, tramoId) => {
+      const t = tramos.find((x) => x.id === tramoId)
+      if (t && t.capacidad > 0 && ocupados / t.capacidad >= 0.85) avisos.push(t.nombre)
+    })
+    return avisos
+  }, [ocupadosPorTramo, tramos])
 
   const abierta = ventanaAbierta(campana)
   const diasRestantes = diasHasta(campana.fechaLimiteRenovacion)
@@ -277,6 +336,58 @@ export default function Papeletas() {
     setPapeletas((prev) => prev.map((p) => (p.id === id ? { ...p, ...cambios } : p)))
   }
 
+  /** Registra el cobro de la papeleta con el método elegido (emitida → pagada). */
+  function registrarPago(id: string, metodo: MetodoPagoPapeleta) {
+    actualizarPapeleta(id, { estado: 'Pagada', metodoPago: metodo, fechaPago: hoy() })
+  }
+
+  /** Anular ≠ borrar: la papeleta se conserva como «Anulada», con su motivo. */
+  function anularPapeleta(id: string) {
+    const motivo = window.prompt('Motivo de la anulación (queda registrado):', '')
+    if (motivo === null) return
+    actualizarPapeleta(id, { estado: 'Anulada', motivoAnulacion: motivo.trim() || 'Sin especificar' })
+  }
+
+  // ---- Impresión masiva: un único PDF con una papeleta por página ----
+  const contadorImpresion = useMemo(() => {
+    const c: Record<string, number> = { Asignada: 0, Pagada: 0, Entregada: 0 }
+    papeletasActivas.forEach((p) => {
+      if (p.estado in c) c[p.estado] += 1
+    })
+    return c
+  }, [papeletasActivas])
+
+  const totalAImprimir = (['Asignada', 'Pagada', 'Entregada'] as const)
+    .filter((e) => imprimirEstados[e])
+    .reduce((s, e) => s + (contadorImpresion[e] ?? 0), 0)
+
+  function generarImpresion() {
+    const lista: ItemImpresion[] = papeletasActivas
+      .filter((p) => imprimirEstados[p.estado])
+      .map((p) => {
+        const asig = asignacionPorPapeleta.get(p.id)
+        return {
+          papeleta: p,
+          hermano: hermanoDe(p.hermanoId)!,
+          tramo: asig?.tramo ?? null,
+          puesto: asig?.puesto ?? null,
+          excedeAforo: asig?.estado === 'Excede aforo',
+        }
+      })
+      .filter((it) => it.hermano)
+      .sort((a, b) => a.hermano.numero - b.hermano.numero)
+    if (lista.length === 0) return
+    setListaImpresion(lista)
+    setImprimirOpen(false)
+    // Espera a que se pinten las páginas antes de abrir el diálogo de impresión.
+    document.body.classList.add('print-masivo')
+    setTimeout(() => {
+      window.print()
+      document.body.classList.remove('print-masivo')
+      setListaImpresion(null)
+    }, 300)
+  }
+
   /** Cierra la campaña actual y abre la del año siguiente (los sitios de este año pasan a renovables). */
   function abrirNuevoAno() {
     const anio = campana.anio + 1
@@ -305,6 +416,9 @@ export default function Papeletas() {
           </p>
         </div>
         <div className="dash-head__actions">
+          <button className="btn btn-primary" onClick={() => setImprimirOpen(true)}>
+            Imprimir papeletas
+          </button>
           <button className="btn btn-outline" onClick={() => setModeloOpen(true)}>
             Modelo de papeleta
           </button>
@@ -329,35 +443,53 @@ export default function Papeletas() {
         )}
       </div>
 
+      {/* Avisos de portada: lo que la secretaría debe mirar de un vistazo */}
+      {(stats.pendientePago > 0 || tramosCasiLlenos.length > 0 || stats.solicitudes > 0 || (abierta && stats.porRenovar > 0)) && (
+        <div className="avisos-band">
+          {stats.pendientePago > 0 && (
+            <span className="aviso aviso--warn">⚠️ {stats.pendientePago} papeleta{stats.pendientePago === 1 ? '' : 's'} pendiente{stats.pendientePago === 1 ? '' : 's'} de pago</span>
+          )}
+          {tramosCasiLlenos.map((nombre) => (
+            <span key={nombre} className="aviso aviso--warn">🟡 {nombre} casi completo</span>
+          ))}
+          {stats.solicitudes > 0 && (
+            <span className="aviso aviso--info">🔔 {stats.solicitudes} solicitud{stats.solicitudes === 1 ? '' : 'es'} por asignar</span>
+          )}
+          {abierta && stats.porRenovar > 0 && (
+            <span className="aviso aviso--neutral">↻ {stats.porRenovar} por renovar</span>
+          )}
+        </div>
+      )}
+
       <section className="stat-grid">
         <div className="stat-tile">
-          <span className="stat-tile__label">Con sitio este año</span>
-          <span className="stat-tile__value">{stats.conSitio}</span>
-          <span className="stat-tile__trend stat-tile__trend--ok">Renovadas y nuevas</span>
+          <span className="stat-tile__label">Papeletas emitidas</span>
+          <span className="stat-tile__value">{stats.emitidas}</span>
+          <span className="stat-tile__trend stat-tile__trend--neutral">Campaña {campana.anio}</span>
         </div>
         <div className="stat-tile">
-          <span className="stat-tile__label">Por renovar</span>
-          <span className="stat-tile__value">{stats.porRenovar}</span>
-          <span className={`stat-tile__trend stat-tile__trend--${stats.porRenovar > 0 ? 'warn' : 'ok'}`}>
-            {abierta ? 'Antes de la fecha límite' : 'Ventana cerrada'}
+          <span className="stat-tile__label">Recaudado</span>
+          <span className="stat-tile__value">{formatCurrency(stats.recaudado)}</span>
+          <span className="stat-tile__trend stat-tile__trend--ok">Pagadas y entregadas</span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-tile__label">Entregadas</span>
+          <span className="stat-tile__value">{stats.entregadas}</span>
+          <span className="stat-tile__trend stat-tile__trend--ok">de {stats.emitidas} emitidas</span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-tile__label">Pendiente de pago</span>
+          <span className="stat-tile__value">{stats.pendientePago}</span>
+          <span className={`stat-tile__trend stat-tile__trend--${stats.pendientePago > 0 ? 'warn' : 'ok'}`}>
+            Emitidas sin cobrar
           </span>
-        </div>
-        <div className="stat-tile">
-          <span className="stat-tile__label">No renovadas</span>
-          <span className="stat-tile__value">{stats.noRenovadas}</span>
-          <span className="stat-tile__trend stat-tile__trend--neutral">Sitios liberados</span>
-        </div>
-        <div className="stat-tile">
-          <span className="stat-tile__label">Nuevas</span>
-          <span className="stat-tile__value">{stats.nuevas}</span>
-          <span className="stat-tile__trend stat-tile__trend--neutral">Primera vez</span>
         </div>
       </section>
 
       <div className="toolbar">
         <input
           className="search-box"
-          placeholder="Buscar por hermano o nº de hermano"
+          placeholder="Buscar por hermano, nº o DNI"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -373,6 +505,16 @@ export default function Papeletas() {
             </button>
           ))}
         </div>
+        <select
+          className="search-box"
+          style={{ maxWidth: '13rem' }}
+          value={orden}
+          onChange={(e) => setOrden(e.target.value as 'numero' | 'antiguedad')}
+          aria-label="Ordenar"
+        >
+          <option value="numero">Ordenar por nº de hermano</option>
+          <option value="antiguedad">Ordenar por antigüedad</option>
+        </select>
       </div>
 
       <div className="table-card">
@@ -381,6 +523,7 @@ export default function Papeletas() {
             <tr>
               <th>Nº</th>
               <th>Hermano</th>
+              <th>Antigüedad</th>
               <th>Sitio {campana.anio - 1}</th>
               <th>Estado {campana.anio}</th>
               <th>Sitio {campana.anio}</th>
@@ -403,6 +546,10 @@ export default function Papeletas() {
                         <span className="row-person__sub">{h.estado}</span>
                       </span>
                     </div>
+                  </td>
+                  <td className="table-subtle">
+                    {Math.max(0, campana.anio - h.antiguedad)} años
+                    <span className="table-muted"> · {h.antiguedad}</span>
                   </td>
                   <td>{tramoAnterior ? etiquetaTramo(tramoAnterior) : <span className="table-muted">—</span>}</td>
                   <td>
@@ -442,7 +589,7 @@ export default function Papeletas() {
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={6} className="table-empty">
+                <td colSpan={7} className="table-empty">
                   No hay hermanos que coincidan con la búsqueda.
                 </td>
               </tr>
@@ -466,7 +613,13 @@ export default function Papeletas() {
             const actual = r.papeletaActual
             const asig = actual ? asignacionPorPapeleta.get(actual.id) : undefined
             const tramoActual = asig?.tramo ?? null
-            const puedeSacar = r.estado === 'Sin papeleta' || r.estado === 'No renovada'
+            // Última papeleta anulada de la campaña (anular ≠ borrar): se conserva.
+            const anuladaActual = papeletas.find(
+              (p) => p.hermanoId === h.id && p.anio === campana.anio && p.estado === 'Anulada',
+            )
+            const deuda = deudaDe(h.id)
+            const bloqueadoPorDeuda = ajustes.bloquearPapeletaConDeuda && deuda > 0
+            const puedeSacar = (r.estado === 'Sin papeleta' || r.estado === 'No renovada') && !bloqueadoPorDeuda
             return (
               <div className="ficha">
                 <div className="ficha__row">
@@ -476,8 +629,18 @@ export default function Papeletas() {
                   )}
                 </div>
 
+                {/* Aviso de cuotas pendientes */}
+                {deuda > 0 && (
+                  <div className={`banner-inline ${bloqueadoPorDeuda ? 'banner-inline--warn' : 'banner-inline--accent'}`}>
+                    ⚠️ {h.nombre.split(' ')[0]} tiene <b>{formatCurrency(deuda)}</b> en cuotas pendientes.{' '}
+                    {bloqueadoPorDeuda
+                      ? 'No se le puede sacar papeleta hasta regularizar (ver Ajustes de campaña).'
+                      : 'Puedes emitir igualmente o pedirle que regularice.'}
+                  </div>
+                )}
+
                 {/* Por renovar: renovar o renunciar */}
-                {r.estado === 'Por renovar' && r.sitioAnterior && tramoAnterior && (
+                {r.estado === 'Por renovar' && !bloqueadoPorDeuda && r.sitioAnterior && tramoAnterior && (
                   <div className="assign-box">
                     <label>Renovación del sitio del año anterior</label>
                     <p className="form-hint">
@@ -618,12 +781,32 @@ export default function Papeletas() {
                         la cuenta de la hermandad y confírmalo abajo.
                       </div>
                     )}
+                    {/* Estado del pago: emitida (Asignada) ≠ pagada */}
+                    {actual.estado === 'Asignada' && (
+                      <div className="assign-box" style={{ marginTop: '1rem' }}>
+                        <label>Registrar cobro</label>
+                        <p className="form-hint">
+                          Emitida el {actual.fechaSolicitud} · <b>{formatCurrency(actual.importe)}</b>. Aún sin cobrar.
+                          {actual.pagoComunicado && ` ${h.nombre.split(' ')[0]} avisó de pago por ${actual.pagoComunicado.metodo} el ${actual.pagoComunicado.fecha}.`}
+                        </p>
+                        <div className="assign-box__row">
+                          <select value={metodoPagoSel} onChange={(e) => setMetodoPagoSel(e.target.value as MetodoPagoPapeleta)}>
+                            {METODOS_PAGO_PAPELETA.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                          <button className="btn btn-primary" onClick={() => registrarPago(actual.id, metodoPagoSel)}>
+                            Registrar pago
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {(actual.estado === 'Pagada' || actual.estado === 'Entregada') && actual.metodoPago && (
+                      <div className="banner-inline banner-inline--accent" style={{ marginTop: '1rem' }}>
+                        Pagada por <b>{actual.metodoPago}</b>{actual.fechaPago ? ` el ${actual.fechaPago}` : ''}.
+                      </div>
+                    )}
                     <div className="assign-box__row" style={{ marginTop: '1rem' }}>
-                      {actual.estado === 'Asignada' && (
-                        <button className="btn btn-primary" onClick={() => actualizarPapeleta(actual.id, { estado: 'Pagada' })}>
-                          {actual.pagoComunicado ? 'Confirmar pago recibido' : 'Marcar como pagada'}
-                        </button>
-                      )}
                       {actual.estado === 'Pagada' && (
                         <button
                           className="btn btn-primary"
@@ -636,12 +819,20 @@ export default function Papeletas() {
                         Imprimir / Descargar
                       </button>
                     </div>
-                    {(actual.estado === 'Solicitada' || actual.estado === 'Asignada') && (
-                      <button type="button" className="ticket-cancel" onClick={() => actualizarPapeleta(actual.id, { estado: 'Anulada' })}>
+                    {(actual.estado === 'Solicitada' || actual.estado === 'Asignada' || actual.estado === 'Pagada') && (
+                      <button type="button" className="ticket-cancel" onClick={() => anularPapeleta(actual.id)}>
                         Anular papeleta
                       </button>
                     )}
                   </>
+                )}
+
+                {!actual && anuladaActual && (
+                  <div className="banner-inline banner-inline--warn">
+                    Papeleta nº {String(anuladaActual.numero).padStart(4, '0')} <b>anulada</b>
+                    {anuladaActual.motivoAnulacion ? ` · ${anuladaActual.motivoAnulacion}` : ''}. Se conserva el registro
+                    (anular no es borrar). Puede volver a sacar papeleta arriba.
+                  </div>
                 )}
 
                 {r.estado === 'No renovada' && actual?.estado === 'Renuncia' && (
@@ -683,6 +874,22 @@ export default function Papeletas() {
           </div>
 
           <div className="assign-box">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={ajustes.bloquearPapeletaConDeuda}
+                onChange={(e) => setAjustes({ ...ajustes, bloquearPapeletaConDeuda: e.target.checked })}
+              />
+              Bloquear la papeleta si el hermano tiene cuotas pendientes
+            </label>
+            <p className="form-hint">
+              {ajustes.bloquearPapeletaConDeuda
+                ? 'No se podrá sacar papeleta a quien deba cuotas hasta que regularice.'
+                : 'Solo se avisa de la deuda, pero se puede emitir la papeleta igualmente.'}
+            </p>
+          </div>
+
+          <div className="assign-box">
             <label>Cerrar campaña {campana.anio}</label>
             <p className="form-hint">
               Abre la campaña de {campana.anio + 1}: los sitios entregados este año pasan a ser renovables, y todos los
@@ -718,6 +925,62 @@ export default function Papeletas() {
         </p>
         <ModeloPapeletaEditor modelo={modelo} onCambio={setModelo} />
       </Drawer>
+
+      {/* Impresión masiva: elegir qué papeletas y generar un PDF con una por página */}
+      <Drawer
+        open={imprimirOpen}
+        onClose={() => setImprimirOpen(false)}
+        title="Imprimir papeletas"
+        subtitle="Un PDF con una papeleta por página"
+        footer={
+          <>
+            <button className="btn btn-ghost" onClick={() => setImprimirOpen(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={generarImpresion} disabled={totalAImprimir === 0}>
+              Generar PDF ({totalAImprimir})
+            </button>
+          </>
+        }
+      >
+        <div className="app-form">
+          <p className="form-hint">
+            Elige qué papeletas de la campaña {campana.anio} incluir. Se abrirá el diálogo de
+            impresión; elige «Guardar como PDF» para obtener un único archivo con todas.
+          </p>
+          {(['Asignada', 'Pagada', 'Entregada'] as const).map((e) => (
+            <label className="checkbox-row" key={e}>
+              <input
+                type="checkbox"
+                checked={!!imprimirEstados[e]}
+                onChange={(ev) => setImprimirEstados((prev) => ({ ...prev, [e]: ev.target.checked }))}
+              />
+              {e === 'Asignada' ? 'Emitidas (sin pagar)' : e === 'Pagada' ? 'Pagadas' : 'Entregadas'} — {contadorImpresion[e] ?? 0}
+            </label>
+          ))}
+          <p className="form-hint" style={{ marginTop: '0.6rem' }}>
+            Total a imprimir: <b>{totalAImprimir}</b> papeleta{totalAImprimir === 1 ? '' : 's'}. Cada una lleva su
+            QR con los datos.
+          </p>
+        </div>
+      </Drawer>
+
+      {/* Zona de impresión masiva: oculta en pantalla, visible al imprimir con la clase print-masivo */}
+      {listaImpresion && (
+        <div className="impresion-masiva" aria-hidden="true">
+          {listaImpresion.map((it) => (
+            <div className="impresion-masiva__pagina" key={it.papeleta.id}>
+              <PapeletaTicket
+                papeleta={it.papeleta}
+                hermano={it.hermano}
+                hermandad={hermandad}
+                tramo={it.tramo}
+                puesto={it.puesto}
+                excedeAforo={it.excedeAforo}
+                opcion={it.papeleta.opcion}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

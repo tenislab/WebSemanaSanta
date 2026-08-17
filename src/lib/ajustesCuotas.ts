@@ -9,11 +9,13 @@ import { leerPersistido } from './persistencia'
 export interface AjustesCuotas {
   /** Si true, la mora la ha de proponer un cargo y confirmar otro distinto. */
   moraRequiereDosCargos: boolean
+  /** Si true, no se puede sacar papeleta a un hermano con cuotas pendientes. */
+  bloquearPapeletaConDeuda: boolean
 }
 
 export const CLAVE_AJUSTES_CUOTAS = 'cabildo-ajustes-cuotas'
 
-export const AJUSTES_CUOTAS_INICIAL: AjustesCuotas = { moraRequiereDosCargos: false }
+export const AJUSTES_CUOTAS_INICIAL: AjustesCuotas = { moraRequiereDosCargos: false, bloquearPapeletaConDeuda: false }
 
 export function getAjustesCuotas(): AjustesCuotas {
   return leerPersistido<AjustesCuotas>(CLAVE_AJUSTES_CUOTAS, AJUSTES_CUOTAS_INICIAL)

@@ -39,6 +39,47 @@ export interface Hermano {
  */
 export const CLAVE_DEMO_HERMANOS = 'hermano123'
 
+/**
+ * Censo ampliado para que la demo se vea poblada (papeletas, cuotas, informes…)
+ * sin escribir a mano decenas de fichas. Es DETERMINISTA (mismos datos en cada
+ * carga) para que la demostración no cambie sola. Se define ANTES de
+ * HERMANOS_INICIALES porque este lo usa al inicializarse.
+ */
+const NOMBRES_DEMO = [
+  'Álvaro Núñez Prieto', 'Marta Gil Herrera', 'Sergio Ramos León', 'Elena Cano Ruiz',
+  'Pablo Ferrer Segura', 'Nuria Blanco Pino', 'Iván Torres Gala', 'Sara Méndez Rey',
+  'Hugo Vidal Marín', 'Claudia Ripoll Serna', 'Adrián Lozano Vera', 'Paula Sáez Roldán',
+  'Óscar Bravo Cid', 'Irene Nadal Costa', 'Marcos Peña Duarte', 'Lucas Arias Gallardo',
+  'Alba Suárez Rivas', 'Daniel Prados Mora', 'Sofía Carmona Gil', 'Jorge Aranda Rubio',
+  'Natalia Vargas Soto', 'Rubén Castaño Lara', 'Andrea Mora Quintero', 'Víctor Salas Beltrán',
+  'Cristina Vera Alonso', 'Gonzalo Ibáñez Rico', 'Miriam Pardo Nieto', 'Alberto Rojas Vela',
+  'Laura Campos Bueno', 'Diego Santos Robles', 'Ángela Herrero Gil', 'Raúl Montes Vega',
+  'Patricia León Casas', 'Emilio Nieto Bravo', 'Silvia Ortega Peña',
+]
+const LETRAS_DNI = 'TRWAGMYFPDXBNJZSQVHLCKE'
+
+function generarHermanosDemo(): Hermano[] {
+  return NOMBRES_DEMO.map((nombre, i): Hermano => {
+    const antiguedad = 1980 + ((i * 7) % 45)
+    const dniNum = 10000000 + i * 137
+    return {
+      id: `hd${i + 1}`,
+      numero: 800 + i,
+      nombre,
+      estado: antiguedad >= 2025 ? 'Nuevo' : i % 17 === 0 ? 'Baja' : 'Activo',
+      antiguedad,
+      email: `${nombre.split(' ')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}${i}@example.com`,
+      telefono: `6${String(10000000 + i * 91).slice(0, 8)}`,
+      direccion: `C/ Ejemplo, ${10 + i}`,
+      cuotaAlDia: i % 3 !== 0,
+      iban: i % 5 === 0 ? null : `ES${String(70 + (i % 29)).padStart(2, '0')} 2100 ${String(1000 + i).padStart(4, '0')} ${String(20 + i).padStart(2, '0')} ${String(10000000 + i * 131).slice(0, 8)}`,
+      dni: `${dniNum}${LETRAS_DNI[dniNum % 23]}`,
+      claveAcceso: CLAVE_DEMO_HERMANOS,
+      authUserId: null,
+    }
+  })
+}
+
 export const HERMANOS_INICIALES: Hermano[] = [
   { id: 'h1', numero: 89, nombre: 'Ana Sánchez del Río', estado: 'Activo', antiguedad: 1991, email: 'ana.sanchez@example.com', telefono: '622 104 558', direccion: 'C/ Alfarería, 12', cuotaAlDia: true, iban: 'ES47 2100 0813 6102 0012 3456', dni: '12345678A', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   { id: 'h2', numero: 214, nombre: 'María Reyes Ortega', estado: 'Activo', antiguedad: 1998, email: 'maria.reyes@example.com', telefono: '655 302 119', direccion: 'C/ Feria, 44', cuotaAlDia: true, iban: 'ES12 0049 1500 0512 3456 7892', dni: '23456789B', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
@@ -55,6 +96,7 @@ export const HERMANOS_INICIALES: Hermano[] = [
   { id: 'h13', numero: 45, nombre: 'Rafael Ortiz Bermejo', estado: 'Activo', antiguedad: 1988, email: 'rafael.ortiz@example.com', telefono: '655 019 442', direccion: 'C/ Águilas, 6', cuotaAlDia: true, iban: 'ES19 0128 0257 3801 0012 3461', dni: '33445566N', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   { id: 'h14', numero: 610, nombre: 'Diego Fernández Ríos', estado: 'Activo', antiguedad: 2020, email: 'diego.fernandez@example.com', telefono: '622 887 015', direccion: 'C/ Bailén, 14', cuotaAlDia: true, iban: null, dni: '44556677P', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   { id: 'h15', numero: 520, nombre: 'Beatriz Muñoz Casas', estado: 'Activo', antiguedad: 2021, email: 'beatriz.munoz@example.com', telefono: '611 340 928', direccion: 'C/ Pureza, 55', cuotaAlDia: false, iban: 'ES40 2100 5731 1502 0012 3462', dni: '55667788Q', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  ...generarHermanosDemo(),
 ]
 
 export function initials(name: string) {

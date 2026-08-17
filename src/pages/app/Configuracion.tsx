@@ -473,6 +473,30 @@ export default function Configuracion() {
               <p className="form-hint">Tiñe los botones y acentos del área del hermano de tus hermanos/as.</p>
             </div>
           </div>
+
+          <div className="color-picker-row">
+            <span className="color-picker-swatch" style={{ background: settings.colorSecundario }} aria-hidden="true" />
+            <div className="form-row">
+              <label htmlFor="colorSecundario">Segundo color (acento)</label>
+              <div className="color-picker-controls">
+                <input
+                  id="colorSecundario"
+                  type="color"
+                  value={settings.colorSecundario}
+                  onChange={(e) => update('colorSecundario', e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="color-picker-hex"
+                  value={settings.colorSecundario}
+                  onChange={(e) => update('colorSecundario', e.target.value)}
+                  placeholder="#C5A059"
+                  maxLength={7}
+                />
+              </div>
+              <p className="form-hint">Color dorado o de detalle: filetes, degradados de la cabecera y la web.</p>
+            </div>
+          </div>
         </section>
 
         <section className="settings-card">

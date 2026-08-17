@@ -82,6 +82,7 @@ export default function WebPublica() {
     const parche: Partial<WebPublica> = {}
     if (!web.titulo && hermandad.nombreLegal) parche.titulo = hermandad.nombreLegal
     if (web.colorPrimario === '#6A1A23' && hermandad.colorPrimario) parche.colorPrimario = hermandad.colorPrimario
+    if (web.colorSecundario === '#C5A059' && hermandad.colorSecundario) parche.colorSecundario = hermandad.colorSecundario
     if (!web.slug && hermandad.nombreLegal) parche.slug = aSlug(hermandad.nombreLegal)
     if (Object.keys(parche).length) setWeb({ ...web, ...parche })
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,6 +1,12 @@
 export type EstadoPapeleta = 'Solicitada' | 'Asignada' | 'Pagada' | 'Entregada' | 'Anulada' | 'Renuncia'
 
+/** Cómo avisa el hermano de que ha pagado desde su área (solo Bizum/transferencia). */
 export type MetodoPago = 'Bizum' | 'Transferencia'
+
+/** Método con el que la secretaría registra el cobro de la papeleta. */
+export type MetodoPagoPapeleta = 'Efectivo' | 'Tarjeta' | 'Transferencia' | 'Domiciliación' | 'Bizum' | 'Exento'
+
+export const METODOS_PAGO_PAPELETA: MetodoPagoPapeleta[] = ['Efectivo', 'Tarjeta', 'Transferencia', 'Domiciliación', 'Bizum', 'Exento']
 
 export interface Papeleta {
   id: string
@@ -16,6 +22,12 @@ export interface Papeleta {
   estado: EstadoPapeleta
   fechaSolicitud: string
   fechaEntrega?: string
+  /** Método con el que la secretaría registró el cobro (al marcarla como pagada). */
+  metodoPago?: MetodoPagoPapeleta
+  /** Fecha en la que se registró el pago. */
+  fechaPago?: string
+  /** Motivo por el que se anuló (anular ≠ borrar: la papeleta se conserva anulada). */
+  motivoAnulacion?: string
   /** El hermano avisa desde su área de que ya ha pagado (Bizum o transferencia); la secretaría lo confirma al marcarla como pagada. */
   pagoComunicado?: { metodo: MetodoPago; fecha: string } | null
 }
@@ -63,4 +75,44 @@ export const PAPELETAS_INICIALES: Papeleta[] = [
   { id: 'pb9', numero: 420, hermanoId: 'h5', anio: 2027, tramoId: null, importe: 0, estado: 'Renuncia', fechaSolicitud: '18 ene 2027' },
   // (h4, h8, h10, h12 tenían sitio en 2026 y aún no han renovado → "Por renovar")
   // (h6 está de baja y h11 es nueva sin sitio → "Sin papeleta")
+  ...generarPapeletasDemo(),
 ]
+
+/**
+ * Papeletas de ejemplo para el censo ampliado (ver data/hermanos.ts,
+ * generarHermanosDemo). Son personalizadas (sin tramo del cortejo) para no
+ * alterar el reparto, con estados variados para que el módulo se vea poblado y
+ * con estadísticas realistas (emitidas, pagadas, entregadas, pendientes…).
+ * Determinista: los mismos datos en cada carga.
+ */
+function generarPapeletasDemo(): Papeleta[] {
+  const out: Papeleta[] = []
+  const opciones = ['Cirio', 'Nazareno', 'Penitente', 'Mantilla']
+  const estados2027: EstadoPapeleta[] = ['Entregada', 'Pagada', 'Asignada', 'Asignada', 'Solicitada', 'Anulada', 'Renuncia', 'Pagada', 'Asignada']
+  let num = 500
+  for (let i = 0; i < 35; i++) {
+    const id = `hd${i + 1}`
+    const baja = i % 17 === 0 // coincide con los 'Baja' de generarHermanosDemo
+    // Sitio del año anterior (2026), para la mayoría (así hay renovaciones).
+    if (!baja && i % 4 !== 0) {
+      out.push({ id: `pd26-${i}`, numero: num++, hermanoId: id, anio: 2026, tramoId: null, opcion: opciones[i % opciones.length], importe: 18, estado: 'Entregada', fechaSolicitud: '20 ene 2026', fechaEntrega: '10 feb 2026' })
+    }
+    if (baja) continue
+    const est = estados2027[i % estados2027.length]
+    const opcion = opciones[i % opciones.length]
+    const importe = est === 'Renuncia' ? 0 : opcion === 'Mantilla' ? 15 : 18
+    out.push({
+      id: `pd27-${i}`,
+      numero: num++,
+      hermanoId: id,
+      anio: 2027,
+      tramoId: null,
+      opcion: est === 'Renuncia' ? null : opcion,
+      importe,
+      estado: est,
+      fechaSolicitud: '15 ene 2027',
+      fechaEntrega: est === 'Entregada' ? '05 feb 2027' : undefined,
+    })
+  }
+  return out
+}

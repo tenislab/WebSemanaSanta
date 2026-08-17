@@ -1,4 +1,4 @@
-import type { Papeleta } from '../../data/papeletas'
+import type { MetodoPagoPapeleta, Papeleta } from '../../data/papeletas'
 
 export function papeletaToRow(p: Papeleta): Record<string, unknown> {
   return {
@@ -12,6 +12,9 @@ export function papeletaToRow(p: Papeleta): Record<string, unknown> {
     estado: p.estado,
     fecha_solicitud: p.fechaSolicitud,
     fecha_entrega: p.fechaEntrega ?? null,
+    metodo_pago: p.metodoPago ?? null,
+    fecha_pago: p.fechaPago ?? null,
+    motivo_anulacion: p.motivoAnulacion ?? null,
     pago_metodo: p.pagoComunicado?.metodo ?? null,
     pago_fecha: p.pagoComunicado?.fecha ?? null,
   }
@@ -29,6 +32,9 @@ export function rowToPapeleta(r: Record<string, unknown>): Papeleta {
     estado: r.estado as Papeleta['estado'],
     fechaSolicitud: r.fecha_solicitud as string,
     fechaEntrega: (r.fecha_entrega as string | null) ?? undefined,
+    metodoPago: (r.metodo_pago as MetodoPagoPapeleta | null) ?? undefined,
+    fechaPago: (r.fecha_pago as string | null) ?? undefined,
+    motivoAnulacion: (r.motivo_anulacion as string | null) ?? undefined,
     pagoComunicado: r.pago_metodo
       ? { metodo: r.pago_metodo as 'Bizum' | 'Transferencia', fecha: r.pago_fecha as string }
       : null,

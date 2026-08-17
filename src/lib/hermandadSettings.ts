@@ -19,6 +19,8 @@ export interface HermandadSettings {
   logoDataUrl: string | null
   /** Color de marca de la hermandad; tiñe los botones y acentos de su área del hermano. */
   colorPrimario: string
+  /** Segundo color de marca (dorado/acento), para detalles y degradados. */
+  colorSecundario: string
   /** Texto legal del pie de recibos y justificantes (exención fiscal, registro…); si está vacío se usa uno genérico. */
   textoPieDocumentos: string
 }
@@ -38,7 +40,8 @@ const EMPTY: HermandadSettings = {
   bizumTelefono: '',
   identificadorAcreedor: '',
   logoDataUrl: null,
-  colorPrimario: '#caa24a',
+  colorPrimario: '#6A1A23',
+  colorSecundario: '#C5A059',
   textoPieDocumentos: '',
 }
 
@@ -56,7 +59,8 @@ function rowToSettings(r: Record<string, unknown>, fallbackNombre?: string): Her
     bizumTelefono: (r.bizum_telefono as string) ?? '',
     identificadorAcreedor: (r.identificador_acreedor as string) ?? '',
     logoDataUrl: (r.logo_data_url as string | null) ?? null,
-    colorPrimario: (r.color_primario as string) || '#caa24a',
+    colorPrimario: (r.color_primario as string) || '#6A1A23',
+    colorSecundario: (r.color_secundario as string) || '#C5A059',
     textoPieDocumentos: (r.texto_pie_documentos as string) ?? '',
   }
 }
@@ -76,6 +80,7 @@ function settingsToRow(s: HermandadSettings): Record<string, unknown> {
     identificador_acreedor: s.identificadorAcreedor,
     logo_data_url: s.logoDataUrl,
     color_primario: s.colorPrimario,
+    color_secundario: s.colorSecundario,
     texto_pie_documentos: s.textoPieDocumentos,
   }
 }

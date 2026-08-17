@@ -1365,6 +1365,19 @@ h1, h2, h3,
   .screen-hidden.print-doc { display: block; }
 }
 
+/* Impresión masiva: una papeleta por página, oculta en pantalla. Se activa con
+   la clase body.print-masivo (ver Papeletas → Imprimir papeletas). */
+.impresion-masiva { display: none; }
+@media print {
+  body.print-masivo * { visibility: hidden; }
+  body.print-masivo .impresion-masiva,
+  body.print-masivo .impresion-masiva * { visibility: visible; }
+  body.print-masivo .impresion-masiva { display: block; position: absolute; inset: 0; margin: 0; }
+  /* Cada papeleta en su propia página; se anula el posicionado del print-doc suelto. */
+  body.print-masivo .impresion-masiva .print-doc { position: static; inset: auto; margin: 0; box-shadow: none; }
+  body.print-masivo .impresion-masiva__pagina { page-break-after: always; padding: 1.5cm; }
+}
+
 /* =========================================================================
    Modelo de papeleta personalizado (subir imagen + colocar datos encima)
    ========================================================================= */
@@ -1957,6 +1970,17 @@ h1, h2, h3,
 .portal__welcome .eyebrow { color: rgba(255,255,255,0.82); }
 .portal__welcome h1 { color: #fff; font-size: 1.6rem; margin: 0.15rem 0 0; }
 .portal__welcome .portal__resumen .pill { background: rgba(255,255,255,0.16); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+
+/* Banda de avisos de portada (Papeletas): lo urgente de un vistazo */
+.avisos-band { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.1rem; }
+.aviso {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;
+  border: 1px solid var(--line);
+}
+.aviso--warn { background: var(--warn-bg, #fdf3e2); color: var(--warn-fg, #8a5a00); border-color: var(--warn-fg, #b8860b); }
+.aviso--info { background: var(--info-bg, #eef4fb); color: var(--info-fg, #1e5a99); }
+.aviso--neutral { background: var(--surface-2, rgba(0,0,0,0.04)); color: var(--text-muted); }
 
 /* Tarjetas de resumen del área del hermano (dashboard) */
 .portal__cards {
