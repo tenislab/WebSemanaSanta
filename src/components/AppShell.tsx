@@ -4,6 +4,8 @@ import Logo, { LogoMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 import { puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
+import { useSuscripcion } from '../lib/suscripcion'
+import PantallaSuscripcion from './PantallaSuscripcion'
 import type { Cargo } from '../data/documentos'
 
 interface NavItem {
@@ -129,6 +131,7 @@ export default function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { suscripcion, activar } = useSuscripcion()
 
   const hermandad = (user?.user_metadata?.hermandad as string | undefined) ?? 'Tu hermandad'
   const nombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Hermano/a'
@@ -151,6 +154,17 @@ export default function AppShell() {
   async function handleSignOut() {
     await signOut()
     navigate('/', { replace: true })
+  }
+
+  // Muro de suscripción: sin suscripción activa, el panel queda bloqueado.
+  if (!suscripcion.activa) {
+    return (
+      <PantallaSuscripcion
+        nombreHermandad={hermandad}
+        onActivar={(plan) => activar(plan, new Date().toISOString().slice(0, 10))}
+        onSalir={handleSignOut}
+      />
+    )
   }
 
   return (

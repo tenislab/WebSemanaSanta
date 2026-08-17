@@ -1,39 +1,35 @@
-# Actualización Cabildo — etiquetas, cuotas y web pública (+ arreglos)
+# Actualización Cabildo — suscripción + CMS de la web
 
-Descomprime en la **raíz de tu repositorio** (respetando `src/...`), sobrescribe,
-y en **GitHub Desktop** verás los cambios para commit y push.
+Descomprime en la **raíz del repo** (respetando `src/...`), sobrescribe y sube por
+GitHub Desktop.
 
-## Novedades
+## Novedades de esta entrega
 
-1. **Etiquetas de hermano + avisos segmentados** (Comunicados por etiqueta).
-2. **Cuotas**: mensual (12 recibos), método de cobro (Domiciliación/Transferencia/
-   Efectivo/Bizum), «En mora» manual, y **modelo de recibo** personalizado.
-3. **Web pública MUCHO más personalizable**:
-   - 3 plantillas, publicar/ocultar, URL `/w/tu-slug`.
-   - **Diseño**: color principal y secundario, tema **claro/oscuro**, 3 tipografías,
-     logo propio.
-   - **Portada**: foto, altura (compacta/media/completa), oscurecido regulable,
-     texto del botón.
-   - **Secciones activables y reordenables**: Historia, **Titulares** (con foto),
-     Cultos, **Galería**, **Actualidad** (últimos comunicados), Contacto.
-   - **Redes sociales**, enlace a mapa y pie de página.
-   - Botón **«Entrar» → portal del hermano** (`/hermano`).
+### Suscripción (bloquea el panel)
+- Sin suscripción activa, el panel muestra un **muro** con los planes (20 €/mes o
+  300 €/año, sin prueba gratis). «Suscribirse» activa la cuenta (cobro simulado
+  hasta conectar Stripe).
 
-## Arreglos (tras revisión de código)
-- Cuotas mensuales en día 29–31 ya no caen en el mes equivocado.
-- El spinner de carga ya no parpadea al refrescarse la sesión.
-- Subir imágenes que no caben en el navegador ahora **avisa** en vez de fallar en silencio.
+### Web pública rehecha como CMS por pestañas (como el panel de Amargura)
+- Pestañas: **Diseño y secciones · Fotos de portada · Actualidad · Cultos ·
+  Páginas y textos · Boletines · Contacto**.
+- **Fotos de portada**: varias, se alternan de fondo.
+- **Actualidad**: noticias con foto, fecha y estado publicada/oculta.
+- **Páginas y textos**: antetítulo, título, entradilla, párrafos y fotos.
+- **Boletines**: lista con título/subtítulo (el PDF, al conectar almacenamiento).
+- **Mini-previsualización en vivo** a la derecha, se refresca al editar.
 
-## Comprobado
-- Las 14 páginas del panel + portal del hermano cargan con **0 errores de JavaScript**.
-- Typecheck limpio y build correcto.
-- Revisión de código pasada; los 3 bugs encontrados, corregidos.
+## Cómo ver la web
+1. En el panel: **Web pública** → pestaña **«Diseño y secciones»** → marca
+   **«Web publicada»** y pon un enlace (slug), p. ej. `mi-hermandad`.
+2. La **vista previa** aparece a la derecha del editor (se actualiza sola).
+3. Para verla a pantalla completa: botón **«Ver mi web»** (arriba) o abre en el
+   navegador `TU-DOMINIO/w/tu-slug` (en local: `localhost:PUERTO/w/tu-slug`).
 
-## Para desplegar en modo local (sin base de datos)
-En Vercel, **no** definas `VITE_SUPABASE_URL` ni `VITE_SUPABASE_ANON_KEY`.
+> Importante: por ahora la web vive en el navegador donde se edita (modo local).
+> Para que sea **pública de verdad** para cualquiera y desde cualquier
+> dispositivo, falta guardarla en Supabase (lo dejamos para el final).
 
-## Pendiente (siguiente entrega)
-- Suscripción de la hermandad (20 €/mes · 300 €/año, sin cobro real).
-- Ajuste de mora (uno o dos cargos).
-- Emails reales (Brevo/Resend) y, para web pública real multi-hermandad, guardarla
-  en Supabase.
+## Pendiente
+- Mora configurable (uno o dos cargos).
+- Emails reales (Brevo/Resend) y web pública en Supabase — para el final.

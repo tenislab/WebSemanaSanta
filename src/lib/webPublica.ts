@@ -14,7 +14,15 @@ export type PlantillaWeb = 'clasica' | 'sobria' | 'moderna'
 export type TemaWeb = 'claro' | 'oscuro'
 export type TipografiaWeb = 'clasica' | 'moderna' | 'elegante'
 export type AlturaHero = 'compacta' | 'media' | 'completa'
-export type TipoSeccion = 'historia' | 'titulares' | 'cultos' | 'galeria' | 'actualidad' | 'contacto'
+export type TipoSeccion =
+  | 'historia'
+  | 'titulares'
+  | 'cultos'
+  | 'galeria'
+  | 'actualidad'
+  | 'paginas'
+  | 'boletines'
+  | 'contacto'
 export type TipoRed = 'Instagram' | 'Facebook' | 'X' | 'YouTube' | 'TikTok' | 'Web'
 
 export const PLANTILLAS: { id: PlantillaWeb; nombre: string; descripcion: string }[] = [
@@ -34,7 +42,9 @@ export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string }> = {
   titulares: { nombre: 'Titulares' },
   cultos: { nombre: 'Cultos y actos' },
   galeria: { nombre: 'Galería de fotos' },
-  actualidad: { nombre: 'Actualidad (comunicados)' },
+  actualidad: { nombre: 'Actualidad (noticias)' },
+  paginas: { nombre: 'Páginas y textos' },
+  boletines: { nombre: 'Boletines' },
   contacto: { nombre: 'Contacto' },
 }
 
@@ -62,6 +72,42 @@ export interface CultoWeb {
   detalle: string
 }
 
+/** Noticia de la sección Actualidad. */
+export interface Noticia {
+  id: string
+  titulo: string
+  fecha: string
+  resumen: string
+  fotoDataUrl: string | null
+  publicada: boolean
+}
+
+/** Párrafo de una página de texto (con subtítulo opcional). */
+export interface ParrafoPagina {
+  id: string
+  subtitulo: string
+  texto: string
+}
+
+/** Página de la sección «Páginas y textos» (Titulares, Historia, Junta…). */
+export interface PaginaWeb {
+  id: string
+  icono: string
+  antetitulo: string
+  titulo: string
+  entradilla: string
+  parrafos: ParrafoPagina[]
+  fotos: string[]
+}
+
+/** Boletín en PDF (por ahora se guarda el título; el PDF, al conectar almacenamiento). */
+export interface Boletin {
+  id: string
+  titulo: string
+  subtitulo: string
+  pdfNombre: string | null
+}
+
 export interface RedWeb {
   id: string
   tipo: TipoRed
@@ -86,8 +132,8 @@ export interface WebPublica {
   tema: TemaWeb
   tipografia: TipografiaWeb
 
-  // Portada
-  heroFotoDataUrl: string | null
+  // Portada: varias fotos que se alternan de fondo en la cabecera.
+  heroFotos: string[]
   /** Oscurecido de la foto de portada, 0–80 (%). */
   heroOverlay: number
   heroAltura: AlturaHero
@@ -101,6 +147,9 @@ export interface WebPublica {
   titulares: Titular[]
   cultos: CultoWeb[]
   galeria: FotoGaleria[]
+  noticias: Noticia[]
+  paginas: PaginaWeb[]
+  boletines: Boletin[]
   /** Muestra en la web los últimos comunicados publicados. */
   mostrarActualidad: boolean
 
@@ -123,7 +172,9 @@ export const SECCIONES_POR_DEFECTO: SeccionConfig[] = [
   { tipo: 'titulares', visible: true },
   { tipo: 'cultos', visible: true },
   { tipo: 'galeria', visible: true },
-  { tipo: 'actualidad', visible: false },
+  { tipo: 'actualidad', visible: true },
+  { tipo: 'paginas', visible: true },
+  { tipo: 'boletines', visible: false },
   { tipo: 'contacto', visible: true },
 ]
 
@@ -141,7 +192,7 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   tema: 'claro',
   tipografia: 'clasica',
 
-  heroFotoDataUrl: null,
+  heroFotos: [],
   heroOverlay: 55,
   heroAltura: 'media',
   heroTextoBoton: 'Portal del hermano',
@@ -159,6 +210,18 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
     { id: 'culto-2', titulo: 'Estación de penitencia', detalle: 'Salida procesional en la tarde del Viernes Santo.' },
   ],
   galeria: [],
+  noticias: [
+    { id: 'not-1', titulo: 'Convocatoria de Cabildo General', fecha: '2026-02-02', resumen: 'Por orden del Hermano Mayor se convoca a todos los hermanos al Cabildo General.', fotoDataUrl: null, publicada: true },
+  ],
+  paginas: [
+    {
+      id: 'pag-1', icono: '✝️', antetitulo: 'La Hermandad', titulo: 'Sagrados Titulares',
+      entradilla: 'Nuestros Sagrados Titulares.',
+      parrafos: [{ id: 'p-1', subtitulo: 'Historia de la imagen', texto: 'Describe aquí a los titulares de tu hermandad.' }],
+      fotos: [],
+    },
+  ],
+  boletines: [],
   mostrarActualidad: false,
 
   email: '',
@@ -184,13 +247,32 @@ export function aSlug(texto: string): string {
 /** Mezcla lo guardado con los valores por defecto, para que los datos antiguos no pierdan campos nuevos. */
 function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
   if (!guardado) return WEB_PUBLICA_INICIAL
+  // Compatibilidad: si venía con una sola foto de portada (modelo anterior),
+  // se pasa al array de fotos.
+  const heroFotos =
+    guardado.heroFotos && guardado.heroFotos.length
+      ? guardado.heroFotos
+      : (guardado as { heroFotoDataUrl?: string | null }).heroFotoDataUrl
+        ? [(guardado as { heroFotoDataUrl?: string }).heroFotoDataUrl as string]
+        : []
+  // Si los datos son antiguos y no traían las secciones nuevas, se completan.
+  const secciones = guardado.secciones && guardado.secciones.length ? guardado.secciones : SECCIONES_POR_DEFECTO
+  const tiposPresentes = new Set(secciones.map((s) => s.tipo))
+  const seccionesCompletas = [
+    ...secciones,
+    ...SECCIONES_POR_DEFECTO.filter((s) => !tiposPresentes.has(s.tipo)),
+  ]
   return {
     ...WEB_PUBLICA_INICIAL,
     ...guardado,
-    secciones: guardado.secciones && guardado.secciones.length ? guardado.secciones : SECCIONES_POR_DEFECTO,
+    heroFotos,
+    secciones: seccionesCompletas,
     titulares: guardado.titulares ?? WEB_PUBLICA_INICIAL.titulares,
     cultos: guardado.cultos ?? WEB_PUBLICA_INICIAL.cultos,
     galeria: guardado.galeria ?? [],
+    noticias: guardado.noticias ?? WEB_PUBLICA_INICIAL.noticias,
+    paginas: guardado.paginas ?? WEB_PUBLICA_INICIAL.paginas,
+    boletines: guardado.boletines ?? [],
     redes: guardado.redes ?? [],
   }
 }

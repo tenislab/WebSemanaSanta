@@ -1,4 +1,5 @@
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   SECCIONES_INFO,
   TIPOGRAFIAS,
@@ -8,20 +9,22 @@ import {
 } from '../lib/webPublica'
 import { useHermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from '../components/Logo'
-import { COMUNICADOS_INICIALES, type Comunicado } from '../data/comunicados'
-import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
+import { formatDate } from '../lib/format'
 
 /**
- * Web pública de la hermandad, en la ruta /w/:slug. Pinta la plantilla, los
- * colores, la tipografía, el tema y las secciones que la hermandad haya
- * activado, en el orden elegido. El botón «Entrar» lleva al portal del hermano.
+ * Web pública de la hermandad (/w/:slug). Pinta plantilla, colores, tipografía,
+ * tema y las secciones activas en su orden. Con ?preview=1 se muestra aunque no
+ * esté publicada (para la vista previa del panel). El botón «Entrar» lleva al
+ * portal del hermano.
  */
 export default function SitioPublico() {
   const { slug } = useParams()
+  const [params] = useSearchParams()
+  const preview = params.get('preview') === '1'
   const web = getWebPublica()
   const hermandad = useHermandadSettings()
 
-  if (!web.publicada || web.slug !== slug) {
+  if (!preview && (!web.publicada || web.slug !== slug)) {
     return (
       <div className="sitio-noweb">
         <LogoMark size={40} />
@@ -40,12 +43,8 @@ export default function SitioPublico() {
 
   const seccionesVisibles = web.secciones.filter((s) => s.visible)
   const anclaLabel: Record<TipoSeccion, string> = {
-    historia: 'Historia',
-    titulares: 'Titulares',
-    cultos: 'Cultos',
-    galeria: 'Galería',
-    actualidad: 'Actualidad',
-    contacto: 'Contacto',
+    historia: 'Historia', titulares: 'Titulares', cultos: 'Cultos', galeria: 'Galería',
+    actualidad: 'Actualidad', paginas: 'La Hermandad', boletines: 'Boletines', contacto: 'Contacto',
   }
 
   return (
@@ -65,26 +64,12 @@ export default function SitioPublico() {
           <span>{titulo}</span>
         </div>
         <nav className="sitio__menu">
-          {seccionesVisibles.map((s) => (
-            <a key={s.tipo} href={`#${s.tipo}`}>{anclaLabel[s.tipo]}</a>
-          ))}
+          {seccionesVisibles.map((s) => <a key={s.tipo} href={`#${s.tipo}`}>{anclaLabel[s.tipo]}</a>)}
           <Link to="/hermano" className="sitio-btn sitio-btn--entrar">Entrar</Link>
         </nav>
       </header>
 
-      <section
-        className={`sitio__hero sitio__hero--${web.heroAltura}`}
-        style={web.heroFotoDataUrl ? { backgroundImage: `url(${web.heroFotoDataUrl})` } : undefined}
-      >
-        <div className="sitio__hero-overlay" style={{ background: `rgba(15,8,10,${web.heroOverlay / 100})` }} />
-        <div className="sitio__hero-inner">
-          <h1>{titulo}</h1>
-          {web.lema && <p className="sitio__lema">{web.lema}</p>}
-          <Link to="/hermano" className="sitio-btn sitio-btn--hero">
-            {web.heroTextoBoton || 'Portal del hermano'} →
-          </Link>
-        </div>
-      </section>
+      <HeroFondo web={web} titulo={titulo} />
 
       <main className="sitio__main">
         {seccionesVisibles.map((s) => (
@@ -103,17 +88,47 @@ export default function SitioPublico() {
   )
 }
 
+/** Portada con las fotos alternándose de fondo. */
+function HeroFondo({ web, titulo }: { web: WebPublica; titulo: string }) {
+  const fotos = web.heroFotos
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    if (fotos.length < 2) return
+    const t = setInterval(() => setI((n) => (n + 1) % fotos.length), 5000)
+    return () => clearInterval(t)
+  }, [fotos.length])
+  const fondo = fotos[i] ?? fotos[0]
+
+  return (
+    <section
+      className={`sitio__hero sitio__hero--${web.heroAltura}`}
+      style={fondo ? { backgroundImage: `url(${fondo})` } : undefined}
+    >
+      <div className="sitio__hero-overlay" style={{ background: `rgba(15,8,10,${web.heroOverlay / 100})` }} />
+      <div className="sitio__hero-inner">
+        <h1>{titulo}</h1>
+        {web.lema && <p className="sitio__lema">{web.lema}</p>}
+        <Link to="/hermano" className="sitio-btn sitio-btn--hero">{web.heroTextoBoton || 'Portal del hermano'} →</Link>
+      </div>
+    </section>
+  )
+}
+
 function Redes({ web }: { web: WebPublica }) {
   if (web.redes.length === 0) return null
   return (
     <div className="sitio__redes">
       {web.redes.map((r) => (
-        <a key={r.id} href={r.url} target="_blank" rel="noopener noreferrer" className="sitio__red">
-          {r.tipo}
-        </a>
+        <a key={r.id} href={r.url} target="_blank" rel="noopener noreferrer" className="sitio__red">{r.tipo}</a>
       ))}
     </div>
   )
+}
+
+function fechaBonita(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(`${iso}T00:00:00`)
+  return Number.isNaN(d.getTime()) ? iso : formatDate(d)
 }
 
 function Seccion({
@@ -159,10 +174,7 @@ function Seccion({
         <h2>{SECCIONES_INFO.cultos.nombre}</h2>
         <div className="sitio__cultos">
           {web.cultos.map((c) => (
-            <article key={c.id} className="sitio__culto">
-              <h3>{c.titulo}</h3>
-              <p>{c.detalle}</p>
-            </article>
+            <article key={c.id} className="sitio__culto"><h3>{c.titulo}</h3><p>{c.detalle}</p></article>
           ))}
         </div>
       </section>
@@ -187,19 +199,64 @@ function Seccion({
   }
 
   if (tipo === 'actualidad') {
-    if (!web.mostrarActualidad) return null
-    const comunicados = leerPersistido<Comunicado[]>(CLAVES_DATOS.comunicados, COMUNICADOS_INICIALES)
-      .filter((c) => c.estado === 'Enviado')
-      .slice(0, 4)
-    if (comunicados.length === 0) return null
+    const noticias = web.noticias.filter((n) => n.publicada)
+    if (noticias.length === 0) return null
     return (
       <section id="actualidad" className="sitio__seccion">
         <h2>{SECCIONES_INFO.actualidad.nombre}</h2>
+        <div className="sitio__noticias">
+          {noticias.map((n) => (
+            <article key={n.id} className="sitio__noticia">
+              {n.fotoDataUrl && <img src={n.fotoDataUrl} alt="" />}
+              <div>
+                <span className="sitio__noticia-fecha">{fechaBonita(n.fecha)}</span>
+                <h3>{n.titulo}</h3>
+                <p>{n.resumen}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  if (tipo === 'paginas') {
+    if (web.paginas.length === 0) return null
+    return (
+      <section id="paginas" className="sitio__seccion">
+        <h2>{SECCIONES_INFO.paginas.nombre}</h2>
+        {web.paginas.map((p) => (
+          <article key={p.id} className="sitio__pagina">
+            {p.antetitulo && <span className="sitio__pagina-ante">{p.antetitulo}</span>}
+            <h3>{p.icono} {p.titulo}</h3>
+            {p.entradilla && <p className="sitio__pagina-entradilla">{p.entradilla}</p>}
+            {p.fotos.length > 0 && (
+              <div className="sitio__galeria">
+                {p.fotos.map((f, idx) => <figure key={idx} className="sitio__foto"><img src={f} alt="" /></figure>)}
+              </div>
+            )}
+            {p.parrafos.map((par) => (
+              <div key={par.id} className="sitio__parrafo">
+                {par.subtitulo && <h4>{par.subtitulo}</h4>}
+                <p className="sitio__texto">{par.texto}</p>
+              </div>
+            ))}
+          </article>
+        ))}
+      </section>
+    )
+  }
+
+  if (tipo === 'boletines') {
+    if (web.boletines.length === 0) return null
+    return (
+      <section id="boletines" className="sitio__seccion">
+        <h2>{SECCIONES_INFO.boletines.nombre}</h2>
         <div className="sitio__cultos">
-          {comunicados.map((c) => (
-            <article key={c.id} className="sitio__culto">
-              <h3>{c.titulo}</h3>
-              <p>{c.cuerpo}</p>
+          {web.boletines.map((bo) => (
+            <article key={bo.id} className="sitio__culto">
+              <h3>{bo.titulo}</h3>
+              <p>{bo.subtitulo}{bo.pdfNombre ? ` · ${bo.pdfNombre}` : ''}</p>
             </article>
           ))}
         </div>
@@ -220,9 +277,7 @@ function Seccion({
           {email && <li>{email}</li>}
         </ul>
         {web.mapaUrl && (
-          <a href={web.mapaUrl} target="_blank" rel="noopener noreferrer" className="sitio-btn sitio-btn--sm">
-            Ver en el mapa
-          </a>
+          <a href={web.mapaUrl} target="_blank" rel="noopener noreferrer" className="sitio-btn sitio-btn--sm">Ver en el mapa</a>
         )}
       </section>
     )

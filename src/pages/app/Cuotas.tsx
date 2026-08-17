@@ -31,6 +31,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { descargarArchivo, toCsv } from '../../lib/csv'
 import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
+import { useAjustesCuotas } from '../../lib/ajustesCuotas'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -100,6 +101,8 @@ export default function Cuotas() {
   const [fechaRemesa, setFechaRemesa] = useState('')
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modeloRecibo, setModeloRecibo] = useState<ModeloPapeleta | null>(() => getModeloRecibo())
+  const [ajustesOpen, setAjustesOpen] = useState(false)
+  const [ajustes, setAjustes] = useAjustesCuotas()
 
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const conceptosCuota = useMemo(() => getConceptosCuota(), [])
@@ -140,10 +143,42 @@ export default function Cuotas() {
     setSelected((prev) => (prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy() } : prev))
   }
 
-  /** Pone o quita la mora a mano (nunca automático al vencer). */
-  function cambiarEstado(id: string, estado: EstadoCuota) {
-    setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, estado } : c)))
-    setSelected((prev) => (prev && prev.id === id ? { ...prev, estado } : prev))
+  const miCorreo = (user?.email ?? '').toLowerCase()
+  const miNombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Un cargo'
+
+  function aplicarCuota(id: string, cambios: Partial<Cuota>) {
+    setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, ...cambios } : c)))
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, ...cambios } : prev))
+  }
+
+  /**
+   * Poner en mora a mano. Si la hermandad exige dos cargos, el primero la
+   * PROPONE y otro distinto la CONFIRMA; si no, se pone directa. Nunca es
+   * automática al vencer la fecha.
+   */
+  function ponerEnMora(c: Cuota) {
+    if (!ajustes.moraRequiereDosCargos) {
+      aplicarCuota(c.id, { estado: 'En mora', moraPropuestaPor: undefined, moraPropuestaNombre: undefined })
+      return
+    }
+    if (!c.moraPropuestaPor) {
+      aplicarCuota(c.id, { moraPropuestaPor: miCorreo, moraPropuestaNombre: miNombre })
+      return
+    }
+    if (c.moraPropuestaPor === miCorreo) {
+      window.alert('Ya has propuesto tú la mora. La debe confirmar otro cargo (tesorero o secretario).')
+      return
+    }
+    // Un segundo cargo distinto confirma:
+    aplicarCuota(c.id, { estado: 'En mora', moraPropuestaPor: undefined, moraPropuestaNombre: undefined })
+  }
+
+  function quitarMora(id: string) {
+    aplicarCuota(id, { estado: 'Pendiente', moraPropuestaPor: undefined, moraPropuestaNombre: undefined })
+  }
+
+  function cancelarPropuestaMora(id: string) {
+    aplicarCuota(id, { moraPropuestaPor: undefined, moraPropuestaNombre: undefined })
   }
 
   // Remesa bancaria: recibos pendientes y domiciliados con IBAN, listos para
@@ -268,6 +303,9 @@ export default function Cuotas() {
           </p>
         </div>
         <div className="dash-head__actions">
+          <button className="btn btn-outline" onClick={() => setAjustesOpen(true)}>
+            Ajustes
+          </button>
           <button className="btn btn-outline" onClick={() => setModeloOpen(true)}>
             Modelo de recibo
           </button>
@@ -441,13 +479,27 @@ export default function Cuotas() {
                   Marcar como pagada
                 </button>
               )}
-              {puedeMora && selected.estado === 'Pendiente' && (
-                <button className="btn btn-ghost rgpd-borrar" onClick={() => cambiarEstado(selected.id, 'En mora')}>
-                  Poner en mora
+              {puedeMora && selected.estado === 'Pendiente' &&
+                (ajustes.moraRequiereDosCargos && selected.moraPropuestaPor === miCorreo ? (
+                  <button className="btn btn-ghost" disabled>
+                    Mora propuesta · falta otro cargo
+                  </button>
+                ) : (
+                  <button className="btn btn-ghost rgpd-borrar" onClick={() => ponerEnMora(selected)}>
+                    {!ajustes.moraRequiereDosCargos
+                      ? 'Poner en mora'
+                      : selected.moraPropuestaPor
+                        ? 'Confirmar mora'
+                        : 'Proponer mora'}
+                  </button>
+                ))}
+              {puedeMora && selected.estado === 'Pendiente' && selected.moraPropuestaPor && (
+                <button className="btn btn-ghost" onClick={() => cancelarPropuestaMora(selected.id)}>
+                  Cancelar propuesta
                 </button>
               )}
               {puedeMora && selected.estado === 'En mora' && (
-                <button className="btn btn-ghost" onClick={() => cambiarEstado(selected.id, 'Pendiente')}>
+                <button className="btn btn-ghost" onClick={() => quitarMora(selected.id)}>
                   Quitar mora
                 </button>
               )}
@@ -458,6 +510,12 @@ export default function Cuotas() {
           )
         }
       >
+        {selected && selected.moraPropuestaPor && selected.estado === 'Pendiente' && (
+          <div className="banner-inline banner-inline--warn" style={{ marginBottom: '1rem' }}>
+            Mora <b>propuesta</b> por {selected.moraPropuestaNombre ?? selected.moraPropuestaPor}. Falta que otro cargo
+            (tesorero o secretario) la confirme.
+          </div>
+        )}
         {selected &&
           (() => {
             const h = hermanoDe(selected.hermanoId)
@@ -667,6 +725,27 @@ export default function Cuotas() {
           guardar={saveModeloRecibo}
           borrar={borrarModeloRecibo}
         />
+      </Drawer>
+
+      {/* Ajustes de cuotas (mora) */}
+      <Drawer open={ajustesOpen} onClose={() => setAjustesOpen(false)} title="Ajustes de cuotas" subtitle="Mora">
+        <div className="app-form">
+          <div className="assign-box">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={ajustes.moraRequiereDosCargos}
+                onChange={(e) => setAjustes({ ...ajustes, moraRequiereDosCargos: e.target.checked })}
+              />
+              La mora requiere que la confirmen dos cargos
+            </label>
+            <p className="form-hint">
+              {ajustes.moraRequiereDosCargos
+                ? 'Un cargo (tesorero o secretario) PROPONE la mora y otro distinto la CONFIRMA. Es una doble validación.'
+                : 'Basta con que un cargo autorizado (tesorero, secretario o titular) ponga la mora.'}
+            </p>
+          </div>
+        </div>
       </Drawer>
     </div>
   )

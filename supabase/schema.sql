@@ -82,13 +82,31 @@ create table if not exists cuotas (
   hermano_id uuid not null references hermanos(id) on delete cascade,
   concepto text not null,
   importe numeric(10, 2) not null default 0,
-  estado text not null default 'Pendiente' check (estado in ('Pagada', 'Pendiente', 'Devuelta')),
+  estado text not null default 'Pendiente' check (estado in ('Pagada', 'Pendiente', 'Devuelta', 'En mora')),
   fecha_emision text not null default '',
   fecha_cobro text not null default '',
   domiciliada boolean not null default false,
+  -- Método de cobro (Domiciliación/Transferencia/Efectivo/Bizum) y datos de la
+  -- mora manual (quién la propone cuando hace falta confirmación de dos cargos).
+  metodo_cobro text,
+  mora_propuesta_por text,
+  mora_propuesta_nombre text,
   fecha_pago text
 );
 create index if not exists cuotas_hermano_id_idx on cuotas(hermano_id);
+
+-- Si la tabla cuotas ya existía de una instalación anterior, añade las columnas
+-- nuevas y amplía el check del estado (ejecutar es idempotente).
+alter table cuotas add column if not exists metodo_cobro text;
+alter table cuotas add column if not exists mora_propuesta_por text;
+alter table cuotas add column if not exists mora_propuesta_nombre text;
+do $$
+begin
+  alter table cuotas drop constraint if exists cuotas_estado_check;
+  alter table cuotas add constraint cuotas_estado_check
+    check (estado in ('Pagada', 'Pendiente', 'Devuelta', 'En mora'));
+exception when others then null;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- Papeletas de sitio

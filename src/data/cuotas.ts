@@ -26,6 +26,10 @@ export interface Cuota {
   /** Método de cobro. Si falta (datos antiguos), se deduce de `domiciliada`. */
   metodoCobro?: MetodoCobro
   fechaPago?: string
+  /** Correo del cargo que ha PROPUESTO la mora (cuando hace falta confirmación de dos cargos). */
+  moraPropuestaPor?: string
+  /** Nombre visible de quien propuso la mora. */
+  moraPropuestaNombre?: string
 }
 
 /** Método de cobro de una cuota, tolerando datos antiguos que solo tienen `domiciliada`. */
