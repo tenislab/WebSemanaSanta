@@ -1,35 +1,31 @@
-# Actualización Cabildo — suscripción + CMS de la web
+# Actualización Cabildo — mora, CMS premium, PDF en modelos (+ más)
 
-Descomprime en la **raíz del repo** (respetando `src/...`), sobrescribe y sube por
-GitHub Desktop.
+Descomprime en la **raíz del repo** (respetando `src/...`) y sobrescribe.
 
-## Novedades de esta entrega
+## ⚠️ IMPORTANTE: hay una dependencia nueva
+Esta entrega usa `pdfjs-dist` (para convertir PDF a imagen). Va incluida en
+`package.json`. Tras descomprimir, **ejecuta una vez**:
 
-### Suscripción (bloquea el panel)
-- Sin suscripción activa, el panel muestra un **muro** con los planes (20 €/mes o
-  300 €/año, sin prueba gratis). «Suscribirse» activa la cuenta (cobro simulado
-  hasta conectar Stripe).
+    npm install
 
-### Web pública rehecha como CMS por pestañas (como el panel de Amargura)
-- Pestañas: **Diseño y secciones · Fotos de portada · Actualidad · Cultos ·
-  Páginas y textos · Boletines · Contacto**.
-- **Fotos de portada**: varias, se alternan de fondo.
-- **Actualidad**: noticias con foto, fecha y estado publicada/oculta.
-- **Páginas y textos**: antetítulo, título, entradilla, párrafos y fotos.
-- **Boletines**: lista con título/subtítulo (el PDF, al conectar almacenamiento).
-- **Mini-previsualización en vivo** a la derecha, se refresca al editar.
+(GitHub Desktop hará el commit; Vercel ejecuta `npm install` solo al desplegar,
+así que en producción no hay que hacer nada más.)
 
-## Cómo ver la web
-1. En el panel: **Web pública** → pestaña **«Diseño y secciones»** → marca
-   **«Web publicada»** y pon un enlace (slug), p. ej. `mi-hermandad`.
-2. La **vista previa** aparece a la derecha del editor (se actualiza sola).
-3. Para verla a pantalla completa: botón **«Ver mi web»** (arriba) o abre en el
-   navegador `TU-DOMINIO/w/tu-slug` (en local: `localhost:PUERTO/w/tu-slug`).
+## Novedades
+- **Modelo de papeleta y de recibo: admite PDF** — al subir un PDF se convierte
+  su primera página en imagen y colocas los datos encima igual que con una foto.
+  Ideal para usar el PDF de la imprenta.
+- **Mora configurable** — en Cuotas → Ajustes, la hermandad decide si basta un
+  cargo o hacen falta dos (proponer + confirmar).
+- **Web pública**: botón **«Copiar enlace»** destacado.
+- **CMS más premium**: pestañas tipo segmento y vista previa con marco de móvil.
+- Arreglos de la revisión (interfaz de la mora; `schema.sql` con estado «En
+  mora», `metodo_cobro` y datos de la propuesta para el modo Supabase real).
 
-> Importante: por ahora la web vive en el navegador donde se edita (modo local).
-> Para que sea **pública de verdad** para cualquiera y desde cualquier
-> dispositivo, falta guardarla en Supabase (lo dejamos para el final).
+## Comprobado
+- Subir PDF al modelo → se convierte a imagen y el editor funciona encima ✓
+- 14 páginas + portal con 0 errores JS ✓ · typecheck y build limpios ✓
 
-## Pendiente
-- Mora configurable (uno o dos cargos).
-- Emails reales (Brevo/Resend) y web pública en Supabase — para el final.
+## Pendiente (para el final)
+- Web pública en Supabase (que sea pública real y salga en Google).
+- Emails reales (Brevo/Resend), cobro Stripe, publicación real en redes.

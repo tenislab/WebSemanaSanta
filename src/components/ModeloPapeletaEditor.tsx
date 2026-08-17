@@ -66,6 +66,7 @@ export default function ModeloPapeletaEditor({
   const [seleccion, setSeleccion] = useState<string | null>(null)
   const [arrastrando, setArrastrando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [cargando, setCargando] = useState(false)
 
   function ejemploDe(clave: string): string {
     return claves.find((c) => c.clave === clave)?.ejemplo ?? ''
@@ -80,18 +81,34 @@ export default function ModeloPapeletaEditor({
   async function subirImagen(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setError('Sube una imagen (JPG o PNG) del modelo de papeleta.')
+    const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    if (!file.type.startsWith('image/') && !esPdf) {
+      setError('Sube una imagen (JPG/PNG) o un PDF del modelo.')
       return
     }
     setError(null)
-    const lector = new FileReader()
-    lector.onload = async () => {
-      const comprimida = await comprimirImagen(String(lector.result))
-      actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos ?? [] })
+    try {
+      if (esPdf) {
+        // Un PDF: se rasteriza su primera página y se usa como imagen del modelo.
+        setCargando(true)
+        const { pdfPrimeraPaginaAImagen } = await import('../lib/pdfAImagen')
+        const imagen = await pdfPrimeraPaginaAImagen(file)
+        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos ?? [] })
+      } else {
+        const lector = new FileReader()
+        lector.onload = async () => {
+          const comprimida = await comprimirImagen(String(lector.result))
+          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos ?? [] })
+        }
+        lector.readAsDataURL(file)
+      }
+    } catch (err) {
+      console.error('No se pudo procesar el archivo del modelo:', err)
+      setError('No se pudo leer el PDF. Prueba con otro archivo o sube una imagen.')
+    } finally {
+      setCargando(false)
+      e.target.value = ''
     }
-    lector.readAsDataURL(file)
-    e.target.value = ''
   }
 
   function anadirCampo() {
@@ -137,13 +154,13 @@ export default function ModeloPapeletaEditor({
       {!modelo ? (
         <div className="modelo-editor__subir">
           <p className="form-hint">
-            Sube una imagen de tu modelo de papeleta (una foto o un escaneo; da igual el diseño).
-            Después colocas encima los datos del hermano y, al imprimir, cada papeleta sale
-            rellena con los datos reales.
+            Sube una <strong>imagen</strong> (JPG/PNG) o un <strong>PDF</strong> de tu modelo (una foto,
+            un escaneo o el PDF de la imprenta; da igual el diseño). Después colocas encima los datos
+            del hermano y, al imprimir, cada documento sale relleno con los datos reales.
           </p>
           <label className="btn btn-primary">
-            Subir modelo de papeleta
-            <input type="file" accept="image/*" onChange={subirImagen} hidden />
+            {cargando ? 'Procesando…' : 'Subir modelo (imagen o PDF)'}
+            <input type="file" accept="image/*,application/pdf" onChange={subirImagen} hidden disabled={cargando} />
           </label>
           {error && <p className="form-hint form-hint--error">{error}</p>}
         </div>
@@ -154,8 +171,8 @@ export default function ModeloPapeletaEditor({
               + Añadir dato
             </button>
             <label className="btn btn-outline btn-sm">
-              Cambiar imagen
-              <input type="file" accept="image/*" onChange={subirImagen} hidden />
+              {cargando ? 'Procesando…' : 'Cambiar imagen/PDF'}
+              <input type="file" accept="image/*,application/pdf" onChange={subirImagen} hidden disabled={cargando} />
             </label>
             <button
               type="button"
