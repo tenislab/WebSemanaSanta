@@ -23,6 +23,7 @@ import {
 } from '../../lib/webPublica'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { nuevoId } from '../../lib/supabaseSync'
+import SitioContenido from '../../components/SitioContenido'
 
 function comprimirImagen(dataUrl: string, maxLado = 1600): Promise<string> {
   return new Promise((resolve) => {
@@ -75,7 +76,6 @@ export default function WebPublica() {
   const hermandad = useHermandadSettings()
   const [pestana, setPestana] = useState<Pestana>('diseno')
   const [copiado, setCopiado] = useState(false)
-  const [previewKey, setPreviewKey] = useState(0)
   const [paginaSel, setPaginaSel] = useState<string | null>(null)
 
   useEffect(() => {
@@ -86,12 +86,6 @@ export default function WebPublica() {
     if (Object.keys(parche).length) setWeb({ ...web, ...parche })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Refresca la vista previa poco después de cada cambio (evita recargar en cada tecla).
-  useEffect(() => {
-    const t = setTimeout(() => setPreviewKey((k) => k + 1), 600)
-    return () => clearTimeout(t)
-  }, [web])
 
   const enlace = `${window.location.origin}/w/${web.slug}`
 
@@ -144,14 +138,16 @@ export default function WebPublica() {
           {pestana === 'contacto' && <ContactoTab web={web} hermandad={hermandad} editar={editar} />}
         </div>
 
-        {/* Mini previsualización */}
+        {/* Vista previa en vivo (render React real, sin iframe: sin parpadeo) */}
         <aside className="cms-preview">
           <div className="cms-preview__head">
             <span>Vista previa</span>
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => setPreviewKey((k) => k + 1)}>Actualizar</button>
+            <a href={enlace} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">Abrir</a>
           </div>
           <div className="cms-preview__frame">
-            <iframe key={previewKey} title="Vista previa de la web" src={`/w/${web.slug}?preview=1`} />
+            <div className="cms-preview__stage">
+              <SitioContenido web={web} hermandad={hermandad} interactivo={false} />
+            </div>
           </div>
         </aside>
       </div>

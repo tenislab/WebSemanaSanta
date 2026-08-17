@@ -864,22 +864,25 @@ export default function HermanoPortal() {
         onSalir={salir}
       />
       <main className="portal__main">
-        <div className="dash-head">
-          <p className="eyebrow">Área del hermano · {nombreHermandadActiva}</p>
-          <h1>Hola, {primerNombre}</h1>
-          <div className="portal__resumen">
-            <span className="pill pill--info">Nº {numeroActivo}</span>
-            {hermanoPrincipal && (
-              <>
-                <span className={`pill ${hermanoPrincipal.estado === 'Activo' ? 'pill--ok' : hermanoPrincipal.estado === 'Nuevo' ? 'pill--info' : 'pill--off'}`}>
-                  {hermanoPrincipal.estado}
-                </span>
-                <span className={`pill ${hermanoPrincipal.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
-                  {hermanoPrincipal.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
-                </span>
-                <span className="pill pill--off">Hermano/a desde {hermanoPrincipal.antiguedad}</span>
-              </>
-            )}
+        <div className="portal__welcome" style={{ ['--portal-accent' as string]: colorActivo }}>
+          <span className="portal__welcome-avatar">{inicialesHermandad(hermanoActivo?.nombre ?? primerNombre)}</span>
+          <div className="portal__welcome-text">
+            <p className="eyebrow">Área del hermano · {nombreHermandadActiva}</p>
+            <h1>Hola, {primerNombre}</h1>
+            <div className="portal__resumen">
+              <span className="pill pill--info">Nº {numeroActivo}</span>
+              {hermanoPrincipal && (
+                <>
+                  <span className={`pill ${hermanoPrincipal.estado === 'Activo' ? 'pill--ok' : hermanoPrincipal.estado === 'Nuevo' ? 'pill--info' : 'pill--off'}`}>
+                    {hermanoPrincipal.estado}
+                  </span>
+                  <span className={`pill ${hermanoPrincipal.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
+                    {hermanoPrincipal.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
+                  </span>
+                  <span className="pill pill--off">Hermano/a desde {hermanoPrincipal.antiguedad}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

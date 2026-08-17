@@ -1528,12 +1528,19 @@ h1, h2, h3,
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem;
   font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted);
 }
-/* Marco tipo "móvil" para que la vista previa se vea premium */
+/* Marco tipo "móvil": la vista previa es un render React real (sin iframe, sin
+   parpadeo), que se desplaza dentro del marco. */
 .cms-preview__frame {
-  border: 8px solid #1c1c1e; border-radius: 26px; overflow: hidden; background: #fff;
-  aspect-ratio: 9/16; box-shadow: 0 12px 34px rgba(0,0,0,0.22);
+  border: 8px solid #1c1c1e; border-radius: 26px; overflow-y: auto; overflow-x: hidden; background: #fff;
+  height: 640px; box-shadow: 0 12px 34px rgba(0,0,0,0.22);
 }
-.cms-preview__frame iframe { width: 250%; height: 250%; border: 0; transform: scale(0.4); transform-origin: top left; }
+.cms-preview__stage { width: 100%; }
+/* Dentro del marco, el sitio no debe forzar alturas de viewport */
+.cms-preview__stage .sitio { min-height: 0; }
+.cms-preview__stage .sitio__hero--compacta { min-height: 190px; }
+.cms-preview__stage .sitio__hero--media { min-height: 240px; }
+.cms-preview__stage .sitio__hero--completa { min-height: 320px; }
+.cms-preview__stage .sitio__nav { position: static; }
 .cms-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
 /* Editor de la web: secciones (orden/visibilidad) y galería */
@@ -1611,16 +1618,49 @@ h1, h2, h3,
 .sitio__red { color: var(--sitio-color); text-decoration: none; font-size: 0.82rem; font-weight: 600; }
 .sitio__red:hover { text-decoration: underline; }
 
-/* Variante CLÁSICA: fondo crema en tema claro */
+/* Portada sin foto: degradado con los colores de la hermandad (no gris) */
+.sitio__hero--sinfoto {
+  background: linear-gradient(135deg, var(--sitio-color), color-mix(in srgb, var(--sitio-color) 45%, var(--sitio-color2)));
+}
+
+/* ===== Las 3 plantillas cambian LAYOUT, no solo color ===== */
+
+/* CLÁSICA — centrada, señorial, con filete dorado y todo al centro */
 .sitio[data-plantilla='clasica'][data-tema='claro'] { --sitio-bg: #f7f2e9; --sitio-bg2: #fffdf8; }
+.sitio[data-plantilla='clasica'] .sitio__nav { justify-content: center; flex-direction: column; gap: 0.5rem; text-align: center; }
+.sitio[data-plantilla='clasica'] .sitio__hero { text-align: center; }
+.sitio[data-plantilla='clasica'] .sitio__seccion { text-align: center; }
+.sitio[data-plantilla='clasica'] .sitio__seccion h2 { text-align: center; }
+.sitio[data-plantilla='clasica'] .sitio__seccion h2::after { margin-left: auto; margin-right: auto; width: 60px; }
+.sitio[data-plantilla='clasica'] .sitio__lema { font-style: italic; }
+.sitio[data-plantilla='clasica'] .sitio-btn { border-radius: 3px; letter-spacing: 1px; text-transform: uppercase; font-size: 0.78rem; }
 
-/* Variante SOBRIA: bordes finos y botones cuadrados */
-.sitio[data-plantilla='sobria'] .sitio-btn { border-radius: 2px; }
+/* SOBRIA — minimalista, alineado a la izquierda, mucho aire, sin adornos */
+.sitio[data-plantilla='sobria'] { --sitio-color2: #999; }
+.sitio[data-plantilla='sobria'] .sitio__nav { border-bottom: 1px solid var(--sitio-linea); text-transform: uppercase; letter-spacing: 1px; font-size: 0.72rem; }
+.sitio[data-plantilla='sobria'] .sitio__menu a { font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; }
+.sitio[data-plantilla='sobria'] .sitio__hero { align-items: flex-end; justify-content: flex-start; text-align: left; }
+.sitio[data-plantilla='sobria'] .sitio__hero-inner { max-width: 640px; padding: 0 0.5rem; }
+.sitio[data-plantilla='sobria'] .sitio__hero h1 { font-weight: 400; letter-spacing: -0.5px; }
+.sitio[data-plantilla='sobria'] .sitio__seccion h2 { font-weight: 400; font-size: 1.35rem; letter-spacing: 0.5px; }
 .sitio[data-plantilla='sobria'] .sitio__seccion h2::after { display: none; }
+.sitio[data-plantilla='sobria'] .sitio__main { max-width: 760px; }
+.sitio[data-plantilla='sobria'] .sitio__culto,
+.sitio[data-plantilla='sobria'] .sitio__noticia { background: transparent; border-left: 2px solid var(--sitio-color); border-top: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
+.sitio[data-plantilla='sobria'] .sitio-btn { border-radius: 0; background: transparent; color: var(--sitio-color); border: 1px solid var(--sitio-color); }
+.sitio[data-plantilla='sobria'] .sitio-btn--hero { background: var(--sitio-color); color: #fff; }
 
-/* Variante MODERNA: más contraste y botones redondeados */
-.sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2.4rem, 7vw, 4.4rem); }
-.sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 40px; padding: 12px 26px; }
+/* MODERNA — impacto, portada enorme, titulares grandes, tarjetas con sombra */
+.sitio[data-plantilla='moderna'] .sitio__nav { text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+.sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2.6rem, 8vw, 5rem); font-weight: 800; letter-spacing: -1px; line-height: 1.05; }
+.sitio[data-plantilla='moderna'] .sitio__lema { font-size: 1.3rem; }
+.sitio[data-plantilla='moderna'] .sitio__seccion h2 { font-size: 2rem; font-weight: 800; }
+.sitio[data-plantilla='moderna'] .sitio__seccion h2::after { height: 5px; width: 70px; border-radius: 4px; }
+.sitio[data-plantilla='moderna'] .sitio__culto,
+.sitio[data-plantilla='moderna'] .sitio__noticia,
+.sitio[data-plantilla='moderna'] .sitio__titular img { box-shadow: 0 10px 26px rgba(0,0,0,0.14); border: none; }
+.sitio[data-plantilla='moderna'] .sitio__culto { border-radius: 16px; }
+.sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 40px; padding: 13px 30px; font-weight: 700; }
 
 /* Noticias (Actualidad) */
 .sitio__noticias { display: flex; flex-direction: column; gap: 1rem; }
@@ -1864,11 +1904,38 @@ h1, h2, h3,
 
 .portal__main { width: 100%; max-width: 900px; margin: 0 auto; padding: 1.8rem 1.5rem 3rem; }
 .portal__resumen { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+
+/* Cabecera de bienvenida del área del hermano: escudo/avatar + saludo, con el
+   color de la hermandad de fondo, para que el área se vea cuidada y personal. */
+.portal__welcome {
+  --portal-accent: var(--morado-900);
+  display: flex; align-items: center; gap: 1.1rem;
+  padding: 1.4rem 1.6rem; margin-bottom: 1.4rem; border-radius: 18px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--portal-accent) 30%, transparent), transparent 60%),
+    linear-gradient(135deg, color-mix(in srgb, var(--portal-accent) 88%, #000), color-mix(in srgb, var(--portal-accent) 55%, #000));
+  color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+}
+.portal__welcome-avatar {
+  flex: none; width: 62px; height: 62px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; font-weight: 800; color: var(--portal-accent);
+  background: linear-gradient(180deg, #fff, #f0e7d6);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+.portal__welcome-text { min-width: 0; }
+.portal__welcome .eyebrow { color: rgba(255,255,255,0.82); }
+.portal__welcome h1 { color: #fff; font-size: 1.6rem; margin: 0.15rem 0 0; }
+.portal__welcome .portal__resumen .pill { background: rgba(255,255,255,0.16); color: #fff; border: 1px solid rgba(255,255,255,0.25); }
+
 .portal__section {
   background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 1.3rem 1.4rem; margin-bottom: 1.2rem; box-shadow: var(--glass-shadow);
 }
-.portal__section h2 { font-size: 1.1rem; margin-bottom: 0.9rem; }
+.portal__section h2 {
+  font-size: 1.12rem; margin-bottom: 0.9rem; padding-left: 0.7rem;
+  border-left: 3px solid var(--gold);
+}
 .portal__papeleta { display: flex; flex-direction: column; gap: 0.8rem; }
 .portal__consent { display: flex; align-items: center; gap: 1rem; justify-content: space-between; flex-wrap: wrap; }
 .portal__consent span { flex: 1; min-width: 240px; }

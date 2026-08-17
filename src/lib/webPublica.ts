@@ -12,7 +12,8 @@ import { guardarConAviso, leerPersistido } from './persistencia'
 
 export type PlantillaWeb = 'clasica' | 'sobria' | 'moderna'
 export type TemaWeb = 'claro' | 'oscuro'
-export type TipografiaWeb = 'clasica' | 'moderna' | 'elegante'
+/** Id de tipografía; se resuelve contra TIPOGRAFIAS (ver abajo). */
+export type TipografiaWeb = string
 export type AlturaHero = 'compacta' | 'media' | 'completa'
 export type TipoSeccion =
   | 'historia'
@@ -32,9 +33,22 @@ export const PLANTILLAS: { id: PlantillaWeb; nombre: string; descripcion: string
 ]
 
 export const TIPOGRAFIAS: { id: TipografiaWeb; nombre: string; css: string }[] = [
-  { id: 'clasica', nombre: 'Clásica (serif)', css: "Georgia, 'Times New Roman', serif" },
-  { id: 'moderna', nombre: 'Moderna (sans)', css: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" },
-  { id: 'elegante', nombre: 'Elegante', css: "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', serif" },
+  { id: 'clasica', nombre: 'Clásica (Georgia)', css: "Georgia, 'Times New Roman', serif" },
+  { id: 'elegante', nombre: 'Elegante (Palatino)', css: "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', serif" },
+  { id: 'cinzel', nombre: 'Cinzel (cofrade)', css: "'Cinzel', Georgia, serif" },
+  { id: 'cormorant', nombre: 'Cormorant Garamond', css: "'Cormorant Garamond', Georgia, serif" },
+  { id: 'playfair', nombre: 'Playfair Display', css: "'Playfair Display', Georgia, serif" },
+  { id: 'ebgaramond', nombre: 'EB Garamond', css: "'EB Garamond', Georgia, serif" },
+  { id: 'merriweather', nombre: 'Merriweather', css: "'Merriweather', Georgia, serif" },
+  { id: 'lora', nombre: 'Lora', css: "'Lora', Georgia, serif" },
+  { id: 'moderna', nombre: 'Moderna (sistema)', css: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" },
+  { id: 'montserrat', nombre: 'Montserrat', css: "'Montserrat', system-ui, sans-serif" },
+  { id: 'raleway', nombre: 'Raleway', css: "'Raleway', system-ui, sans-serif" },
+  { id: 'poppins', nombre: 'Poppins', css: "'Poppins', system-ui, sans-serif" },
+  { id: 'lato', nombre: 'Lato', css: "'Lato', system-ui, sans-serif" },
+  { id: 'oswald', nombre: 'Oswald (titulares)', css: "'Oswald', system-ui, sans-serif" },
+  { id: 'bebas', nombre: 'Bebas Neue (impacto)', css: "'Bebas Neue', system-ui, sans-serif" },
+  { id: 'dancing', nombre: 'Dancing Script (caligrafía)', css: "'Dancing Script', cursive" },
 ]
 
 export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string }> = {
