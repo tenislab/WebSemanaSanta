@@ -662,6 +662,19 @@ export default function HermanoPortal() {
           icono={hermandadElegida?.icono}
         />
         <main className="portal__stage">
+          <aside className="portal__aside" style={{ ['--portal-accent' as string]: hermandadElegida?.color ?? colorActivo }}>
+            <div className="portal__aside-badge">
+              <LogoMark size={40} />
+            </div>
+            <h2 className="portal__aside-title">Tu hermandad, en tu bolsillo</h2>
+            <p className="portal__aside-sub">Entra en tu área personal y gestiona todo sin pasar por secretaría.</p>
+            <ul className="portal__aside-list">
+              <li>Tus cuotas y recibos al día</li>
+              <li>Tu papeleta de sitio y su pago</li>
+              <li>Solicitudes y tus datos personales</li>
+              <li>Avisos y comunicados de la hermandad</li>
+            </ul>
+          </aside>
           <div className="portal__card">
             {paso === 'buscar' && (
               <>
@@ -885,6 +898,33 @@ export default function HermanoPortal() {
             </div>
           </div>
         </div>
+
+        {hermanoPrincipal && (
+          <div className="portal__cards">
+            <div className={`portal__card-mini portal__card-mini--${hermanoPrincipal.cuotaAlDia ? 'ok' : 'warn'}`}>
+              <span className="portal__card-mini__label">Mi cuota</span>
+              <span className="portal__card-mini__value">{hermanoPrincipal.cuotaAlDia ? 'Al día' : 'Pendiente'}</span>
+              <span className="portal__card-mini__sub">{campana.anio}</span>
+            </div>
+            <div className="portal__card-mini portal__card-mini--accent">
+              <span className="portal__card-mini__label">Mi papeleta {campana.anio}</span>
+              <span className="portal__card-mini__value">
+                {asignacion?.tramo ? etiquetaTramo(asignacion.tramo) : renovacion?.papeletaActual?.opcion ?? 'Sin sitio'}
+              </span>
+              <span className="portal__card-mini__sub">{renovacion?.estado ?? '—'}</span>
+            </div>
+            <div className="portal__card-mini">
+              <span className="portal__card-mini__label">Antigüedad</span>
+              <span className="portal__card-mini__value">{Math.max(0, new Date().getFullYear() - hermanoPrincipal.antiguedad)} años</span>
+              <span className="portal__card-mini__sub">desde {hermanoPrincipal.antiguedad}</span>
+            </div>
+            <div className="portal__card-mini">
+              <span className="portal__card-mini__label">Nº de hermano</span>
+              <span className="portal__card-mini__value">{hermanoPrincipal.numero}</span>
+              <span className="portal__card-mini__sub">{hermanoPrincipal.estado}</span>
+            </div>
+          </div>
+        )}
 
         {!consent && (
           <div className="banner-inline banner-inline--accent portal__consent">

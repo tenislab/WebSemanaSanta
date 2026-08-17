@@ -1,8 +1,5 @@
 # Actualizacion Cabildo
 
-Descomprime en la raiz del repo (respetando src/...). IMPORTANTE: ejecuta "npm install" tras descomprimir (dependencia pdfjs-dist).
+Descomprime en la raiz (respetando src/...). IMPORTANTE: ejecuta "npm install" (dependencia pdfjs-dist).
 
-Novedades recientes:
-- Web publica: preview en vivo (sin parpadeo), 3 plantillas distintas de layout, 16 tipografias, portada con degradado.
-- Area del hermano: cabecera premium con el color de la hermandad.
-- Todo lo anterior de la sesion (modo local, papeleta/recibo con PDF, etiquetas, cuotas mensual/mora, suscripcion...).
+Ultimo: area del hermano premium (entrada partida + dashboard con tarjetas). Web publica mejorada. Todo lo de la sesion.
