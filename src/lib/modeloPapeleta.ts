@@ -1,6 +1,7 @@
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import { formatCurrency } from './format'
+import { guardarConAviso } from './persistencia'
 
 /**
  * Modelo de papeleta personalizado. La hermandad sube la imagen de SU propio
@@ -85,7 +86,7 @@ export function getModeloPapeleta(): ModeloPapeleta | null {
 }
 
 export function saveModeloPapeleta(modelo: ModeloPapeleta) {
-  localStorage.setItem(CLAVE_STORAGE, JSON.stringify(modelo))
+  guardarConAviso(CLAVE_STORAGE, modelo)
 }
 
 export function borrarModeloPapeleta() {

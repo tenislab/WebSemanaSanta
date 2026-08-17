@@ -1,6 +1,7 @@
 import type { Hermano } from '../data/hermanos'
 import { metodoDeCuota, type Cuota } from '../data/cuotas'
 import { formatCurrency } from './format'
+import { guardarConAviso } from './persistencia'
 import type { CampoModelo, ModeloPapeleta } from './modeloPapeleta'
 
 /**
@@ -42,7 +43,7 @@ export function getModeloRecibo(): ModeloPapeleta | null {
 }
 
 export function saveModeloRecibo(modelo: ModeloPapeleta) {
-  localStorage.setItem(CLAVE_STORAGE, JSON.stringify(modelo))
+  guardarConAviso(CLAVE_STORAGE, modelo)
 }
 
 export function borrarModeloRecibo() {

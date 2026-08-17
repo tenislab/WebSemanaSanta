@@ -1,40 +1,39 @@
-# Actualización Cabildo — bloques 1, 2 y 3
+# Actualización Cabildo — etiquetas, cuotas y web pública (+ arreglos)
 
-Descomprime el contenido de este zip **en la raíz de tu repositorio**,
-respetando las carpetas (`src/...`). Sobrescribe los archivos que te pida.
-Después, en **GitHub Desktop** verás todos los cambios listos para commit y push.
+Descomprime en la **raíz de tu repositorio** (respetando `src/...`), sobrescribe,
+y en **GitHub Desktop** verás los cambios para commit y push.
 
-## Qué incluye
+## Novedades
 
-**Novedades ya funcionando (todo en modo local, sin base de datos):**
+1. **Etiquetas de hermano + avisos segmentados** (Comunicados por etiqueta).
+2. **Cuotas**: mensual (12 recibos), método de cobro (Domiciliación/Transferencia/
+   Efectivo/Bizum), «En mora» manual, y **modelo de recibo** personalizado.
+3. **Web pública MUCHO más personalizable**:
+   - 3 plantillas, publicar/ocultar, URL `/w/tu-slug`.
+   - **Diseño**: color principal y secundario, tema **claro/oscuro**, 3 tipografías,
+     logo propio.
+   - **Portada**: foto, altura (compacta/media/completa), oscurecido regulable,
+     texto del botón.
+   - **Secciones activables y reordenables**: Historia, **Titulares** (con foto),
+     Cultos, **Galería**, **Actualidad** (últimos comunicados), Contacto.
+   - **Redes sociales**, enlace a mapa y pie de página.
+   - Botón **«Entrar» → portal del hermano** (`/hermano`).
 
-1. **Etiquetas de hermano + avisos segmentados**
-   - Etiquetas por hermano (costalero, acólito, banda… + crear las tuyas), con
-     filtro en el censo.
-   - En Comunicados puedes dirigir un aviso a una etiqueta: se calcula a qué
-     hermanos llegaría por email (envío real pendiente de conectar proveedor).
+## Arreglos (tras revisión de código)
+- Cuotas mensuales en día 29–31 ya no caen en el mes equivocado.
+- El spinner de carga ya no parpadea al refrescarse la sesión.
+- Subir imágenes que no caben en el navegador ahora **avisa** en vez de fallar en silencio.
 
-2. **Cuotas: mensual, mora manual, métodos y modelo de recibo**
-   - Cuota mensual (emite 12 recibos) además de la puntual.
-   - Método de cobro: Domiciliación, Transferencia, Efectivo, Bizum.
-   - «En mora» manual (tesorero/secretario/titular); nada entra en mora solo.
-   - Modelo de recibo personalizado: subes tu diseño y se rellena con los datos.
+## Comprobado
+- Las 14 páginas del panel + portal del hermano cargan con **0 errores de JavaScript**.
+- Typecheck limpio y build correcto.
+- Revisión de código pasada; los 3 bugs encontrados, corregidos.
 
-3. **Web pública con 3 plantillas**
-   - Sección «Web pública» en el panel: eliges plantilla (Clásica/Sobria/Moderna),
-     publicas/ocultas, personalizas el enlace `/w/tu-slug`, el contenido y el
-     color (por defecto el de tu hermandad).
-   - La web tiene un botón **«Entrar»** que lleva al portal del hermano (`/hermano`).
-
-**También incluye lo de la sesión anterior:** modo local sin BD, modelo de
-papeleta, acceso de hermano de un clic, y tolerancia a Supabase en pausa.
-
-## Importante para desplegar en modo local
-
-En Vercel, para funcionar sin base de datos (con los accesos demo), **no**
-definas `VITE_SUPABASE_URL` ni `VITE_SUPABASE_ANON_KEY`.
+## Para desplegar en modo local (sin base de datos)
+En Vercel, **no** definas `VITE_SUPABASE_URL` ni `VITE_SUPABASE_ANON_KEY`.
 
 ## Pendiente (siguiente entrega)
-- Suscripción de la hermandad (20 €/mes · 300 €/año, sin cobro real todavía).
-- Ajuste de mora (que la hermandad decida si basta un cargo o hacen falta dos).
-- Envío real de emails (al conectar Brevo/Resend).
+- Suscripción de la hermandad (20 €/mes · 300 €/año, sin cobro real).
+- Ajuste de mora (uno o dos cargos).
+- Emails reales (Brevo/Resend) y, para web pública real multi-hermandad, guardarla
+  en Supabase.

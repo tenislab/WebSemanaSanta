@@ -56,10 +56,18 @@ function estadoClass(estado: EstadoCuota) {
   return 'pill--err'
 }
 
-/** Suma un mes a una fecha ISO (YYYY-MM-DD), devolviéndola en el mismo formato. */
+/**
+ * Suma meses a una fecha ISO (YYYY-MM-DD) sin el desbordamiento de `setMonth`
+ * (que convertiría el 31 de enero + 1 mes en el 3 de marzo). Si el día no
+ * existe en el mes destino, se ajusta al último día de ese mes.
+ */
 function sumarMeses(iso: string, meses: number): string {
   const d = new Date(`${iso}T00:00:00`)
+  const dia = d.getDate()
+  d.setDate(1)
   d.setMonth(d.getMonth() + meses)
+  const ultimoDiaDelMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+  d.setDate(Math.min(dia, ultimoDiaDelMes))
   return d.toISOString().slice(0, 10)
 }
 

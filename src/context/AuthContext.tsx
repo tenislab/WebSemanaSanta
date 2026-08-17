@@ -113,7 +113,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMfaPendiente(false)
         return
       }
-      setMfaPendiente((prev) => (prev === null ? null : prev === true ? true : null))
+      // No se toca el estado aquí: dejarlo en su valor previo evita que cada
+      // re-sincronización (p. ej. el refresco de token, cada hora o al volver a
+      // la pestaña) lo ponga en "comprobando" y parpadee el spinner a pantalla
+      // completa. El "comprobando" (null) solo ocurre en la carga inicial.
       try {
         const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
         setMfaPendiente(Boolean(data && data.currentLevel === 'aal1' && data.nextLevel === 'aal2'))

@@ -32,6 +32,28 @@ export function leerPersistido<T>(clave: string, fallback: T): T {
 }
 
 /**
+ * Guarda en localStorage avisando si no cabe. Las imágenes (modelos de
+ * papeleta/recibo, fotos de la web) se guardan como base64 y pueden agotar el
+ * espacio del navegador (~5 MB); sin este aviso, el fallo sería silencioso y
+ * el usuario creería que se guardó cuando no fue así. Devuelve true si se
+ * guardó, false si no cupo.
+ */
+export function guardarConAviso(clave: string, valor: unknown): boolean {
+  try {
+    localStorage.setItem(clave, JSON.stringify(valor))
+    return true
+  } catch {
+    if (typeof window !== 'undefined') {
+      window.alert(
+        'No se ha podido guardar: el navegador se ha quedado sin espacio. ' +
+          'Usa imágenes más ligeras o quita algunas fotos y vuelve a intentarlo.',
+      )
+    }
+    return false
+  }
+}
+
+/**
  * Como useState, pero cada cambio queda guardado en localStorage, de modo
  * que altas, pagos, asignaciones, etc. sobreviven a una recarga de página.
  * Es el paso intermedio hasta conectar Supabase: la firma no cambia, así

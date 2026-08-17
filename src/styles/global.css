@@ -1503,56 +1503,89 @@ h1, h2, h3,
 }
 .sitio-noweb h1 { font-family: Georgia, serif; }
 
-/* Página pública */
-.sitio { min-height: 100vh; background: #fff; color: #222; }
+/* Editor de la web: secciones (orden/visibilidad) y galería */
+.secciones-lista { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.seccion-item { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; }
+.seccion-item__orden { display: flex; gap: 0.2rem; }
+.galeria-editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.8rem; }
+.galeria-editor__item { display: flex; flex-direction: column; gap: 0.35rem; }
+.galeria-editor__item img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; }
+
+/* Página pública — usa variables: --sitio-color, --sitio-color2, --sitio-fuente.
+   Colores base según el tema (claro/oscuro). */
+.sitio {
+  min-height: 100vh;
+  font-family: var(--sitio-fuente, Georgia, serif);
+  --sitio-bg: #ffffff; --sitio-bg2: #f6f2ec; --sitio-fg: #222; --sitio-muted: #666; --sitio-linea: rgba(0,0,0,0.1);
+}
+.sitio[data-tema='oscuro'] { --sitio-bg: #16110f; --sitio-bg2: #1e1815; --sitio-fg: #ece3d9; --sitio-muted: #a99; --sitio-linea: rgba(255,255,255,0.12); }
+.sitio { background: var(--sitio-bg); color: var(--sitio-fg); }
+
 .sitio__nav {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  padding: 0.9rem 1.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);
-  position: sticky; top: 0; background: rgba(255,255,255,0.96); backdrop-filter: blur(6px); z-index: 10;
+  padding: 0.9rem 1.6rem; border-bottom: 1px solid var(--sitio-linea);
+  position: sticky; top: 0; background: color-mix(in srgb, var(--sitio-bg) 92%, transparent); backdrop-filter: blur(6px); z-index: 10;
 }
 .sitio__brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; color: var(--sitio-color); }
 .sitio__logo { width: 34px; height: 34px; object-fit: contain; }
-.sitio__menu { display: flex; align-items: center; gap: 1.1rem; }
-.sitio__menu a { color: #333; text-decoration: none; font-size: 0.9rem; }
+.sitio__menu { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; }
+.sitio__menu a { color: var(--sitio-fg); text-decoration: none; font-size: 0.9rem; }
 .sitio__menu a:hover { color: var(--sitio-color); }
+
 .sitio__hero {
-  min-height: 62vh; display: flex; align-items: center; justify-content: center; text-align: center;
+  display: flex; align-items: center; justify-content: center; text-align: center;
   padding: 3rem 1.5rem; background-size: cover; background-position: center;
   color: #fff; position: relative;
 }
-.sitio__hero::before { content: ''; position: absolute; inset: 0; background: rgba(20,10,12,0.55); }
-.sitio__hero-inner { position: relative; max-width: 780px; }
+.sitio__hero--compacta { min-height: 40vh; }
+.sitio__hero--media { min-height: 60vh; }
+.sitio__hero--completa { min-height: 88vh; }
+.sitio__hero-overlay { position: absolute; inset: 0; }
+.sitio__hero-inner { position: relative; max-width: 800px; }
 .sitio__hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); margin-bottom: 0.6rem; }
-.sitio__lema { font-size: 1.15rem; opacity: 0.92; margin-bottom: 1.4rem; }
-.sitio__main { max-width: 940px; margin: 0 auto; padding: 2.5rem 1.5rem; }
-.sitio__seccion { margin-bottom: 2.6rem; }
-.sitio__seccion h2 { color: var(--sitio-color); font-size: 1.6rem; margin-bottom: 0.9rem; }
-.sitio__texto { line-height: 1.7; white-space: pre-wrap; }
+.sitio__lema { font-size: 1.15rem; opacity: 0.94; margin-bottom: 1.4rem; }
+
+.sitio__main { max-width: 980px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+.sitio__seccion { margin-bottom: 2.8rem; scroll-margin-top: 80px; }
+.sitio__seccion h2 { color: var(--sitio-color); font-size: 1.7rem; margin-bottom: 1rem; position: relative; }
+.sitio__seccion h2::after { content: ''; display: block; width: 48px; height: 3px; background: var(--sitio-color2); margin-top: 0.4rem; }
+.sitio__texto { line-height: 1.75; white-space: pre-wrap; }
+
+.sitio__titulares { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; }
+.sitio__titular { text-align: center; }
+.sitio__titular img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; margin-bottom: 0.6rem; }
+.sitio__titular h3 { color: var(--sitio-color); margin-bottom: 0.25rem; }
+.sitio__titular p { color: var(--sitio-muted); font-size: 0.92rem; }
+
 .sitio__cultos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
-.sitio__culto { border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; padding: 1rem 1.2rem; }
+.sitio__culto { border: 1px solid var(--sitio-linea); border-radius: 10px; padding: 1rem 1.2rem; background: var(--sitio-bg2); }
 .sitio__culto h3 { color: var(--sitio-color); margin-bottom: 0.3rem; }
-.sitio__contacto { list-style: none; padding: 0; line-height: 1.9; }
+
+.sitio__galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.9rem; }
+.sitio__foto { margin: 0; }
+.sitio__foto img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; }
+.sitio__foto figcaption { font-size: 0.82rem; color: var(--sitio-muted); margin-top: 0.3rem; text-align: center; }
+
+.sitio__contacto { list-style: none; padding: 0; line-height: 1.9; margin-bottom: 0.8rem; }
+
 .sitio__foot {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
-  padding: 1.4rem 1.6rem; border-top: 1px solid rgba(0,0,0,0.08); color: #666; font-size: 0.85rem;
+  padding: 1.4rem 1.6rem; border-top: 1px solid var(--sitio-linea); color: var(--sitio-muted); font-size: 0.85rem;
+  background: var(--sitio-bg2);
 }
+.sitio__foot-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.sitio__redes { display: flex; gap: 0.6rem; }
+.sitio__red { color: var(--sitio-color); text-decoration: none; font-size: 0.82rem; font-weight: 600; }
+.sitio__red:hover { text-decoration: underline; }
 
-/* Variante CLÁSICA: serif y fondo crema */
-.sitio[data-plantilla='clasica'] { background: #f7f2e9; }
-.sitio[data-plantilla='clasica'] h1,
-.sitio[data-plantilla='clasica'] h2,
-.sitio[data-plantilla='clasica'] .sitio__brand { font-family: Georgia, 'Times New Roman', serif; }
-.sitio[data-plantilla='clasica'] .sitio__hero { min-height: 54vh; }
+/* Variante CLÁSICA: fondo crema en tema claro */
+.sitio[data-plantilla='clasica'][data-tema='claro'] { --sitio-bg: #f7f2e9; --sitio-bg2: #fffdf8; }
 
-/* Variante SOBRIA: mucho blanco, sin overlay tan oscuro, tipografía sans */
-.sitio[data-plantilla='sobria'] .sitio__hero { min-height: 46vh; }
-.sitio[data-plantilla='sobria'] .sitio__hero::before { background: rgba(0,0,0,0.35); }
-.sitio[data-plantilla='sobria'] .sitio__nav { border-bottom: 1px solid #ececec; }
+/* Variante SOBRIA: bordes finos y botones cuadrados */
 .sitio[data-plantilla='sobria'] .sitio-btn { border-radius: 2px; }
+.sitio[data-plantilla='sobria'] .sitio__seccion h2::after { display: none; }
 
-/* Variante MODERNA: hero a pantalla completa, más contraste */
-.sitio[data-plantilla='moderna'] .sitio__hero { min-height: 82vh; }
-.sitio[data-plantilla='moderna'] .sitio__hero::before { background: linear-gradient(135deg, rgba(20,10,12,0.75), rgba(20,10,12,0.35)); }
+/* Variante MODERNA: más contraste y botones redondeados */
 .sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2.4rem, 7vw, 4.4rem); }
 .sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 40px; padding: 12px 26px; }
 
