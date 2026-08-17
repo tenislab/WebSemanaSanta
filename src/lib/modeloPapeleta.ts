@@ -49,7 +49,9 @@ export const CLAVES_DATO: { clave: ClaveDato; etiqueta: string; ejemplo: string 
 
 export interface CampoModelo {
   id: string
-  clave: ClaveDato
+  /** Clave del dato a mostrar. Es `string` (no solo ClaveDato) para poder
+   *  reutilizar el mismo editor con otros modelos, como el de recibo. */
+  clave: string
   /** Posición del campo en porcentaje del ancho/alto de la imagen (0–100). */
   xPct: number
   yPct: number

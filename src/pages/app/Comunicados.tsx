@@ -12,9 +12,14 @@ import {
   type RedSocial,
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
-import { CLAVES_DATOS } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
+import { useEtiquetas } from '../../lib/etiquetas'
+import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
+
+/** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
+const PREFIJO_ETIQUETA = 'Etiqueta: '
 
 function fmt(iso: string | null) {
   if (!iso) return '—'
@@ -54,6 +59,15 @@ export default function Comunicados() {
   const [cuentas, setCuentas] = useCuentasSociales()
   const canales = useMemo(() => getLista(CLAVES_CATALOGOS.canalesComunicado, CANALES), [])
   const segmentos = useMemo(() => getLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS), [])
+  const [etiquetas] = useEtiquetas()
+  const hermanos = useMemo(() => leerPersistido<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+
+  /** Si el destinatario es una etiqueta, devuelve los hermanos que la tienen (con su email). */
+  function hermanosDeDestinatario(destinatarios: string): Hermano[] {
+    if (!destinatarios.startsWith(PREFIJO_ETIQUETA)) return []
+    const etiqueta = destinatarios.slice(PREFIJO_ETIQUETA.length)
+    return hermanos.filter((h) => (h.etiquetas ?? []).includes(etiqueta) && h.estado !== 'Baja')
+  }
   const [query, setQuery] = useState('')
   const [filtroCanal, setFiltroCanal] = useState<'Todos' | Canal>('Todos')
   const [selected, setSelected] = useState<Comunicado | null>(null)
@@ -115,7 +129,11 @@ export default function Comunicados() {
 
   function enviarAhora(c: Comunicado) {
     const hoy = new Date().toISOString().slice(0, 10)
-    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy }
+    // Si va dirigido a una etiqueta, el alcance es el nº de hermanos con esa
+    // etiqueta (envío de email simulado por ahora).
+    const destinatariosHermanos = hermanosDeDestinatario(c.destinatarios)
+    const alcance = destinatariosHermanos.length > 0 ? destinatariosHermanos.length : c.alcance
+    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance }
     setComunicados((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)))
     setSelected(actualizado)
   }
@@ -139,6 +157,7 @@ export default function Comunicados() {
 
     const hoy = new Date().toISOString().slice(0, 10)
     const nextNumero = Math.max(0, ...comunicados.map((c) => c.numero)) + 1
+    const alcanceEtiqueta = hermanosDeDestinatario(destinatarios).length
     const nuevo: Comunicado = {
       id: nuevoId(),
       numero: nextNumero,
@@ -152,7 +171,7 @@ export default function Comunicados() {
       fechaProgramada,
       fechaEnvio: estado === 'Enviado' ? hoy : null,
       autor: 'Tú',
-      alcance: null,
+      alcance: estado === 'Enviado' && alcanceEtiqueta > 0 ? alcanceEtiqueta : null,
     }
     setComunicados((prev) => [nuevo, ...prev])
     setJustAddedId(nuevo.id)
@@ -356,6 +375,33 @@ export default function Comunicados() {
                 <dt>Destinatarios</dt>
                 <dd>{selected.destinatarios}</dd>
               </div>
+              {(() => {
+                const receptores = hermanosDeDestinatario(selected.destinatarios)
+                if (receptores.length === 0) return null
+                return (
+                  <div>
+                    <dt>Aviso por email (simulado)</dt>
+                    <dd>
+                      Se {selected.estado === 'Enviado' ? 'ha enviado' : 'enviaría'} a{' '}
+                      <b>{receptores.length}</b> hermano{receptores.length === 1 ? '' : 's'} con esta
+                      etiqueta:
+                      <div className="etiquetas-chips" style={{ marginTop: '0.4rem' }}>
+                        {receptores.slice(0, 12).map((h) => (
+                          <span key={h.id} className="etiqueta-pill">
+                            {h.nombre} · {h.email}
+                          </span>
+                        ))}
+                        {receptores.length > 12 && (
+                          <span className="etiqueta-pill">+{receptores.length - 12} más</span>
+                        )}
+                      </div>
+                      <span className="table-subtle">
+                        El envío real de correo se activará al conectar el proveedor de email.
+                      </span>
+                    </dd>
+                  </div>
+                )
+              })()}
               {selected.redes && selected.redes.length > 0 && (
                 <div>
                   <dt>Redes sociales</dt>
@@ -438,6 +484,13 @@ export default function Comunicados() {
                 {segmentos.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
+                {etiquetas.length > 0 && (
+                  <optgroup label="Por etiqueta (solo esos hermanos)">
+                    {etiquetas.map((et) => (
+                      <option key={et} value={`${PREFIJO_ETIQUETA}${et}`}>{et}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>

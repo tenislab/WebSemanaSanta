@@ -2,9 +2,26 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import Recibo from '../../components/Recibo'
+import ReciboModeloRender from '../../components/ReciboModeloRender'
+import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
 import HermanoPicker from '../../components/HermanoPicker'
+import {
+  CLAVES_DATO_RECIBO,
+  getModeloRecibo,
+  saveModeloRecibo,
+  borrarModeloRecibo,
+} from '../../lib/modeloRecibo'
+import type { ModeloPapeleta } from '../../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
-import { CUOTAS_INICIALES, type ConceptoCuota, type Cuota, type EstadoCuota } from '../../data/cuotas'
+import {
+  CUOTAS_INICIALES,
+  METODOS_COBRO,
+  metodoDeCuota,
+  type ConceptoCuota,
+  type Cuota,
+  type EstadoCuota,
+  type MetodoCobro,
+} from '../../data/cuotas'
 import { getConceptosCuota } from '../../lib/conceptosCuota'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
@@ -39,6 +56,13 @@ function estadoClass(estado: EstadoCuota) {
   return 'pill--err'
 }
 
+/** Suma un mes a una fecha ISO (YYYY-MM-DD), devolviéndola en el mismo formato. */
+function sumarMeses(iso: string, meses: number): string {
+  const d = new Date(`${iso}T00:00:00`)
+  d.setMonth(d.getMonth() + meses)
+  return d.toISOString().slice(0, 10)
+}
+
 export default function Cuotas() {
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
@@ -57,9 +81,17 @@ export default function Cuotas() {
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [hermanoNuevaCuota, setHermanoNuevaCuota] = useState<Hermano | null>(null)
-  const [domiciliarNuevaCuota, setDomiciliarNuevaCuota] = useState(true)
+  const [metodoNuevaCuota, setMetodoNuevaCuota] = useState<MetodoCobro>('Domiciliación')
+  const [periodicidadNueva, setPeriodicidadNueva] = useState<'puntual' | 'mensual'>('puntual')
+
+  // La mora solo la ponen/quitan el tesorero, el secretario o el titular
+  // (quien no tiene cargo asignado es el titular, con acceso completo).
+  const cargo = user?.user_metadata?.cargo as string | undefined
+  const puedeMora = !cargo || cargo === 'Tesorero/a' || cargo === 'Secretario/a'
   const [remesaOpen, setRemesaOpen] = useState(false)
   const [fechaRemesa, setFechaRemesa] = useState('')
+  const [modeloOpen, setModeloOpen] = useState(false)
+  const [modeloRecibo, setModeloRecibo] = useState<ModeloPapeleta | null>(() => getModeloRecibo())
 
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const conceptosCuota = useMemo(() => getConceptosCuota(), [])
@@ -98,6 +130,12 @@ export default function Cuotas() {
       prev.map((c) => (c.id === id ? { ...c, estado: 'Pagada', fechaPago: hoy() } : c)),
     )
     setSelected((prev) => (prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy() } : prev))
+  }
+
+  /** Pone o quita la mora a mano (nunca automático al vencer). */
+  function cambiarEstado(id: string, estado: EstadoCuota) {
+    setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, estado } : c)))
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, estado } : prev))
   }
 
   // Remesa bancaria: recibos pendientes y domiciliados con IBAN, listos para
@@ -148,7 +186,8 @@ export default function Cuotas() {
 
   function abrirNuevaCuota() {
     setHermanoNuevaCuota(null)
-    setDomiciliarNuevaCuota(true)
+    setMetodoNuevaCuota('Domiciliación')
+    setPeriodicidadNueva('puntual')
     setFormOpen(true)
   }
 
@@ -166,28 +205,39 @@ export default function Cuotas() {
     const importeRaw = String(data.get('importe') ?? '')
     const importe = Number(importeRaw.replace(',', '.'))
     const fechaCobroRaw = String(data.get('fechaCobro') ?? '')
+    const metodoCobro = String(data.get('metodoCobro') ?? 'Domiciliación') as MetodoCobro
+    const periodicidad = String(data.get('periodicidad') ?? 'puntual')
     const hermano = hermanos.find((h) => h.id === hermanoId)
-    const domiciliada = data.get('domiciliada') === 'on' && Boolean(hermano?.iban)
+    // Solo se domicilia de verdad si el método es domiciliación Y el hermano tiene IBAN.
+    const domiciliada = metodoCobro === 'Domiciliación' && Boolean(hermano?.iban)
+    const metodoFinal: MetodoCobro = metodoCobro === 'Domiciliación' && !hermano?.iban ? 'Transferencia' : metodoCobro
     if (!hermanoId || !concepto || !Number.isFinite(importe) || importe <= 0) return
 
-    const nuevaId = nuevoId()
-    // El número se calcula DENTRO del updater a partir de `prev`, no del
-    // closure `cuotas`: así dos emisiones seguidas no comparten el mismo nº.
+    // Mensual: se emiten 12 recibos, uno por mes, con el cobro corriendo mes a mes.
+    const meses = periodicidad === 'mensual' ? 12 : 1
+    const baseIso = fechaCobroRaw || fechaCobroPorDefecto()
+    const primerId = nuevoId()
+
     setCuotas((prev) => {
-      const nueva: Cuota = {
-        id: nuevaId,
-        numero: Math.max(0, ...prev.map((c) => c.numero)) + 1,
-        hermanoId,
-        concepto,
-        importe,
-        estado: 'Pendiente',
-        fechaEmision: hoy(),
-        fechaCobro: formatearFechaInput(fechaCobroRaw),
-        domiciliada,
+      let siguienteNumero = Math.max(0, ...prev.map((c) => c.numero)) + 1
+      const nuevas: Cuota[] = []
+      for (let i = 0; i < meses; i++) {
+        nuevas.push({
+          id: i === 0 ? primerId : nuevoId(),
+          numero: siguienteNumero++,
+          hermanoId,
+          concepto: meses > 1 ? `${concepto} · mes ${i + 1}/12` : concepto,
+          importe,
+          estado: 'Pendiente',
+          fechaEmision: hoy(),
+          fechaCobro: formatearFechaInput(sumarMeses(baseIso, i)),
+          domiciliada,
+          metodoCobro: metodoFinal,
+        })
       }
-      return [nueva, ...prev]
+      return [...nuevas.reverse(), ...prev]
     })
-    setJustAddedId(nuevaId)
+    setJustAddedId(primerId)
     cerrarNuevaCuota()
     setFilter('Todas')
     setQuery('')
@@ -210,6 +260,9 @@ export default function Cuotas() {
           </p>
         </div>
         <div className="dash-head__actions">
+          <button className="btn btn-outline" onClick={() => setModeloOpen(true)}>
+            Modelo de recibo
+          </button>
           <button
             className="btn btn-outline"
             onClick={abrirRemesa}
@@ -259,14 +312,22 @@ export default function Cuotas() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="filters">
-          {(['Todas', 'Pagada', 'Pendiente', 'Devuelta'] as const).map((f) => (
+          {(['Todas', 'Pagada', 'Pendiente', 'En mora', 'Devuelta'] as const).map((f) => (
             <button
               key={f}
               className={`chip${filter === f ? ' chip--active' : ''}`}
               onClick={() => setFilter(f)}
               type="button"
             >
-              {f === 'Todas' ? 'Todas' : f === 'Pagada' ? 'Pagadas' : f === 'Pendiente' ? 'Pendientes' : 'Devueltas'}
+              {f === 'Todas'
+                ? 'Todas'
+                : f === 'Pagada'
+                  ? 'Pagadas'
+                  : f === 'Pendiente'
+                    ? 'Pendientes'
+                    : f === 'En mora'
+                      ? 'En mora'
+                      : 'Devueltas'}
             </button>
           ))}
         </div>
@@ -314,7 +375,7 @@ export default function Cuotas() {
                     <span className="cobro-cell">
                       <span className="num">{c.fechaCobro}</span>
                       <span className={`cobro-tag${c.domiciliada ? ' cobro-tag--bank' : ''}`}>
-                        {c.domiciliada ? 'Domiciliada' : 'Manual'}
+                        {metodoDeCuota(c)}
                       </span>
                     </span>
                   </td>
@@ -367,9 +428,19 @@ export default function Cuotas() {
         footer={
           selected && (
             <>
-              {selected.estado === 'Pendiente' && (
+              {(selected.estado === 'Pendiente' || selected.estado === 'En mora') && (
                 <button className="btn btn-outline" onClick={() => marcarPagada(selected.id)}>
                   Marcar como pagada
+                </button>
+              )}
+              {puedeMora && selected.estado === 'Pendiente' && (
+                <button className="btn btn-ghost rgpd-borrar" onClick={() => cambiarEstado(selected.id, 'En mora')}>
+                  Poner en mora
+                </button>
+              )}
+              {puedeMora && selected.estado === 'En mora' && (
+                <button className="btn btn-ghost" onClick={() => cambiarEstado(selected.id, 'Pendiente')}>
+                  Quitar mora
                 </button>
               )}
               <button className="btn btn-primary" onClick={() => window.print()}>
@@ -383,7 +454,14 @@ export default function Cuotas() {
           (() => {
             const h = hermanoDe(selected.hermanoId)
             if (!h) return <p className="dash-head__lead">No se encuentra el hermano de este recibo.</p>
-            return <Recibo cuota={selected} hermano={h} hermandad={hermandad} />
+            return modeloRecibo ? (
+              <ReciboModeloRender
+                modelo={modeloRecibo}
+                datos={{ cuota: selected, hermano: h, hermandadNombre: hermandad.nombreLegal }}
+              />
+            ) : (
+              <Recibo cuota={selected} hermano={h} hermandad={hermandad} />
+            )
           })()}
       </Drawer>
 
@@ -449,43 +527,55 @@ export default function Cuotas() {
               required
             />
           </div>
-          <div className="form-row">
-            <label htmlFor="fechaCobro">Fecha de cobro</label>
-            <input id="fechaCobro" name="fechaCobro" type="date" defaultValue={fechaCobroPorDefecto()} />
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor="fechaCobro">Fecha de cobro</label>
+              <input id="fechaCobro" name="fechaCobro" type="date" defaultValue={fechaCobroPorDefecto()} />
+            </div>
+            <div className="form-row">
+              <label htmlFor="periodicidad">Periodicidad</label>
+              <select
+                id="periodicidad"
+                name="periodicidad"
+                value={periodicidadNueva}
+                onChange={(e) => setPeriodicidadNueva(e.target.value as 'puntual' | 'mensual')}
+              >
+                <option value="puntual">Recibo único</option>
+                <option value="mensual">Mensual (12 recibos)</option>
+              </select>
+            </div>
           </div>
 
-          <div className="assign-box">
-            <label className="checkbox-row" htmlFor="domiciliada">
-              <input
-                id="domiciliada"
-                name="domiciliada"
-                type="checkbox"
-                checked={domiciliarNuevaCuota && Boolean(hermanoNuevaCuota?.iban)}
-                disabled={!hermanoNuevaCuota?.iban}
-                onChange={(e) => setDomiciliarNuevaCuota(e.target.checked)}
-              />
-              Domiciliar por banco
-            </label>
-            {!hermanoNuevaCuota && (
-              <p className="form-hint">Elige un hermano para saber si tiene cuenta registrada.</p>
-            )}
-            {hermanoNuevaCuota && !hermanoNuevaCuota.iban && (
+          <div className="form-row">
+            <label htmlFor="metodoCobro">Método de cobro</label>
+            <select
+              id="metodoCobro"
+              name="metodoCobro"
+              value={metodoNuevaCuota}
+              onChange={(e) => setMetodoNuevaCuota(e.target.value as MetodoCobro)}
+            >
+              {METODOS_COBRO.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            {metodoNuevaCuota === 'Domiciliación' && hermanoNuevaCuota && !hermanoNuevaCuota.iban && (
               <p className="form-hint form-hint--error">
-                {hermanoNuevaCuota.nombre.split(' ')[0]} no tiene cuenta bancaria registrada — esta
-                cuota se cobrará de forma manual. Puedes añadirle una cuenta desde su ficha en
-                Hermanos.
+                {hermanoNuevaCuota.nombre.split(' ')[0]} no tiene cuenta bancaria — se emitirá como
+                Transferencia. Puedes añadirle una cuenta desde su ficha en Hermanos.
               </p>
             )}
-            {hermanoNuevaCuota?.iban && (
+            {periodicidadNueva === 'mensual' && (
               <p className="form-hint">
-                Se cargará en su cuenta el día indicado arriba, si la domiciliación queda marcada.
+                Se emitirán <b>12 recibos</b> (uno por mes) con el mismo importe, corriendo la fecha
+                de cobro mes a mes.
               </p>
             )}
           </div>
 
           <p className="form-hint">
-            El recibo se emitirá con la fecha de hoy y quedará como «Pendiente» hasta que se
-            registre el pago.
+            {periodicidadNueva === 'mensual' ? 'Los recibos quedarán' : 'El recibo quedará'} como
+            «Pendiente» hasta que se registre el pago. Nadie entra en mora automáticamente: el
+            tesorero o el secretario la ponen a mano cuando procede.
           </p>
         </form>
       </Drawer>
@@ -548,6 +638,27 @@ export default function Cuotas() {
             enviarlo.
           </p>
         </div>
+      </Drawer>
+
+      {/* Modelo de recibo personalizado */}
+      <Drawer
+        open={modeloOpen}
+        onClose={() => setModeloOpen(false)}
+        title="Modelo de recibo"
+        subtitle="Sube tu diseño y coloca los datos"
+      >
+        <p className="form-hint">
+          Sube la imagen de tu modelo de recibo y coloca encima los datos de la cuota. A partir de
+          entonces, cada recibo se imprime sobre ese modelo con los datos reales del hermano. Si
+          borras el modelo, se vuelve al recibo estándar.
+        </p>
+        <ModeloPapeletaEditor
+          modelo={modeloRecibo}
+          onCambio={setModeloRecibo}
+          claves={CLAVES_DATO_RECIBO}
+          guardar={saveModeloRecibo}
+          borrar={borrarModeloRecibo}
+        />
       </Drawer>
     </div>
   )

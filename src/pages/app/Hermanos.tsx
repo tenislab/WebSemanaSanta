@@ -13,6 +13,7 @@ import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
 import { descargarArchivo } from '../../lib/csv'
 import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
+import { useEtiquetas } from '../../lib/etiquetas'
 
 /**
  * Con Supabase conectado, crea además una cuenta real de acceso (mismo
@@ -61,7 +62,10 @@ export default function Hermanos() {
   )
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'Todos' | EstadoHermano>('Todos')
+  const [filtroEtiqueta, setFiltroEtiqueta] = useState<string>('')
   const [selected, setSelected] = useState<Hermano | null>(null)
+  const [etiquetas, setEtiquetas] = useEtiquetas()
+  const [nuevaEtiqueta, setNuevaEtiqueta] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [dniError, setDniError] = useState<string | null>(null)
@@ -122,13 +126,47 @@ export default function Hermanos() {
   const filtered = useMemo(() => {
     return hermanos
       .filter((h) => (filter === 'Todos' ? true : h.estado === filter))
+      .filter((h) => (filtroEtiqueta ? (h.etiquetas ?? []).includes(filtroEtiqueta) : true))
       .filter((h) => {
         const q = query.trim().toLowerCase()
         if (!q) return true
         return h.nombre.toLowerCase().includes(q) || String(h.numero).includes(q)
       })
       .sort((a, b) => a.numero - b.numero)
-  }, [hermanos, query, filter])
+  }, [hermanos, query, filter, filtroEtiqueta])
+
+  /** Añade o quita una etiqueta a un hermano (y refleja el cambio en la ficha abierta). */
+  function toggleEtiquetaHermano(hermanoId: string, etiqueta: string) {
+    setHermanos((prev) =>
+      prev.map((h) => {
+        if (h.id !== hermanoId) return h
+        const actuales = h.etiquetas ?? []
+        const siguiente = actuales.includes(etiqueta)
+          ? actuales.filter((e) => e !== etiqueta)
+          : [...actuales, etiqueta]
+        return { ...h, etiquetas: siguiente }
+      }),
+    )
+    setSelected((s) => {
+      if (!s || s.id !== hermanoId) return s
+      const actuales = s.etiquetas ?? []
+      const siguiente = actuales.includes(etiqueta)
+        ? actuales.filter((e) => e !== etiqueta)
+        : [...actuales, etiqueta]
+      return { ...s, etiquetas: siguiente }
+    })
+  }
+
+  /** Crea una etiqueta nueva en el catálogo y se la asigna al hermano abierto. */
+  function crearEtiqueta() {
+    const limpia = nuevaEtiqueta.trim()
+    if (!limpia) return
+    if (!etiquetas.includes(limpia)) setEtiquetas([...etiquetas, limpia])
+    if (selected && !(selected.etiquetas ?? []).includes(limpia)) {
+      toggleEtiquetaHermano(selected.id, limpia)
+    }
+    setNuevaEtiqueta('')
+  }
 
   const stats = useMemo(() => {
     const total = hermanos.length
@@ -309,6 +347,20 @@ export default function Hermanos() {
             </button>
           ))}
         </div>
+        {etiquetas.length > 0 && (
+          <select
+            className="search-box"
+            style={{ maxWidth: '15rem' }}
+            value={filtroEtiqueta}
+            onChange={(e) => setFiltroEtiqueta(e.target.value)}
+            aria-label="Filtrar por etiqueta"
+          >
+            <option value="">Todas las etiquetas</option>
+            {etiquetas.map((et) => (
+              <option key={et} value={et}>{et}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="table-card">
@@ -407,6 +459,46 @@ export default function Hermanos() {
               Accede a su área del hermano con este DNI y la contraseña <code>{selected.claveAcceso}</code>, que
               podrá cambiar desde su área.
             </p>
+
+            <div className="assign-box">
+              <label>Etiquetas</label>
+              <p className="form-hint">
+                Marca los grupos a los que pertenece. Sirven para mandarle avisos segmentados (p. ej.
+                solo a los costaleros) y para filtrar el censo.
+              </p>
+              <div className="etiquetas-chips">
+                {etiquetas.map((et) => {
+                  const activa = (selected.etiquetas ?? []).includes(et)
+                  return (
+                    <button
+                      type="button"
+                      key={et}
+                      className={`chip chip--toggle${activa ? ' chip--active' : ''}`}
+                      onClick={() => toggleEtiquetaHermano(selected.id, et)}
+                    >
+                      {activa ? '✓ ' : ''}{et}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="assign-box__row" style={{ marginTop: '0.6rem' }}>
+                <input
+                  type="text"
+                  placeholder="Crear etiqueta nueva…"
+                  value={nuevaEtiqueta}
+                  onChange={(e) => setNuevaEtiqueta(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      crearEtiqueta()
+                    }
+                  }}
+                />
+                <button type="button" className="btn btn-outline btn-sm" onClick={crearEtiqueta}>
+                  Añadir
+                </button>
+              </div>
+            </div>
 
             <div className="assign-box">
               <label htmlFor="ibanHermano">

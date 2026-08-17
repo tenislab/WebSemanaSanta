@@ -18,6 +18,8 @@ export interface Hermano {
   claveAcceso: string
   /** Id de su cuenta real de Supabase Auth, una vez creada (null en modo demostración o hasta que se cree). */
   authUserId: string | null
+  /** Etiquetas del hermano (costalero, acólito, banda…), para segmentar avisos y listados. */
+  etiquetas?: string[]
 }
 
 /**

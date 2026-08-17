@@ -29,6 +29,7 @@ function moduloIdDeRuta(pathname: string): string | null {
     { prefix: '/app/inventario', modulo: 'inventario' },
     { prefix: '/app/archivo', modulo: 'archivo' },
     { prefix: '/app/comunicados', modulo: 'comunicados' },
+    { prefix: '/app/web', modulo: 'web' },
     { prefix: '/app/informes', modulo: 'informes' },
     { prefix: '/app/personal', modulo: 'personal' },
     { prefix: '/app/configuracion', modulo: 'configuracion' },
@@ -100,6 +101,7 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/app/archivo', label: 'Archivo documental', icon: ic.archivo, modulo: 'archivo' },
       { to: '/app/comunicados', label: 'Comunicados', icon: ic.comunicados, modulo: 'comunicados' },
+      { to: '/app/web', label: 'Web pública', icon: ic.comunicados, modulo: 'web' },
       { to: '/app/informes', label: 'Informes', icon: ic.informes, modulo: 'informes' },
     ],
   },

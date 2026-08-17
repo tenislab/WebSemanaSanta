@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
 import HermanoPortal from './pages/HermanoPortal'
+import SitioPublico from './pages/SitioPublico'
 import EntradaUnificada from './pages/EntradaUnificada'
 import PaginaLegal from './pages/PaginaLegal'
 import AppShell from './components/AppShell'
@@ -18,6 +19,7 @@ import Archivo from './pages/app/Archivo'
 import Comunicados from './pages/app/Comunicados'
 import Informes from './pages/app/Informes'
 import Personal from './pages/app/Personal'
+import WebPublica from './pages/app/WebPublica'
 import Configuracion from './pages/app/Configuracion'
 import Seguridad from './pages/app/Seguridad'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -31,6 +33,7 @@ export default function App() {
       <Route path="/registro" element={<Signup />} />
       <Route path="/recuperar" element={<ForgotPassword />} />
       <Route path="/hermano" element={<HermanoPortal />} />
+      <Route path="/w/:slug" element={<SitioPublico />} />
       <Route path="/legal/:slug" element={<PaginaLegal />} />
 
       <Route
@@ -52,6 +55,7 @@ export default function App() {
         <Route path="comunicados" element={<Comunicados />} />
         <Route path="informes" element={<Informes />} />
         <Route path="personal" element={<Personal />} />
+        <Route path="web" element={<WebPublica />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="seguridad" element={<Seguridad />} />
       </Route>

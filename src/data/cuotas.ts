@@ -1,6 +1,15 @@
-export type EstadoCuota = 'Pagada' | 'Pendiente' | 'Devuelta'
+/**
+ * Estados de una cuota. «En mora» NO salta solo al vencer la fecha: lo pone a
+ * mano el tesorero o el secretario cuando decide reclamar el impago.
+ */
+export type EstadoCuota = 'Pagada' | 'Pendiente' | 'Devuelta' | 'En mora'
 /** Nombre del concepto de cuota; los conceptos y sus importes los define cada hermandad (ver lib/conceptosCuota.ts). */
 export type ConceptoCuota = string
+
+/** Cómo se cobra la cuota. */
+export type MetodoCobro = 'Domiciliación' | 'Transferencia' | 'Efectivo' | 'Bizum'
+
+export const METODOS_COBRO: MetodoCobro[] = ['Domiciliación', 'Transferencia', 'Efectivo', 'Bizum']
 
 export interface Cuota {
   id: string
@@ -14,7 +23,14 @@ export interface Cuota {
   fechaCobro: string
   /** Si se cobra por domiciliación bancaria (cargo en la cuenta del hermano) o de forma manual. */
   domiciliada: boolean
+  /** Método de cobro. Si falta (datos antiguos), se deduce de `domiciliada`. */
+  metodoCobro?: MetodoCobro
   fechaPago?: string
+}
+
+/** Método de cobro de una cuota, tolerando datos antiguos que solo tienen `domiciliada`. */
+export function metodoDeCuota(c: Cuota): MetodoCobro {
+  return c.metodoCobro ?? (c.domiciliada ? 'Domiciliación' : 'Transferencia')
 }
 
 export const CONCEPTOS: ConceptoCuota[] = ['Cuota anual', 'Cuota trimestral', 'Cuota extraordinaria']

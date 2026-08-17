@@ -1,79 +1,40 @@
-# Modo local + modelo de papeleta + acceso de hermano
+# Actualización Cabildo — bloques 1, 2 y 3
 
-Todo funciona con o sin base de datos, esté Supabase encendido, en pausa o sin
-configurar. Novedades de esta entrega:
+Descomprime el contenido de este zip **en la raíz de tu repositorio**,
+respetando las carpetas (`src/...`). Sobrescribe los archivos que te pida.
+Después, en **GitHub Desktop** verás todos los cambios listos para commit y push.
 
-## 1. Entrar como hermano (antes solo se podía como hermandad)
+## Qué incluye
 
-El portal del hermano (`/hermano`) ahora también funciona en modo local aunque
-Supabase esté configurado pero en pausa. Y trae **accesos rápidos de un clic**,
-igual que el panel de la hermandad:
+**Novedades ya funcionando (todo en modo local, sin base de datos):**
 
-- En `/hermano`, en modo local, salen varios **hermanos de prueba**; pulsas uno
-  y entras directo a su área (con sus cuotas y su papeleta).
-- También puedes entrar escribiendo **DNI + contraseña**. En el censo de
-  ejemplo, la contraseña de todos es `hermano123`. Ejemplos:
-  - Ana Sánchez del Río — DNI `12345678A`
-  - María Reyes Ortega — DNI `23456789B`
-  - Juan Luis Cabrera — DNI `34567890C`
-  - Francisco Gómez Nieto — DNI `45678901D`
-- A los hermanos que des de alta tú, su usuario y contraseña provisional es su
-  **DNI**.
+1. **Etiquetas de hermano + avisos segmentados**
+   - Etiquetas por hermano (costalero, acólito, banda… + crear las tuyas), con
+     filtro en el censo.
+   - En Comunicados puedes dirigir un aviso a una etiqueta: se calcula a qué
+     hermanos llegaría por email (envío real pendiente de conectar proveedor).
 
-> Nota: el acceso del panel (tesorero, secretaría, etc., en `/login`) y el
-> acceso del hermano (`/hermano`) son dos entradas distintas. Si quieres que las
-> mismas personas de cada cargo puedan entrar además como hermanos, dilo y lo
-> enlazo.
+2. **Cuotas: mensual, mora manual, métodos y modelo de recibo**
+   - Cuota mensual (emite 12 recibos) además de la puntual.
+   - Método de cobro: Domiciliación, Transferencia, Efectivo, Bizum.
+   - «En mora» manual (tesorero/secretario/titular); nada entra en mora solo.
+   - Modelo de recibo personalizado: subes tu diseño y se rellena con los datos.
 
-## 2. Modelo de papeleta personalizado (NUEVO)
+3. **Web pública con 3 plantillas**
+   - Sección «Web pública» en el panel: eliges plantilla (Clásica/Sobria/Moderna),
+     publicas/ocultas, personalizas el enlace `/w/tu-slug`, el contenido y el
+     color (por defecto el de tu hermandad).
+   - La web tiene un botón **«Entrar»** que lleva al portal del hermano (`/hermano`).
 
-En **Panel → Papeletas → «Modelo de papeleta»**:
+**También incluye lo de la sesión anterior:** modo local sin BD, modelo de
+papeleta, acceso de hermano de un clic, y tolerancia a Supabase en pausa.
 
-1. Sube la **imagen de tu modelo** de papeleta (una foto o un escaneo; da igual
-   el diseño).
-2. Pulsa **«+ Añadir dato»** y **arrastra** cada dato a su sitio sobre la
-   imagen: nombre, nº de hermano, DNI, tramo/puesto, modalidad, importe, estado,
-   nº de papeleta, fechas, nombre de la hermandad, o texto fijo (etiquetas).
-3. Ajusta tamaño, color, alineación y negrita de cada dato.
+## Importante para desplegar en modo local
 
-A partir de ahí, la papeleta de **cada hermano** se imprime sobre ese modelo con
-**sus datos reales** (botón «Imprimir / Descargar»), tanto en el panel como en el
-área del hermano. Si borras el modelo, se vuelve a usar la papeleta estándar.
+En Vercel, para funcionar sin base de datos (con los accesos demo), **no**
+definas `VITE_SUPABASE_URL` ni `VITE_SUPABASE_ANON_KEY`.
 
-Todo se guarda en el navegador; no necesita base de datos.
-
-## 3. Tolerancia a Supabase en pausa (de la entrega anterior)
-
-Al arrancar, la app comprueba si Supabase responde. Si está en pausa/caído (o
-sin configurar), pasa sola a **modo local**: accesos de demostración, login y
-datos del navegador. Cuando Supabase vuelve, recupera el modo normal.
-
-## 7 usuarios del panel (uno por cargo), por `/login`
-
-| Cargo                        | Correo                     | Contraseña |
-|------------------------------|----------------------------|------------|
-| Hermano Mayor (titular)      | demo@cabildo.app           | demo1234   |
-| Secretario/a                 | secretaria@tuhermandad.org | secre123   |
-| Tesorero/a                   | tesorero@tuhermandad.org   | tesoro123  |
-| Fiscal                       | fiscal@tuhermandad.org     | fiscal123  |
-| Mayordomo/Prioste            | mayordomo@tuhermandad.org  | mayordo123 |
-| Diputado/a Mayor de Gobierno | diputado@tuhermandad.org   | diputa123  |
-| Vocal                        | vocal@tuhermandad.org      | vocal123   |
-
-## Cómo aplicar
-
-Lo más fácil, el parche (un solo archivo, aplica los 18 archivos de golpe):
-
-    git apply cambios-modo-local.patch
-    npm install
-    npm run build
-
-O descomprime el zip en la raíz respetando `src/...` y sobrescribe.
-
-## Verificado (navegador headless)
-
-- entrar como hermano de un clic y por DNI ✔
-- subir modelo de papeleta, colocar datos y que persista ✔
-- la papeleta se imprime sobre el modelo con datos reales ✔
-- Supabase en pausa → la app cae a modo local ✔
-- `tsc` limpio, 0 errores JS ✔
+## Pendiente (siguiente entrega)
+- Suscripción de la hermandad (20 €/mes · 300 €/año, sin cobro real todavía).
+- Ajuste de mora (que la hermandad decida si basta un cargo o hacen falta dos).
+- Envío real de emails (al conectar Brevo/Resend).

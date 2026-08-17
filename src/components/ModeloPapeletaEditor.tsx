@@ -3,28 +3,31 @@ import {
   CLAVES_DATO,
   borrarModeloPapeleta,
   saveModeloPapeleta,
-  valorDeCampo,
   type CampoModelo,
-  type ClaveDato,
-  type DatosModelo,
   type ModeloPapeleta,
 } from '../lib/modeloPapeleta'
 import { nuevoId } from '../lib/supabaseSync'
+
+/** Definición de un dato colocable (etiqueta que se ve en el selector + ejemplo para la vista previa). */
+interface ClaveDefinicion {
+  clave: string
+  etiqueta: string
+  ejemplo: string
+}
 
 interface Props {
   /** Modelo actual (o null si aún no hay ninguno). */
   modelo: ModeloPapeleta | null
   /** Se llama cada vez que el modelo cambia y se guarda. */
   onCambio: (modelo: ModeloPapeleta | null) => void
-  /** Datos reales de un hermano para la vista previa (si no, se usan ejemplos). */
-  datosEjemplo?: DatosModelo
+  /** Datos disponibles para colocar. Por defecto, los de la papeleta. */
+  claves?: ClaveDefinicion[]
+  /** Cómo se guarda/borra el modelo. Por defecto, el almacenamiento de la papeleta. */
+  guardar?: (modelo: ModeloPapeleta) => void
+  borrar?: () => void
 }
 
 const COLOR_DEFECTO = '#1a1a1a'
-
-function ejemploDe(clave: ClaveDato): string {
-  return CLAVES_DATO.find((c) => c.clave === clave)?.ejemplo ?? ''
-}
 
 /** Reduce una imagen grande para que quepa holgadamente en localStorage. */
 function comprimirImagen(dataUrl: string, maxLado = 1400): Promise<string> {
@@ -52,15 +55,25 @@ function comprimirImagen(dataUrl: string, maxLado = 1400): Promise<string> {
   })
 }
 
-export default function ModeloPapeletaEditor({ modelo, onCambio, datosEjemplo }: Props) {
+export default function ModeloPapeletaEditor({
+  modelo,
+  onCambio,
+  claves = CLAVES_DATO,
+  guardar = saveModeloPapeleta,
+  borrar = borrarModeloPapeleta,
+}: Props) {
   const lienzoRef = useRef<HTMLDivElement>(null)
   const [seleccion, setSeleccion] = useState<string | null>(null)
   const [arrastrando, setArrastrando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  function ejemploDe(clave: string): string {
+    return claves.find((c) => c.clave === clave)?.ejemplo ?? ''
+  }
+
   function actualizar(next: ModeloPapeleta | null) {
-    if (next) saveModeloPapeleta(next)
-    else borrarModeloPapeleta()
+    if (next) guardar(next)
+    else borrar()
     onCambio(next)
   }
 
@@ -169,11 +182,10 @@ export default function ModeloPapeletaEditor({ modelo, onCambio, datosEjemplo }:
           >
             <img src={modelo.imagenDataUrl} alt="Modelo de papeleta" className="modelo-editor__img" draggable={false} />
             {modelo.campos.map((campo) => {
-              const valorReal = datosEjemplo ? valorDeCampo(campo, datosEjemplo) : ''
               const mostrado =
                 campo.clave === 'textoFijo'
                   ? campo.texto || 'Texto'
-                  : valorReal || ejemploDe(campo.clave)
+                  : ejemploDe(campo.clave)
               return (
                 <span
                   key={campo.id}
@@ -203,9 +215,9 @@ export default function ModeloPapeletaEditor({ modelo, onCambio, datosEjemplo }:
                 <label>Dato que muestra</label>
                 <select
                   value={campoSel.clave}
-                  onChange={(e) => editarCampo(campoSel.id, { clave: e.target.value as ClaveDato })}
+                  onChange={(e) => editarCampo(campoSel.id, { clave: e.target.value })}
                 >
-                  {CLAVES_DATO.map((c) => (
+                  {claves.map((c) => (
                     <option key={c.clave} value={c.clave}>{c.etiqueta}</option>
                   ))}
                 </select>

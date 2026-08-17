@@ -24,6 +24,7 @@ export const MODULOS: Modulo[] = [
   { id: 'archivo', label: 'Archivo documental' },
   { id: 'comunicados', label: 'Comunicados' },
   { id: 'informes', label: 'Informes' },
+  { id: 'web', label: 'Web pública' },
   { id: 'personal', label: 'Personal y permisos' },
   { id: 'configuracion', label: 'Configuración' },
 ]
@@ -33,7 +34,7 @@ const TODOS = MODULOS.map((m) => m.id)
 /** Permisos de fábrica por cargo: un punto de partida razonable, pensado para editarse desde Personal. */
 export const PERMISOS_POR_DEFECTO: Record<Cargo, string[]> = {
   'Hermano Mayor': TODOS,
-  'Secretario/a': ['hermanos', 'cortejo', 'papeletas', 'archivo', 'comunicados', 'informes'],
+  'Secretario/a': ['hermanos', 'cortejo', 'papeletas', 'archivo', 'comunicados', 'informes', 'web'],
   'Tesorero/a': ['tesoreria', 'cuotas', 'inventario', 'informes'],
   Fiscal: ['archivo', 'informes'],
   'Mayordomo/Prioste': ['cortejo', 'inventario', 'informes'],

@@ -1428,6 +1428,135 @@ h1, h2, h3,
 }
 
 /* =========================================================================
+   Etiquetas de hermano (chips seleccionables)
+   ========================================================================= */
+.etiquetas-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chip--toggle {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface-2, rgba(0, 0, 0, 0.03));
+  color: inherit;
+  border-radius: 20px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.chip--toggle:hover { border-color: var(--accent, #c5a059); }
+.chip--toggle.chip--active {
+  background: rgba(197, 160, 89, 0.16);
+  border-color: var(--accent, #c5a059);
+  font-weight: 600;
+}
+/* Etiquetas mostradas junto al nombre en tablas/listas */
+.etiqueta-pill {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
+/* =========================================================================
+   Web pública — selector de plantilla (panel) + página pública (/w/:slug)
+   ========================================================================= */
+.plantillas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.8rem; }
+.plantilla-card {
+  display: flex; flex-direction: column; gap: 0.35rem; text-align: left;
+  padding: 0.8rem; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface-2, rgba(0,0,0,0.02)); color: inherit; cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.plantilla-card:hover { border-color: var(--accent, #c5a059); }
+.plantilla-card--sel { border-color: var(--accent, #c5a059); box-shadow: 0 0 0 2px rgba(197,160,89,0.25); }
+.plantilla-card small { color: var(--text-muted); font-size: 0.78rem; }
+.plantilla-card__mini { display: flex; flex-direction: column; gap: 3px; height: 56px; border-radius: 6px; overflow: hidden; padding: 6px; }
+.plantilla-card__mini span { display: block; border-radius: 3px; }
+.plantilla-card__mini--clasica { background: #f3ede2; }
+.plantilla-card__mini--clasica span { background: #6A1A23; height: 8px; }
+.plantilla-card__mini--clasica span:nth-child(2) { width: 70%; opacity: 0.6; }
+.plantilla-card__mini--clasica span:nth-child(3) { width: 40%; opacity: 0.4; }
+.plantilla-card__mini--sobria { background: #fff; border: 1px solid #e5e5e5; }
+.plantilla-card__mini--sobria span { background: #222; height: 6px; }
+.plantilla-card__mini--sobria span:nth-child(2) { width: 80%; opacity: 0.3; }
+.plantilla-card__mini--sobria span:nth-child(3) { width: 55%; opacity: 0.2; }
+.plantilla-card__mini--moderna { background: linear-gradient(135deg, #2C2C2C, #6A1A23); }
+.plantilla-card__mini--moderna span { background: rgba(255,255,255,0.9); height: 10px; }
+.plantilla-card__mini--moderna span:nth-child(2) { width: 60%; opacity: 0.5; }
+.plantilla-card__mini--moderna span:nth-child(3) { width: 35%; opacity: 0.3; }
+
+/* Botones de la web pública */
+.sitio-btn {
+  display: inline-block; padding: 10px 20px; border-radius: 4px;
+  background: var(--sitio-color, #6A1A23); color: #fff; text-decoration: none;
+  font-size: 0.85rem; font-weight: 600; letter-spacing: 0.3px; border: none; cursor: pointer;
+}
+.sitio-btn--sm { padding: 6px 14px; font-size: 0.78rem; }
+.sitio-btn--entrar { margin-left: 0.5rem; }
+.sitio-btn:hover { opacity: 0.92; }
+
+/* Página "no disponible" */
+.sitio-noweb {
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.8rem; text-align: center; padding: 2rem; background: #f3ede2; color: #2c2c2c;
+}
+.sitio-noweb h1 { font-family: Georgia, serif; }
+
+/* Página pública */
+.sitio { min-height: 100vh; background: #fff; color: #222; }
+.sitio__nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.9rem 1.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);
+  position: sticky; top: 0; background: rgba(255,255,255,0.96); backdrop-filter: blur(6px); z-index: 10;
+}
+.sitio__brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; color: var(--sitio-color); }
+.sitio__logo { width: 34px; height: 34px; object-fit: contain; }
+.sitio__menu { display: flex; align-items: center; gap: 1.1rem; }
+.sitio__menu a { color: #333; text-decoration: none; font-size: 0.9rem; }
+.sitio__menu a:hover { color: var(--sitio-color); }
+.sitio__hero {
+  min-height: 62vh; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 3rem 1.5rem; background-size: cover; background-position: center;
+  color: #fff; position: relative;
+}
+.sitio__hero::before { content: ''; position: absolute; inset: 0; background: rgba(20,10,12,0.55); }
+.sitio__hero-inner { position: relative; max-width: 780px; }
+.sitio__hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); margin-bottom: 0.6rem; }
+.sitio__lema { font-size: 1.15rem; opacity: 0.92; margin-bottom: 1.4rem; }
+.sitio__main { max-width: 940px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+.sitio__seccion { margin-bottom: 2.6rem; }
+.sitio__seccion h2 { color: var(--sitio-color); font-size: 1.6rem; margin-bottom: 0.9rem; }
+.sitio__texto { line-height: 1.7; white-space: pre-wrap; }
+.sitio__cultos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+.sitio__culto { border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; padding: 1rem 1.2rem; }
+.sitio__culto h3 { color: var(--sitio-color); margin-bottom: 0.3rem; }
+.sitio__contacto { list-style: none; padding: 0; line-height: 1.9; }
+.sitio__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  padding: 1.4rem 1.6rem; border-top: 1px solid rgba(0,0,0,0.08); color: #666; font-size: 0.85rem;
+}
+
+/* Variante CLÁSICA: serif y fondo crema */
+.sitio[data-plantilla='clasica'] { background: #f7f2e9; }
+.sitio[data-plantilla='clasica'] h1,
+.sitio[data-plantilla='clasica'] h2,
+.sitio[data-plantilla='clasica'] .sitio__brand { font-family: Georgia, 'Times New Roman', serif; }
+.sitio[data-plantilla='clasica'] .sitio__hero { min-height: 54vh; }
+
+/* Variante SOBRIA: mucho blanco, sin overlay tan oscuro, tipografía sans */
+.sitio[data-plantilla='sobria'] .sitio__hero { min-height: 46vh; }
+.sitio[data-plantilla='sobria'] .sitio__hero::before { background: rgba(0,0,0,0.35); }
+.sitio[data-plantilla='sobria'] .sitio__nav { border-bottom: 1px solid #ececec; }
+.sitio[data-plantilla='sobria'] .sitio-btn { border-radius: 2px; }
+
+/* Variante MODERNA: hero a pantalla completa, más contraste */
+.sitio[data-plantilla='moderna'] .sitio__hero { min-height: 82vh; }
+.sitio[data-plantilla='moderna'] .sitio__hero::before { background: linear-gradient(135deg, rgba(20,10,12,0.75), rgba(20,10,12,0.35)); }
+.sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2.4rem, 7vw, 4.4rem); }
+.sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 40px; padding: 12px 26px; }
+
+/* =========================================================================
    Cortejo — reparto de puestos por tramo, día de salida
    ========================================================================= */
 .dash-head__actions { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }

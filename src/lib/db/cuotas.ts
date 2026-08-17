@@ -1,4 +1,4 @@
-import type { Cuota } from '../../data/cuotas'
+import type { Cuota, MetodoCobro } from '../../data/cuotas'
 
 export function cuotaToRow(c: Cuota): Record<string, unknown> {
   return {
@@ -11,6 +11,7 @@ export function cuotaToRow(c: Cuota): Record<string, unknown> {
     fecha_emision: c.fechaEmision,
     fecha_cobro: c.fechaCobro,
     domiciliada: c.domiciliada,
+    metodo_cobro: c.metodoCobro ?? null,
     fecha_pago: c.fechaPago ?? null,
   }
 }
@@ -26,6 +27,7 @@ export function rowToCuota(r: Record<string, unknown>): Cuota {
     fechaEmision: r.fecha_emision as string,
     fechaCobro: r.fecha_cobro as string,
     domiciliada: r.domiciliada as boolean,
+    metodoCobro: (r.metodo_cobro as MetodoCobro | null) ?? undefined,
     fechaPago: (r.fecha_pago as string | null) ?? undefined,
   }
 }
