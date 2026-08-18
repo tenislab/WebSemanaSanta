@@ -4,7 +4,7 @@ import Logo, { LogoMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 import { puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
-import { useSuscripcion } from '../lib/suscripcion'
+import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
 import type { Cargo } from '../data/documentos'
 
@@ -143,13 +143,21 @@ export default function AppShell() {
     () =>
       NAV.map((group) => ({
         ...group,
-        items: group.items.filter((item) => !item.modulo || puedeVerModulo(cargo, item.modulo)),
+        // Un enlace se ve si el cargo tiene permiso Y el pack contratado incluye
+        // ese módulo (p. ej. la Web pública solo con un pack que traiga la web).
+        items: group.items.filter(
+          (item) =>
+            (!item.modulo || puedeVerModulo(cargo, item.modulo)) &&
+            moduloPermitidoPorPack(suscripcion, item.modulo),
+        ),
       })).filter((group) => group.items.length > 0),
-    [cargo, permisosVersion],
+    [cargo, permisosVersion, suscripcion],
   )
 
   const moduloActual = moduloIdDeRuta(location.pathname)
-  const accesoBloqueado = moduloActual !== null && !puedeVerModulo(cargo, moduloActual)
+  const accesoBloqueado =
+    moduloActual !== null &&
+    (!puedeVerModulo(cargo, moduloActual) || !moduloPermitidoPorPack(suscripcion, moduloActual))
 
   async function handleSignOut() {
     await signOut()
@@ -161,7 +169,7 @@ export default function AppShell() {
     return (
       <PantallaSuscripcion
         nombreHermandad={hermandad}
-        onActivar={(plan) => activar(plan, new Date().toISOString().slice(0, 10))}
+        onActivar={(pack, periodo) => activar(pack, periodo, new Date().toISOString().slice(0, 10))}
         onSalir={handleSignOut}
       />
     )

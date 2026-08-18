@@ -284,6 +284,38 @@ export default function Hermanos() {
     setTimeout(() => setContactoSaved(false), 2500)
   }
 
+  /**
+   * Da de baja a un hermano y renumera el censo: su número queda libre y todos
+   * los hermanos con número mayor descienden uno (los números «suben» en el
+   * escalafón de antigüedad). El hermano de baja sale de la numeración activa
+   * (número 0, se muestra como «—»); su historial se conserva.
+   */
+  function darDeBaja(hermanoId: string) {
+    const objetivo = hermanos.find((h) => h.id === hermanoId)
+    if (!objetivo || objetivo.estado === 'Baja') return
+    const numBaja = objetivo.numero
+    setHermanos((prev) =>
+      prev.map((h) => {
+        if (h.id === hermanoId) return { ...h, estado: 'Baja', numero: 0 }
+        if (h.estado !== 'Baja' && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
+        return h
+      }),
+    )
+    agregarAvisoHermano(hermanoId, 'La secretaría ha tramitado tu baja en la hermandad.')
+    setSelected((prev) => (prev && prev.id === hermanoId ? { ...prev, estado: 'Baja', numero: 0 } : prev))
+  }
+
+  /** Reactiva a un hermano de baja: vuelve al censo con el último número disponible. */
+  function reactivar(hermanoId: string) {
+    const objetivo = hermanos.find((h) => h.id === hermanoId)
+    if (!objetivo || objetivo.estado !== 'Baja') return
+    const siguiente = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
+    setHermanos((prev) =>
+      prev.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo', numero: siguiente } : h)),
+    )
+    setSelected((prev) => (prev && prev.id === hermanoId ? { ...prev, estado: 'Activo', numero: siguiente } : prev))
+  }
+
   async function descargarDatosRgpd(hermano: Hermano) {
     const datos = await recopilarDatosHermano(hermano.id)
     if (!datos) return
@@ -413,7 +445,7 @@ export default function Hermanos() {
                 onClick={() => setSelected(h)}
                 style={{ cursor: 'pointer' }}
               >
-                <td className="num">{h.numero}</td>
+                <td className="num">{h.numero > 0 ? h.numero : '—'}</td>
                 <td>
                   <div className="row-person">
                     <span className="row-avatar">{initials(h.nombre)}</span>
@@ -465,7 +497,7 @@ export default function Hermanos() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.nombre ?? ''}
-        subtitle={selected ? `Hermano nº ${selected.numero}` : undefined}
+        subtitle={selected ? (selected.numero > 0 ? `Hermano nº ${selected.numero}` : 'De baja · sin número activo') : undefined}
       >
         {selected && (
           <div className="ficha">
@@ -599,6 +631,40 @@ export default function Hermanos() {
               )}
               {selected.iban && !ibanError && ibanDraft === selected.iban && (
                 <p className="form-hint">Cuenta actual: {maskIban(selected.iban)}</p>
+              )}
+            </div>
+
+            <div className="assign-box">
+              <label>Situación en la hermandad</label>
+              {selected.estado !== 'Baja' ? (
+                <>
+                  <p className="form-hint">
+                    Al dar de baja, su número queda libre y los hermanos con número mayor
+                    descienden uno (el escalafón de antigüedad se recoloca solo). Se conserva su
+                    historial y puede reactivarse más adelante.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm rgpd-borrar"
+                    onClick={() => {
+                      if (window.confirm(`¿Dar de baja a ${selected.nombre}? Los números de hermano se recolocarán.`)) {
+                        darDeBaja(selected.id)
+                      }
+                    }}
+                  >
+                    Dar de baja
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="form-hint">
+                    Está de baja: fuera de la numeración activa. Al reactivarlo entra de nuevo en el
+                    censo con el último número disponible.
+                  </p>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => reactivar(selected.id)}>
+                    Reactivar hermano
+                  </button>
+                </>
               )}
             </div>
 

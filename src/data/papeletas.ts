@@ -73,7 +73,10 @@ export const PAPELETAS_INICIALES: Papeleta[] = [
   { id: 'pb8', numero: 419, hermanoId: 'h7', anio: 2027, tramoId: null, importe: 18, estado: 'Solicitada', fechaSolicitud: '22 ene 2027' },
   // Renuncia (tenía sitio en 2026 y decide no salir este año)
   { id: 'pb9', numero: 420, hermanoId: 'h5', anio: 2027, tramoId: null, importe: 0, estado: 'Renuncia', fechaSolicitud: '18 ene 2027' },
-  // (h4, h8, h10, h12 tenían sitio en 2026 y aún no han renovado → "Por renovar")
+  // h4 es Diputado de tramo: renueva su sitio en Cirio 2º tramo (t4), para poder
+  // tomar la asistencia de su tramo el día de salida desde su área de hermano.
+  { id: 'pb10', numero: 421, hermanoId: 'h4', anio: 2027, tramoId: 't4', importe: 18, estado: 'Pagada', fechaSolicitud: '15 ene 2027' },
+  // (h8, h10, h12 tenían sitio en 2026 y aún no han renovado → "Por renovar")
   // (h6 está de baja y h11 es nueva sin sitio → "Sin papeleta")
   ...generarPapeletasDemo(),
 ]

@@ -1,6 +1,7 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { getWebPublica } from '../lib/webPublica'
 import { useHermandadSettings } from '../lib/hermandadSettings'
+import { getSuscripcion, tieneCapacidad } from '../lib/suscripcion'
 import { LogoMark } from '../components/Logo'
 import SitioContenido from '../components/SitioContenido'
 
@@ -15,6 +16,21 @@ export default function SitioPublico() {
   const preview = params.get('preview') === '1'
   const web = getWebPublica()
   const hermandad = useHermandadSettings()
+  // La web pública solo se sirve si la hermandad tiene un pack que incluya la
+  // capacidad «web». La vista previa del panel (?preview=1) no se filtra: quien
+  // llega ahí ya está dentro del módulo Web, que su propio pack le habilita.
+  const conWeb = tieneCapacidad(getSuscripcion(), 'web')
+
+  if (!preview && !conWeb) {
+    return (
+      <div className="sitio-noweb">
+        <LogoMark size={40} />
+        <h1>Esta web no está disponible</h1>
+        <p>La hermandad no tiene contratada la web pública en su suscripción.</p>
+        <Link to="/hermano" className="sitio-btn">Área del hermano</Link>
+      </div>
+    )
+  }
 
   if (!preview && (!web.publicada || web.slug !== slug)) {
     return (

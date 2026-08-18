@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import HermanoPicker from '../../components/HermanoPicker'
 import { LogoMark } from '../../components/Logo'
+import AsistenciaTramo from '../../components/AsistenciaTramo'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { INCIDENCIAS_INICIALES, TIPOS_INCIDENCIA_POR_DEFECTO, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
@@ -890,6 +891,19 @@ function TramoFicha({
           </dd>
         </div>
       </dl>
+
+      <div className="assign-box">
+        <label>Asistencia · día de salida {edicionActual}</label>
+        <p className="form-hint">
+          Confírmala aquí o deja que la marque el diputado del tramo desde su área de hermano: se
+          sincroniza al instante en ambos sitios.
+        </p>
+        <AsistenciaTramo
+          anio={edicionActual}
+          miembros={confirmados.map((a) => ({ hermano: a.hermano, puesto: a.puesto }))}
+          porQuien="Secretaría"
+        />
+      </div>
 
       <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Cabildo</p>
 

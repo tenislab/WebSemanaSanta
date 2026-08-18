@@ -1,17 +1,19 @@
-F4 · Sección de precios en la portada
-=====================================
+F4 + F5 · entrega combinada (aplica sobre lo que tienes ahora en main)
+======================================================================
 
-Cambian SOLO 2 archivos: src/pages/Landing.tsx y src/styles/global.css
+Cambian 14 archivos, todos dentro de src/. Incluye F4 (precios) y F5
+(papeleta doble, bajas con renumeración, packs de suscripción y asistencia
+del diputado de tramo).
 
-OPCIÓN A (recomendada) — aplicar el parche:
-  git apply F4-precios.patch
+OPCIÓN A (recomendada) — aplicar el parche desde la raíz del repo:
+  git apply F4-F5.patch
 
 OPCIÓN B — copiar los archivos tal cual:
-  Copia src/pages/Landing.tsx  y  src/styles/global.css
-  de esta carpeta ENCIMA de los mismos de tu proyecto.
-  (Respeta las rutas: van dentro de src/, NO en la raíz.)
+  Copia la carpeta src/ de este zip ENCIMA de la de tu proyecto
+  (respeta las rutas: todo va dentro de src/, NADA en la raíz).
 
 Además, borra el zip suelto que quedaba en la raíz del repo:
   git rm PROYECTOCOMPLETOLIMPIO.zip
 
-Luego: git add -A && git commit -m "F4 precios" && git push
+Luego:
+  git add -A && git commit -m "F4+F5" && git push

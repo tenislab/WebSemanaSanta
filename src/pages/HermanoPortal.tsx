@@ -4,6 +4,7 @@ import { LogoMark } from '../components/Logo'
 import EscudoHermandad from '../components/EscudoHermandad'
 import PapeletaTicket from '../components/PapeletaTicket'
 import PapeletaModeloRender from '../components/PapeletaModeloRender'
+import AsistenciaTramo from '../components/AsistenciaTramo'
 import { getModeloPapeleta } from '../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
@@ -16,7 +17,7 @@ import {
   getPrecioBase,
   precioDeTramo,
 } from '../lib/tramos'
-import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
+import { repartoCompleto, repartoPorTramo, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
 import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
 import {
   useSolicitudesPapeleta,
@@ -503,6 +504,24 @@ export default function HermanoPortal() {
       : undefined
   }, [papeletas, campana.anio, tramos, hermanos, renovacion])
 
+  // Diputado de tramo: si el hermano tiene esa etiqueta y sitio asignado, puede
+  // gestionar la asistencia de los hermanos de SU tramo desde su propia área.
+  const esDiputadoTramo = useMemo(
+    () => (hermanoPrincipal?.etiquetas ?? []).includes('Diputado de tramo'),
+    [hermanoPrincipal],
+  )
+  const tramoDelDiputado = asignacion?.tramo ?? null
+  const miembrosTramo = useMemo(() => {
+    if (!esDiputadoTramo || !tramoDelDiputado) return []
+    const activas = papeletas.filter((p) => p.anio === campana.anio)
+    const porTramo = repartoPorTramo(
+      repartoCompleto(tramos, activas, (id) => hermanos.find((h) => h.id === id), new Set()),
+    )
+    return (porTramo.get(tramoDelDiputado.id) ?? [])
+      .filter((a) => a.estado !== 'Excede aforo')
+      .map((a) => ({ hermano: a.hermano, puesto: a.puesto }))
+  }, [esDiputadoTramo, tramoDelDiputado, papeletas, campana.anio, tramos, hermanos])
+
   const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
   /** ¿Participó el año anterior? (cualquier papeleta emitida, con o sin tramo): decide qué fecha de apertura le aplica. */
   const participoAnoAnterior = hermanoPrincipal
@@ -962,7 +981,7 @@ export default function HermanoPortal() {
             </div>
             <div className="portal__card-mini">
               <span className="portal__card-mini__label">Nº de hermano</span>
-              <span className="portal__card-mini__value">{hermanoPrincipal.numero}</span>
+              <span className="portal__card-mini__value">{hermanoPrincipal.numero > 0 ? hermanoPrincipal.numero : '—'}</span>
               <span className="portal__card-mini__sub">{hermanoPrincipal.estado}</span>
             </div>
           </div>
@@ -1005,6 +1024,31 @@ export default function HermanoPortal() {
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {/* Diputado de tramo: asistencia de los hermanos de su tramo el día de salida */}
+        {esDiputadoTramo && (
+          <section className="portal__section">
+            <h2>Mi tramo · día de salida {campana.anio}</h2>
+            {tramoDelDiputado ? (
+              <>
+                <p className="portal__lead">
+                  Eres diputado/a del tramo <b>{etiquetaTramo(tramoDelDiputado)}</b>. Confirma quién sale
+                  y quién no (con el motivo). La secretaría lo ve al instante en el panel.
+                </p>
+                <AsistenciaTramo
+                  anio={campana.anio}
+                  miembros={miembrosTramo}
+                  porQuien={hermanoPrincipal?.nombre ?? 'Diputado de tramo'}
+                />
+              </>
+            ) : (
+              <p className="portal__lead">
+                Cuando tengas tu sitio asignado en el cortejo, aquí verás a los hermanos de tu tramo
+                para tomar la asistencia del día de salida.
+              </p>
+            )}
           </section>
         )}
 

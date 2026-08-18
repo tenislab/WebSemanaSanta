@@ -110,8 +110,9 @@ export default function Papeletas() {
   const [ajustesOpen, setAjustesOpen] = useState(false)
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modelo, setModelo] = useState<ModeloPapeleta | null>(() => getModeloPapeleta())
-  // Dos salidas de la papeleta: móvil (con QR, para el correo) y física (sin QR, para imprimir).
-  const [variantePapeleta, setVariantePapeleta] = useState<'movil' | 'fisica'>('movil')
+  // Salidas de la papeleta: móvil (con QR, para el correo), física (sin QR, para
+  // imprimir) o las dos a la vez (se muestran e imprimen ambas).
+  const [variantePapeleta, setVariantePapeleta] = useState<'movil' | 'fisica' | 'ambas'>('movil')
   const [imprimirOpen, setImprimirOpen] = useState(false)
   const [imprimirEstados, setImprimirEstados] = useState<Record<string, boolean>>({ Asignada: true, Pagada: true, Entregada: true })
   const [listaImpresion, setListaImpresion] = useState<ItemImpresion[] | null>(null)
@@ -874,40 +875,92 @@ export default function Papeletas() {
                       >
                         🖨️ Física (sin QR)
                       </button>
+                      <button
+                        type="button"
+                        className={`chip chip--toggle${variantePapeleta === 'ambas' ? ' chip--active' : ''}`}
+                        onClick={() => setVariantePapeleta('ambas')}
+                      >
+                        📱+🖨️ Las dos
+                      </button>
                     </div>
-                    {modelo ? (
-                      <PapeletaModeloRender
-                        modelo={modelo}
-                        sinQr={variantePapeleta === 'fisica'}
-                        datos={{
-                          hermano: h,
-                          papeleta: actual,
-                          tramoEtiqueta: tramoActual ? etiquetaTramo(tramoActual) : null,
-                          puesto: asig?.puesto ?? null,
-                          hermandadNombre: hermandad.nombreLegal || (user?.user_metadata?.hermandad as string | undefined) || '',
-                          fechaSalida: campana.fechaSalida,
-                        }}
-                      />
-                    ) : (
-                      <PapeletaTicket
-                        papeleta={actual}
-                        hermano={h}
-                        hermandad={hermandad}
-                        tramo={tramoActual}
-                        puesto={asig?.puesto ?? null}
-                        excedeAforo={asig?.estado === 'Excede aforo'}
-                        opcion={actual.opcion}
-                        sinQr={variantePapeleta === 'fisica'}
-                      />
+                    {variantePapeleta !== 'fisica' && (
+                      <div className="papeleta-variante">
+                        {variantePapeleta === 'ambas' && (
+                          <p className="papeleta-variante__lbl no-print">📱 Versión de móvil · con QR</p>
+                        )}
+                        {modelo ? (
+                          <PapeletaModeloRender
+                            modelo={modelo}
+                            sinQr={false}
+                            datos={{
+                              hermano: h,
+                              papeleta: actual,
+                              tramoEtiqueta: tramoActual ? etiquetaTramo(tramoActual) : null,
+                              puesto: asig?.puesto ?? null,
+                              hermandadNombre: hermandad.nombreLegal || (user?.user_metadata?.hermandad as string | undefined) || '',
+                              fechaSalida: campana.fechaSalida,
+                            }}
+                          />
+                        ) : (
+                          <PapeletaTicket
+                            papeleta={actual}
+                            hermano={h}
+                            hermandad={hermandad}
+                            tramo={tramoActual}
+                            puesto={asig?.puesto ?? null}
+                            excedeAforo={asig?.estado === 'Excede aforo'}
+                            opcion={actual.opcion}
+                            sinQr={false}
+                          />
+                        )}
+                      </div>
+                    )}
+                    {variantePapeleta !== 'movil' && (
+                      <div className="papeleta-variante papeleta-variante--fisica">
+                        {variantePapeleta === 'ambas' && (
+                          <p className="papeleta-variante__lbl no-print">🖨️ Versión física · sin QR</p>
+                        )}
+                        {modelo ? (
+                          <PapeletaModeloRender
+                            modelo={modelo}
+                            sinQr={true}
+                            datos={{
+                              hermano: h,
+                              papeleta: actual,
+                              tramoEtiqueta: tramoActual ? etiquetaTramo(tramoActual) : null,
+                              puesto: asig?.puesto ?? null,
+                              hermandadNombre: hermandad.nombreLegal || (user?.user_metadata?.hermandad as string | undefined) || '',
+                              fechaSalida: campana.fechaSalida,
+                            }}
+                          />
+                        ) : (
+                          <PapeletaTicket
+                            papeleta={actual}
+                            hermano={h}
+                            hermandad={hermandad}
+                            tramo={tramoActual}
+                            puesto={asig?.puesto ?? null}
+                            excedeAforo={asig?.estado === 'Excede aforo'}
+                            opcion={actual.opcion}
+                            sinQr={true}
+                          />
+                        )}
+                      </div>
                     )}
                     <p className="form-hint no-print">
                       {variantePapeleta === 'movil'
                         ? 'Versión de móvil: lleva el QR de verificación. Es la que se envía al hermano por correo (envío real al conectar la base de datos).'
-                        : 'Versión física: sin QR, pensada para imprimir en papel.'}
+                        : variantePapeleta === 'fisica'
+                        ? 'Versión física: sin QR, pensada para imprimir en papel.'
+                        : 'Se sacan las dos: la de móvil con QR (para enviar por correo) y la física sin QR (para imprimir). Al imprimir salen ambas.'}
                     </p>
                     <div className="assign-box__row no-print" style={{ marginTop: '0.4rem' }}>
                       <button className="btn btn-outline btn-sm" onClick={() => window.print()}>
-                        {variantePapeleta === 'movil' ? 'Descargar / enviar (con QR)' : 'Imprimir física (sin QR)'}
+                        {variantePapeleta === 'movil'
+                          ? 'Descargar / enviar (con QR)'
+                          : variantePapeleta === 'fisica'
+                          ? 'Imprimir física (sin QR)'
+                          : 'Imprimir / enviar las dos'}
                       </button>
                     </div>
                     {actual.estado === 'Asignada' && actual.pagoComunicado && (
