@@ -248,7 +248,9 @@ export default function HermanoPortal() {
     setErrorLogin(null)
     setErrorSolicitud(null)
     setSolicitudEnviada(false)
-    setDniInput('')
+    // Se conserva el DNI que venga en el enlace (…/hermano?dni=…), que es como
+    // llegan los hermanos desde un correo: si no, al elegir hermandad se borraba.
+    setDniInput(searchParams.get('dni') ?? '')
     setClaveInput('')
   }
 

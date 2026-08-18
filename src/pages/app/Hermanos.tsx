@@ -147,6 +147,10 @@ export default function Hermanos() {
       direccion: selected?.direccion && selected.direccion !== 'Sin datos' ? selected.direccion : '',
     })
     setContactoSaved(false)
+    // Solo al CAMBIAR de hermano (por eso la dependencia es el id y no la ficha
+    // entera): si dependiera de cada campo, el formulario se reiniciaría solo
+    // mientras se está escribiendo en él.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id])
 
   const filtered = useMemo(() => {

@@ -1,0 +1,47 @@
+CABILDO — lint, limpieza y documentación
+========================================
+
+APLÍCALO ASÍ (desde la raíz del repo):
+
+    git apply cambios.patch
+    npm install          <-- IMPORTANTE: hay dependencias nuevas (ESLint)
+    git add -A
+    git commit -m "Lint, limpieza y documentación"
+    git push
+
+Con eso queda todo. El parche YA BORRA los archivos sueltos que había en la
+raíz (F4-F5.patch, F4-precios.patch, LEEME.txt), no tienes que hacer nada.
+
+
+QUÉ ENTRA
+---------
+· ESLint con el plugin de hooks de React: es el que detecta automáticamente
+  los fallos de "estado obsoleto" que causaron los bugs de las auditorías.
+  Queda en CERO avisos.  ->  npm run lint
+
+· Tres arreglos de limpieza:
+  - La protección que impide ver el panel mientras se comprueba el doble
+    factor nunca se activaba. Ahora funciona.
+  - El enlace /hermano?dni=... no rellenaba el DNI (es como llegarán los
+    hermanos desde un correo).
+  - Un campo declarado y sin usar en ninguna parte.
+
+· docs/HOJA-DE-RUTA.md — qué está hecho y qué falta, con TODO el detalle de
+  conectar Supabase, los mandatos SEPA y las devoluciones del banco, los
+  correos (SPF/DKIM/DMARC, proveedores y costes) y la pasarela de pago.
+
+· docs/COMO-TRABAJAR.md — cómo hay que trabajar en este repo: las tres
+  comprobaciones antes de entregar, cómo se preparan las entregas y las
+  trampas conocidas del proyecto.
+
+· .gitignore ahora ignora *.patch, *.zip y LEEME.txt: aunque extraigas una
+  entrega sobre el repo, esos archivos ya no se te cuelan en el commit.
+  (Esto ya había pasado tres veces.)
+
+
+SI ALGO FALLA
+-------------
+Si "git apply" se queja, es que el repo tiene cambios que yo no veía.
+Alternativa: copia las carpetas src/ y docs/ y los archivos sueltos
+(.gitignore, README.md, package.json, package-lock.json, eslint.config.js)
+encima de los tuyos, y borra a mano F4-F5.patch, F4-precios.patch y LEEME.txt.

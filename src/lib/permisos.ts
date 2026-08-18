@@ -86,7 +86,6 @@ export function usePermisosPorCargo(): Record<Cargo, string[]> {
   useEffect(() => {
     setPermisos(getPermisosPorCargo())
     // Se relee de localStorage (ya actualizado por usePermisosSincronizados) cada vez que llega una versión nueva.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version])
   return permisos
 }

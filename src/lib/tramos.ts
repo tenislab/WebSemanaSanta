@@ -97,7 +97,6 @@ export function useTramos(): Tramo[] {
     return () => {
       cancelado = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return tramos
 }

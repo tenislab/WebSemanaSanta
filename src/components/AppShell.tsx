@@ -172,6 +172,10 @@ export default function AppShell() {
             moduloPermitidoPorPack(suscripcion, item.modulo),
         ),
       })).filter((group) => group.items.length > 0),
+    // `permisosVersion` no se usa dentro a propósito: es un contador que sube
+    // cuando llegan los permisos reales desde la base de datos, y está aquí
+    // justamente para recalcular el menú en ese momento.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [cargo, permisosVersion, suscripcion],
   )
 

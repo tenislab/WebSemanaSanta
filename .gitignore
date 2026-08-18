@@ -28,3 +28,10 @@ pnpm-debug.log*
 *.ntvs*
 *.njsproj
 *.sln
+
+# entregas de Claude (parches y zips que se extraen sobre el repo)
+# Se ignoran a propósito: al aplicar una entrega, estos archivos caen en la raíz
+# y NO deben acabar en el repositorio. Ver docs/COMO-TRABAJAR.md.
+*.patch
+*.zip
+LEEME.txt

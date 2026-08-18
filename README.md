@@ -4,10 +4,13 @@
 papeletas de sitio, cortejo, tesorería y comunicaciones en una única
 plataforma, pensada para cualquier corporación del tamaño que sea.
 
-> Estado actual: **maqueta funcional de la parte pública + acceso**. La web
-> pública (landing) y la autenticación (iniciar sesión / crear hermandad)
-> están operativas y preparadas para conectarse con Supabase. El área privada
-> de gestión se construirá sobre esta base.
+> Estado actual: **aplicación completa en modo local**. Los quince módulos del
+> panel, el área del hermano y la web pública funcionan de principio a fin con
+> datos de ejemplo guardados en el navegador. Lo que falta (correos reales,
+> cobros, multidispositivo) necesita conectar la base de datos.
+>
+> 📋 **[Hoja de ruta](docs/HOJA-DE-RUTA.md)** — qué está hecho y qué falta.
+> 🛠️ **[Cómo trabajar](docs/COMO-TRABAJAR.md)** — normas de trabajo y trampas del repo.
 
 ## Tecnología
 
@@ -32,11 +35,17 @@ Otros comandos:
 npm run build      # compila para producción (carpeta dist/)
 npm run preview    # sirve la build de producción
 npm run typecheck  # comprueba tipos con TypeScript
+npm run lint       # revisión con ESLint (debe salir sin avisos)
+npm run lint:fix   # arregla lo que se pueda solo
 ```
+
+Antes de dar por buena cualquier tarea: `typecheck`, `lint` y `build`, los tres.
 
 ## Conectar Supabase
 
-La autenticación ya está cableada; solo faltan las claves.
+La app entera está cableada; solo faltan las claves. Para crear las tablas:
+`supabase/schema.sql` (base nueva) o `supabase/migracion-2026-08.sql` (base ya
+creada con una versión anterior).
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
 2. Ve a **Project Settings → API** y copia:

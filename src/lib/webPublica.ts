@@ -168,8 +168,6 @@ export interface WebPublica {
   noticias: Noticia[]
   paginas: PaginaWeb[]
   boletines: Boletin[]
-  /** Muestra en la web los últimos comunicados publicados. */
-  mostrarActualidad: boolean
 
   // Contacto
   email: string
@@ -240,7 +238,6 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
     },
   ],
   boletines: [],
-  mostrarActualidad: false,
 
   email: '',
   telefono: '',

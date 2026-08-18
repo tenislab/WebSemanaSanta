@@ -96,7 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ANTES de saber si necesita el segundo paso; hasta resolverlo no se puede
   // dejar entrar (si no, otra pestaña ya abierta en /app renderizaría el panel
   // un instante con la sesión a medio verificar).
-  const [mfaPendiente, setMfaPendiente] = useState<boolean | null>(false)
+  // Arranca en null («aún no se sabe») cuando hay Supabase: así la guardia de
+  // ProtectedRoute no deja ver el panel hasta comprobar si la sesión necesita el
+  // segundo paso. Antes empezaba en false y esa guardia no se activaba nunca.
+  const [mfaPendiente, setMfaPendiente] = useState<boolean | null>(isSupabaseConfigured ? null : false)
 
   useEffect(() => {
     if (!supabase) {

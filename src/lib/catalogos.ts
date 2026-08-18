@@ -41,7 +41,6 @@ export function useLista(clave: string, porDefecto: readonly string[]): string[]
     return () => {
       cancelado = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave])
   return lista
 }
