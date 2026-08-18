@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
+import HermanoPicker from '../../components/HermanoPicker'
 import { EVENTOS_INICIALES, TIPOS_EVENTO, type Evento, type TareaEvento, type TipoEvento } from '../../data/eventos'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
@@ -443,25 +444,16 @@ export default function Eventos() {
                       <span>{t.titulo}</span>
                     </label>
                     <div className="eventos-tarea__meta">
-                      <select
-                        value={t.trabajadorId ?? ''}
-                        onChange={(ev) => {
-                          const h = hermanos.find((x) => x.id === ev.target.value) ?? null
-                          asignarTarea(seleccionado.id, t.id, h)
-                        }}
-                      >
-                        <option value="">Sin asignar</option>
-                        {/* Si el asignado ya no está activo (baja o borrado), se
-                            mantiene visible para no perder la asignación en silencio. */}
-                        {t.trabajadorId && !hermanosActivos.some((h) => h.id === t.trabajadorId) && (
-                          <option value={t.trabajadorId}>
-                            {hermanoDe(t.trabajadorId)?.nombre ?? t.trabajadorNombre ?? 'Trabajador'} (ya no activo)
-                          </option>
-                        )}
-                        {hermanosActivos.map((h) => (
-                          <option key={h.id} value={h.id}>{h.nombre}</option>
-                        ))}
-                      </select>
+                      {/* Buscador, no lista: con un censo de verdad son cientos de
+                          nombres y un desplegable no hay quien lo use. */}
+                      <HermanoPicker
+                        hermanos={hermanosActivos}
+                        valorId={t.trabajadorId}
+                        onSelect={(h) => asignarTarea(seleccionado.id, t.id, h)}
+                        placeholder="Buscar hermano…"
+                        textoVacio="Sin asignar"
+                        nombreFueraDeLista={hermanoDe(t.trabajadorId)?.nombre ?? t.trabajadorNombre}
+                      />
                       <button
                         type="button"
                         className="icon-btn"

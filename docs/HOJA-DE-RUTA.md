@@ -4,7 +4,8 @@ Estado del proyecto y lo que queda para cerrarlo. Actualizado en agosto de 2026.
 
 La app está **completa como producto de gestión en modo local**: se puede enseñar
 entera, con datos de ejemplo, y todos los flujos funcionan de principio a fin.
-Casi todo lo que falta necesita la base de datos conectada.
+Lo que queda va en dos bloques: **F10–F13 se pueden hacer ya** (no dependen de
+nada de fuera) y **F14–F17 necesitan Supabase, el banco o el dominio**.
 
 ---
 
@@ -18,36 +19,53 @@ Casi todo lo que falta necesita la base de datos conectada.
 | **F5** | Papeleta de móvil (QR), física (sin QR) o las dos. Bajas con renumeración del censo. Cuatro packs de suscripción con control de acceso real. Asistencia del día de salida por el diputado de tramo. |
 | **F6** | Cuotas por ejercicio: salto de año con emisión anual a todo el censo, y «simular cobro» de la remesa. |
 | **F7** | Eventos y tareas: calendario, tareas por evento y trabajadores asignados. |
+| **F8** | Contenidos de la web editables de verdad: Historia y páginas con entradilla, párrafos con subtítulo y fotos reordenables; titulares con autoría y texto largo; cultos con cuándo, dónde y foto; secciones renombrables; la vista previa salta a lo que se está editando. Buscador de hermano en vez de lista desplegable. |
+| **F9** | Cabecera y pie configurables, mapa incrustado y la pestaña «Contacto» sacada a la luz. Ver abajo. |
 | **Auditorías** | Dos rondas (unas 60 incidencias). Corregidos, entre otros: el QR no se podía escanear, la impresión en tema oscuro salía ilegible, un token de CSS inexistente borraba bordes en media interfaz, doble cobro en fraccionamientos mensuales y un día de desfase en todas las fechas de cobro. |
 
----
+### Qué entró en F9
 
-## F8 — Rematar lo suelto *(se puede hacer ya, sin depender de nada)*
-
-Fase corta, todo en modo local:
-
-- **Refrescar el censo sin recargar.** Cuotas y Eventos lo leen una sola vez al
-  abrir la página; si se da de baja a alguien en otra pestaña, no se enteran.
-- **Tablets estrechas** (560–700 px): el editor de tramos se sale de la pantalla
-  y el botón flotante puede tapar el pie de la portada.
-- **Plantilla web «sobria»**: su color secundario no llega a aplicarse.
-- **Hermandades de muestra**: la baja solicitada ahí no se guarda.
-
----
-
-## F9 — Que los packs signifiquen algo *(local)*
-
-Hoy la única diferencia real entre packs es el dominio propio. El pack «Todo»
-promete comunicados multicanal e informes avanzados, pero esos módulos no
-distinguen el pack.
-
-- Decidir qué entra exactamente en cada pack.
-- Aplicarlo en el código (`CAPACIDAD_DE_MODULO` en `src/lib/suscripcion.ts`).
-- **Poner los precios definitivos**: los actuales son inventados.
+- **Cabecera**: se elige si se ve el logo, el nombre y el lema, el texto del
+  botón de la derecha (vacío = sin botón) y si la barra se queda arriba al bajar.
+- **Pie**: columnas de enlaces a medida (a una sección propia con `#cultos`, a
+  una página o a una dirección de fuera), datos de contacto, redes y aviso legal.
+  Antes era **una sola línea de texto**.
+- **Mapa incrustado** en la sección de contacto, dibujado a partir de la
+  dirección (sin clave de Google). Solo se incrustan enlaces de Google Maps: un
+  iframe a cualquier dirección escrita en el editor sería un agujero en la web
+  pública (`esDeGoogleMaps` en `src/lib/webPublica.ts`).
+- **Avisos en el editor** de lo que falta («tu web no dice dónde estáis»,
+  «el pie no tiene aviso legal», «hay enlaces que no llevan a ninguna parte»),
+  con un botón que lleva a la pestaña donde se arregla.
+- **Pestañas reordenadas**: primero lo que da forma a toda la web (diseño,
+  cabecera y pie, contacto) y después el contenido. «Contacto» estaba la última
+  y casi nadie llegaba a ella.
 
 ---
 
-## F10 — Conectar la base de datos *(necesita Supabase)*
+## Lo que queda
+
+El orden es el acordado: primero todo lo que se puede dejar terminado **sin
+configurar nada fuera**, y al final lo que depende de Supabase, del banco y del
+dominio.
+
+| Fase | Qué entra |
+|------|-----------|
+| **F10** | Galería por álbumes, portada y boletines. |
+| **F11** | Los documentos imprimibles, uno a uno, empezando por el orden del cortejo. |
+| **F12** | Campos propios en la ficha del hermano y sesgos guardados con nombre. |
+| **F13** | Calendario y tareas asignadas a cuentas del personal («mis tareas»). |
+| **F14** | Conectar Supabase. |
+| **F15** | Correos de verdad. |
+| **F16** | Cobros y domiciliaciones. |
+| **F17** | Dominio propio y remate. |
+
+Además, **cada 20 subidas** toca limpieza total: aviso y zip del proyecto
+completo y limpio, para que no se solapen entregas.
+
+---
+
+## F14 — Conectar la base de datos *(necesita Supabase)*
 
 La fase bisagra: todo lo demás depende de ella.
 
@@ -66,7 +84,7 @@ La fase bisagra: todo lo demás depende de ella.
 
 ---
 
-## F11 — Correos de verdad *(necesita Supabase + dominio)*
+## F15 — Correos de verdad *(necesita Supabase + dominio)*
 
 Hoy **todo el envío es simulado**.
 
@@ -104,7 +122,7 @@ cuota. Con registro de envíos y **baja de la lista** (obligatorio por RGPD).
 
 ---
 
-## F12 — Cobrar de verdad *(necesita Supabase)*
+## F16 — Cobrar de verdad *(necesita Supabase)*
 
 ### Domiciliaciones (cuotas) — por el banco
 
@@ -137,16 +155,16 @@ Para papeletas, donativos y lotería: **Redsys** (lo da el propio banco) o
 
 ---
 
-## F13 — La web, terminada *(necesita Supabase + dominio)*
+## F17 — La web, terminada *(necesita Supabase + dominio)*
 
 - Dominio propio funcionando de verdad (DNS y certificado).
-- Galería por álbumes.
-- Formulario de contacto que llegue a secretaría.
+- Formulario de contacto que llegue a secretaría (hoy la web da el correo y el
+  teléfono, pero no hay formulario: enviarlo necesita servidor).
 - Calendario público de cultos enlazado con el módulo de Eventos.
 
 ---
 
-## F14 — El acabado
+## Y de propina, cuando todo lo anterior esté
 
 - Histórico completo en el área del hermano (papeletas y cuotas de años
   anteriores, descarga de recibos).

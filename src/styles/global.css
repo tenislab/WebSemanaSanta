@@ -1383,6 +1383,24 @@ h1, h2, h3,
 .hermano-picker__opt:hover { background: var(--bg-sunken); }
 .hermano-picker__num { font-size: 0.74rem; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; }
 .hermano-picker__empty { padding: 0.6rem; font-size: 0.82rem; color: var(--text-muted); }
+/* Opción «sin asignar» y botón de limpiar (modo controlado: asignaciones que ya existen) */
+.hermano-picker__opt--vacio { color: var(--text-muted); font-style: italic; }
+/* Opción bajo el cursor o elegida con las flechas del teclado */
+.hermano-picker__opt--resaltada { background: var(--bg-sunken); }
+.hermano-picker__mas {
+  padding: 0.45rem 0.6rem; font-size: 0.76rem; color: var(--text-muted);
+  border-top: 1px solid var(--line); font-style: italic;
+}
+.hermano-picker__limpiar {
+  position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--bg-sunken); color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center; font-size: 0.7rem; line-height: 1;
+}
+.hermano-picker__limpiar:hover { color: var(--err-fg); }
+/* Dentro de la fila de una tarea, el buscador no debe comerse el ancho */
+.eventos-tarea__meta .hermano-picker { min-width: 13rem; flex: 1; }
+.eventos-tarea__meta .hermano-picker input[type='text'] { font-size: 0.82rem; padding: 0.3rem 1.7rem 0.3rem 0.5rem; }
 
 /* =========================================================================
    Papeleta de sitio (ticket con QR de vista previa)
@@ -1696,6 +1714,46 @@ h1, h2, h3,
 }
 .sitio-noweb h1 { font-family: Georgia, serif; }
 
+/* Aviso de lo que le falta a la web, arriba del editor: se ve desde cualquier
+   pestaña, porque el problema no era saber configurarlo sino no enterarse. */
+.cms-avisos {
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2, rgba(0,0,0,0.03));
+  margin-bottom: 1.1rem; overflow: hidden;
+}
+/* Se apoya en los tokens de estado, que ya cambian solos con el tema: un color
+   fijo aquí se volvía ilegible en oscuro. */
+.cms-avisos--grave { border-color: color-mix(in srgb, var(--warn-fg) 45%, var(--border)); background: var(--warn-bg); }
+.cms-avisos--grave .cms-avisos__head { color: var(--warn-fg); }
+.cms-avisos--ok {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.7rem 1rem; font-size: 0.86rem; color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--border)); background: var(--ok-bg);
+}
+.cms-avisos__head {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%;
+  padding: 0.75rem 1rem; background: transparent; border: 0; cursor: pointer;
+  color: var(--text); font-size: 0.9rem; text-align: left;
+}
+.cms-avisos__icono {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.72rem; font-weight: 800; color: #fff; background: var(--text-muted);
+}
+.cms-avisos--grave .cms-avisos__icono { background: var(--warn-fg); color: var(--warn-bg); }
+.cms-avisos--ok .cms-avisos__icono { background: var(--ok-fg); color: var(--ok-bg); }
+.cms-avisos__flecha { margin-left: auto; color: var(--text-muted); font-size: 0.7rem; }
+.cms-avisos__lista { list-style: none; margin: 0; padding: 0 1rem 0.85rem; display: flex; flex-direction: column; gap: 0.45rem; }
+.cms-avisos__lista li {
+  display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+  font-size: 0.86rem; color: var(--text-muted); line-height: 1.45;
+}
+.cms-avisos__lista li span { flex: 1 1 260px; }
+.cms-avisos--grave .cms-avisos__lista li { color: color-mix(in srgb, var(--warn-fg) 80%, var(--text)); }
+.form-hint--alerta { color: var(--warn-fg); font-weight: 600; }
+/* Un campo que no vale se marca también en el propio campo, no solo con texto
+   debajo: al escribir se mira el campo, no lo que hay al lado. */
+input[aria-invalid='true'], textarea[aria-invalid='true'] { border-color: var(--warn-fg); }
+
 /* CMS de la web: pestañas, layout con vista previa, chips de páginas */
 .cms-tabs {
   display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 1.2rem;
@@ -1741,6 +1799,29 @@ h1, h2, h3,
 .galeria-editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.8rem; }
 .galeria-editor__item { display: flex; flex-direction: column; gap: 0.35rem; }
 .galeria-editor__item img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 8px; }
+.galeria-editor__acciones { display: flex; gap: 0.25rem; justify-content: center; }
+
+/* Editor de párrafos (Historia, páginas y titulares) */
+.editor-parrafo { display: flex; flex-direction: column; gap: 0.5rem; }
+.editor-parrafo__head { display: flex; align-items: center; gap: 0.5rem; }
+.editor-parrafo__head input { flex: 1; min-width: 0; }
+.editor-parrafo__n {
+  width: 1.6rem; height: 1.6rem; flex: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.74rem; font-weight: 700;
+  background: var(--bg-sunken); color: var(--text-muted); border: 1px solid var(--line);
+}
+.editor-parrafo__acciones { display: flex; gap: 0.2rem; flex: none; }
+.editor-parrafo__acciones .icon-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* Título a medida de cada sección, junto a su casilla */
+.seccion-item__nombre {
+  flex: 1; min-width: 0; margin: 0 0.6rem;
+  padding: 0.3rem 0.55rem; font: inherit; font-size: 0.82rem;
+  background: var(--bg-sunken); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.seccion-item__nombre:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
 
 /* Página pública — usa variables: --sitio-color, --sitio-color2, --sitio-fuente.
    Colores base según el tema (claro/oscuro). */
@@ -1752,6 +1833,10 @@ h1, h2, h3,
   min-height: 100vh;
   font-family: var(--sitio-fuente, Georgia, serif);
   --sitio-bg: #ffffff; --sitio-bg2: #f6f2ec; --sitio-fg: #222; --sitio-muted: #666; --sitio-linea: rgba(0,0,0,0.1);
+  /* Ancho de lectura de la web. Lo comparten el contenido y el pie: si el pie
+     va suelto a todo lo ancho, las columnas quedan desparramadas en pantallas
+     grandes y no se alinean con el texto de arriba. */
+  --sitio-ancho: 980px;
 }
 .sitio[data-tema='oscuro'] { --sitio-bg: #16110f; --sitio-bg2: #1e1815; --sitio-fg: #ece3d9; --sitio-muted: #a99; --sitio-linea: rgba(255,255,255,0.12); }
 .sitio { background: var(--sitio-bg); color: var(--sitio-fg); }
@@ -1759,9 +1844,13 @@ h1, h2, h3,
 .sitio__nav {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
   padding: 0.9rem 1.6rem; border-bottom: 1px solid var(--sitio-linea);
-  position: sticky; top: 0; background: color-mix(in srgb, var(--sitio-bg) 92%, transparent); backdrop-filter: blur(6px); z-index: 10;
+  background: color-mix(in srgb, var(--sitio-bg) 92%, transparent); backdrop-filter: blur(6px); z-index: 10;
 }
+/* La barra se queda arriba al bajar solo si la hermandad lo pide. */
+.sitio__nav--fija { position: sticky; top: 0; }
 .sitio__brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; color: var(--sitio-color); }
+.sitio__brand-texto { display: flex; flex-direction: column; line-height: 1.2; }
+.sitio__brand-texto small { font-weight: 400; font-size: 0.72rem; color: var(--sitio-muted); letter-spacing: 0.3px; }
 .sitio__logo { width: 34px; height: 34px; object-fit: contain; }
 .sitio__menu { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; }
 .sitio__menu a { color: var(--sitio-fg); text-decoration: none; font-size: 0.9rem; }
@@ -1780,8 +1869,11 @@ h1, h2, h3,
 .sitio__hero h1 { font-size: clamp(1.7rem, 7cqi, 3.4rem); margin-bottom: 0.6rem; line-height: 1.1; }
 .sitio__lema { font-size: 1.15rem; opacity: 0.94; margin-bottom: 1.4rem; }
 
-.sitio__main { max-width: 980px; margin: 0 auto; padding: 2.5rem 1.5rem; }
-.sitio__seccion { margin-bottom: 2.8rem; scroll-margin-top: 80px; }
+.sitio__main { max-width: var(--sitio-ancho); margin: 0 auto; padding: 2.5rem 1.5rem; }
+.sitio__seccion { margin-bottom: 2.8rem; scroll-margin-top: 1.2rem; }
+/* El hueco al saltar a una sección solo hace falta si la barra tapa: con la
+   cabecera suelta, esos 80 px eran un salto en blanco sin motivo. */
+.sitio--navfija .sitio__seccion { scroll-margin-top: 80px; }
 .sitio__seccion h2 { color: var(--sitio-color); font-size: 1.7rem; margin-bottom: 1rem; position: relative; }
 .sitio__seccion h2::after { content: ''; display: block; width: 48px; height: 3px; background: var(--sitio-color2); margin-top: 0.4rem; }
 .sitio__texto { line-height: 1.75; white-space: pre-wrap; }
@@ -1802,12 +1894,28 @@ h1, h2, h3,
 .sitio__foto figcaption { font-size: 0.82rem; color: var(--sitio-muted); margin-top: 0.3rem; text-align: center; }
 
 .sitio__contacto { list-style: none; padding: 0; line-height: 1.9; margin-bottom: 0.8rem; }
+.sitio__contacto a { color: inherit; text-decoration: none; }
+.sitio__contacto a:hover { color: var(--sitio-color); text-decoration: underline; }
+/* Datos a un lado y mapa al otro; en estrecho, uno debajo del otro. */
+.sitio__contacto-grid { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1.4fr); gap: 1.4rem; align-items: start; }
+.sitio__mapa { border: 1px solid var(--sitio-linea); border-radius: 10px; overflow: hidden; background: var(--sitio-bg2); }
+.sitio__mapa iframe { display: block; width: 100%; height: 300px; border: 0; }
 
 .sitio__foot {
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
-  padding: 1.4rem 1.6rem; border-top: 1px solid var(--sitio-linea); color: var(--sitio-muted); font-size: 0.85rem;
+  padding: 1.6rem 1.5rem 1.4rem; border-top: 1px solid var(--sitio-linea); color: var(--sitio-muted); font-size: 0.85rem;
   background: var(--sitio-bg2);
 }
+.sitio__foot-cols {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1.2rem 2rem;
+  padding-bottom: 1.3rem; margin-bottom: 1.1rem; border-bottom: 1px solid var(--sitio-linea);
+}
+.sitio__foot-cols, .sitio__foot-barra, .sitio__foot-legal { max-width: var(--sitio-ancho); margin-left: auto; margin-right: auto; }
+.sitio__foot-col { display: flex; flex-direction: column; gap: 0.35rem; }
+.sitio__foot-col h4 { color: var(--sitio-color); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.15rem; }
+.sitio__foot-col a { color: var(--sitio-fg); text-decoration: none; }
+.sitio__foot-col a:hover { color: var(--sitio-color); text-decoration: underline; }
+.sitio__foot-barra { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.sitio__foot-legal { margin-top: 0.9rem; font-size: 0.76rem; opacity: 0.8; line-height: 1.6; }
 .sitio__foot-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .sitio__redes { display: flex; gap: 0.6rem; }
 .sitio__red { color: var(--sitio-color); text-decoration: none; font-size: 0.82rem; font-weight: 600; }
@@ -1846,7 +1954,7 @@ h1, h2, h3,
 .sitio[data-plantilla='sobria'] .sitio__hero-inner { max-width: 640px; padding: 0 0.5rem; }
 .sitio[data-plantilla='sobria'] .sitio__hero h1 { font-weight: 300; letter-spacing: -0.5px; }
 .sitio[data-plantilla='sobria'] .sitio__lema { font-weight: 300; opacity: 0.85; }
-.sitio[data-plantilla='sobria'] .sitio__main { max-width: 720px; }
+.sitio[data-plantilla='sobria'] { --sitio-ancho: 720px; }
 .sitio[data-plantilla='sobria'] .sitio__seccion { margin-bottom: 4rem; }
 .sitio[data-plantilla='sobria'] .sitio__seccion h2 { font-weight: 300; font-size: 1.2rem; letter-spacing: 3px; text-transform: uppercase; color: var(--sitio-muted); }
 .sitio[data-plantilla='sobria'] .sitio__seccion h2::after { display: none; }
@@ -1871,6 +1979,15 @@ h1, h2, h3,
 .sitio[data-plantilla='moderna'] .sitio__noticia { border-radius: 18px; }
 .sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 50px; padding: 15px 34px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
 
+/* El pie y el mapa siguen a la plantilla, como el resto de la web. */
+.sitio[data-plantilla='clasica'] .sitio__foot-cols { text-align: center; }
+.sitio[data-plantilla='clasica'] .sitio__foot-col { align-items: center; }
+.sitio[data-plantilla='clasica'] .sitio__mapa { border-radius: 4px; }
+.sitio[data-plantilla='sobria'] .sitio__mapa { border-radius: 0; }
+.sitio[data-plantilla='sobria'] .sitio__foot-col h4 { color: var(--sitio-muted); font-weight: 400; letter-spacing: 3px; }
+.sitio[data-plantilla='moderna'] .sitio__mapa { border: 0; border-radius: 18px; box-shadow: 0 14px 34px rgba(0,0,0,0.18); }
+.sitio[data-plantilla='moderna'] .sitio__foot-col h4 { font-weight: 900; letter-spacing: 0.5px; }
+
 /* Adaptación a anchos estrechos (vista previa y móvil real): mismo diseño,
    pero con menos aire y la navegación que fluye a varias líneas. */
 @container sitio (max-width: 560px) {
@@ -1881,6 +1998,12 @@ h1, h2, h3,
   .sitio__lema { font-size: 1rem; }
   .sitio__main { padding: 1.8rem 1.1rem; }
   .sitio__seccion { margin-bottom: 2rem; }
+  /* En estrecho el menú va a varias líneas y la barra es mucho más alta. */
+  .sitio--navfija .sitio__seccion { scroll-margin-top: 140px; }
+  .sitio__contacto-grid { grid-template-columns: 1fr; }
+  .sitio__mapa iframe { height: 220px; }
+  .sitio__foot { padding: 1.3rem 1.1rem; }
+  .sitio__foot-cols { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem 1.2rem; }
   .sitio[data-plantilla='moderna'] .sitio__seccion h2 { font-size: 1.6rem; }
   .sitio[data-plantilla='moderna'] .sitio__lema { font-size: 1.05rem; }
 }
@@ -1898,6 +2021,29 @@ h1, h2, h3,
 .sitio__pagina h3 { color: var(--sitio-color); font-size: 1.35rem; margin: 0.2rem 0 0.5rem; }
 .sitio__pagina-entradilla { font-size: 1.1rem; font-style: italic; margin-bottom: 1rem; }
 .sitio__parrafo { margin-bottom: 1rem; }
+/* Entradilla de una sección (Historia): una frase que abre, en cursiva. */
+.sitio__entradilla { font-size: 1.1rem; font-style: italic; margin-bottom: 1.2rem; opacity: 0.9; }
+/* Sección que se está editando: se marca en la vista previa del panel para no
+   perder de vista dónde caerá lo que se escribe. */
+.sitio__seccion--activa {
+  position: relative;
+  background: color-mix(in srgb, var(--sitio-color2) 9%, transparent);
+  border-radius: 8px;
+}
+.sitio__seccion--activa::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: 3px; background: var(--sitio-color2);
+}
+/* La cabecera y el pie no son secciones, pero también se editan: mismo aviso
+   de «estás tocando esto» en la vista previa. */
+.sitio__marco--activo { box-shadow: inset 0 0 0 2px var(--sitio-color2); }
+/* Autoría de un titular («Juan de Mesa, 1620»), bajo su nombre. */
+.sitio__autoria {
+  font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--sitio-color2); margin: 0.1rem 0 0.5rem;
+}
+.sitio__culto-foto { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; margin-bottom: 0.7rem; }
+.sitio__culto-cuando { font-weight: 600; color: var(--sitio-color); margin: 0.1rem 0 0.4rem; }
 .sitio__parrafo h4 { color: var(--sitio-color); margin-bottom: 0.3rem; }
 
 /* =========================================================================

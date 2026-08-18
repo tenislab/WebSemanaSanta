@@ -51,27 +51,44 @@ export const TIPOGRAFIAS: { id: TipografiaWeb; nombre: string; css: string }[] =
   { id: 'dancing', nombre: 'Dancing Script (caligrafía)', css: "'Dancing Script', cursive" },
 ]
 
-export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string }> = {
-  historia: { nombre: 'Historia' },
-  titulares: { nombre: 'Titulares' },
-  cultos: { nombre: 'Cultos y actos' },
-  galeria: { nombre: 'Galería de fotos' },
-  actualidad: { nombre: 'Actualidad (noticias)' },
-  paginas: { nombre: 'Páginas y textos' },
-  boletines: { nombre: 'Boletines' },
-  contacto: { nombre: 'Contacto' },
+/**
+ * `nombre` es como se llama la sección **en el editor**, con sus aclaraciones
+ * («Actualidad (noticias)»); `publico` es como sale **en la web**, limpio. Antes
+ * eran dos listas en dos archivos y la coletilla del editor se coló en el menú.
+ */
+export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string; publico: string }> = {
+  historia: { nombre: 'Historia', publico: 'Historia' },
+  titulares: { nombre: 'Titulares', publico: 'Titulares' },
+  cultos: { nombre: 'Cultos y actos', publico: 'Cultos' },
+  galeria: { nombre: 'Galería de fotos', publico: 'Galería' },
+  actualidad: { nombre: 'Actualidad (noticias)', publico: 'Actualidad' },
+  paginas: { nombre: 'Páginas y textos', publico: 'La Hermandad' },
+  boletines: { nombre: 'Boletines', publico: 'Boletines' },
+  contacto: { nombre: 'Contacto', publico: 'Contacto' },
+}
+
+/** Cómo se titula una sección en la web: el nombre a medida, o el de fábrica. */
+export function nombreSeccion(s: SeccionConfig): string {
+  return s.nombre?.trim() || SECCIONES_INFO[s.tipo].publico
 }
 
 export interface SeccionConfig {
   tipo: TipoSeccion
   visible: boolean
+  /** Título a medida para esta sección («Cultos y actos» → «Nuestros cultos»). Vacío = el de fábrica. */
+  nombre?: string
 }
 
 export interface Titular {
   id: string
   nombre: string
   fotoDataUrl: string | null
+  /** Una línea de presentación, bajo el nombre. */
   descripcion: string
+  /** Autor y época de la imagen («Juan de Mesa, 1620»). */
+  autoria: string
+  /** Texto largo: historia de la imagen, restauraciones, devoción… */
+  parrafos: ParrafoPagina[]
 }
 
 export interface FotoGaleria {
@@ -84,6 +101,10 @@ export interface CultoWeb {
   id: string
   titulo: string
   detalle: string
+  /** Cuándo es, en texto libre («del 3 al 7 de marzo, 20:30»). */
+  fecha: string
+  lugar: string
+  fotoDataUrl: string | null
 }
 
 /** Noticia de la sección Actualidad. */
@@ -101,6 +122,25 @@ export interface ParrafoPagina {
   id: string
   subtitulo: string
   texto: string
+}
+
+/**
+ * Un bloque de contenido con formato: entradilla, párrafos con subtítulo y
+ * fotos. Es lo que usan la Historia y las páginas, para que en la web no haya
+ * secciones que sean solo un pegote de texto plano.
+ */
+export interface ContenidoRico {
+  entradilla: string
+  parrafos: ParrafoPagina[]
+  fotos: string[]
+}
+
+export const CONTENIDO_RICO_VACIO: ContenidoRico = { entradilla: '', parrafos: [], fotos: [] }
+
+/** ¿Tiene algo que enseñar este bloque? */
+export function contenidoVacio(c: ContenidoRico | undefined): boolean {
+  if (!c) return true
+  return !c.entradilla.trim() && c.fotos.length === 0 && !c.parrafos.some((p) => p.texto.trim() || p.subtitulo.trim())
 }
 
 /** Página de la sección «Páginas y textos» (Titulares, Historia, Junta…). */
@@ -128,6 +168,55 @@ export interface RedWeb {
   id: string
   tipo: TipoRed
   url: string
+}
+
+/** Qué se ve en la barra de arriba de la web y cómo se comporta. */
+export interface CabeceraWeb {
+  mostrarLogo: boolean
+  mostrarNombre: boolean
+  /** El lema, junto al nombre (además del que sale en la portada). */
+  mostrarLema: boolean
+  /** La barra se queda arriba al bajar por la página. */
+  fija: boolean
+  /** Botón de la derecha; vacío = no se pone ninguno. */
+  textoBoton: string
+}
+
+export const CABECERA_INICIAL: CabeceraWeb = {
+  mostrarLogo: true,
+  mostrarNombre: true,
+  mostrarLema: false,
+  fija: true,
+  textoBoton: 'Entrar',
+}
+
+export interface EnlacePie {
+  id: string
+  texto: string
+  url: string
+}
+
+/** Una columna de enlaces del pie («La hermandad», «Ayuda»…). */
+export interface ColumnaPie {
+  id: string
+  titulo: string
+  enlaces: EnlacePie[]
+}
+
+/** El pie de la web: columnas de enlaces, datos de contacto, redes y aviso legal. */
+export interface PieWeb {
+  columnas: ColumnaPie[]
+  mostrarContacto: boolean
+  mostrarRedes: boolean
+  /** Línea pequeña del final (protección de datos, aviso legal…). */
+  textoLegal: string
+}
+
+export const PIE_INICIAL: PieWeb = {
+  columnas: [],
+  mostrarContacto: true,
+  mostrarRedes: true,
+  textoLegal: '',
 }
 
 export interface WebPublica {
@@ -161,7 +250,7 @@ export interface WebPublica {
   secciones: SeccionConfig[]
 
   // Contenido
-  historia: string
+  historia: ContenidoRico
   titulares: Titular[]
   cultos: CultoWeb[]
   galeria: FotoGaleria[]
@@ -176,6 +265,12 @@ export interface WebPublica {
   /** URL de Google Maps (enlace o embed). */
   mapaUrl: string
   redes: RedWeb[]
+
+  // Cabecera y pie
+  cabecera: CabeceraWeb
+  pie: PieWeb
+  /** Enseña el mapa incrustado en la sección de contacto (además del enlace). */
+  mapaIncrustado: boolean
 
   // Pie
   textoPie: string
@@ -215,15 +310,43 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
 
   secciones: SECCIONES_POR_DEFECTO,
 
-  historia:
-    'Fundada por un grupo de vecinos devotos, nuestra hermandad mantiene viva desde entonces la devoción a sus Sagrados Titulares. Desde su sede canónica organiza los cultos anuales, la estación de penitencia y una intensa labor de caridad con las familias del barrio.',
+  historia: {
+    entradilla: 'Siglos de devoción en el mismo barrio.',
+    parrafos: [
+      {
+        id: 'his-1',
+        subtitulo: 'Fundación',
+        texto:
+          'Fundada por un grupo de vecinos devotos, nuestra hermandad mantiene viva desde entonces la devoción a sus Sagrados Titulares.',
+      },
+      {
+        id: 'his-2',
+        subtitulo: 'Hoy',
+        texto:
+          'Desde su sede canónica organiza los cultos anuales, la estación de penitencia y una intensa labor de caridad con las familias del barrio.',
+      },
+    ],
+    fotos: [],
+  },
   titulares: [
-    { id: 'tit-1', nombre: 'Ntro. Padre Jesús', fotoDataUrl: null, descripcion: 'Sagrada imagen del Señor.' },
-    { id: 'tit-2', nombre: 'María Santísima', fotoDataUrl: null, descripcion: 'Bendita imagen de la Virgen.' },
+    {
+      id: 'tit-1', nombre: 'Ntro. Padre Jesús', fotoDataUrl: null,
+      descripcion: 'Sagrada imagen del Señor.', autoria: 'Autor anónimo, siglo XVII', parrafos: [],
+    },
+    {
+      id: 'tit-2', nombre: 'María Santísima', fotoDataUrl: null,
+      descripcion: 'Bendita imagen de la Virgen.', autoria: 'Autor anónimo, siglo XVIII', parrafos: [],
+    },
   ],
   cultos: [
-    { id: 'culto-1', titulo: 'Cultos de Cuaresma', detalle: 'Quinario y función principal en la sede canónica.' },
-    { id: 'culto-2', titulo: 'Estación de penitencia', detalle: 'Salida procesional en la tarde del Viernes Santo.' },
+    {
+      id: 'culto-1', titulo: 'Cultos de Cuaresma', detalle: 'Quinario y función principal en la sede canónica.',
+      fecha: 'Del 3 al 7 de marzo, 20:30', lugar: 'Sede canónica', fotoDataUrl: null,
+    },
+    {
+      id: 'culto-2', titulo: 'Estación de penitencia', detalle: 'Salida procesional en la tarde del Viernes Santo.',
+      fecha: 'Viernes Santo, 17:30', lugar: 'Desde la parroquia', fotoDataUrl: null,
+    },
   ],
   galeria: [],
   noticias: [
@@ -246,6 +369,75 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   redes: [],
 
   textoPie: '',
+  cabecera: CABECERA_INICIAL,
+  pie: PIE_INICIAL,
+  mapaIncrustado: true,
+}
+
+/**
+ * URL para incrustar el mapa en la web. Se construye a partir de la dirección
+ * (no hace falta ninguna clave de Google) o del enlace de Google Maps que haya
+ * pegado la hermandad.
+ *
+ * Solo se aceptan enlaces de Google Maps: un iframe con una URL cualquiera
+ * escrita en el editor sería una puerta abierta en la web pública.
+ */
+export function urlMapaIncrustado(mapaUrl: string, direccion: string): string | null {
+  const enlace = mapaUrl.trim()
+  const dir = direccion.trim()
+
+  if (enlace && esDeGoogleMaps(enlace)) {
+    // Solo se incrusta tal cual si YA es un enlace para incrustar (el que da
+    // Google en «Compartir → Insertar un mapa»). Un enlace corto
+    // (maps.app.goo.gl) redirige y Google lo rechaza dentro de un iframe: con
+    // dirección se dibuja a partir de ella, que siempre funciona.
+    if (/[?&]output=embed\b/.test(enlace) || /\/maps\/embed/.test(enlace)) return enlace
+    if (!dir) {
+      const sep = enlace.includes('?') ? '&' : '?'
+      return `${enlace}${sep}output=embed`
+    }
+  }
+  // Sin clave de Google y sin depender de lo que hayan pegado: la dirección
+  // basta para dibujar el mapa.
+  return dir ? `https://www.google.com/maps?q=${encodeURIComponent(dir)}&output=embed` : null
+}
+
+/**
+ * Deja pasar solo enlaces que se pueden publicar sin peligro: http(s), rutas de
+ * la propia aplicación y anclas a una sección de la web. Devuelve `undefined`
+ * si no vale, y entonces el enlace no se pinta.
+ *
+ * Una URL escrita en el editor como `javascript:…` se pintaba tal cual en el
+ * href y podía ejecutar código a quien visitara la web.
+ */
+export function urlSegura(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  const limpia = url.trim()
+  if (/^https?:\/\//i.test(limpia)) return limpia
+  if (/^\/[^/]/.test(limpia)) return limpia
+  // Ancla a una sección de la propia web (#cultos, #pagina-xxx): la usan los
+  // enlaces del pie para saltar dentro de la página.
+  if (/^#[\w-]+$/.test(limpia)) return limpia
+  // Sin esquema («hermandad.es/blog»): se asume https, que es lo que quiso poner.
+  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(limpia)) return `https://${limpia}`
+  return undefined
+}
+
+/**
+ * ¿Es un enlace de Google Maps? Se comprueba el dominio entero, no que
+ * «contenga» google: `google.com.loquesea.net` es de otro y en un iframe sería
+ * una puerta abierta en la web pública.
+ */
+export function esDeGoogleMaps(url: string): boolean {
+  let host = ''
+  try {
+    host = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.toLowerCase()
+  } catch {
+    return false
+  }
+  if (host === 'maps.app.goo.gl' || host === 'goo.gl') return true
+  // google.es, www.google.com, maps.google.co.uk, google.com.mx…
+  return /^(www\.|maps\.)?google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(host)
 }
 
 /** Convierte un texto en un slug válido para la URL (minúsculas, sin acentos, con guiones). */
@@ -257,6 +449,29 @@ export function aSlug(texto: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
+}
+
+/**
+ * Acepta tanto el formato nuevo (contenido con formato) como el antiguo (un
+ * texto plano) y devuelve siempre el nuevo. Así, al actualizar, nadie pierde
+ * la historia que ya tenía escrita.
+ */
+function aContenidoRico(valor: unknown): ContenidoRico {
+  if (typeof valor === 'string') {
+    const texto = valor.trim()
+    return texto
+      ? { entradilla: '', parrafos: [{ id: 'his-migrada', subtitulo: '', texto }], fotos: [] }
+      : { ...CONTENIDO_RICO_VACIO }
+  }
+  if (valor && typeof valor === 'object') {
+    const c = valor as Partial<ContenidoRico>
+    return {
+      entradilla: c.entradilla ?? '',
+      parrafos: Array.isArray(c.parrafos) ? c.parrafos : [],
+      fotos: Array.isArray(c.fotos) ? c.fotos : [],
+    }
+  }
+  return { ...WEB_PUBLICA_INICIAL.historia }
 }
 
 /** Mezcla lo guardado con los valores por defecto, para que los datos antiguos no pierdan campos nuevos. */
@@ -282,8 +497,32 @@ function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
     ...guardado,
     heroFotos,
     secciones: seccionesCompletas,
-    titulares: guardado.titulares ?? WEB_PUBLICA_INICIAL.titulares,
-    cultos: guardado.cultos ?? WEB_PUBLICA_INICIAL.cultos,
+    // La Historia era un texto plano; ahora es contenido con formato. Lo que
+    // hubiera escrito se conserva, convertido en un primer párrafo.
+    historia: aContenidoRico(guardado.historia),
+    // Titulares y cultos ganaron campos (autoría, párrafos, fecha, lugar, foto):
+    // los que vengan de antes se completan sin perder lo escrito.
+    // Cabecera y pie: los que vengan de antes no los traen.
+    cabecera: { ...CABECERA_INICIAL, ...(guardado.cabecera ?? {}) },
+    pie: { ...PIE_INICIAL, ...(guardado.pie ?? {}) },
+    // Se leen como parciales a propósito: lo guardado por una versión anterior
+    // NO trae los campos nuevos, aunque el tipo diga que sí.
+    titulares: (guardado.titulares ?? WEB_PUBLICA_INICIAL.titulares).map((t: Partial<Titular>) => ({
+      id: t.id ?? 'tit',
+      nombre: t.nombre ?? '',
+      fotoDataUrl: t.fotoDataUrl ?? null,
+      descripcion: t.descripcion ?? '',
+      autoria: t.autoria ?? '',
+      parrafos: t.parrafos ?? [],
+    })),
+    cultos: (guardado.cultos ?? WEB_PUBLICA_INICIAL.cultos).map((c: Partial<CultoWeb>) => ({
+      id: c.id ?? 'culto',
+      titulo: c.titulo ?? '',
+      detalle: c.detalle ?? '',
+      fecha: c.fecha ?? '',
+      lugar: c.lugar ?? '',
+      fotoDataUrl: c.fotoDataUrl ?? null,
+    })),
     galeria: guardado.galeria ?? [],
     noticias: guardado.noticias ?? WEB_PUBLICA_INICIAL.noticias,
     paginas: guardado.paginas ?? WEB_PUBLICA_INICIAL.paginas,

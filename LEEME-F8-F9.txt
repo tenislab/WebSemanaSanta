@@ -1,0 +1,113 @@
+CABILDO — ENTREGA F8 + F9
+=========================
+
+Esto trae DOS fases, porque la F8 todavía no estaba subida:
+
+  F8 — Los contenidos de la web, de verdad editables
+  F9 — Cabecera, pie y contacto
+
+
+CÓMO APLICARLO (elige UNA de las dos)
+-------------------------------------
+
+OPCIÓN A — copiar los archivos (la más simple)
+
+  Descomprime el zip DIRECTAMENTE sobre la carpeta del proyecto, encima de
+  lo que hay. Las carpetas src/ y docs/ ya vienen con la ruta correcta, así
+  que cada archivo cae en su sitio.
+
+  IMPORTANTE: no metas los archivos dentro de una carpeta "archivos/" ni
+  nada parecido. Deben quedar en:
+      src/components/EditorContenido.tsx
+      src/components/HermanoPicker.tsx
+      src/components/SitioContenido.tsx
+      src/lib/webPublica.ts
+      src/pages/app/Eventos.tsx
+      src/pages/app/WebPublica.tsx
+      src/styles/global.css
+      docs/HOJA-DE-RUTA.md
+
+  Después borra de la raíz del proyecto los archivos LEEME-F8-F9.txt y
+  cabildo-f8-f9.patch: son de la entrega, no del proyecto.
+
+
+OPCIÓN B — aplicar el parche
+
+      git apply cabildo-f8-f9.patch
+      rm cabildo-f8-f9.patch LEEME-F8-F9.txt
+
+  Ya está comprobado que aplica limpio sobre main (1747243) y que después
+  compila: typecheck, lint y build, los tres en verde.
+
+
+LIMPIEZA PENDIENTE EN TU REPOSITORIO
+------------------------------------
+
+En la raíz del repositorio siguen colgados cinco archivos de entregas
+antiguas que no pintan nada ahí. Bórralos:
+
+      git rm F4-F5.patch F4-precios.patch INSTRUCCIONES.txt LEEME.txt cabildo-todo.patch
+
+El .gitignore ya está puesto para que esto no vuelva a pasar.
+
+
+DESPUÉS
+-------
+
+      npm run typecheck && npm run lint && npm run build
+
+Los tres tienen que salir sin un solo aviso.
+
+
+QUÉ PROBAR
+----------
+
+Panel → Web pública
+
+ 1. Arriba del todo sale un aviso con lo que le falta a tu web. Pulsa
+    «Arreglar» en cualquiera: te lleva a la pestaña donde se soluciona.
+    Según lo vas rellenando, la lista se va vaciando; cuando no queda nada,
+    el aviso se pone en verde.
+
+ 2. Pestaña «Cabecera y pie» (nueva):
+    - Quita el nombre, deja solo el logo; pon el lema; quita el botón de la
+      derecha dejando el campo vacío. Mira la vista previa a la derecha.
+    - Desmarca «la barra se queda arriba» y baja por la vista previa: la
+      barra ya no persigue.
+    - En el pie, pulsa «Crear una con mis secciones»: te monta una columna
+      con enlaces a tus propias secciones y páginas.
+    - Añade un enlace y escribe una dirección inventada («asdf»): el campo
+      se marca y te avisa, en vez de desaparecer en silencio de la web.
+      Al escribir la dirección se despliegan los sitios de tu propia web.
+    - Escribe el aviso legal: sale en letra pequeña al final de la web.
+
+ 3. Pestaña «Contacto y mapa» (ahora la tercera, antes era la última):
+    - Escribe la dirección de la sede: el mapa aparece solo, sin tener que
+      pegar nada de Google.
+    - Prueba a pegar un enlace que no sea de Google Maps: te avisa de que no
+      se puede incrustar y el mapa se sigue dibujando con la dirección.
+      Esto es a propósito (un iframe a cualquier sitio sería un agujero).
+
+ 4. Abre tu web de verdad con «Ver mi web» y baja hasta el final: pie con
+    columnas, contacto, redes, copyright y aviso legal.
+
+ 5. En el móvil: la web no se sale a lo ancho y el pie se reordena solo.
+
+Panel → Eventos y tareas
+
+ 6. Al asignar una tarea ya no hay una lista con 1.200 nombres: se escribe y
+    busca. Va con teclado (flechas, Enter, Escape).
+
+
+LO QUE SE CORRIGIÓ AL REPASARLO
+-------------------------------
+
+- En la vista previa del panel, los enlaces del pie, las redes y «Cómo
+  llegar» navegaban de verdad: pulsarlos te sacaba de la aplicación.
+- El menú de la web ponía «Actualidad (noticias)»: se le coló el nombre que
+  usa el editor. Los nombres estaban duplicados en dos archivos.
+- El filtro de Google Maps dejaba pasar dominios como
+  google.com.loquesea.net. Ahora se comprueba el dominio entero.
+- Un enlace corto de Maps (maps.app.goo.gl) no se puede meter en un iframe:
+  con dirección puesta, se dibuja a partir de ella, que siempre funciona.
+- Se reservaban 80 px al saltar a una sección aunque la barra no fuese fija.

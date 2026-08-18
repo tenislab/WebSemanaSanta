@@ -5,14 +5,20 @@ import {
   SECCIONES_INFO,
   TIPOGRAFIAS,
   aSlug,
+  contenidoVacio,
+  esDeGoogleMaps,
+  nombreSeccion,
+  urlMapaIncrustado,
+  urlSegura,
   useWebPublica,
   type AlturaHero,
   type Boletin,
+  type ColumnaPie,
   type CultoWeb,
+  type EnlacePie,
   type FotoGaleria,
   type Noticia,
   type PaginaWeb,
-  type ParrafoPagina,
   type PlantillaWeb,
   type RedWeb,
   type TemaWeb,
@@ -21,10 +27,12 @@ import {
   type Titular,
   type WebPublica,
 } from '../../lib/webPublica'
+import type { HermandadSettings } from '../../lib/hermandadSettings'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { useSuscripcion, tieneCapacidad } from '../../lib/suscripcion'
 import { nuevoId } from '../../lib/supabaseSync'
-import SitioContenido from '../../components/SitioContenido'
+import SitioContenido, { type FocoPreview } from '../../components/SitioContenido'
+import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
 
 function comprimirImagen(dataUrl: string, maxLado = 1600): Promise<string> {
   return new Promise((resolve) => {
@@ -68,16 +76,76 @@ const ALTURAS: { id: AlturaHero; label: string }[] = [
   { id: 'completa', label: 'Pantalla completa' },
 ]
 
-type Pestana = 'diseno' | 'portada' | 'actualidad' | 'cultos' | 'paginas' | 'boletines' | 'contacto'
+type Pestana = 'diseno' | 'marco' | 'contacto' | 'portada' | 'actualidad' | 'cultos' | 'paginas' | 'boletines'
+
+/**
+ * A qué sección de la web corresponde cada pestaña del editor: la vista previa
+ * salta a ella y la resalta, para no perder de vista qué se está tocando.
+ */
+const SECCION_DE_PESTANA: Partial<Record<Pestana, FocoPreview>> = {
+  actualidad: 'actualidad',
+  cultos: 'cultos',
+  paginas: 'paginas',
+  boletines: 'boletines',
+  contacto: 'contacto',
+}
+/**
+ * El orden importa: primero lo que da forma a TODA la web (diseño, cabecera y
+ * pie, contacto) y después el contenido. «Contacto» estaba la última y casi
+ * nadie llegaba a ella: la dirección y las redes se quedaban sin poner.
+ */
 const PESTANAS: { id: Pestana; label: string }[] = [
   { id: 'diseno', label: 'Diseño y secciones' },
+  { id: 'marco', label: 'Cabecera y pie' },
+  { id: 'contacto', label: 'Contacto y mapa' },
   { id: 'portada', label: 'Fotos de portada' },
   { id: 'actualidad', label: 'Actualidad' },
   { id: 'cultos', label: 'Cultos' },
   { id: 'paginas', label: 'Páginas y textos' },
   { id: 'boletines', label: 'Boletines' },
-  { id: 'contacto', label: 'Contacto' },
 ]
+
+interface AvisoWeb {
+  id: string
+  texto: string
+  /** A dónde lleva el botón «Arreglar». */
+  pestana: Pestana
+  /** Los graves salen marcados: la web se ve mal o coja sin esto. */
+  grave?: boolean
+}
+
+/**
+ * Lo que le falta a la web para estar presentable. Se enseña arriba del todo
+ * porque el problema real no era no saber configurarlo, sino no enterarse de
+ * que faltaba: se publicaban webs sin dirección, sin portada y sin un solo
+ * culto.
+ */
+function avisosDeLaWeb(web: WebPublica, hermandad: HermandadSettings): AvisoWeb[] {
+  const avisos: AvisoWeb[] = []
+  const dir = web.direccion || hermandad.direccion
+  const tel = web.telefono || hermandad.telefono
+  const email = web.email || hermandad.email
+
+  if (!dir) avisos.push({ id: 'dir', texto: 'Tu web no dice dónde estáis: falta la dirección de la sede.', pestana: 'contacto', grave: true })
+  if (!tel && !email) avisos.push({ id: 'contacto', texto: 'No hay forma de contactar: pon al menos un teléfono o un correo.', pestana: 'contacto', grave: true })
+  if (web.heroFotos.length === 0) avisos.push({ id: 'portada', texto: 'La portada no tiene ninguna foto (se ve un degradado de color).', pestana: 'portada' })
+  if (contenidoVacio(web.historia)) avisos.push({ id: 'historia', texto: 'La sección «Historia» está vacía y no se publica.', pestana: 'diseno' })
+  if (web.titulares.length === 0) avisos.push({ id: 'titulares', texto: 'No has puesto ningún titular.', pestana: 'diseno' })
+  if (web.cultos.length === 0) avisos.push({ id: 'cultos', texto: 'No hay cultos publicados: es lo que más se busca en una web de hermandad.', pestana: 'cultos' })
+  if (web.redes.length === 0) avisos.push({ id: 'redes', texto: 'No has enlazado ninguna red social.', pestana: 'contacto' })
+  const enlacesRotos = web.pie.columnas.flatMap((c) => c.enlaces).filter((e) => (e.texto.trim() || e.url.trim()) && !urlSegura(e.url)).length
+  if (enlacesRotos > 0) {
+    avisos.push({
+      id: 'enlaces',
+      texto: `${enlacesRotos === 1 ? 'Un enlace del pie no lleva' : `${enlacesRotos} enlaces del pie no llevan`} a ninguna parte: no se publican.`,
+      pestana: 'marco',
+    })
+  }
+  if (!web.pie.textoLegal.trim()) avisos.push({ id: 'legal', texto: 'El pie no tiene aviso legal ni política de privacidad (es obligatorio si recoges datos).', pestana: 'marco' })
+  if (!web.publicada) avisos.push({ id: 'publicada', texto: 'La web está oculta: solo la ves tú.', pestana: 'diseno' })
+
+  return avisos
+}
 
 export default function WebPublica() {
   const [web, setWeb] = useWebPublica()
@@ -85,6 +153,9 @@ export default function WebPublica() {
   const [pestana, setPestana] = useState<Pestana>('diseno')
   const [copiado, setCopiado] = useState(false)
   const [paginaSel, setPaginaSel] = useState<string | null>(null)
+  // Dentro de «Cabecera y pie» hay dos sitios muy separados de la web: la vista
+  // previa sigue al que se esté tocando.
+  const [focoMarco, setFocoMarco] = useState<'cabecera' | 'pie'>('cabecera')
 
   useEffect(() => {
     const parche: Partial<WebPublica> = {}
@@ -97,6 +168,7 @@ export default function WebPublica() {
   }, [])
 
   const enlace = `${window.location.origin}/w/${web.slug}`
+  const avisos = avisosDeLaWeb(web, hermandad)
 
   function editar<K extends keyof WebPublica>(campo: K, valor: WebPublica[K]) {
     // Actualización funcional: al subir una imagen el cambio llega más tarde
@@ -128,6 +200,8 @@ export default function WebPublica() {
         </div>
       </div>
 
+      <AvisosWeb avisos={avisos} irA={setPestana} />
+
       {/* Pestañas */}
       <div className="cms-tabs">
         {PESTANAS.map((p) => (
@@ -142,6 +216,7 @@ export default function WebPublica() {
           {pestana === 'diseno' && (
             <DisenoTab web={web} hermandad={hermandad} editar={editar} copiado={copiado} copiarEnlace={copiarEnlace} />
           )}
+          {pestana === 'marco' && <MarcoTab web={web} editar={editar} onFoco={setFocoMarco} />}
           {pestana === 'portada' && <PortadaTab web={web} editar={editar} />}
           {pestana === 'actualidad' && <ActualidadTab web={web} editar={editar} />}
           {pestana === 'cultos' && <CultosTab web={web} editar={editar} />}
@@ -158,7 +233,12 @@ export default function WebPublica() {
           </div>
           <div className="cms-preview__frame">
             <div className="cms-preview__stage">
-              <SitioContenido web={web} hermandad={hermandad} interactivo={false} />
+              <SitioContenido
+                web={web}
+                hermandad={hermandad}
+                interactivo={false}
+                seccionActiva={pestana === 'marco' ? focoMarco : SECCION_DE_PESTANA[pestana]}
+              />
             </div>
           </div>
         </aside>
@@ -168,6 +248,242 @@ export default function WebPublica() {
 }
 
 type EditarFn = <K extends keyof WebPublica>(campo: K, valor: WebPublica[K]) => void
+
+/* ------------------------- Avisos de lo que falta ------------------------- */
+function AvisosWeb({ avisos, irA }: { avisos: AvisoWeb[]; irA: (p: Pestana) => void }) {
+  // Plegado por defecto si solo quedan detalles: no queremos una lista de
+  // reproches ocupando media pantalla cada vez que se entra a escribir.
+  const graves = avisos.filter((a) => a.grave)
+  const [abierto, setAbierto] = useState(graves.length > 0)
+
+  if (avisos.length === 0) {
+    return (
+      <p className="cms-avisos cms-avisos--ok">
+        <span className="cms-avisos__icono" aria-hidden="true">✓</span>
+        Tu web está completa: portada, historia, titulares, cultos, contacto y aviso legal.
+      </p>
+    )
+  }
+
+  return (
+    <section className={`cms-avisos${graves.length ? ' cms-avisos--grave' : ''}`}>
+      <button type="button" className="cms-avisos__head" onClick={() => setAbierto(!abierto)} aria-expanded={abierto}>
+        <span className="cms-avisos__icono" aria-hidden="true">{graves.length ? '!' : 'i'}</span>
+        <b>
+          {graves.length > 0
+            ? `Falta algo importante en tu web (${avisos.length})`
+            : `Puedes rematar ${avisos.length} ${avisos.length === 1 ? 'detalle' : 'detalles'}`}
+        </b>
+        <span className="cms-avisos__flecha">{abierto ? '▲' : '▼'}</span>
+      </button>
+      {abierto && (
+        <ul className="cms-avisos__lista">
+          {avisos.map((a) => (
+            <li key={a.id}>
+              <span>{a.texto}</span>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => irA(a.pestana)}>Arreglar</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/* --------------------------- Cabecera y pie --------------------------- */
+function MarcoTab({ web, editar, onFoco }: { web: WebPublica; editar: EditarFn; onFoco: (f: 'cabecera' | 'pie') => void }) {
+  const { cabecera, pie } = web
+
+  function editarCabecera(c: Partial<typeof cabecera>) { editar('cabecera', { ...cabecera, ...c }) }
+  function editarPie(c: Partial<typeof pie>) { editar('pie', { ...pie, ...c }) }
+  function editarColumna(id: string, c: Partial<ColumnaPie>) {
+    editarPie({ columnas: pie.columnas.map((col) => (col.id === id ? { ...col, ...c } : col)) })
+  }
+  function editarEnlace(colId: string, id: string, c: Partial<EnlacePie>) {
+    editarColumna(colId, {
+      enlaces: (pie.columnas.find((x) => x.id === colId)?.enlaces ?? []).map((e) => (e.id === id ? { ...e, ...c } : e)),
+    })
+  }
+  function moverColumna(i: number, dir: -1 | 1) {
+    const j = i + dir
+    if (j < 0 || j >= pie.columnas.length) return
+    const cols = [...pie.columnas]
+    ;[cols[i], cols[j]] = [cols[j], cols[i]]
+    editarPie({ columnas: cols })
+  }
+  /**
+   * Los sitios de la propia web a los que se puede enlazar. Se ofrecen como
+   * sugerencia al escribir la dirección: nadie se sabe de memoria que una
+   * página suya es `#pagina-a1b2c3`.
+   */
+  const destinosPropios: { texto: string; url: string }[] = [
+    ...web.secciones
+      .filter((s) => s.visible && s.tipo !== 'paginas')
+      .map((s) => ({ texto: nombreSeccion(s), url: `#${s.tipo}` })),
+    ...web.paginas
+      .filter((p) => p.enMenu !== false)
+      .map((p) => ({ texto: p.titulo || 'Página', url: `#pagina-${p.id}` })),
+  ]
+
+  /** Atajo: una columna con enlaces a las secciones y páginas que ya existen. */
+  function columnaDeSecciones() {
+    const enlaces: EnlacePie[] = destinosPropios
+      .filter((d) => d.url !== '#contacto')
+      .map((d) => ({ id: nuevoId(), texto: d.texto, url: d.url }))
+    editarPie({ columnas: [...pie.columnas, { id: nuevoId(), titulo: 'La Hermandad', enlaces }] })
+  }
+
+  return (
+    <>
+      {/* onFocus burbujea: basta con marcarlo en la tarjeta para que la vista
+          previa salte a la barra de arriba al tocar cualquier control suyo. */}
+      <section className="settings-card" onFocus={() => onFoco('cabecera')}>
+        <div className="settings-card__head"><h2 className="settings-card__title">Cabecera</h2></div>
+        <p className="form-hint">La barra de arriba, la que se ve en todas las páginas de tu web.</p>
+        <label className="checkbox">
+          <input type="checkbox" checked={cabecera.mostrarLogo} onChange={(e) => editarCabecera({ mostrarLogo: e.target.checked })} />
+          <span>Enseñar el escudo o logo</span>
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={cabecera.mostrarNombre} onChange={(e) => editarCabecera({ mostrarNombre: e.target.checked })} />
+          <span>Enseñar el nombre de la hermandad</span>
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={cabecera.mostrarLema} onChange={(e) => editarCabecera({ mostrarLema: e.target.checked })} />
+          <span>Enseñar el lema debajo del nombre</span>
+        </label>
+        {cabecera.mostrarLema && !web.lema && (
+          <p className="form-hint">Todavía no hay lema escrito: se pone en <b>Diseño y secciones → Colores y tipografía</b>.</p>
+        )}
+        <label className="checkbox">
+          <input type="checkbox" checked={cabecera.fija} onChange={(e) => editarCabecera({ fija: e.target.checked })} />
+          <span>La barra se queda arriba al bajar por la página</span>
+        </label>
+        {!cabecera.mostrarLogo && !cabecera.mostrarNombre && (
+          <p className="form-hint form-hint--alerta">
+            Sin logo ni nombre, la parte izquierda de la barra queda en blanco. Deja al menos uno.
+          </p>
+        )}
+        <div className="form-row" style={{ marginTop: '0.8rem' }}>
+          <label htmlFor="botonCabecera">Botón de la derecha</label>
+          <input
+            id="botonCabecera"
+            type="text"
+            value={cabecera.textoBoton}
+            onChange={(e) => editarCabecera({ textoBoton: e.target.value })}
+            placeholder="Entrar"
+          />
+          <p className="form-hint">Lleva al área del hermano. Déjalo vacío si no quieres ningún botón.</p>
+        </div>
+      </section>
+
+      <section className="settings-card" onFocus={() => onFoco('pie')}>
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Pie de página</h2>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => editarPie({ columnas: [...pie.columnas, { id: nuevoId(), titulo: 'Enlaces', enlaces: [] }] })}>
+            + Añadir columna
+          </button>
+        </div>
+        <p className="form-hint">
+          Columnas de enlaces al final de la web. Puedes enlazar a una sección de tu propia web
+          (<code>#cultos</code>), a una página tuya o a una dirección de fuera.
+        </p>
+        {/* Al escribir la dirección se despliegan los sitios de la propia web. */}
+        <datalist id="destinos-web">
+          {destinosPropios.map((d) => <option key={d.url} value={d.url}>{d.texto}</option>)}
+        </datalist>
+        {pie.columnas.length === 0 && (
+          <div className="assign-box__row" style={{ marginBottom: '0.6rem' }}>
+            <span className="table-subtle">Sin columnas: el pie es solo una línea con el copyright.</span>
+            <button type="button" className="btn btn-outline btn-sm" onClick={columnaDeSecciones}>
+              Crear una con mis secciones
+            </button>
+          </div>
+        )}
+        {pie.columnas.map((col, i) => (
+          <div className="assign-box" key={col.id}>
+            <div className="assign-box__row">
+              <input
+                type="text"
+                value={col.titulo}
+                onChange={(e) => editarColumna(col.id, { titulo: e.target.value })}
+                placeholder="Título de la columna"
+                aria-label="Título de la columna"
+              />
+              <button type="button" className="icon-btn" title="Subir" disabled={i === 0} onClick={() => moverColumna(i, -1)}>▲</button>
+              <button type="button" className="icon-btn" title="Bajar" disabled={i === pie.columnas.length - 1} onClick={() => moverColumna(i, 1)}>▼</button>
+              <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editarPie({ columnas: pie.columnas.filter((x) => x.id !== col.id) })}>Quitar</button>
+            </div>
+            {col.enlaces.map((e) => {
+              // Un enlace mal escrito no se publica y desaparece sin decir nada:
+              // aquí se avisa en el momento, no cuando ya está la web fuera.
+              const roto = Boolean(e.url.trim()) && !urlSegura(e.url)
+              const sinTexto = Boolean(e.url.trim()) && !e.texto.trim()
+              return (
+                <div key={e.id} style={{ marginTop: '0.4rem' }}>
+                  <div className="assign-box__row">
+                    <input type="text" value={e.texto} onChange={(ev) => editarEnlace(col.id, e.id, { texto: ev.target.value })} placeholder="Texto" aria-label="Texto del enlace" />
+                    <input
+                      type="text"
+                      list="destinos-web"
+                      value={e.url}
+                      onChange={(ev) => editarEnlace(col.id, e.id, { url: ev.target.value })}
+                      placeholder="#cultos o https://…"
+                      aria-label="Dirección del enlace"
+                      aria-invalid={roto}
+                    />
+                    <button type="button" className="icon-btn rgpd-borrar" title="Quitar enlace" onClick={() => editarColumna(col.id, { enlaces: col.enlaces.filter((x) => x.id !== e.id) })}>✕</button>
+                  </div>
+                  {roto && <p className="form-hint form-hint--alerta">Esa dirección no vale: pon «#cultos» para una sección tuya o una dirección que empiece por https://</p>}
+                  {!roto && sinTexto && <p className="form-hint form-hint--alerta">Ponle un texto o no se publicará.</p>}
+                </div>
+              )
+            })}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: '0.4rem' }}
+              onClick={() => editarColumna(col.id, { enlaces: [...col.enlaces, { id: nuevoId(), texto: '', url: '' }] })}
+            >
+              + Añadir enlace
+            </button>
+            {col.enlaces.length === 0 && (
+              <p className="form-hint">Una columna sin enlaces no se publica.</p>
+            )}
+          </div>
+        ))}
+
+        <label className="checkbox" style={{ marginTop: '0.8rem' }}>
+          <input type="checkbox" checked={pie.mostrarContacto} onChange={(e) => editarPie({ mostrarContacto: e.target.checked })} />
+          <span>Repetir los datos de contacto en el pie</span>
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={pie.mostrarRedes} onChange={(e) => editarPie({ mostrarRedes: e.target.checked })} />
+          <span>Enseñar las redes sociales en el pie</span>
+        </label>
+
+        <div className="form-row" style={{ marginTop: '0.8rem' }}>
+          <label htmlFor="textoPie">Línea de copyright</label>
+          <input id="textoPie" type="text" value={web.textoPie} onChange={(e) => editar('textoPie', e.target.value)} placeholder={`© ${web.titulo || 'Tu hermandad'}`} />
+        </div>
+        <div className="form-row">
+          <label htmlFor="textoLegal">Aviso legal y protección de datos</label>
+          <textarea
+            id="textoLegal"
+            rows={3}
+            value={pie.textoLegal}
+            onChange={(e) => editarPie({ textoLegal: e.target.value })}
+            placeholder="Hermandad inscrita en el Registro de Entidades Religiosas nº … · Responsable del tratamiento de datos: … · Puedes ejercer tus derechos escribiendo a …"
+          />
+          <p className="form-hint">
+            Sale en letra pequeña al final de todo. Si en la web recoges datos personales, este texto
+            es obligatorio.
+          </p>
+        </div>
+      </section>
+    </>
+  )
+}
 
 /* ------------------------------ Diseño ------------------------------ */
 function DisenoTab({
@@ -185,6 +501,10 @@ function DisenoTab({
 
   function toggleSeccion(i: number) {
     editar('secciones', web.secciones.map((s, idx) => (idx === i ? { ...s, visible: !s.visible } : s)))
+  }
+  /** Título a medida de una sección; vacío = el nombre de fábrica. */
+  function renombrarSeccion(i: number, nombre: string) {
+    editar('secciones', web.secciones.map((s, idx) => (idx === i ? { ...s, nombre } : s)))
   }
   function moverSeccion(i: number, dir: -1 | 1) {
     const j = i + dir
@@ -285,7 +605,35 @@ function DisenoTab({
         </div>
         <div className="form-row"><label htmlFor="titulo">Nombre</label><input id="titulo" type="text" value={web.titulo} onChange={(e) => editar('titulo', e.target.value)} /></div>
         <div className="form-row"><label htmlFor="lema">Lema</label><input id="lema" type="text" value={web.lema} onChange={(e) => editar('lema', e.target.value)} /></div>
-        <div className="form-row"><label htmlFor="historia">Historia</label><textarea id="historia" rows={4} value={web.historia} onChange={(e) => editar('historia', e.target.value)} /></div>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head"><h2 className="settings-card__title">Historia</h2></div>
+        <p className="form-hint">
+          Se publica como una sección con formato: una entradilla, los párrafos que quieras (con su
+          subtítulo) y fotos. Lo que tuvieras escrito antes está en el primer párrafo.
+        </p>
+        <div className="form-row">
+          <label htmlFor="historiaEntradilla">Entradilla</label>
+          <input
+            id="historiaEntradilla"
+            type="text"
+            value={web.historia.entradilla}
+            onChange={(e) => editar('historia', { ...web.historia, entradilla: e.target.value })}
+            placeholder="Una frase que resuma la historia de la hermandad"
+          />
+        </div>
+        <EditorParrafos
+          parrafos={web.historia.parrafos}
+          onChange={(parrafos) => editar('historia', { ...web.historia, parrafos })}
+          ayuda="Por ejemplo: «Fundación», «Los titulares», «La sede», «Hoy»."
+        />
+        <EditorFotos
+          fotos={web.historia.fotos}
+          onChange={(fotos) => editar('historia', { ...web.historia, fotos })}
+          onSubir={leerImagen}
+          titulo="Fotos de la sección"
+        />
       </section>
 
       <section className="settings-card">
@@ -293,7 +641,18 @@ function DisenoTab({
         <ul className="secciones-lista">
           {web.secciones.map((s, i) => (
             <li key={s.tipo} className="seccion-item">
-              <label className="checkbox"><input type="checkbox" checked={s.visible} onChange={() => toggleSeccion(i)} /><span>{SECCIONES_INFO[s.tipo].nombre}</span></label>
+              <label className="checkbox">
+                <input type="checkbox" checked={s.visible} onChange={() => toggleSeccion(i)} />
+                <span>{SECCIONES_INFO[s.tipo].nombre}</span>
+              </label>
+              <input
+                className="seccion-item__nombre"
+                type="text"
+                value={s.nombre ?? ''}
+                onChange={(e) => renombrarSeccion(i, e.target.value)}
+                placeholder={`Se verá como «${SECCIONES_INFO[s.tipo].publico}»`}
+                aria-label={`Título a medida para ${SECCIONES_INFO[s.tipo].nombre}`}
+              />
               <span className="seccion-item__orden">
                 <button type="button" className="icon-btn" onClick={() => moverSeccion(i, -1)} disabled={i === 0}>▲</button>
                 <button type="button" className="icon-btn" onClick={() => moverSeccion(i, 1)} disabled={i === web.secciones.length - 1}>▼</button>
@@ -317,19 +676,35 @@ function TitularesGaleria({ web, editar }: { web: WebPublica; editar: EditarFn; 
       <section className="settings-card">
         <div className="settings-card__head">
           <h2 className="settings-card__title">Titulares</h2>
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => editar('titulares', [...web.titulares, { id: nuevoId(), nombre: 'Nuevo titular', fotoDataUrl: null, descripcion: '' }])}>+ Añadir</button>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => editar('titulares', [...web.titulares, { id: nuevoId(), nombre: 'Nuevo titular', fotoDataUrl: null, descripcion: '', autoria: '', parrafos: [] }])}>+ Añadir</button>
         </div>
         {web.titulares.map((t) => (
           <div className="assign-box" key={t.id}>
             <div className="assign-box__row">
               {t.fotoDataUrl && <img src={t.fotoDataUrl} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }} />}
               <label className="btn btn-outline btn-sm">{t.fotoDataUrl ? 'Cambiar foto' : 'Foto'}<input type="file" accept="image/*" hidden onChange={(e) => leerImagen(e, (d) => editarTitular(t.id, { fotoDataUrl: d }))} /></label>
+              <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" style={{ marginLeft: 'auto' }} onClick={() => editar('titulares', web.titulares.filter((x) => x.id !== t.id))}>Quitar titular</button>
             </div>
-            <div className="form-row"><input type="text" value={t.nombre} onChange={(e) => editarTitular(t.id, { nombre: e.target.value })} placeholder="Nombre" /></div>
-            <div className="assign-box__row">
-              <input type="text" value={t.descripcion} onChange={(e) => editarTitular(t.id, { descripcion: e.target.value })} placeholder="Descripción" />
-              <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('titulares', web.titulares.filter((x) => x.id !== t.id))}>Quitar</button>
+            <div className="form-grid-2">
+              <div className="form-row">
+                <label>Nombre</label>
+                <input type="text" value={t.nombre} onChange={(e) => editarTitular(t.id, { nombre: e.target.value })} placeholder="Ntro. Padre Jesús…" />
+              </div>
+              <div className="form-row">
+                <label>Autoría</label>
+                <input type="text" value={t.autoria} onChange={(e) => editarTitular(t.id, { autoria: e.target.value })} placeholder="Juan de Mesa, 1620" />
+              </div>
             </div>
+            <div className="form-row">
+              <label>Una línea de presentación</label>
+              <input type="text" value={t.descripcion} onChange={(e) => editarTitular(t.id, { descripcion: e.target.value })} placeholder="Sagrada imagen del Señor." />
+            </div>
+            <EditorParrafos
+              parrafos={t.parrafos}
+              onChange={(parrafos) => editarTitular(t.id, { parrafos })}
+              titulo="Texto de la imagen"
+              ayuda="Su historia, restauraciones, la devoción que despierta… Se publica bajo la foto."
+            />
           </div>
         ))}
       </section>
@@ -428,14 +803,38 @@ function CultosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
     <section className="settings-card">
       <div className="settings-card__head">
         <h2 className="settings-card__title">Cultos y actos</h2>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => editar('cultos', [...web.cultos, { id: nuevoId(), titulo: 'Nuevo culto', detalle: '' }])}>+ Añadir culto</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => editar('cultos', [...web.cultos, { id: nuevoId(), titulo: 'Nuevo culto', detalle: '', fecha: '', lugar: '', fotoDataUrl: null }])}>+ Añadir culto</button>
       </div>
       {web.cultos.map((c) => (
         <div className="assign-box" key={c.id}>
-          <div className="form-row"><input type="text" value={c.titulo} onChange={(e) => editarCulto(c.id, { titulo: e.target.value })} placeholder="Título" /></div>
           <div className="assign-box__row">
-            <input type="text" value={c.detalle} onChange={(e) => editarCulto(c.id, { detalle: e.target.value })} placeholder="Detalle (fecha, hora, lugar…)" />
-            <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('cultos', web.cultos.filter((x) => x.id !== c.id))}>Quitar</button>
+            {c.fotoDataUrl && <img src={c.fotoDataUrl} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }} />}
+            <label className="btn btn-outline btn-sm">
+              {c.fotoDataUrl ? 'Cambiar foto' : 'Foto (opcional)'}
+              <input type="file" accept="image/*" hidden onChange={(e) => leerImagen(e, (d) => editarCulto(c.id, { fotoDataUrl: d }))} />
+            </label>
+            {c.fotoDataUrl && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => editarCulto(c.id, { fotoDataUrl: null })}>Quitar foto</button>
+            )}
+            <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" style={{ marginLeft: 'auto' }} onClick={() => editar('cultos', web.cultos.filter((x) => x.id !== c.id))}>Quitar culto</button>
+          </div>
+          <div className="form-row">
+            <label>Título</label>
+            <input type="text" value={c.titulo} onChange={(e) => editarCulto(c.id, { titulo: e.target.value })} placeholder="Quinario, Función Principal, Besamanos…" />
+          </div>
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label>Cuándo</label>
+              <input type="text" value={c.fecha} onChange={(e) => editarCulto(c.id, { fecha: e.target.value })} placeholder="Del 3 al 7 de marzo, 20:30" />
+            </div>
+            <div className="form-row">
+              <label>Dónde</label>
+              <input type="text" value={c.lugar} onChange={(e) => editarCulto(c.id, { lugar: e.target.value })} placeholder="Sede canónica" />
+            </div>
+          </div>
+          <div className="form-row">
+            <label>Detalle</label>
+            <textarea rows={2} value={c.detalle} onChange={(e) => editarCulto(c.id, { detalle: e.target.value })} placeholder="Quién predica, intenciones, avisos…" />
           </div>
         </div>
       ))}
@@ -491,34 +890,18 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
             </div>
           </div>
 
-          <div className="settings-card__head" style={{ marginTop: '0.5rem' }}>
-            <h3 className="settings-card__title" style={{ fontSize: '1rem' }}>Párrafos</h3>
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => editarPagina(sel.id, { parrafos: [...sel.parrafos, { id: nuevoId(), subtitulo: '', texto: '' } as ParrafoPagina] })}>+ Añadir párrafo</button>
-          </div>
-          {sel.parrafos.map((par) => (
-            <div className="assign-box" key={par.id}>
-              <div className="form-row"><input type="text" value={par.subtitulo} onChange={(e) => editarPagina(sel.id, { parrafos: sel.parrafos.map((x) => (x.id === par.id ? { ...x, subtitulo: e.target.value } : x)) })} placeholder="Subtítulo (opcional)" /></div>
-              <div className="assign-box__row">
-                <textarea rows={2} value={par.texto} onChange={(e) => editarPagina(sel.id, { parrafos: sel.parrafos.map((x) => (x.id === par.id ? { ...x, texto: e.target.value } : x)) })} placeholder="Texto del párrafo" />
-                <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editarPagina(sel.id, { parrafos: sel.parrafos.filter((x) => x.id !== par.id) })}>Quitar</button>
-              </div>
-            </div>
-          ))}
-
-          <div className="settings-card__head" style={{ marginTop: '0.5rem' }}>
-            <h3 className="settings-card__title" style={{ fontSize: '1rem' }}>Fotos de la página</h3>
-            <label className="btn btn-outline btn-sm">+ Añadir foto<input type="file" accept="image/*" hidden onChange={(e) => leerImagen(e, (d) => editarPagina(sel.id, { fotos: [...sel.fotos, d] }))} /></label>
-          </div>
-          {sel.fotos.length > 0 && (
-            <div className="galeria-editor">
-              {sel.fotos.map((f, i) => (
-                <div className="galeria-editor__item" key={i}>
-                  <img src={f} alt="" />
-                  <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editarPagina(sel.id, { fotos: sel.fotos.filter((_, j) => j !== i) })}>Quitar</button>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Mismos editores que la Historia y los titulares: un solo sitio que
+              mantener y las mismas posibilidades (reordenar) en todas partes. */}
+          <EditorParrafos
+            parrafos={sel.parrafos}
+            onChange={(parrafos) => editarPagina(sel.id, { parrafos })}
+          />
+          <EditorFotos
+            fotos={sel.fotos}
+            onChange={(fotos) => editarPagina(sel.id, { fotos })}
+            onSubir={leerImagen}
+            titulo="Fotos de la página"
+          />
 
           <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" style={{ marginTop: '0.6rem' }} onClick={() => { editar('paginas', web.paginas.filter((p) => p.id !== sel.id)); setPaginaSel(null) }}>Eliminar página</button>
         </div>
@@ -554,30 +937,68 @@ function BoletinesTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
 }
 
 /* ------------------------------ Contacto ------------------------------ */
-function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: ReturnType<typeof useHermandadSettings>; editar: EditarFn }) {
+function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: HermandadSettings; editar: EditarFn }) {
   function editarRed(id: string, c: Partial<RedWeb>) { editar('redes', web.redes.map((r) => (r.id === id ? { ...r, ...c } : r))) }
+  const direccion = web.direccion || hermandad.direccion
+  const mapa = urlMapaIncrustado(web.mapaUrl, direccion)
+  // Un enlace que no es de Google Maps no se incrusta a propósito: un iframe a
+  // cualquier sitio es un agujero en la web pública.
+  const enlaceNoIncrustable = Boolean(web.mapaUrl.trim()) && !esDeGoogleMaps(web.mapaUrl)
+
   return (
-    <section className="settings-card">
-      <div className="settings-card__head"><h2 className="settings-card__title">Contacto y redes</h2></div>
-      <p className="form-hint">Si dejas un campo vacío, se usan los datos de <Link to="/app/configuracion">Configuración</Link>.</p>
-      <div className="form-row"><label>Dirección</label><input type="text" value={web.direccion} onChange={(e) => editar('direccion', e.target.value)} placeholder={hermandad.direccion} /></div>
-      <div className="form-grid-2">
-        <div className="form-row"><label>Teléfono</label><input type="text" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder={hermandad.telefono} /></div>
-        <div className="form-row"><label>Correo</label><input type="email" value={web.email} onChange={(e) => editar('email', e.target.value)} placeholder={hermandad.email} /></div>
-      </div>
-      <div className="form-row"><label>Enlace de Google Maps</label><input type="text" value={web.mapaUrl} onChange={(e) => editar('mapaUrl', e.target.value)} placeholder="https://maps.google.com/…" /></div>
-      <div className="settings-card__head" style={{ marginTop: '1rem' }}>
-        <h3 className="settings-card__title" style={{ fontSize: '1rem' }}>Redes sociales</h3>
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => editar('redes', [...web.redes, { id: nuevoId(), tipo: 'Instagram', url: '' }])}>+ Añadir red</button>
-      </div>
-      {web.redes.map((r) => (
-        <div className="assign-box__row" key={r.id} style={{ marginTop: '0.5rem' }}>
-          <select value={r.tipo} onChange={(e) => editarRed(r.id, { tipo: e.target.value as TipoRed })}>{REDES.map((red) => <option key={red} value={red}>{red}</option>)}</select>
-          <input type="text" value={r.url} onChange={(e) => editarRed(r.id, { url: e.target.value })} placeholder="https://…" />
-          <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('redes', web.redes.filter((x) => x.id !== r.id))}>Quitar</button>
+    <>
+      <section className="settings-card">
+        <div className="settings-card__head"><h2 className="settings-card__title">Dónde estáis y cómo contactar</h2></div>
+        <p className="form-hint">Si dejas un campo vacío, se usan los datos de <Link to="/app/configuracion">Configuración</Link>.</p>
+        <div className="form-row"><label htmlFor="direccion">Dirección</label><input id="direccion" type="text" value={web.direccion} onChange={(e) => editar('direccion', e.target.value)} placeholder={hermandad.direccion || 'Calle, número, ciudad'} /></div>
+        <div className="form-grid-2">
+          <div className="form-row"><label htmlFor="telefono">Teléfono</label><input id="telefono" type="text" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder={hermandad.telefono || '954 00 00 00'} /></div>
+          <div className="form-row"><label htmlFor="email">Correo</label><input id="email" type="email" value={web.email} onChange={(e) => editar('email', e.target.value)} placeholder={hermandad.email || 'secretaria@…'} /></div>
         </div>
-      ))}
-      <div className="form-row" style={{ marginTop: '1rem' }}><label>Pie de página</label><input type="text" value={web.textoPie} onChange={(e) => editar('textoPie', e.target.value)} placeholder={`© ${web.titulo || 'Tu hermandad'}`} /></div>
-    </section>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head"><h2 className="settings-card__title">Mapa</h2></div>
+        <label className="checkbox">
+          <input type="checkbox" checked={web.mapaIncrustado} onChange={(e) => editar('mapaIncrustado', e.target.checked)} />
+          <span>Enseñar el mapa dentro de la web</span>
+        </label>
+        <p className="form-hint">
+          Con la dirección de arriba ya se dibuja el mapa: no hace falta poner nada más. El enlace
+          solo hace falta si quieres apuntar a un sitio concreto de Google Maps.
+        </p>
+        <div className="form-row">
+          <label htmlFor="mapaUrl">Enlace de Google Maps (opcional)</label>
+          <input id="mapaUrl" type="text" value={web.mapaUrl} onChange={(e) => editar('mapaUrl', e.target.value)} placeholder="https://maps.app.goo.gl/…" />
+        </div>
+        {enlaceNoIncrustable && (
+          <p className="form-hint form-hint--alerta">
+            Ese enlace no es de Google Maps: se publicará como botón «Cómo llegar», pero el mapa
+            dibujado se saca de la dirección. Por seguridad no incrustamos páginas de fuera.
+          </p>
+        )}
+        {web.mapaIncrustado && !mapa && !web.mapaUrl.trim() && (
+          <p className="form-hint form-hint--alerta">Sin dirección no hay mapa que enseñar.</p>
+        )}
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Redes sociales</h2>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => editar('redes', [...web.redes, { id: nuevoId(), tipo: 'Instagram', url: '' }])}>+ Añadir red</button>
+        </div>
+        {web.redes.length === 0 && <p className="form-hint">Salen en el pie de la web y en la sección de contacto.</p>}
+        {web.redes.map((r) => (
+          <div className="assign-box__row" key={r.id} style={{ marginTop: '0.5rem' }}>
+            <select value={r.tipo} onChange={(e) => editarRed(r.id, { tipo: e.target.value as TipoRed })} aria-label="Red social">{REDES.map((red) => <option key={red} value={red}>{red}</option>)}</select>
+            <input type="text" value={r.url} onChange={(e) => editarRed(r.id, { url: e.target.value })} placeholder="https://instagram.com/…" aria-label="Dirección del perfil" />
+            <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('redes', web.redes.filter((x) => x.id !== r.id))}>Quitar</button>
+          </div>
+        ))}
+        <p className="form-hint" style={{ marginTop: '0.8rem' }}>
+          El texto del pie y el aviso legal están en <b>Cabecera y pie</b>.
+        </p>
+      </section>
+    </>
   )
 }

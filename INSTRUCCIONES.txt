@@ -1,47 +1,39 @@
-CABILDO — lint, limpieza y documentación
-========================================
+CABILDO — F8 (contenidos de la web) + buscador de hermano
+=========================================================
 
-APLÍCALO ASÍ (desde la raíz del repo):
+APLÍCALO ASÍ, desde la raíz del repo:
 
     git apply cambios.patch
-    npm install          <-- IMPORTANTE: hay dependencias nuevas (ESLint)
+    npm install          <-- hay dependencias nuevas (ESLint)
     git add -A
-    git commit -m "Lint, limpieza y documentación"
+    git commit -m "F8: contenidos de la web + buscador de hermano"
     git push
 
-Con eso queda todo. El parche YA BORRA los archivos sueltos que había en la
-raíz (F4-F5.patch, F4-precios.patch, LEEME.txt), no tienes que hacer nada.
 
+QUÉ PROBAR
+----------
+BUSCADOR (Eventos y tareas)
+  1. Abre un evento y mira la lista de tareas: donde antes había un
+     desplegable con todo el censo, ahora hay un buscador.
+  2. Escribe un nombre o un número: filtra al momento.
+  3. Pruébalo con el teclado: flechas para moverte, Enter para elegir.
+  4. Escribe cualquier cosa y haz clic fuera sin elegir: vuelve a mostrar
+     quién estaba asignado de verdad (antes se quedaba el texto suelto).
+  5. La equis de la derecha deja la tarea sin asignar.
 
-QUÉ ENTRA
----------
-· ESLint con el plugin de hooks de React: es el que detecta automáticamente
-  los fallos de "estado obsoleto" que causaron los bugs de las auditorías.
-  Queda en CERO avisos.  ->  npm run lint
+WEB PÚBLICA (F8)
+  6. "Diseño y secciones": pon un nombre propio a cualquier sección (p. ej.
+     Cultos -> "Nuestros cultos") y mira el menú de la vista previa.
+  7. Más abajo, la tarjeta "Historia": entradilla, párrafos con subtítulo y
+     fotos, con flechas para reordenar. Lo que tuvieras escrito sigue ahí.
+  8. Pestaña "Cultos": cada culto tiene Cuándo, Dónde y foto.
+  9. Titulares: autoría de la imagen y texto largo con párrafos.
+ 10. Cambia de pestaña y mira la VISTA PREVIA: salta sola a la sección que
+     estás editando y la resalta con un filete dorado.
+ 11. "Páginas y textos": los párrafos ya se pueden reordenar.
 
-· Tres arreglos de limpieza:
-  - La protección que impide ver el panel mientras se comprueba el doble
-    factor nunca se activaba. Ahora funciona.
-  - El enlace /hermano?dni=... no rellenaba el DNI (es como llegarán los
-    hermanos desde un correo).
-  - Un campo declarado y sin usar en ninguna parte.
-
-· docs/HOJA-DE-RUTA.md — qué está hecho y qué falta, con TODO el detalle de
-  conectar Supabase, los mandatos SEPA y las devoluciones del banco, los
-  correos (SPF/DKIM/DMARC, proveedores y costes) y la pasarela de pago.
-
-· docs/COMO-TRABAJAR.md — cómo hay que trabajar en este repo: las tres
-  comprobaciones antes de entregar, cómo se preparan las entregas y las
-  trampas conocidas del proyecto.
-
-· .gitignore ahora ignora *.patch, *.zip y LEEME.txt: aunque extraigas una
-  entrega sobre el repo, esos archivos ya no se te cuelan en el commit.
-  (Esto ya había pasado tres veces.)
-
-
-SI ALGO FALLA
--------------
-Si "git apply" se queja, es que el repo tiene cambios que yo no veía.
-Alternativa: copia las carpetas src/ y docs/ y los archivos sueltos
-(.gitignore, README.md, package.json, package-lock.json, eslint.config.js)
-encima de los tuyos, y borra a mano F4-F5.patch, F4-precios.patch y LEEME.txt.
+TAMBIÉN ENTRA (si no aplicaste las entregas anteriores)
+  · ESLint  ->  npm run lint
+  · docs/HOJA-DE-RUTA.md y docs/COMO-TRABAJAR.md
+  · El enlace /hermano?dni=... ya rellena el DNI
+  · .gitignore ignora *.patch, *.zip y LEEME.txt
