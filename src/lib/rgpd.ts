@@ -101,13 +101,15 @@ export function exportarDatosHermano(datos: DatosHermano): string {
  * hay que hacer esa cascada a mano sobre las cuatro colecciones en
  * localStorage.
  */
-export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[]> {
+export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[] | null> {
   if (isSupabaseConfigured && supabase) {
     await supabase.from('hermanos').delete().eq('id', hermanoId)
     const { data, error } = await supabase.from('hermanos').select('*').order('numero')
     if (error) {
+      // OJO: null = «no se pudo releer», NO «el censo está vacío». Devolver []
+      // hacía que un fallo puntual de red borrase el censo entero de la vista.
       console.error('No se pudo recargar el censo tras borrar el hermano:', error.message)
-      return []
+      return null
     }
     return (data ?? []).map(rowToHermano)
   }

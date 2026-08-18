@@ -32,6 +32,15 @@ import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { descargarArchivo, toCsv } from '../../lib/csv'
 import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
+import { getCampana } from '../../lib/campana'
+import {
+  emitirCuotasAnuales,
+  hermanosSinCuota,
+  ultimoEjercicio,
+  simularCobroRemesa,
+  parseFechaEs,
+  ejercicioDe,
+} from '../../lib/cuotasEmision'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -41,7 +50,7 @@ function hoy() {
 function fechaCobroPorDefecto() {
   const d = new Date()
   d.setDate(d.getDate() + 15)
-  return d.toISOString().slice(0, 10)
+  return isoLocal(d)
 }
 
 function formatearFechaInput(value: string) {
@@ -69,7 +78,13 @@ function sumarMeses(iso: string, meses: number): string {
   d.setMonth(d.getMonth() + meses)
   const ultimoDiaDelMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
   d.setDate(Math.min(dia, ultimoDiaDelMes))
-  return d.toISOString().slice(0, 10)
+  return isoLocal(d)
+}
+
+/** Fecha en ISO pero con la hora LOCAL: con toISOString, en España (UTC+1/+2)
+ *  la medianoche local es el día anterior en UTC y toda fecha salía un día antes. */
+function isoLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export default function Cuotas() {
@@ -106,6 +121,33 @@ export default function Cuotas() {
 
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const conceptosCuota = useMemo(() => getConceptosCuota(), [])
+
+  // --- Salto de año (emisión anual del ejercicio) ---
+  // El ejercicio en curso sigue al año de la campaña, para que toda la app hable
+  // del mismo año. El concepto «anual» es el primero del catálogo (normalmente
+  // «Cuota anual»); es el que se emite a todo el censo cada ejercicio.
+  const conceptoAnual = conceptosCuota[0]
+  const ejercicioEnCurso = useMemo(() => getCampana().anio, [])
+  const ultimoEmitido = useMemo(() => ultimoEjercicio(cuotas), [cuotas])
+  const [emisionOpen, setEmisionOpen] = useState(false)
+  const [ejercicioEmision, setEjercicioEmision] = useState(ejercicioEnCurso)
+  const [conceptoEmision, setConceptoEmision] = useState(conceptoAnual?.nombre ?? 'Cuota anual')
+  const [metodoEmision, setMetodoEmision] = useState<MetodoCobro>('Domiciliación')
+  // Un año a medio teclear («2», «202») emitiría cuotas de un ejercicio absurdo.
+  const ejercicioValido = ejercicioEmision >= 2000 && ejercicioEmision <= 2100
+
+  const pendientesDeEmitir = useMemo(
+    () => hermanosSinCuota(cuotas, hermanos, ejercicioEmision, conceptoEmision),
+    [cuotas, hermanos, ejercicioEmision, conceptoEmision],
+  )
+  const importeConceptoEmision = useMemo(
+    () => conceptosCuota.find((c) => c.nombre === conceptoEmision)?.importe ?? conceptoAnual?.importe ?? 0,
+    [conceptosCuota, conceptoEmision, conceptoAnual],
+  )
+  // ¿Toca un ejercicio nuevo? Hay hermanos activos sin la cuota anual del año en curso.
+  const hayNuevoEjercicio =
+    (ultimoEmitido == null || ultimoEmitido < ejercicioEnCurso) &&
+    hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual?.nombre ?? 'Cuota anual').length > 0
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
@@ -128,13 +170,20 @@ export default function Cuotas() {
   }, [cuotas, query, filter, hermanoDe])
 
   const stats = useMemo(() => {
-    const total = cuotas.length
-    const cobrado = cuotas.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
-    const pendiente = cuotas.filter((c) => c.estado === 'Pendiente').reduce((s, c) => s + c.importe, 0)
-    const pagadas = cuotas.filter((c) => c.estado === 'Pagada').length
+    // Los indicadores hablan del EJERCICIO EN CURSO (antes mezclaban todos los
+    // años, así que el «% al día» no significaba nada al pasar de ejercicio).
+    const base = cuotas.filter((c) => ejercicioDe(c) === ejercicioEnCurso)
+    const total = base.length
+    const cobrado = base.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
+    // Deuda viva: pendientes, devueltas y en mora de CUALQUIER ejercicio (la de
+    // años anteriores sigue debiéndose, no puede desaparecer del indicador).
+    const pendiente = cuotas
+      .filter((c) => c.estado === 'Pendiente' || c.estado === 'Devuelta' || c.estado === 'En mora')
+      .reduce((s, c) => s + c.importe, 0)
+    const pagadas = base.filter((c) => c.estado === 'Pagada').length
     const alDia = total ? Math.round((pagadas / total) * 100) : 0
     return { total, cobrado, pendiente, alDia }
-  }, [cuotas])
+  }, [cuotas, ejercicioEnCurso])
 
   function marcarPagada(id: string) {
     setCuotas((prev) =>
@@ -181,12 +230,76 @@ export default function Cuotas() {
     aplicarCuota(id, { moraPropuestaPor: undefined, moraPropuestaNombre: undefined })
   }
 
+  function abrirEmision() {
+    setEjercicioEmision(ejercicioEnCurso)
+    setConceptoEmision(conceptoAnual?.nombre ?? 'Cuota anual')
+    setMetodoEmision('Domiciliación')
+    setEmisionOpen(true)
+  }
+
+  /** Emite la cuota anual del ejercicio a todos los hermanos que aún no la tienen. */
+  function confirmarEmision() {
+    if (!ejercicioValido) return
+    // Se calcula DENTRO del updater, sobre la lista más reciente: si se emitiera
+    // sobre la copia del render (p. ej. antes de que termine de cargar la tabla)
+    // se numeraría desde 1 y se duplicarían recibos ya existentes.
+    setCuotas((prev) => {
+      const nuevas = emitirCuotasAnuales({
+        cuotas: prev,
+        hermanos,
+        ejercicio: ejercicioEmision,
+        concepto: conceptoEmision,
+        importe: importeConceptoEmision,
+        fechaCobro: formatearFechaInput(fechaCobroPorDefecto()),
+        fechaEmision: hoy(),
+        metodoPorDefecto: metodoEmision,
+        nuevoId,
+      })
+      return nuevas.length ? [...nuevas, ...prev] : prev
+    })
+    setEmisionOpen(false)
+    setFilter('Todas')
+    setQuery('')
+  }
+
+  /**
+   * Auto-pagado simulado: marca como cobrada la remesa (sin pasarela real). Una
+   * fracción determinista se devuelve, para que se vean también las devoluciones.
+   */
+  function simularCobro() {
+    const ids = recibosRemesables.map((c) => c.id)
+    if (ids.length === 0) return
+    const fecha = hoy()
+    setCuotas((prev) => simularCobroRemesa(prev, ids, fecha))
+    // El recibo abierto en la ficha también se actualiza (si no, seguía diciendo
+    // «Pendiente» y al marcarlo pagado pisaba la devolución simulada).
+    setSelected((prev) => (prev ? simularCobroRemesa([prev], ids, fecha)[0] : prev))
+    setRemesaOpen(false)
+  }
+
   // Remesa bancaria: recibos pendientes y domiciliados con IBAN, listos para
   // presentar al banco. El CSV es un listado de trabajo; el XML es el
   // fichero de adeudo directo SEPA (pain.008.001.02) que exige el banco.
+  // Solo entran los recibos cuya fecha de cobro ya ha llegado (o llega en la
+  // fecha elegida para la remesa). Sin este filtro, un fraccionamiento mensual
+  // presentaba de golpe los doce meses del año al banco.
+  const limiteRemesa = useMemo(() => {
+    if (fechaRemesa) return new Date(`${fechaRemesa}T23:59:59`)
+    const d = new Date()
+    d.setDate(d.getDate() + 5)
+    d.setHours(23, 59, 59, 999)
+    return d
+  }, [fechaRemesa])
+
   const recibosRemesables = useMemo(
-    () => cuotas.filter((c) => c.estado === 'Pendiente' && c.domiciliada && hermanoDe(c.hermanoId)?.iban),
-    [cuotas, hermanoDe],
+    () =>
+      cuotas.filter((c) => {
+        if (c.estado !== 'Pendiente' || !c.domiciliada || !hermanoDe(c.hermanoId)?.iban) return false
+        const cobro = parseFechaEs(c.fechaCobro)
+        // Si la fecha no se puede interpretar, se incluye (no se pierde el recibo).
+        return !cobro || cobro <= limiteRemesa
+      }),
+    [cuotas, hermanoDe, limiteRemesa],
   )
 
   const acreedor = useMemo(
@@ -272,6 +385,9 @@ export default function Cuotas() {
           concepto: meses > 1 ? `${concepto} · mes ${i + 1}/12` : concepto,
           importe,
           estado: 'Pendiente',
+          // Ejercicio explícito: si se dedujera de la fecha de emisión, una cuota
+          // creada a mano quedaría en otro ejercicio y la emisión anual la duplicaría.
+          ejercicio: ejercicioEnCurso,
           fechaEmision: hoy(),
           fechaCobro: formatearFechaInput(sumarMeses(baseIso, i)),
           domiciliada,
@@ -321,27 +437,43 @@ export default function Cuotas() {
           >
             Remesa ({recibosRemesables.length})
           </button>
+          <button className="btn btn-outline" onClick={abrirEmision}>
+            Emitir ejercicio
+          </button>
           <button className="btn btn-primary" onClick={abrirNuevaCuota}>
             + Nueva cuota
           </button>
         </div>
       </div>
 
+      {hayNuevoEjercicio && (
+        <div className="banner-inline banner-inline--accent cuotas-nuevo-ejercicio">
+          <span>
+            <b>Nuevo ejercicio {ejercicioEnCurso}.</b> Hay{' '}
+            {hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual?.nombre ?? 'Cuota anual').length} hermanos
+            sin la {conceptoAnual?.nombre ?? 'cuota anual'} de este año. Emítela a todo el censo de una vez.
+          </span>
+          <button className="btn btn-primary btn-sm" onClick={abrirEmision}>
+            Emitir cuotas de {ejercicioEnCurso}
+          </button>
+        </div>
+      )}
+
       <section className="stat-grid">
         <div className="stat-tile">
           <span className="stat-tile__label">Recibos emitidos</span>
           <span className="stat-tile__value">{stats.total}</span>
-          <span className="stat-tile__trend stat-tile__trend--neutral">Este ejercicio</span>
+          <span className="stat-tile__trend stat-tile__trend--neutral">Ejercicio {ejercicioEnCurso}</span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Cobrado</span>
           <span className="stat-tile__value">{formatCurrency(stats.cobrado)}</span>
-          <span className="stat-tile__trend stat-tile__trend--ok">{stats.alDia}% al día</span>
+          <span className="stat-tile__trend stat-tile__trend--ok">{stats.alDia}% al día · {ejercicioEnCurso}</span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Pendiente de cobro</span>
           <span className="stat-tile__value">{formatCurrency(stats.pendiente)}</span>
-          <span className="stat-tile__trend stat-tile__trend--warn">Por regularizar</span>
+          <span className="stat-tile__trend stat-tile__trend--warn">Deuda viva (todos los años)</span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">% al corriente</span>
@@ -474,9 +606,19 @@ export default function Cuotas() {
         footer={
           selected && (
             <>
-              {(selected.estado === 'Pendiente' || selected.estado === 'En mora') && (
+              {(selected.estado === 'Pendiente' || selected.estado === 'En mora' || selected.estado === 'Devuelta') && (
                 <button className="btn btn-outline" onClick={() => marcarPagada(selected.id)}>
                   Marcar como pagada
+                </button>
+              )}
+              {/* Un recibo devuelto no es un callejón sin salida: se puede volver
+                  a poner al cobro (entra otra vez en la próxima remesa). */}
+              {selected.estado === 'Devuelta' && (
+                <button
+                  className="btn btn-outline"
+                  onClick={() => aplicarCuota(selected.id, { estado: 'Pendiente', fechaPago: undefined })}
+                >
+                  Volver a poner al cobro
                 </button>
               )}
               {puedeMora && selected.estado === 'Pendiente' &&
@@ -657,6 +799,9 @@ export default function Cuotas() {
             <button className="btn btn-ghost" onClick={exportarRemesaCsv}>
               Solo CSV
             </button>
+            <button className="btn btn-outline" onClick={simularCobro} title="Marca la remesa como cobrada, sin pasarela real">
+              Simular cobro
+            </button>
             <button className="btn btn-primary" onClick={descargarSepaXml} disabled={!!avisoAcreedor || !fechaRemesa}>
               Descargar XML SEPA
             </button>
@@ -701,8 +846,83 @@ export default function Cuotas() {
           <p className="form-hint">
             El XML es un fichero de adeudo directo SEPA CORE (pain.008.001.02) real, listo para
             subir a la banca online. El «Solo CSV» es un listado de trabajo para revisar antes de
-            enviarlo.
+            enviarlo. <b>Simular cobro</b> marca la remesa como pagada (sin pasarela real, para
+            probar el ciclo completo); una pequeña parte se devuelve, como en la vida real.
           </p>
+        </div>
+      </Drawer>
+
+      {/* Emisión anual del ejercicio (salto de año) */}
+      <Drawer
+        open={emisionOpen}
+        onClose={() => setEmisionOpen(false)}
+        title="Emitir cuotas del ejercicio"
+        subtitle="Salto de año"
+        footer={
+          <>
+            <button className="btn btn-ghost" onClick={() => setEmisionOpen(false)}>
+              Cancelar
+            </button>
+            <button className="btn btn-primary" onClick={confirmarEmision} disabled={pendientesDeEmitir.length === 0 || !ejercicioValido}>
+              Emitir {pendientesDeEmitir.length} cuota{pendientesDeEmitir.length === 1 ? '' : 's'}
+            </button>
+          </>
+        }
+      >
+        <div className="app-form">
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor="ejercicioEmision">Ejercicio</label>
+              <input
+                id="ejercicioEmision"
+                type="number"
+                value={ejercicioEmision}
+                min={2000}
+                max={2100}
+                onChange={(e) => setEjercicioEmision(Number(e.target.value))}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="conceptoEmision">Concepto</label>
+              <select
+                id="conceptoEmision"
+                value={conceptoEmision}
+                onChange={(e) => setConceptoEmision(e.target.value)}
+              >
+                {conceptosCuota.map((c) => (
+                  <option key={c.id} value={c.nombre}>
+                    {c.nombre} · {formatCurrency(c.importe)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <label htmlFor="metodoEmision">Método de cobro por defecto</label>
+            <select
+              id="metodoEmision"
+              value={metodoEmision}
+              onChange={(e) => setMetodoEmision(e.target.value as MetodoCobro)}
+            >
+              {METODOS_COBRO.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <p className="form-hint">
+              Se domicilia solo a quien tenga IBAN; al resto se le emite por transferencia.
+            </p>
+          </div>
+          <div className="banner-inline banner-inline--accent">
+            Se emitirá <b>{formatCurrency(importeConceptoEmision)}</b> de «{conceptoEmision}» a{' '}
+            <b>{pendientesDeEmitir.length}</b> hermano{pendientesDeEmitir.length === 1 ? '' : 's'} del
+            ejercicio {ejercicioEmision} que aún no la tienen. Los de baja quedan fuera y a quien ya
+            la tenga no se le duplica.
+          </div>
+          {pendientesDeEmitir.length === 0 && (
+            <p className="form-hint">
+              Todos los hermanos activos ya tienen «{conceptoEmision}» del ejercicio {ejercicioEmision}.
+            </p>
+          )}
         </div>
       </Drawer>
 

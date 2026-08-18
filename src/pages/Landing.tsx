@@ -124,7 +124,7 @@ export default function Landing() {
             </ul>
             <div className="hero-actions">
               <Link className="btn btn-primary btn-glass-dynamic" to="/registro">
-                <span>Crea tu hermandad gratis</span>
+                <span>Crear mi hermandad</span>
               </Link>
               <Link className="btn btn-outline" to="/entrar">
                 Entrar
@@ -265,15 +265,15 @@ export default function Landing() {
                   className={`btn btn-block ${p.destacado ? 'btn-primary btn-glass-dynamic' : 'btn-outline'}`}
                   to="/registro"
                 >
-                  {p.destacado ? <span>Crear hermandad</span> : 'Empezar gratis'}
+                  {p.destacado ? <span>Crear mi hermandad</span> : 'Elegir este pack'}
                 </Link>
               </article>
             ))}
           </div>
 
           <p className="pricing-foot">
-            Precios provisionales. Configúralo gratis y activa la suscripción cuando estés listo. Sin
-            permanencia: cambia de pack o cancela en cualquier momento desde el propio panel.
+            Precios provisionales. Crear la cuenta no cuesta nada: eliges tu pack al entrar por
+            primera vez. Sin permanencia: cambia de pack o cancela cuando quieras desde el panel.
           </p>
         </div>
       </section>
@@ -284,7 +284,7 @@ export default function Landing() {
             <p className="eyebrow eyebrow--gold">Empieza hoy</p>
             <h2>Lleva tu hermandad al día en una tarde</h2>
             <Link className="btn btn-primary btn-glass-dynamic" to="/registro">
-              <span>Crea tu hermandad gratis</span>
+              <span>Crear mi hermandad</span>
             </Link>
           </div>
         </div>
@@ -332,7 +332,7 @@ export default function Landing() {
       </footer>
 
       <Link className="floating-cta btn btn-primary btn-glass-dynamic" to="/registro">
-        <span>+ Empieza gratis</span>
+        <span>+ Empezar ahora</span>
       </Link>
     </div>
   )

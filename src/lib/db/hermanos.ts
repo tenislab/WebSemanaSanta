@@ -17,6 +17,8 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
     clave_acceso: h.claveAcceso,
     auth_user_id: h.authUserId,
     etiquetas: h.etiquetas ?? [],
+    fecha_nacimiento: h.fechaNacimiento ?? null,
+    baja_solicitada: h.bajaSolicitada ?? false,
   }
 }
 
@@ -36,5 +38,7 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     claveAcceso: r.clave_acceso as string,
     authUserId: (r.auth_user_id as string | null) ?? null,
     etiquetas: (r.etiquetas as string[] | null) ?? [],
+    fechaNacimiento: (r.fecha_nacimiento as string | null) ?? undefined,
+    bajaSolicitada: Boolean(r.baja_solicitada),
   }
 }

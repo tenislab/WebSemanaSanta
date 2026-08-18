@@ -347,7 +347,7 @@ export default function Archivo() {
                     <br />
                     <span className="table-subtle">{d.categoria}</span>
                   </td>
-                  <td className="num">{fmt(d.fecha)}</td>
+                  <td className="num td-nowrap">{fmt(d.fecha)}</td>
                   <td>
                     {d.cargosConAcceso ? (
                       <span className="pill pill--restricted">

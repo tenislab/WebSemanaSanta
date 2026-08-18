@@ -17,6 +17,7 @@ import Cortejo from './pages/app/Cortejo'
 import Tesoreria from './pages/app/Tesoreria'
 import Inventario from './pages/app/Inventario'
 import Archivo from './pages/app/Archivo'
+import Eventos from './pages/app/Eventos'
 import Comunicados from './pages/app/Comunicados'
 import Informes from './pages/app/Informes'
 import Personal from './pages/app/Personal'
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="tesoreria" element={<Tesoreria />} />
         <Route path="inventario" element={<Inventario />} />
         <Route path="archivo" element={<Archivo />} />
+        <Route path="eventos" element={<Eventos />} />
         <Route path="comunicados" element={<Comunicados />} />
         <Route path="informes" element={<Informes />} />
         <Route path="personal" element={<Personal />} />

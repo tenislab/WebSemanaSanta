@@ -113,7 +113,11 @@ export async function restaurarCopia(copia: CopiaSeguridad): Promise<void> {
     if (!k.startsWith(PREFIJO) || EXCLUIR.has(k)) return
     localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v))
   })
-  await borrarTodosLosArchivos()
+  // Solo se vacía el almacén de adjuntos si la copia trae adjuntos: si no,
+  // una copia antigua (sin esa sección) borraba todos los archivos guardados.
+  if (copia.archivos && copia.archivos.length > 0) {
+    await borrarTodosLosArchivos()
+  }
   for (const a of copia.archivos ?? []) {
     try {
       await guardarArchivo(a.id, base64AFile(a))

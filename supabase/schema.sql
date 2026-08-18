@@ -42,7 +42,10 @@ alter table hermandad_settings add column if not exists color_secundario text no
 -- -----------------------------------------------------------------------------
 create table if not exists hermanos (
   id uuid primary key default gen_random_uuid(),
-  numero int not null unique,
+  -- OJO: sin "unique" a secas. Los hermanos dados de baja quedan fuera de la
+  -- numeración con numero = 0, y puede haber varios; la unicidad se exige solo
+  -- entre los que SÍ tienen número (índice parcial, más abajo).
+  numero int not null,
   nombre text not null,
   estado text not null default 'Nuevo' check (estado in ('Activo', 'Nuevo', 'Baja')),
   antiguedad int not null default extract(year from now()),
@@ -54,8 +57,12 @@ create table if not exists hermanos (
   dni text not null unique,
   clave_acceso text not null, -- ya no se usa para entrar (ver auth_user_id); queda por compatibilidad con el modo demostración
   auth_user_id uuid unique references auth.users(id) on delete set null,
+  etiquetas text[] not null default '{}',
+  fecha_nacimiento date,
+  baja_solicitada boolean not null default false,
   created_at timestamptz not null default now()
 );
+create unique index if not exists hermanos_numero_activo_uniq on hermanos (numero) where numero > 0;
 
 -- -----------------------------------------------------------------------------
 -- Cortejo: cuerpos/tramos
@@ -94,7 +101,10 @@ create table if not exists cuotas (
   metodo_cobro text,
   mora_propuesta_por text,
   mora_propuesta_nombre text,
-  fecha_pago text
+  fecha_pago text,
+  -- Ejercicio (año) al que pertenece la cuota; si falta, se deduce del año de
+  -- la fecha de emisión.
+  ejercicio int
 );
 create index if not exists cuotas_hermano_id_idx on cuotas(hermano_id);
 
@@ -550,3 +560,29 @@ drop policy if exists "papeletas_propio_update" on papeletas;
 create policy "papeletas_propio_update" on papeletas for update to authenticated
   using (auth_es_hermano() and hermano_id = hermano_propio_id())
   with check (auth_es_hermano() and hermano_id = hermano_propio_id());
+
+
+-- -----------------------------------------------------------------------------
+-- Eventos y tareas (agenda de la hermandad)
+-- -----------------------------------------------------------------------------
+-- Las tareas de cada evento van embebidas como JSON: siempre se leen y se
+-- guardan junto al evento, y así no hace falta una tabla aparte.
+create table if not exists eventos (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null,
+  tipo text not null default 'Otro',
+  fecha date not null,
+  hora text,
+  lugar text,
+  descripcion text,
+  tareas jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+alter table eventos enable row level security;
+drop policy if exists "eventos_staff_all" on eventos;
+create policy "eventos_staff_all" on eventos for all to authenticated
+  using (not auth_es_hermano() and modulo_permitido('eventos'))
+  with check (not auth_es_hermano() and modulo_permitido('eventos'));
+-- Los hermanos pueden consultar la agenda (sin editarla).
+drop policy if exists "eventos_hermano_select" on eventos;
+create policy "eventos_hermano_select" on eventos for select to authenticated using (true);

@@ -1,19 +1,34 @@
-F4 + F5 · entrega combinada (aplica sobre lo que tienes ahora en main)
-======================================================================
+CABILDO — F6 + F7 + auditoría de bugs + pulido visual
+=====================================================
 
-Cambian 14 archivos, todos dentro de src/. Incluye F4 (precios) y F5
-(papeleta doble, bajas con renumeración, packs de suscripción y asistencia
-del diputado de tramo).
+Cambian 43 archivos: todos dentro de src/ y supabase/.
 
-OPCIÓN A (recomendada) — aplicar el parche desde la raíz del repo:
-  git apply F4-F5.patch
+QUÉ ENTRA
+  · F6  Cuotas por ejercicio: salto de año (emisión anual a todo el censo) y
+        "simular cobro" de la remesa.
+  · F7  Eventos y tareas: calendario, tareas por evento y "trabajadores"
+        (quién hace qué), con panel de pendientes por persona.
+  · Dos auditorías de bugs (unos 60 hallazgos) y un repaso visual completo en
+    tema claro y oscuro. Entre lo corregido: el QR no se podía escanear, al
+    imprimir en tema oscuro no se leía nada, un token de CSS inexistente
+    borraba los bordes de media interfaz, doble cobro en fraccionamientos
+    mensuales y todas las fechas de cobro con un día de desfase.
 
-OPCIÓN B — copiar los archivos tal cual:
-  Copia la carpeta src/ de este zip ENCIMA de la de tu proyecto
-  (respeta las rutas: todo va dentro de src/, NADA en la raíz).
+CÓMO APLICARLO
+  Opción A (recomendada), desde la raíz del repo:
+      git apply cabildo-todo.patch
 
-Además, borra el zip suelto que quedaba en la raíz del repo:
-  git rm PROYECTOCOMPLETOLIMPIO.zip
+  Opción B: copia las carpetas src/ y supabase/ de este zip ENCIMA de las
+  tuyas. Respeta las rutas: NADA va en la raíz del repo.
 
-Luego:
-  git add -A && git commit -m "F4+F5" && git push
+DESPUÉS
+      git add -A
+      git commit -m "F6 + F7 + auditoría"
+      git push
+
+LIMPIEZA (quedan archivos míos sueltos en la raíz de tu repo):
+      git rm F4-F5.patch F4-precios.patch LEEME.txt
+
+BASE DE DATOS (solo cuando conectes Supabase)
+  supabase/schema.sql        → si creas la base desde cero
+  supabase/migracion-2026-08.sql → si ya la tenías creada antes

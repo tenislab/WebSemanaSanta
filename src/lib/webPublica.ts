@@ -218,7 +218,7 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   secciones: SECCIONES_POR_DEFECTO,
 
   historia:
-    'Escribe aquí la historia de tu hermandad: fundación, titulares, sede canónica y todo lo que quieras contar a quien visite la web.',
+    'Fundada por un grupo de vecinos devotos, nuestra hermandad mantiene viva desde entonces la devoción a sus Sagrados Titulares. Desde su sede canónica organiza los cultos anuales, la estación de penitencia y una intensa labor de caridad con las familias del barrio.',
   titulares: [
     { id: 'tit-1', nombre: 'Ntro. Padre Jesús', fotoDataUrl: null, descripcion: 'Sagrada imagen del Señor.' },
     { id: 'tit-2', nombre: 'María Santísima', fotoDataUrl: null, descripcion: 'Bendita imagen de la Virgen.' },
@@ -233,9 +233,9 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   ],
   paginas: [
     {
-      id: 'pag-1', icono: '✝️', antetitulo: 'La Hermandad', titulo: 'Sagrados Titulares',
-      entradilla: 'Nuestros Sagrados Titulares.',
-      parrafos: [{ id: 'p-1', subtitulo: 'Historia de la imagen', texto: 'Describe aquí a los titulares de tu hermandad.' }],
+      id: 'pag-1', icono: '⚜️', antetitulo: 'Quiénes somos', titulo: 'La Hermandad',
+      entradilla: 'Una corporación viva, abierta a todo el que quiera formar parte de ella.',
+      parrafos: [{ id: 'p-1', subtitulo: 'Junta de gobierno', texto: 'La junta de gobierno, elegida en cabildo por todos los hermanos, dirige la vida de la corporación: cultos, patrimonio, caridad y la estación de penitencia.' }],
       fotos: [],
     },
   ],
@@ -304,7 +304,7 @@ export function saveWebPublica(web: WebPublica) {
 }
 
 /** Hook con la web pública y un setter que persiste. */
-export function useWebPublica(): [WebPublica, (siguiente: WebPublica) => void] {
+export function useWebPublica(): [WebPublica, (siguiente: WebPublica | ((actual: WebPublica) => WebPublica)) => void] {
   const [web, setWebState] = useState<WebPublica>(() => getWebPublica())
 
   useEffect(() => {
@@ -315,9 +315,18 @@ export function useWebPublica(): [WebPublica, (siguiente: WebPublica) => void] {
     return () => window.removeEventListener('storage', sincronizar)
   }, [])
 
-  function setWeb(siguiente: WebPublica) {
-    setWebState(siguiente)
-    saveWebPublica(siguiente)
+  /**
+   * Acepta el valor nuevo o una función (valor actual) => valor nuevo. Esta
+   * segunda forma es la que hay que usar desde callbacks asíncronos (subir una
+   * imagen, comprimirla…): con el objeto capturado se perdían los cambios
+   * hechos mientras tanto.
+   */
+  function setWeb(siguiente: WebPublica | ((actual: WebPublica) => WebPublica)) {
+    setWebState((actual) => {
+      const valor = typeof siguiente === 'function' ? siguiente(actual) : siguiente
+      saveWebPublica(valor)
+      return valor
+    })
   }
 
   return [web, setWeb]

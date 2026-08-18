@@ -93,10 +93,12 @@ export default function Hermanos() {
       actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Rechazada' } : s)))
       return
     }
-    const nextNumero = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
     const nuevo: Hermano = {
       id: nuevoId(),
-      numero: nextNumero,
+      // El número definitivo se asigna dentro del setHermanos de abajo, ya con
+      // la lista más reciente: calcularlo aquí (antes del await) podía repetir
+      // número si entretanto se daba de alta a otro hermano.
+      numero: 0,
       nombre: sol.nombre,
       estado: 'Nuevo',
       antiguedad: new Date().getFullYear(),
@@ -110,8 +112,23 @@ export default function Hermanos() {
       authUserId: null,
     }
     nuevo.authUserId = await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
-    setHermanos((prev) => [...prev, nuevo])
-    actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Aprobada' } : s)))
+    // La comprobación de DNI se repite AQUÍ, ya con la lista más reciente: entre
+    // el clic y el final del alta (una llamada de red) pudo entrar otro hermano.
+    let duplicado = false
+    setHermanos((prev) => {
+      if (prev.some((h) => h.dni.toUpperCase() === sol.dni.toUpperCase())) {
+        duplicado = true
+        return prev
+      }
+      return [...prev, { ...nuevo, numero: Math.max(0, ...prev.map((h) => h.numero)) + 1 }]
+    })
+    // Sobre el estado más reciente de las solicitudes, no sobre el de antes del
+    // await: si no, aprobar dos seguidas revertía la primera a «Pendiente».
+    setSolicitudesState((prev) => {
+      const next = prev.map((s) => (s.id === sol.id ? { ...s, estado: (duplicado ? 'Rechazada' : 'Aprobada') as SolicitudAlta['estado'] } : s))
+      saveSolicitudes(next)
+      return next
+    })
     setJustAddedId(nuevo.id)
     setTimeout(() => setJustAddedId(null), 3000)
   }
@@ -141,7 +158,8 @@ export default function Hermanos() {
         if (!q) return true
         return h.nombre.toLowerCase().includes(q) || String(h.numero).includes(q)
       })
-      .sort((a, b) => a.numero - b.numero)
+      // Por número; los de baja (sin número activo) van al final, no delante del nº 1.
+      .sort((a, b) => (a.numero || Infinity) - (b.numero || Infinity))
   }, [hermanos, query, filter, filtroEtiqueta])
 
   /** Añade o quita una etiqueta a un hermano (y refleja el cambio en la ficha abierta). */
@@ -220,11 +238,12 @@ export default function Hermanos() {
 
     const ibanRaw = String(data.get('iban') ?? '').trim()
     const iban = ibanRaw && isPlausibleIban(ibanRaw) ? ibanRaw : null
+    const fechaNacimiento = String(data.get('fechaNacimiento') ?? '').trim() || undefined
 
-    const nextNumero = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
     const nuevo: Hermano = {
       id: nuevoId(),
-      numero: nextNumero,
+      // Se numera dentro del setHermanos de abajo, con la lista más reciente.
+      numero: 0,
       nombre,
       estado: 'Nuevo',
       antiguedad: new Date().getFullYear(),
@@ -238,9 +257,10 @@ export default function Hermanos() {
       // comunicar y que el hermano cambia luego desde su área.
       claveAcceso: dni,
       authUserId: null,
+      fechaNacimiento,
     }
     nuevo.authUserId = await crearAccesoHermano(email, dni, dni, nombre)
-    setHermanos((prev) => [...prev, nuevo])
+    setHermanos((prev) => [...prev, { ...nuevo, numero: Math.max(0, ...prev.map((h) => h.numero)) + 1 }])
     setJustAddedId(nuevo.id)
     setFormOpen(false)
     setFilter('Todos')
@@ -293,26 +313,34 @@ export default function Hermanos() {
   function darDeBaja(hermanoId: string) {
     const objetivo = hermanos.find((h) => h.id === hermanoId)
     if (!objetivo || objetivo.estado === 'Baja') return
-    const numBaja = objetivo.numero
-    setHermanos((prev) =>
-      prev.map((h) => {
-        if (h.id === hermanoId) return { ...h, estado: 'Baja', numero: 0 }
-        if (h.estado !== 'Baja' && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
+    setHermanos((prev) => {
+      // Se relee dentro del updater: la lista pudo cambiar (otra pestaña, una
+      // recarga desde la base) entre el clic y este momento.
+      const actual = prev.find((h) => h.id === hermanoId)
+      if (!actual || actual.estado === 'Baja') return prev
+      const numBaja = actual.numero
+      return prev.map((h) => {
+        if (h.id === hermanoId) return { ...h, estado: 'Baja', numero: 0, bajaSolicitada: false }
+        // Solo descienden los que están dentro de la numeración activa
+        // (numero > 0); los de baja ya están fuera y no se tocan.
+        if (h.estado !== 'Baja' && h.numero > 0 && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
         return h
-      }),
-    )
+      })
+    })
     agregarAvisoHermano(hermanoId, 'La secretaría ha tramitado tu baja en la hermandad.')
-    setSelected((prev) => (prev && prev.id === hermanoId ? { ...prev, estado: 'Baja', numero: 0 } : prev))
+    setSelected((prev) => (prev && prev.id === hermanoId ? { ...prev, estado: 'Baja', numero: 0, bajaSolicitada: false } : prev))
   }
 
   /** Reactiva a un hermano de baja: vuelve al censo con el último número disponible. */
   function reactivar(hermanoId: string) {
     const objetivo = hermanos.find((h) => h.id === hermanoId)
     if (!objetivo || objetivo.estado !== 'Baja') return
-    const siguiente = Math.max(0, ...hermanos.map((h) => h.numero)) + 1
-    setHermanos((prev) =>
-      prev.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo', numero: siguiente } : h)),
-    )
+    // El número se toma dentro del updater, con la lista más reciente.
+    let siguiente = 0
+    setHermanos((prev) => {
+      siguiente = Math.max(0, ...prev.map((h) => h.numero)) + 1
+      return prev.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo', numero: siguiente } : h))
+    })
     setSelected((prev) => (prev && prev.id === hermanoId ? { ...prev, estado: 'Activo', numero: siguiente } : prev))
   }
 
@@ -329,7 +357,15 @@ export default function Hermanos() {
         'Esta acción ejerce el derecho de supresión (RGPD) y no se puede deshacer. ¿Continuar?',
     )
     if (!ok) return
-    setHermanos(await borrarDatosHermano(hermano.id))
+    const censo = await borrarDatosHermano(hermano.id)
+    if (censo === null) {
+      // El borrado se hizo, pero no se pudo releer el censo: se quita solo a ese
+      // hermano de la lista en vez de dejarla vacía por un fallo de red.
+      setHermanos((prev) => prev.filter((h) => h.id !== hermano.id))
+      window.alert('Los datos se han borrado, pero no se pudo actualizar el listado. Recarga la página para verlo al día.')
+    } else {
+      setHermanos(censo)
+    }
     setSelected(null)
   }
 
@@ -375,7 +411,7 @@ export default function Hermanos() {
         <div className="stat-tile">
           <span className="stat-tile__label">Activos</span>
           <span className="stat-tile__value">{stats.activos}</span>
-          <span className="stat-tile__trend stat-tile__trend--ok">Al corriente de baja</span>
+          <span className="stat-tile__trend stat-tile__trend--ok">De pleno derecho</span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Altas nuevas</span>
@@ -636,6 +672,12 @@ export default function Hermanos() {
 
             <div className="assign-box">
               <label>Situación en la hermandad</label>
+              {selected.bajaSolicitada && selected.estado !== 'Baja' && (
+                <div className="banner-inline banner-inline--warn" style={{ marginBottom: '0.7rem' }}>
+                  <b>{selected.nombre.split(' ')[0]} ha solicitado la baja</b> desde su área de
+                  hermano. Tramítala aquí abajo si procede.
+                </div>
+              )}
               {selected.estado !== 'Baja' ? (
                 <>
                   <p className="form-hint">
@@ -723,9 +765,16 @@ export default function Hermanos() {
             <input id="dni" name="dni" type="text" placeholder="12345678A" required />
             {dniError && <p className="form-hint form-hint--error">{dniError}</p>}
           </div>
-          <div className="form-row">
-            <label htmlFor="telefono">Teléfono</label>
-            <input id="telefono" name="telefono" type="tel" placeholder="600 000 000" />
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor="telefono">Teléfono</label>
+              <input id="telefono" name="telefono" type="tel" placeholder="600 000 000" />
+            </div>
+            <div className="form-row">
+              <label htmlFor="fechaNacimiento">Fecha de nacimiento</label>
+              <input id="fechaNacimiento" name="fechaNacimiento" type="date" />
+              <p className="form-hint">Necesaria para los avisos por edad (p. ej. solo mayores de edad).</p>
+            </div>
           </div>
           <div className="form-row">
             <label htmlFor="direccion">Dirección</label>

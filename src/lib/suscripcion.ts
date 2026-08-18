@@ -131,8 +131,12 @@ export function getSuscripcion(): Suscripcion {
     }
   }
   // Formato antiguo ({ activa, plan: 'mensual'|'anual' }) → pack «Todo»
-  const periodo: Periodo = raw.plan === 'anual' ? 'anual' : 'mensual'
-  return { activa: true, pack: 'todo', periodo, desde: (raw.desde as string) ?? null }
+  if (raw.plan === 'anual' || raw.plan === 'mensual') {
+    return { activa: true, pack: 'todo', periodo: raw.plan, desde: (raw.desde as string) ?? null }
+  }
+  // Suscripción con un pack que no reconocemos: se trata como NO activa. Antes
+  // se concedía «Todo» (todas las capacidades) ante cualquier dato inesperado.
+  return SUSCRIPCION_INICIAL
 }
 
 export function saveSuscripcion(s: Suscripcion) {
@@ -151,7 +155,9 @@ export function tieneCapacidad(s: Suscripcion, cap: Capacidad): boolean {
 
 /**
  * Capacidad que exige cada módulo del panel. Los módulos no listados (inicio,
- * configuración, seguridad) no exigen ninguna: son de la propia cuenta.
+ * personal, configuración, seguridad) no exigen ninguna: son de la propia
+ * cuenta, y hacen falta con cualquier pack (p. ej. para dar acceso a quien
+ * edita la web).
  */
 export const CAPACIDAD_DE_MODULO: Record<string, Capacidad> = {
   hermanos: 'gestion',
@@ -161,9 +167,9 @@ export const CAPACIDAD_DE_MODULO: Record<string, Capacidad> = {
   tesoreria: 'gestion',
   inventario: 'gestion',
   archivo: 'gestion',
+  eventos: 'gestion',
   comunicados: 'gestion',
   informes: 'gestion',
-  personal: 'gestion',
   web: 'web',
 }
 

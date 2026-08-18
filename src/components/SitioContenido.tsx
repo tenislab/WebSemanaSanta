@@ -31,6 +31,24 @@ export default function SitioContenido({
     actualidad: 'Actualidad', paginas: 'La Hermandad', boletines: 'Boletines', contacto: 'Contacto',
   }
 
+  /**
+   * ¿Tiene esta sección algo que enseñar? El menú solo enlaza secciones con
+   * contenido real: una visible pero vacía (galería sin fotos, contacto sin
+   * datos…) no pinta ancla muerta ni título huérfano.
+   */
+  function tieneContenido(tipo: TipoSeccion): boolean {
+    if (tipo === 'historia') return Boolean(web.historia?.trim())
+    if (tipo === 'titulares') return web.titulares.length > 0
+    if (tipo === 'cultos') return web.cultos.length > 0
+    if (tipo === 'galeria') return web.galeria.length > 0
+    if (tipo === 'actualidad') return web.noticias.some((n) => n.publicada)
+    if (tipo === 'paginas') return web.paginas.filter((p) => p.enMenu !== false).length > 0
+    if (tipo === 'boletines') return web.boletines.length > 0
+    if (tipo === 'contacto')
+      return Boolean(web.direccion || hermandad.direccion || web.telefono || hermandad.telefono || web.email || hermandad.email || web.mapaUrl)
+    return true
+  }
+
   const Boton = ({ children, clase }: { children: ReactNode; clase: string }) =>
     interactivo ? (
       <Link to="/hermano" className={clase}>{children}</Link>
@@ -55,7 +73,7 @@ export default function SitioContenido({
           <span>{titulo}</span>
         </div>
         <nav className="sitio__menu">
-          {seccionesVisibles.map((s) => {
+          {seccionesVisibles.filter((s) => tieneContenido(s.tipo)).map((s) => {
             // La sección "paginas" no da un enlace, sino uno por cada página del menú.
             if (s.tipo === 'paginas') {
               return web.paginas
@@ -116,9 +134,27 @@ function Redes({ web }: { web: WebPublica }) {
   if (web.redes.length === 0) return null
   return (
     <div className="sitio__redes">
-      {web.redes.map((r) => <a key={r.id} href={r.url} target="_blank" rel="noopener noreferrer" className="sitio__red">{r.tipo}</a>)}
+      {web.redes
+        .map((r) => ({ ...r, href: urlSegura(r.url) }))
+        .filter((r) => r.href)
+        .map((r) => <a key={r.id} href={r.href} target="_blank" rel="noopener noreferrer" className="sitio__red">{r.tipo}</a>)}
     </div>
   )
+}
+
+/**
+ * Solo se aceptan enlaces http(s) (o relativos). Una URL escrita en el editor
+ * como `javascript:…` se pintaba tal cual en el href y podía ejecutar código
+ * a quien visitara la web.
+ */
+function urlSegura(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  const limpia = url.trim()
+  if (/^https?:\/\//i.test(limpia)) return limpia
+  if (/^\/[^/]/.test(limpia)) return limpia
+  // Sin esquema («hermandad.es/blog»): se asume https, que es lo que quiso poner.
+  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(limpia)) return `https://${limpia}`
+  return undefined
 }
 
 function fechaBonita(iso: string): string {
@@ -129,6 +165,7 @@ function fechaBonita(iso: string): string {
 
 function Seccion({ tipo, web, hermandad }: { tipo: TipoSeccion; web: WebPublica; hermandad: HermandadSettings }) {
   if (tipo === 'historia') {
+    if (!web.historia?.trim()) return null
     return <section id="historia" className="sitio__seccion"><h2>{SECCIONES_INFO.historia.nombre}</h2><p className="sitio__texto">{web.historia}</p></section>
   }
   if (tipo === 'titulares') {
@@ -170,7 +207,8 @@ function Seccion({ tipo, web, hermandad }: { tipo: TipoSeccion; web: WebPublica;
     if (noticias.length === 0) return null
     return (
       <section id="actualidad" className="sitio__seccion">
-        <h2>{SECCIONES_INFO.actualidad.nombre}</h2>
+        {/* En la web pública, sin la coletilla "(noticias)" del editor. */}
+        <h2>Actualidad</h2>
         <div className="sitio__noticias">
           {noticias.map((n) => (
             <article key={n.id} className="sitio__noticia">
@@ -190,7 +228,8 @@ function Seccion({ tipo, web, hermandad }: { tipo: TipoSeccion; web: WebPublica;
       <>
         {pags.map((p) => (
           <section id={`pagina-${p.id}`} key={p.id} className="sitio__seccion">
-            <h2>{p.icono} {p.titulo}</h2>
+            {/* El icono es una ayuda del editor del panel: en la web pública el título va limpio. */}
+            <h2>{p.titulo}</h2>
             {p.antetitulo && <span className="sitio__pagina-ante">{p.antetitulo}</span>}
             {p.entradilla && <p className="sitio__pagina-entradilla">{p.entradilla}</p>}
             {p.fotos.length > 0 && <div className="sitio__galeria">{p.fotos.map((f, idx) => <figure key={idx} className="sitio__foto"><img src={f} alt="" /></figure>)}</div>}
@@ -213,11 +252,15 @@ function Seccion({ tipo, web, hermandad }: { tipo: TipoSeccion; web: WebPublica;
     const dir = web.direccion || hermandad.direccion
     const tel = web.telefono || hermandad.telefono
     const email = web.email || hermandad.email
+    // Sin ningún dato de contacto, la sección no se pinta (nada de títulos vacíos).
+    if (!dir && !tel && !email && !web.mapaUrl) return null
     return (
       <section id="contacto" className="sitio__seccion">
         <h2>{SECCIONES_INFO.contacto.nombre}</h2>
         <ul className="sitio__contacto">{dir && <li>{dir}</li>}{tel && <li>Tel. {tel}</li>}{email && <li>{email}</li>}</ul>
-        {web.mapaUrl && <a href={web.mapaUrl} target="_blank" rel="noopener noreferrer" className="sitio-btn sitio-btn--sm">Ver en el mapa</a>}
+        {urlSegura(web.mapaUrl) && (
+          <a href={urlSegura(web.mapaUrl)} target="_blank" rel="noopener noreferrer" className="sitio-btn sitio-btn--sm">Ver en el mapa</a>
+        )}
       </section>
     )
   }

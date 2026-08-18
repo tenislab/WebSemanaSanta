@@ -24,8 +24,12 @@ const CLAVES_COLECCIONES = [
   CLAVES_DATOS.documentos,
   CLAVES_DATOS.comunicados,
   CLAVES_DATOS.cuentasSociales,
+  CLAVES_DATOS.eventos,
   'cabildo-solicitudes-papeleta',
   'cabildo-convocatoria',
+  // Personal con acceso al panel: en una hermandad vacía tampoco hay cargos
+  // de ejemplo (si no, la demo «de cero» aparecía con seis accesos creados).
+  'cabildo-personal',
 ]
 
 /** Se conservan al restablecer una demo (sesión demo y consentimiento del hermano). */

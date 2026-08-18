@@ -4,6 +4,7 @@ import Drawer from '../../components/Drawer'
 import HermanoPicker from '../../components/HermanoPicker'
 import { LogoMark } from '../../components/Logo'
 import AsistenciaTramo from '../../components/AsistenciaTramo'
+import { useAsistencias, registroDe } from '../../lib/asistencia'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { INCIDENCIAS_INICIALES, TIPOS_INCIDENCIA_POR_DEFECTO, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
@@ -231,8 +232,23 @@ export default function Cortejo() {
   }
 
   function marcarPresente(papeletaId: string) {
-    // "Pase de lista" del día de salida: si aún no estaba pagada, se confirma también el pago en mano.
-    setPapeletas((prev) => prev.map((p) => (p.id === papeletaId ? { ...p, estado: 'Entregada' } : p)))
+    // "Pase de lista" del día de salida: si aún no estaba pagada, se confirma
+    // también el pago en mano, dejando constancia del método y la fecha (antes
+    // pasaba a "Entregada" sin registro y el dinero aparecía sin justificar).
+    const hoyTexto = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+    setPapeletas((prev) =>
+      prev.map((p) => {
+        if (p.id !== papeletaId) return p
+        const yaPagada = p.estado === 'Pagada' || p.estado === 'Entregada'
+        return {
+          ...p,
+          estado: 'Entregada',
+          fechaEntrega: p.fechaEntrega ?? hoyTexto,
+          metodoPago: yaPagada ? p.metodoPago : p.metodoPago ?? 'Efectivo',
+          fechaPago: yaPagada ? p.fechaPago : p.fechaPago ?? hoyTexto,
+        }
+      }),
+    )
   }
 
   function registrarIncidencia(papeletaId: string, tipo: TipoIncidencia, descripcion: string) {
@@ -399,6 +415,8 @@ export default function Cortejo() {
           ))}
           {cuerposPresentes.length > 1 && (
             <>
+              {/* Separador: distingue el grupo de estado del grupo de cuerpo (evita ver dos «Todos» seguidos). */}
+              <span className="filters__sep" aria-hidden="true" />
               {(['Todos', ...cuerposPresentes] as Array<'Todos' | Cuerpo>).map((c) => (
                 <button
                   key={c}
@@ -406,13 +424,14 @@ export default function Cortejo() {
                   onClick={() => setCuerpoFiltro(c)}
                   type="button"
                 >
-                  {c}
+                  {c === 'Todos' ? 'Ambos cortejos' : c}
                 </button>
               ))}
             </>
           )}
+          {/* Conmutador de vista: no es un filtro, va con estilo de botón aparte. */}
           <button
-            className={`chip${vista === 'tabla' ? ' chip--active' : ''}`}
+            className="btn btn-outline btn-sm filters__vista"
             onClick={() => setVista((v) => (v === 'tarjetas' ? 'tabla' : 'tarjetas'))}
             type="button"
           >
@@ -614,8 +633,9 @@ export default function Cortejo() {
             </div>
           </div>
           <p className="form-hint">
-            El puesto dentro del tramo se calcula solo a partir de su número de hermano: cuanto
-            más bajo, más cerca de la cabeza del tramo.
+            El puesto dentro del tramo se calcula solo a partir de su número de hermano: los
+            más antiguos (número más bajo) van al final del tramo, junto al paso; los más nuevos,
+            en cabeza.
           </p>
         </form>
       </Drawer>
@@ -821,6 +841,7 @@ function TramoFicha({
   onPagada: (papeletaId: string) => void
 }) {
   const edicionActual = getCampana().anio
+  const [mapaAsistencia] = useAsistencias()
   const confirmados = reparto.filter((a) => a.estado !== 'Excede aforo')
   const excedidos = reparto.filter((a) => a.estado === 'Excede aforo')
   const ocupados = confirmados.length
@@ -928,12 +949,21 @@ function TramoFicha({
             <p className="form-hint">Sin hermanos asignados todavía.</p>
           ) : (
             <ol>
-              {confirmados.map((a) => (
-                <li key={a.papeleta.id}>
-                  Puesto {a.puesto} · {a.hermano.nombre}{' '}
-                  <span className="table-subtle">· nº {a.hermano.numero}</span>
-                </li>
-              ))}
+              {confirmados.map((a) => {
+                // El listado del día de salida refleja la asistencia ya confirmada
+                // (por la secretaría o por el diputado del tramo).
+                const asis = registroDe(mapaAsistencia, edicionActual, a.hermano.id)
+                return (
+                  <li key={a.papeleta.id} className={asis.estado === 'no_asiste' ? 'cortejo-orden__ausente' : undefined}>
+                    Puesto {a.puesto} · {a.hermano.nombre}{' '}
+                    <span className="table-subtle">· nº {a.hermano.numero > 0 ? a.hermano.numero : '—'}</span>
+                    {asis.estado === 'no_asiste' && (
+                      <span className="table-subtle"> · NO ASISTE{asis.motivo ? ` (${asis.motivo})` : ''}</span>
+                    )}
+                    {asis.estado === 'asiste' && <span className="table-subtle"> · asiste</span>}
+                  </li>
+                )
+              })}
             </ol>
           )}
         </div>

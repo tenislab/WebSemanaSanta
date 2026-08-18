@@ -139,17 +139,31 @@ async function sincronizar<T extends { id: string }>(
     return anterior && JSON.stringify(anterior) !== JSON.stringify(n)
   })
 
+  // supabase-js NO lanza excepción cuando la base rechaza la operación (columna
+  // que no existe, restricción incumplida…): devuelve `error` en la respuesta.
+  // Sin mirarlo, un guardado fallido pasaba totalmente inadvertido: la pantalla
+  // decía que se había guardado y al recargar el cambio no estaba.
+  const fallos: string[] = []
   try {
     if (eliminados.length > 0) {
-      await supabase.from(tabla).delete().in('id', eliminados.map((e) => e.id))
+      const { error } = await supabase.from(tabla).delete().in('id', eliminados.map((e) => e.id))
+      if (error) fallos.push(`borrar: ${error.message}`)
     }
     if (nuevos.length > 0) {
-      await supabase.from(tabla).insert(nuevos.map(toRow))
+      const { error } = await supabase.from(tabla).insert(nuevos.map(toRow))
+      if (error) fallos.push(`crear: ${error.message}`)
     }
     for (const item of posiblesCambios) {
-      await supabase.from(tabla).update(toRow(item)).eq('id', item.id)
+      const { error } = await supabase.from(tabla).update(toRow(item)).eq('id', item.id)
+      if (error) fallos.push(`guardar ${item.id}: ${error.message}`)
     }
   } catch (err) {
-    console.error(`No se pudo sincronizar "${tabla}" con Supabase:`, err)
+    fallos.push(String(err))
+  }
+  if (fallos.length > 0) {
+    console.error(`No se pudo sincronizar "${tabla}" con Supabase:`, fallos.join(' · '))
+    // Aviso visible: quien está usando la app debe enterarse de que lo que ve
+    // en pantalla no ha llegado a la base de datos.
+    window.dispatchEvent(new CustomEvent('cabildo-sync-error', { detail: { tabla, fallos } }))
   }
 }

@@ -101,10 +101,28 @@ export default function Seguridad() {
       </div>
 
       {!configured && (
-        <div className="banner banner--info" role="status">
-          <strong>Modo demostración.</strong> La verificación en dos pasos necesita Supabase
-          conectado; en este modo no hay contraseñas reales que proteger.
-        </div>
+        <>
+          <div className="banner banner--info" role="status">
+            <strong>Modo demostración.</strong> La verificación en dos pasos necesita la base de
+            datos conectada; en este modo no hay contraseñas reales que proteger.
+          </div>
+          {/* En demo no hay nada que activar: se enseña qué hará esta página cuando conectemos. */}
+          <section className="settings-card">
+            <h2 className="settings-card__title">Así funcionará</h2>
+            <ol className="seguridad-pasos">
+              <li>Activas la verificación y la app te enseña un código QR.</li>
+              <li>Lo escaneas con tu app de autenticación (Google Authenticator, Authy, 1Password…).</li>
+              <li>Desde entonces, al iniciar sesión se pide tu contraseña y un código de 6 dígitos que cambia cada 30 segundos.</li>
+            </ol>
+            <p className="form-hint">
+              Protege tu cuenta aunque alguien averigüe tu contraseña. Se activará aquí mismo en
+              cuanto la hermandad esté conectada a la base de datos.
+            </p>
+            <button type="button" className="btn btn-primary btn-sm" disabled title="Disponible al conectar la base de datos">
+              Activar verificación en dos pasos
+            </button>
+          </section>
+        </>
       )}
       {error && (
         <div className="banner banner--error" role="alert">

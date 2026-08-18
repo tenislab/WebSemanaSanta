@@ -25,12 +25,24 @@ export interface DatosVerificacion {
   a: number
 }
 
-/** Base64 seguro para UTF-8 (nombres con acentos, ñ…). */
+/**
+ * Base64 seguro para UTF-8 (nombres con acentos, ñ…) Y para viajar dentro de
+ * una URL: se usa el alfabeto «base64url» (- _ en lugar de + /), sin relleno.
+ * Con el base64 normal, el «+» del código se interpreta como un espacio al
+ * leer el parámetro de la URL y la papeleta salía como «Código no válido».
+ */
 function b64Encode(texto: string): string {
   return btoa(unescape(encodeURIComponent(texto)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 function b64Decode(b64: string): string {
-  return decodeURIComponent(escape(atob(b64)))
+  // Se aceptan también los códigos antiguos (con + / =) y el «+» ya convertido
+  // en espacio al leerlo de la URL, para que ningún QR impreso deje de valer.
+  let normal = b64.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/')
+  while (normal.length % 4 !== 0) normal += '='
+  return decodeURIComponent(escape(atob(normal)))
 }
 
 /** Construye los datos de verificación de una papeleta ya asignada. */

@@ -677,11 +677,16 @@ export default function HermanoPortal() {
   function solicitarBaja() {
     if (!window.confirm('¿Seguro que quieres solicitar la baja como hermano/a? La secretaría tramitará tu solicitud.')) return
     if (esPrincipal && hermanoPrincipal) {
-      setHermanos((prev) => prev.map((h) => (h.id === hermanoPrincipal.id ? { ...h, estado: 'Baja' } : h)))
+      // Es una SOLICITUD: no se da de baja solo. Queda marcada para que la
+      // secretaría la tramite desde el censo (Hermanos › ficha › Dar de baja).
+      setHermanos((prev) => prev.map((h) => (h.id === hermanoPrincipal.id ? { ...h, bajaSolicitada: true } : h)))
     } else {
       setBajaMuestraSolicitada(true)
     }
   }
+
+  /** ¿Ya está pedida la baja? (guardada en el censo, o marcada en una hermandad de muestra). */
+  const bajaPedida = esPrincipal ? Boolean(hermanoPrincipal?.bajaSolicitada) : bajaMuestraSolicitada
 
   const misCuotas = useMemo(
     () => (hermanoPrincipal ? cuotas.filter((c) => c.hermanoId === hermanoPrincipal.id) : []),
@@ -944,7 +949,7 @@ export default function HermanoPortal() {
             <p className="eyebrow">Área del hermano · {nombreHermandadActiva}</p>
             <h1>Hola, {primerNombre}</h1>
             <div className="portal__resumen">
-              <span className="pill pill--info">Nº {numeroActivo}</span>
+              <span className="pill pill--info">{numeroActivo > 0 ? `Nº ${numeroActivo}` : 'Sin número (baja)'}</span>
               {hermanoPrincipal && (
                 <>
                   <span className={`pill ${hermanoPrincipal.estado === 'Activo' ? 'pill--ok' : hermanoPrincipal.estado === 'Nuevo' ? 'pill--info' : 'pill--off'}`}>
@@ -1144,7 +1149,21 @@ export default function HermanoPortal() {
                   </>
                 )}
 
-                {(renovacion.estado === 'Sin papeleta' || renovacion.estado === 'No renovada') &&
+                {/* Renunció este año: se le confirma, en vez de volver a ofrecerle
+                    el formulario como si no hubiera hecho nada. */}
+                {renovacion.papeletaActual?.estado === 'Renuncia' && (
+                  <div className="assign-box assign-box--wait">
+                    <label>Este año no sales</label>
+                    <p className="portal__lead">
+                      Queda registrado que renuncias a tu sitio en la estación de penitencia de{' '}
+                      {campana.anio}. Si cambias de idea antes de que acabe el plazo, escribe a la
+                      secretaría de {nombreHermandadActiva}.
+                    </p>
+                  </div>
+                )}
+
+                {renovacion.papeletaActual?.estado !== 'Renuncia' &&
+                  (renovacion.estado === 'Sin papeleta' || renovacion.estado === 'No renovada') &&
                   (miSolicitud && miSolicitud.estado === 'Pendiente' ? (
                     <div className="assign-box assign-box--wait">
                       <label>Solicitud enviada</label>
@@ -1234,8 +1253,18 @@ export default function HermanoPortal() {
                 {(renovacion.estado === 'Renovada' || renovacion.estado === 'Nueva') && renovacion.papeletaActual && hermanoPrincipal && (
                   <>
                     <p className="portal__lead">
-                      Tienes tu sitio para este año{asignacion?.tramo ? ` en ${etiquetaTramo(asignacion.tramo)}` : ''}. La
-                      secretaría te avisará para recoger la papeleta física.
+                      {renovacion.papeletaActual.estado === 'Solicitada' ? (
+                        <>
+                          Tu solicitud está <b>pendiente de asignación</b>: la secretaría te dará
+                          sitio y te avisará. Todavía no hay nada que pagar.
+                        </>
+                      ) : (
+                        <>
+                          Tienes tu sitio para este año
+                          {asignacion?.tramo ? ` en ${etiquetaTramo(asignacion.tramo)}` : ''}. La secretaría te
+                          avisará para recoger la papeleta física.
+                        </>
+                      )}
                     </p>
                     {modeloPapeleta ? (
                       <PapeletaModeloRender
@@ -1260,7 +1289,9 @@ export default function HermanoPortal() {
                         opcion={renovacion.papeletaActual.opcion}
                       />
                     )}
-                    {(renovacion.papeletaActual.estado === 'Asignada' || renovacion.papeletaActual.estado === 'Solicitada') && (
+                    {/* Solo se cobra cuando la papeleta está ASIGNADA: una simple
+                        solicitud aún no tiene sitio ni importe firme. */}
+                    {renovacion.papeletaActual.estado === 'Asignada' && (
                       <PagoPapeleta
                         papeleta={renovacion.papeletaActual}
                         bizum={hermandadPrincipal.bizumTelefono}
@@ -1378,10 +1409,16 @@ export default function HermanoPortal() {
           <p className="form-hint">
             Tienes derecho a acceder a tus datos y a solicitar su supresión. La baja la tramita la secretaría de {nombreHermandadActiva}.
           </p>
+          {bajaPedida && (
+            <div className="banner-inline banner-inline--warn" style={{ marginBottom: '0.8rem' }}>
+              Has solicitado la baja. La secretaría de {nombreHermandadActiva} la tramitará; hasta
+              entonces sigues siendo hermano/a de pleno derecho.
+            </div>
+          )}
           <div className="assign-box__row">
             <button className="btn btn-outline" onClick={descargarMisDatos}>Descargar mis datos</button>
-            <button className="btn btn-ghost rgpd-borrar" onClick={solicitarBaja} disabled={bajaMuestraSolicitada}>
-              {bajaMuestraSolicitada ? 'Baja solicitada' : 'Solicitar la baja'}
+            <button className="btn btn-ghost rgpd-borrar" onClick={solicitarBaja} disabled={bajaPedida}>
+              {bajaPedida ? 'Baja solicitada' : 'Solicitar la baja'}
             </button>
           </div>
         </section>

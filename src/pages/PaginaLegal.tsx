@@ -7,9 +7,12 @@ export default function PaginaLegal() {
   const doc = slug ? getDocumentoLegal(slug) : undefined
   if (!doc) return <Navigate to="/" replace />
 
-  // Los textos legales se dejan EN BLANCO a propósito: cada titular debe
-  // publicar los suyos, redactados y revisados por un profesional. Aquí solo
-  // se muestra la página con su título y un aviso, lista para completar.
+  // Se muestran los textos de data/legal.ts como PLANTILLA. Mientras queden
+  // huecos por rellenar ([...]), se avisa en grande de que no tienen validez
+  // legal hasta que el titular ponga sus datos y lo revise un profesional.
+  const sinRellenar =
+    doc.intro.includes('[') || doc.secciones.some((s) => [...(s.parrafos ?? []), ...(s.lista ?? [])].some((t) => t.includes('[')))
+
   return (
     <div className="legal-page">
       <header className="legal-header">
@@ -25,14 +28,35 @@ export default function PaginaLegal() {
         <article className="legal-doc">
           <p className="eyebrow eyebrow--gold">Legal</p>
           <h1>{doc.titulo}</h1>
+          <p className="legal-actualizado">Última actualización: {doc.actualizado}</p>
 
-          <div className="legal-blank" role="note">
-            <p className="legal-blank__title">Documento pendiente de publicación</p>
-            <p>
-              El texto de este documento se publicará próximamente. Debe redactarlo y revisarlo un
-              profesional con los datos reales del titular antes de darle validez legal.
-            </p>
-          </div>
+          {sinRellenar && (
+            <div className="legal-blank" role="note">
+              <p className="legal-blank__title">Plantilla pendiente de completar</p>
+              <p>
+                Este texto es un modelo de partida: los datos entre corchetes los debe rellenar el
+                titular y revisarlo un profesional antes de darle validez legal.
+              </p>
+            </div>
+          )}
+
+          <p className="legal-intro">{doc.intro}</p>
+
+          {doc.secciones.map((s, i) => (
+            <section className="legal-seccion" key={s.titulo ?? i}>
+              {s.titulo && <h2>{s.titulo}</h2>}
+              {s.parrafos?.map((p, j) => (
+                <p key={j}>{p}</p>
+              ))}
+              {s.lista && (
+                <ul>
+                  {s.lista.map((li, j) => (
+                    <li key={j}>{li}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
         </article>
 
         <nav className="legal-otros" aria-label="Otros documentos legales">

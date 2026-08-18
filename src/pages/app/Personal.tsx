@@ -178,7 +178,8 @@ export default function Personal() {
           <tbody>
             {personal.map((p) => (
               <tr key={p.id} onClick={() => setSelected(p)} style={{ cursor: 'pointer' }}>
-                <td className="row-person__name">{p.nombre}</td>
+                {/* El span evita aplicar display:block al propio <td>, que rompería la alineación de la tabla. */}
+                <td><span className="row-person__name">{p.nombre}</span></td>
                 <td className="table-subtle">{p.email}</td>
                 <td>
                   <span className="pill pill--info">{p.cargo}</span>

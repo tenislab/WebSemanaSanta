@@ -186,8 +186,8 @@ export default function Papeletas() {
       })
       .sort((a, b) =>
         orden === 'antiguedad'
-          ? a.hermano.antiguedad - b.hermano.antiguedad || a.hermano.numero - b.hermano.numero
-          : a.hermano.numero - b.hermano.numero,
+          ? a.hermano.antiguedad - b.hermano.antiguedad || (a.hermano.numero || Infinity) - (b.hermano.numero || Infinity)
+          : (a.hermano.numero || Infinity) - (b.hermano.numero || Infinity),
       )
   }, [hermanos, papeletas, campana, filter, query, orden])
 
@@ -457,7 +457,7 @@ export default function Papeletas() {
         }
       })
       .filter((it) => it.hermano)
-      .sort((a, b) => a.hermano.numero - b.hermano.numero)
+      .sort((a, b) => (a.hermano.numero || Infinity) - (b.hermano.numero || Infinity))
     if (lista.length === 0) return
     setListaImpresion(lista)
     setImprimirOpen(false)
@@ -559,13 +559,13 @@ export default function Papeletas() {
             </button>
           )}
           {stats.pendientePago > 0 && (
-            <span className="aviso aviso--warn">⚠️ {stats.pendientePago} papeleta{stats.pendientePago === 1 ? '' : 's'} pendiente{stats.pendientePago === 1 ? '' : 's'} de pago</span>
+            <span className="aviso aviso--warn">{stats.pendientePago} papeleta{stats.pendientePago === 1 ? '' : 's'} pendiente{stats.pendientePago === 1 ? '' : 's'} de pago</span>
           )}
           {tramosCasiLlenos.map((nombre) => (
-            <span key={nombre} className="aviso aviso--warn">🟡 {nombre} casi completo</span>
+            <span key={nombre} className="aviso aviso--warn">{nombre} casi completo</span>
           ))}
           {abierta && stats.porRenovar > 0 && (
-            <span className="aviso aviso--neutral">↻ {stats.porRenovar} por renovar</span>
+            <span className="aviso aviso--neutral">{stats.porRenovar} por renovar</span>
           )}
         </div>
       )}
@@ -621,8 +621,8 @@ export default function Papeletas() {
           onChange={(e) => setOrden(e.target.value as 'numero' | 'antiguedad')}
           aria-label="Ordenar"
         >
-          <option value="numero">Ordenar por nº de hermano</option>
-          <option value="antiguedad">Ordenar por antigüedad</option>
+          <option value="numero">Por nº de hermano</option>
+          <option value="antiguedad">Por antigüedad</option>
         </select>
       </div>
 
@@ -656,7 +656,7 @@ export default function Papeletas() {
                       </span>
                     </div>
                   </td>
-                  <td className="table-subtle">
+                  <td className="table-subtle td-nowrap">
                     {Math.max(0, campana.anio - h.antiguedad)} años
                     <span className="table-muted"> · {h.antiguedad}</span>
                   </td>
@@ -883,6 +883,9 @@ export default function Papeletas() {
                         📱+🖨️ Las dos
                       </button>
                     </div>
+                    {/* Contenedor de las versiones: al imprimir «las dos», es el que sale
+                        del flujo para que cada versión caiga en su propia página. */}
+                    <div className="papeleta-versiones">
                     {variantePapeleta !== 'fisica' && (
                       <div className="papeleta-variante">
                         {variantePapeleta === 'ambas' && (
@@ -947,6 +950,7 @@ export default function Papeletas() {
                         )}
                       </div>
                     )}
+                    </div>
                     <p className="form-hint no-print">
                       {variantePapeleta === 'movil'
                         ? 'Versión de móvil: lleva el QR de verificación. Es la que se envía al hermano por correo (envío real al conectar la base de datos).'

@@ -22,6 +22,7 @@ export const MODULOS: Modulo[] = [
   { id: 'tesoreria', label: 'Tesorería' },
   { id: 'inventario', label: 'Inventario' },
   { id: 'archivo', label: 'Archivo documental' },
+  { id: 'eventos', label: 'Eventos y tareas' },
   { id: 'comunicados', label: 'Comunicados' },
   { id: 'informes', label: 'Informes' },
   { id: 'web', label: 'Web pública' },
@@ -34,12 +35,12 @@ const TODOS = MODULOS.map((m) => m.id)
 /** Permisos de fábrica por cargo: un punto de partida razonable, pensado para editarse desde Personal. */
 export const PERMISOS_POR_DEFECTO: Record<Cargo, string[]> = {
   'Hermano Mayor': TODOS,
-  'Secretario/a': ['hermanos', 'cortejo', 'papeletas', 'archivo', 'comunicados', 'informes', 'web'],
+  'Secretario/a': ['hermanos', 'cortejo', 'papeletas', 'archivo', 'eventos', 'comunicados', 'informes', 'web'],
   'Tesorero/a': ['tesoreria', 'cuotas', 'inventario', 'informes'],
   Fiscal: ['archivo', 'informes'],
-  'Mayordomo/Prioste': ['cortejo', 'inventario', 'informes'],
-  'Diputado/a Mayor de Gobierno': ['hermanos', 'cortejo', 'papeletas', 'informes'],
-  Vocal: ['comunicados', 'informes'],
+  'Mayordomo/Prioste': ['cortejo', 'inventario', 'eventos', 'informes'],
+  'Diputado/a Mayor de Gobierno': ['hermanos', 'cortejo', 'papeletas', 'eventos', 'informes'],
+  Vocal: ['eventos', 'comunicados', 'informes'],
   'Hermano de a pie': [],
 }
 

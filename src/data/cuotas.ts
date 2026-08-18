@@ -18,6 +18,8 @@ export interface Cuota {
   concepto: ConceptoCuota
   importe: number
   estado: EstadoCuota
+  /** Ejercicio (año) al que pertenece la cuota. Si falta (datos antiguos), se deduce de `fechaEmision`. */
+  ejercicio?: number
   fechaEmision: string
   /** Fecha en la que está previsto pasar el cobro (domiciliado o manual). */
   fechaCobro: string

@@ -215,13 +215,18 @@ export default function Comunicados() {
         </button>
       </div>
 
-      <section className="redes-card">
-        <div className="redes-card__head">
-          <h2>Redes sociales conectadas</h2>
+      {/* Desplegable: la gestión de cuentas es configuración, no el día a día — colapsada
+          por defecto para que los avisos (el contenido principal) queden arriba. */}
+      <details className="redes-card">
+        <summary className="redes-card__head">
+          <h2>
+            Redes sociales conectadas
+            <span className="pill pill--info">{cuentas.filter((c) => c.conectada).length} de {cuentas.length}</span>
+          </h2>
           <p className="table-subtle">
             Conexión simulada — la publicación real llegará cuando enlacemos las cuentas oficiales de la hermandad.
           </p>
-        </div>
+        </summary>
         <div className="redes-grid">
           {cuentas.map((c) => (
             <div className="red-card" key={c.red}>
@@ -275,7 +280,7 @@ export default function Comunicados() {
             </div>
           ))}
         </div>
-      </section>
+      </details>
 
       <section className="stat-grid">
         <div className="stat-tile">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Logo, { LogoMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
@@ -30,6 +30,7 @@ function moduloIdDeRuta(pathname: string): string | null {
     { prefix: '/app/tesoreria', modulo: 'tesoreria' },
     { prefix: '/app/inventario', modulo: 'inventario' },
     { prefix: '/app/archivo', modulo: 'archivo' },
+    { prefix: '/app/eventos', modulo: 'eventos' },
     { prefix: '/app/comunicados', modulo: 'comunicados' },
     { prefix: '/app/web', modulo: 'web' },
     { prefix: '/app/informes', modulo: 'informes' },
@@ -63,6 +64,9 @@ const ic = {
   ),
   archivo: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 4h10l6 6v10H4Z" /><path d="M14 4v6h6" /></svg>
+  ),
+  eventos: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18M8 15l2.2 2.2L15 12.5" /></svg>
   ),
   comunicados: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5h16v11H8l-4 4z" /><path d="M8 9h8M8 12h5" /></svg>
@@ -99,8 +103,9 @@ const NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Comunicación',
+    label: 'Vida de hermandad',
     items: [
+      { to: '/app/eventos', label: 'Eventos y tareas', icon: ic.eventos, modulo: 'eventos' },
       { to: '/app/archivo', label: 'Archivo documental', icon: ic.archivo, modulo: 'archivo' },
       { to: '/app/comunicados', label: 'Comunicados', icon: ic.comunicados, modulo: 'comunicados' },
       { to: '/app/web', label: 'Web pública', icon: ic.comunicados, modulo: 'web' },
@@ -119,6 +124,12 @@ const NAV: NavGroup[] = [
   },
 ]
 
+/** Fecha de hoy en ISO con la hora local (toISOString daría el día anterior de madrugada). */
+function fechaHoyLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function initialsOf(input: string | undefined): string {
   if (!input) return '?'
   const parts = input.trim().split(/\s+/)
@@ -128,6 +139,16 @@ function initialsOf(input: string | undefined): string {
 
 export default function AppShell() {
   const { user, signOut } = useAuth()
+  // Aviso cuando un guardado no llega a la base de datos (ver supabaseSync).
+  const [errorSync, setErrorSync] = useState<string | null>(null)
+  useEffect(() => {
+    function alFallar(e: Event) {
+      const detalle = (e as CustomEvent<{ tabla: string }>).detail
+      setErrorSync(detalle?.tabla ?? '')
+    }
+    window.addEventListener('cabildo-sync-error', alFallar)
+    return () => window.removeEventListener('cabildo-sync-error', alFallar)
+  }, [])
   const navigate = useNavigate()
   const location = useLocation()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -169,7 +190,7 @@ export default function AppShell() {
     return (
       <PantallaSuscripcion
         nombreHermandad={hermandad}
-        onActivar={(pack, periodo) => activar(pack, periodo, new Date().toISOString().slice(0, 10))}
+        onActivar={(pack, periodo) => activar(pack, periodo, fechaHoyLocal())}
         onSalir={handleSignOut}
       />
     )
@@ -234,6 +255,19 @@ export default function AppShell() {
             </button>
           </div>
         </header>
+
+        {errorSync !== null && (
+          <div className="banner-inline banner-inline--warn app-sync-error" role="alert">
+            <span>
+              <b>No se ha podido guardar en la base de datos</b>
+              {errorSync ? ` (${errorSync})` : ''}. Lo que ves en pantalla puede no estar guardado:
+              revisa tu conexión y vuelve a intentarlo.
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setErrorSync(null)}>
+              Entendido
+            </button>
+          </div>
+        )}
 
         <main className="app-content">
           {/* Sin acceso a este módulo por cargo: no se muestra "bloqueado", sino que

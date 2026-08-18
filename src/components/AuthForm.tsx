@@ -32,7 +32,6 @@ export default function AuthForm({ mode }: { mode: Mode }) {
   )
   const [confirm, setConfirm] = useState('')
   const [showPass, setShowPass] = useState(false)
-  const [remember, setRemember] = useState(true)
   const [accept, setAccept] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
@@ -388,17 +387,6 @@ export default function AuthForm({ mode }: { mode: Mode }) {
             onChange={(e) => setConfirm(e.target.value)}
           />
         </div>
-      )}
-
-      {mode === 'login' && (
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-          />
-          <span>Mantener la sesión iniciada</span>
-        </label>
       )}
 
       {isSignup && (

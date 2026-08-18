@@ -19,7 +19,7 @@ interface PapeletaTicketProps {
   hermandad: HermandadSettings
   /** Tramo elegido para el cortejo (cruz de guía, vara, cirio…). */
   tramo?: Tramo | null
-  /** Puesto dentro del tramo (1 = el hermano con el número más bajo), calculado en el momento. */
+  /** Puesto dentro del tramo (1 = cabeza del tramo, el hermano menos antiguo). */
   puesto?: number | null
   /** Si el tramo elegido ya recibió más papeletas de las que caben. */
   excedeAforo?: boolean

@@ -22,6 +22,7 @@ import {
   type WebPublica,
 } from '../../lib/webPublica'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
+import { useSuscripcion, tieneCapacidad } from '../../lib/suscripcion'
 import { nuevoId } from '../../lib/supabaseSync'
 import SitioContenido from '../../components/SitioContenido'
 
@@ -51,6 +52,13 @@ function leerImagen(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => v
   lector.onload = async () => cb(await comprimirImagen(String(lector.result)))
   lector.readAsDataURL(file)
   e.target.value = ''
+}
+
+/** Fecha de hoy en ISO pero en hora LOCAL: con toISOString, de madrugada en
+ *  España la noticia salía fechada el día anterior (UTC). */
+function fechaHoyLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 const REDES: TipoRed[] = ['Instagram', 'Facebook', 'X', 'YouTube', 'TikTok', 'Web']
@@ -91,7 +99,10 @@ export default function WebPublica() {
   const enlace = `${window.location.origin}/w/${web.slug}`
 
   function editar<K extends keyof WebPublica>(campo: K, valor: WebPublica[K]) {
-    setWeb({ ...web, [campo]: valor })
+    // Actualización funcional: al subir una imagen el cambio llega más tarde
+    // (lectura + compresión) y con el objeto capturado se perdía lo editado
+    // entretanto.
+    setWeb((actual) => ({ ...actual, [campo]: valor }))
   }
 
   function copiarEnlace() {
@@ -168,6 +179,10 @@ function DisenoTab({
   copiado: boolean
   copiarEnlace: () => void
 }) {
+  // El dominio propio es un extra del pack «Todo» (capacidad premium).
+  const { suscripcion } = useSuscripcion()
+  const conDominioPropio = tieneCapacidad(suscripcion, 'premium')
+
   function toggleSeccion(i: number) {
     editar('secciones', web.secciones.map((s, idx) => (idx === i ? { ...s, visible: !s.visible } : s)))
   }
@@ -196,11 +211,20 @@ function DisenoTab({
         </div>
 
         <div className="form-row" style={{ marginTop: '0.8rem' }}>
-          <label htmlFor="dominio">Dominio personalizado</label>
+          <label htmlFor="dominio">
+            Dominio personalizado {!conDominioPropio && <span className="pill pill--info">Pack Todo</span>}
+          </label>
+          {!conDominioPropio && (
+            <p className="form-hint">
+              Tu web vive en el enlace de arriba. Para usar un dominio propio
+              (hermandaddetriana.es) hace falta el pack <b>Todo</b>.
+            </p>
+          )}
           <input
             id="dominio"
             type="text"
             value={web.dominio ?? ''}
+            disabled={!conDominioPropio}
             onChange={(e) => editar('dominio', e.target.value.trim().toLowerCase())}
             placeholder="hermandaddetriana.es"
           />
@@ -375,7 +399,7 @@ function ActualidadTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
     <section className="settings-card">
       <div className="settings-card__head">
         <h2 className="settings-card__title">Noticias publicadas en la web</h2>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => editar('noticias', [{ id: nuevoId(), titulo: 'Nueva noticia', fecha: new Date().toISOString().slice(0, 10), resumen: '', fotoDataUrl: null, publicada: true }, ...web.noticias])}>+ Nueva noticia</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => editar('noticias', [{ id: nuevoId(), titulo: 'Nueva noticia', fecha: fechaHoyLocal(), resumen: '', fotoDataUrl: null, publicada: true }, ...web.noticias])}>+ Nueva noticia</button>
       </div>
       {web.noticias.length === 0 && <p className="form-hint">Aún no hay noticias.</p>}
       {web.noticias.map((n) => (
@@ -459,7 +483,7 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
           <div className="assign-box__row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <label className="checkbox">
               <input type="checkbox" checked={sel.enMenu !== false} onChange={(e) => editarPagina(sel.id, { enMenu: e.target.checked })} />
-              <span>Mostrar en el menú de la web</span>
+              <span>Mostrar esta página en la web (y en su menú)</span>
             </label>
             <div className="assign-box__row">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => moverPagina(sel.id, -1)}>▲ Subir</button>

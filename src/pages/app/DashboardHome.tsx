@@ -6,11 +6,13 @@ import { CUOTAS_INICIALES } from '../../data/cuotas'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { DOCUMENTOS_INICIALES } from '../../data/documentos'
+import { EVENTOS_INICIALES } from '../../data/eventos'
 import type { Cargo } from '../../data/documentos'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
 import { formatCurrency } from '../../lib/format'
 import { puedeVerModulo } from '../../lib/permisos'
+import { useSuscripcion, moduloPermitidoPorPack } from '../../lib/suscripcion'
 
 const QUICK_ACTIONS = [
   { to: '/app/hermanos', label: 'Nuevo hermano', icon: 'user' as const, modulo: 'hermanos' },
@@ -34,11 +36,15 @@ const ICONS: Record<string, JSX.Element> = {
   ),
 }
 
-const AGENDA = [
-  { day: '14 MAR', title: 'Cabildo General de Salida', time: '21:00' },
-  { day: '15 MAR', title: 'Función Principal de Instituto', time: '12:00' },
-  { day: '17 MAR', title: 'Traslado al Paso de Misterio', time: '19:30' },
-]
+/** «23 AGO» a partir de una fecha ISO, para la agenda del inicio. */
+function diaCorto(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  return d
+    .toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
+    .replace('.', '')
+    .toUpperCase()
+}
 
 function toneClass(tone: 'ok' | 'warn' | 'neutral') {
   return tone === 'ok' ? 'dot--ok' : tone === 'warn' ? 'dot--warn' : 'dot--neutral'
@@ -54,6 +60,7 @@ export default function DashboardHome() {
   const { user } = useAuth()
   const nombre = (user?.user_metadata?.nombre as string | undefined)?.split(' ')[0]
   const cargo = user?.user_metadata?.cargo as Cargo | undefined
+  const { suscripcion } = useSuscripcion()
 
   // Todo lo que muestra el Inicio se calcula en vivo de los mismos datos que
   // gestionan los módulos (guardados en este navegador), no de cifras fijas.
@@ -132,11 +139,28 @@ export default function DashboardHome() {
     return { stats, actividad, alertas }
   }, [])
 
-  const statsVisibles = stats.filter((s) => puedeVerModulo(cargo, s.modulo))
-  const accionesVisibles = QUICK_ACTIONS.filter((a) => puedeVerModulo(cargo, a.modulo))
-  const actividadVisible = actividad.filter((a) => puedeVerModulo(cargo, a.modulo))
-  const alertasVisibles = alertas.filter((a) => puedeVerModulo(cargo, a.modulo))
-  const cultosVisibles = puedeVerModulo(cargo, 'cortejo')
+  // Se ve un módulo en el Inicio si lo permite el cargo Y lo incluye el pack
+  // contratado (si no, una suscripción de solo web vería datos de gestión).
+  const visible = (modulo: string) => puedeVerModulo(cargo, modulo) && moduloPermitidoPorPack(suscripcion, modulo)
+
+  const statsVisibles = stats.filter((s) => visible(s.modulo))
+  const accionesVisibles = QUICK_ACTIONS.filter((a) => visible(a.modulo))
+  const actividadVisible = actividad.filter((a) => visible(a.modulo))
+  const alertasVisibles = alertas.filter((a) => visible(a.modulo))
+  const cultosVisibles = visible('eventos')
+
+  // Próximos eventos reales del módulo de Eventos (los 3 más cercanos desde hoy).
+  const agendaProxima = useMemo(() => {
+    const eventos = leerPersistido(CLAVES_DATOS.eventos, EVENTOS_INICIALES)
+    // En hora LOCAL: con toISOString, de madrugada en España «hoy» era ayer y la
+    // agenda enseñaba eventos ya pasados.
+    const ahora = new Date()
+    const hoyIso = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`
+    return [...eventos]
+      .filter((e) => e.fecha >= hoyIso)
+      .sort((a, b) => (a.fecha === b.fecha ? (a.hora ?? '').localeCompare(b.hora ?? '') : a.fecha.localeCompare(b.fecha)))
+      .slice(0, 3)
+  }, [])
 
   return (
     <div className="dash">
@@ -215,19 +239,26 @@ export default function DashboardHome() {
           {cultosVisibles && (
             <section className="panel">
               <div className="panel__head">
-                <h2>Próximos cultos</h2>
-                <Link to="/app/cortejo" className="panel__link">
+                <h2>Próximos eventos</h2>
+                <Link to="/app/eventos" className="panel__link">
                   Ver agenda
                 </Link>
               </div>
               <ul className="agenda-mini">
-                {AGENDA.map((e) => (
-                  <li key={e.title}>
-                    <span className="agenda-mini__day">{e.day}</span>
-                    <span className="agenda-mini__title">{e.title}</span>
-                    <span className="agenda-mini__time">{e.time}</span>
+                {agendaProxima.map((e) => (
+                  <li key={e.id}>
+                    <span className="agenda-mini__day">{diaCorto(e.fecha)}</span>
+                    <span className="agenda-mini__title">{e.titulo}</span>
+                    <span className="agenda-mini__time">{e.hora ?? ''}</span>
                   </li>
                 ))}
+                {agendaProxima.length === 0 && (
+                  <li>
+                    <span className="agenda-mini__title">
+                      Sin eventos en agenda. <Link to="/app/eventos" className="panel__link">Crea el primero</Link>.
+                    </span>
+                  </li>
+                )}
               </ul>
             </section>
           )}

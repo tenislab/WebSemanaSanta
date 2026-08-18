@@ -294,7 +294,12 @@ export default function Informes() {
           calculado a partir de las categorías de tus movimientos de tesorería.
         </p>
         <div className="assign-box__row">
-          <select value={anioEstado} onChange={(e) => setAnioEstado(Number(e.target.value))} aria-label="Ejercicio">
+          <select
+            value={anioEstado}
+            onChange={(e) => setAnioEstado(Number(e.target.value))}
+            aria-label="Ejercicio"
+            style={{ maxWidth: '9rem' }}
+          >
             {aniosDisponibles.map((a) => (
               <option key={a} value={a}>
                 {a}
