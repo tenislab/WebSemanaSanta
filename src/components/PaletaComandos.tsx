@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTema } from '../lib/tema'
+import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
+import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
 
 export interface DestinoPaleta {
   to: string
@@ -40,6 +42,11 @@ export default function PaletaComandos({
   const navigate = useNavigate()
   const listaRef = useRef<HTMLDivElement>(null)
   const [tema, ponerTema] = useTema()
+  /**
+   * El censo se lee una vez al abrir la paleta, no en cada tecla: con mil
+   * doscientos hermanos, parsear el JSON en cada pulsación se notaba.
+   */
+  const [censo, setCenso] = useState<Hermano[]>([])
 
   useEffect(() => {
     function atajo(e: KeyboardEvent) {
@@ -99,14 +106,38 @@ export default function PaletaComandos({
     return [...ir, ...otros]
   }, [destinos, navigate, onCerrarSesion, tema, ponerTema])
 
+  // Al abrir se trae el censo (si este cargo puede verlo).
+  const verCenso = destinos.some((d) => d.to === '/app/hermanos')
+  useEffect(() => {
+    if (!abierta || !verCenso || censo.length > 0) return
+    setCenso(leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES))
+  }, [abierta, verCenso, censo.length])
+
+  /** Hasta cinco hermanos que encajen con lo escrito, por nombre o por número. */
+  const hermanos = useMemo<Comando[]>(() => {
+    const q = llano(texto.trim())
+    if (q.length < 2 || !verCenso) return []
+    return censo
+      .filter((h) => llano(h.nombre).includes(q) || String(h.numero).startsWith(q))
+      .slice(0, 5)
+      .map((h) => ({
+        id: `hermano:${h.id}`,
+        nombre: h.nombre,
+        grupo: 'Hermanos',
+        pista: h.numero > 0 ? `nº ${h.numero}` : 'sin número',
+        hacer: () => navigate(`/app/hermanos?ficha=${encodeURIComponent(h.id)}`),
+      }))
+  }, [censo, texto, verCenso, navigate])
+
   const filtrados = useMemo(() => {
     const q = llano(texto.trim())
     const base = q ? comandos.filter((c) => llano(c.nombre).includes(q) || llano(c.grupo).includes(q)) : comandos
     if (!q) return base
     if (!comandos.some((c) => c.id === 'ir:/app/hermanos')) return base
-    // Si lo escrito no es un comando, se ofrece buscarlo en el censo: es lo
-    // que la gente busca el 90 % de las veces (un hermano por su nombre).
+    // Los hermanos que encajan primero: es lo que la gente busca el 90 % de
+    // las veces. Y al final, buscar el texto entero en el censo.
     return [
+      ...hermanos,
       ...base,
       {
         id: 'buscar-censo',
@@ -115,7 +146,7 @@ export default function PaletaComandos({
         hacer: () => navigate(`/app/hermanos?q=${encodeURIComponent(texto.trim())}`),
       },
     ]
-  }, [comandos, texto, navigate])
+  }, [comandos, hermanos, texto, navigate])
 
   useEffect(() => { setActivo(0) }, [texto])
 

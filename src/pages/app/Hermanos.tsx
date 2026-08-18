@@ -94,9 +94,11 @@ export default function Hermanos() {
   useEffect(() => {
     const q = params.get('q')
     const nuevo = params.get('nuevo')
-    if (q === null && nuevo === null) return
+    const ficha = params.get('ficha')
+    if (q === null && nuevo === null && ficha === null) return
     if (q !== null) setQuery(q)
     if (nuevo !== null) { setDniError(null); setFormOpen(true) }
+    if (ficha !== null) setSelectedId(ficha)
     // Se limpia la URL: si no, al recargar vuelve a filtrar y desconcierta.
     setParams({}, { replace: true })
   }, [params, setParams])
