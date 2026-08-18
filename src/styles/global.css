@@ -494,6 +494,77 @@ h1, h2, h3,
 .cta-inner h2 { font-size: 2.2rem; color: #f3ede2; max-width: 20ch; margin: 0.8rem auto 0; }
 .cta-inner .btn { margin-top: 1.8rem; }
 
+/* precios (portada) */
+.section-head--center { margin-left: auto; margin-right: auto; text-align: center; }
+.pricing-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem;
+  max-width: 760px; margin: 0 auto;
+}
+.price-card {
+  position: relative;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 2rem 1.8rem 1.9rem;
+  border-radius: 20px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.028));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.price-card--featured {
+  border-color: rgba(214, 188, 138, 0.5);
+  background: linear-gradient(158deg, rgba(214, 188, 138, 0.14), rgba(255, 255, 255, 0.04));
+  box-shadow: 0 40px 90px -44px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.price-card__badge {
+  position: absolute; top: -0.7rem; right: 1.4rem;
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--morado-900, #2a1020); background: linear-gradient(90deg, #d6bc8a, #b89a5e);
+  padding: 0.3rem 0.7rem; border-radius: 999px;
+}
+.price-card__tag {
+  font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: rgba(245, 237, 230, 0.6);
+}
+.price-card__amount {
+  display: flex; align-items: baseline; gap: 0.2rem; margin: 0.2rem 0 0.1rem;
+  font-family: 'Iowan Old Style', Palatino, Georgia, serif; color: #f3ede2;
+}
+.price-card__amount b { font-size: 3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+.price-card__cur { font-size: 1.5rem; color: #d6bc8a; }
+.price-card__per { font-size: 0.95rem; color: rgba(245, 237, 230, 0.6); font-family: var(--sans-fallback, inherit); }
+.price-card__note { color: rgba(245, 237, 230, 0.66); font-size: 0.88rem; margin: 0 0 0.4rem; min-height: 2.4em; }
+.price-card .btn-block { margin-top: auto; }
+
+.pricing-included {
+  max-width: 760px; margin: 1.8rem auto 0;
+  padding: 1.6rem 1.8rem;
+  border-radius: 18px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.pricing-included__title {
+  font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: rgba(245, 237, 230, 0.55); margin: 0 0 1rem; text-align: center;
+}
+.pricing-included__list {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem 1.6rem;
+}
+.pricing-included__list li {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: 0.9rem; color: rgba(245, 237, 230, 0.85);
+}
+.pricing-included__list svg { width: 17px; height: 17px; color: #d6bc8a; flex: none; }
+.pricing-foot {
+  max-width: 620px; margin: 1.6rem auto 0; text-align: center;
+  font-size: 0.86rem; color: rgba(245, 237, 230, 0.55); line-height: 1.6;
+}
+@media (max-width: 640px) {
+  .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+  .pricing-included__list { grid-template-columns: 1fr; }
+}
+
 /* footer */
 .site-footer { padding: 3.2rem 0 2.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .footer-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 2.5rem; }

@@ -1,0 +1,17 @@
+F4 · Sección de precios en la portada
+=====================================
+
+Cambian SOLO 2 archivos: src/pages/Landing.tsx y src/styles/global.css
+
+OPCIÓN A (recomendada) — aplicar el parche:
+  git apply F4-precios.patch
+
+OPCIÓN B — copiar los archivos tal cual:
+  Copia src/pages/Landing.tsx  y  src/styles/global.css
+  de esta carpeta ENCIMA de los mismos de tu proyecto.
+  (Respeta las rutas: van dentro de src/, NO en la raíz.)
+
+Además, borra el zip suelto que quedaba en la raíz del repo:
+  git rm PROYECTOCOMPLETOLIMPIO.zip
+
+Luego: git add -A && git commit -m "F4 precios" && git push

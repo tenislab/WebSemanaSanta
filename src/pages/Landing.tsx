@@ -210,7 +210,66 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="cta-band" id="precios">
+      <section className="section pricing" id="precios">
+        <div className="wrap">
+          <div className="section-head section-head--center">
+            <p className="eyebrow eyebrow--gold">Precios</p>
+            <h2>Un precio claro, sin sorpresas</h2>
+            <p className="section-lead">
+              Todos los módulos incluidos desde el primer día. Sin coste por hermano, sin extras
+              ocultos y sin permanencia. Da igual el tamaño de la corporación: el precio es el mismo.
+            </p>
+          </div>
+
+          <div className="pricing-grid">
+            <article className="price-card">
+              <span className="price-card__tag">Mensual</span>
+              <p className="price-card__amount">
+                <b>20</b> <span className="price-card__cur">€</span>
+                <span className="price-card__per">/mes</span>
+              </p>
+              <p className="price-card__note">Facturación cada mes. Cancela cuando quieras.</p>
+              <Link className="btn btn-outline btn-block" to="/registro">
+                Empezar gratis
+              </Link>
+            </article>
+
+            <article className="price-card price-card--featured">
+              <span className="price-card__badge">El más elegido</span>
+              <span className="price-card__tag">Anual</span>
+              <p className="price-card__amount">
+                <b>300</b> <span className="price-card__cur">€</span>
+                <span className="price-card__per">/año</span>
+              </p>
+              <p className="price-card__note">Un solo pago al año. Toda la campaña cubierta.</p>
+              <Link className="btn btn-primary btn-glass-dynamic btn-block" to="/registro">
+                <span>Crear hermandad</span>
+              </Link>
+            </article>
+          </div>
+
+          <div className="pricing-included">
+            <p className="pricing-included__title">Todo incluido en cualquier plan</p>
+            <ul className="pricing-included__list">
+              <li><Check /> Censo de hermanos ilimitado</li>
+              <li><Check /> Cuotas, recibos y remesas SEPA</li>
+              <li><Check /> Papeletas de sitio con QR y pago online</li>
+              <li><Check /> Cortejo, tesorería e inventario</li>
+              <li><Check /> Web pública propia con dominio personalizado</li>
+              <li><Check /> Comunicados por email, SMS y WhatsApp</li>
+              <li><Check /> Portal privado para cada hermano</li>
+              <li><Check /> Actualizaciones y soporte incluidos</li>
+            </ul>
+          </div>
+
+          <p className="pricing-foot">
+            Configúralo gratis y activa la suscripción cuando estés listo. Sin permanencia: puedes
+            cancelar en cualquier momento desde el propio panel.
+          </p>
+        </div>
+      </section>
+
+      <section className="cta-band">
         <div className="wrap">
           <div className="cta-inner">
             <p className="eyebrow eyebrow--gold">Empieza hoy</p>
