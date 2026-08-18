@@ -381,21 +381,40 @@ export default function Papeletas() {
   }
 
   /** Acepta una solicitud online: le emite la papeleta con lo pedido y marca la solicitud como aceptada. */
+  /**
+   * Tramo del cortejo con el que se emite una solicitud aceptada, para que la
+   * papeleta entre directa en el cortejo (sin colocarla a mano). Se elige del
+   * cuerpo pedido: cirio (reparto por número) para nazareno/penitente, o el
+   * primer tramo del cuerpo en otro caso. La secretaría puede recolocarlo luego.
+   */
+  function tramoParaSolicitud(s: SolicitudPapeleta): Tramo | null {
+    const cuerpo = s.tramoSolicitado && s.tramoSolicitado !== 'Sin preferencia' ? s.tramoSolicitado : null
+    const candidatos = cuerpo ? tramosDeCuerpo(cuerpo, tramos) : tramos
+    if (candidatos.length === 0) return null
+    const prefiereCirio = s.modalidad === 'Nazareno' || s.modalidad === 'Penitente'
+    const cirio = candidatos.find((t) => esAutomatico(t))
+    return (prefiereCirio && cirio ? cirio : cirio ?? candidatos[0]) ?? null
+  }
+
   function aceptarSolicitud(s: SolicitudPapeleta) {
-    const opcion = `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
+    const tramo = tramoParaSolicitud(s)
+    const tramoId = tramo ? tramo.id : null
+    const importe = tramo ? precioDeTramo(tramo, precioBase) : precioBase
+    // Con tramo → va al cortejo; sin tramo (sin cuerpo posible) → papeleta suelta.
+    const opcion = tramoId ? null : `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === s.hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
-        return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId: null, estado: 'Asignada', importe: precioBase } : p))
+        return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId, estado: 'Asignada', importe } : p))
       }
       const nueva: Papeleta = {
         id: nuevoId(),
         numero: siguienteNumero(prev),
         hermanoId: s.hermanoId,
         anio: campana.anio,
-        tramoId: null,
+        tramoId,
         opcion,
-        importe: precioBase,
+        importe,
         estado: 'Asignada',
         fechaSolicitud: hoy(),
       }

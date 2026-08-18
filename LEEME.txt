@@ -1,18 +1,5 @@
-ACTUALIZACIÓN — Caché arreglada + aviso al hermano + demo (+ todo lo anterior)
-=============================================================================
-Aplicar: copia "archivos/" sobre el proyecto, o  git am actualizacion.patch
-(probado: aplica limpio, compila y construye sobre main).
-
-*** LO MÁS IMPORTANTE: CACHÉ ***
-Motivo de "solo veo los cambios en incógnito": tu navegador guardaba el
-index.html viejo. Ahora vercel.json manda "no-cache" en el HTML y cachea solo
-los assets con hash. IMPORTANTE la primera vez:
-  1) Aplica el ZIP y deja que Vercel redespliegue.
-  2) Haz UN refresco forzado: Ctrl+Shift+R (o Cmd+Shift+R en Mac).
-  A partir de ahí, los cambios se ven sin incógnito.
-
-TAMBIÉN INCLUYE
- · Modo demo del hermano: botón siempre visible + entra con datos rellenos.
- · Aviso al hermano cuando la secretaría cambia sus datos (ficha editable).
- · QR de papeleta con página de verificación + QR en el modelo.
- · Permisos que ocultan, vista previa web responsive, pie/legal, Fase 3…
+ACTUALIZACIÓN — F1.1: la papeleta entra directa en el cortejo (+ todo lo anterior)
+Aplicar: copia "archivos/" o  git am actualizacion.patch  (probado sobre main).
+Recuerda el Ctrl+Shift+R la primera vez (arreglo de caché).
+Al ACEPTAR una solicitud, la papeleta ya se coloca en un tramo del cuerpo
+pedido y aparece en el Cortejo automáticamente (antes se quedaba suelta).

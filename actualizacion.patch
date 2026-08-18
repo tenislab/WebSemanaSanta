@@ -1,8 +1,8 @@
 From f69465b9ed3a99cc6eeb8da42c94cd8419a79e1d Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 18:27:15 +0000
-Subject: [PATCH 1/9] =?UTF-8?q?Papeletas=20Fase=203:=20solicitud=20online?=
- =?UTF-8?q?=20del=20hermano=20+=20convocatoria=20+=20fechas=20de=20campa?=
+Subject: [PATCH 01/11] =?UTF-8?q?Papeletas=20Fase=203:=20solicitud=20onlin?=
+ =?UTF-8?q?e=20del=20hermano=20+=20convocatoria=20+=20fechas=20de=20campa?=
  =?UTF-8?q?=C3=B1a?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -870,9 +870,9 @@ index a1585f3..1d31927 100644
 From 8c25d94db1a4fb94f2700b7932c1636c17365a6a Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 18:34:34 +0000
-Subject: [PATCH 2/9] =?UTF-8?q?Fase=203:=20la=20apertura=20por=20participa?=
- =?UTF-8?q?ci=C3=B3n=20cuenta=20tambi=C3=A9n=20papeletas=20sin=20tramo=20y?=
- =?UTF-8?q?=20evita=20renovaciones=20duplicadas?=
+Subject: [PATCH 02/11] =?UTF-8?q?Fase=203:=20la=20apertura=20por=20partici?=
+ =?UTF-8?q?paci=C3=B3n=20cuenta=20tambi=C3=A9n=20papeletas=20sin=20tramo?=
+ =?UTF-8?q?=20y=20evita=20renovaciones=20duplicadas?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -1023,8 +1023,8 @@ index 5c54b44..7999c03 100644
 From d73c2d4a36040fd540cb4188399c4a79497a57e5 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:02:59 +0000
-Subject: [PATCH 3/9] =?UTF-8?q?Modo=20demo=20fiable=20y=20dos=20demos=20de?=
- =?UTF-8?q?=20partida=20(llena=20y=20vac=C3=ADa)?=
+Subject: [PATCH 03/11] =?UTF-8?q?Modo=20demo=20fiable=20y=20dos=20demos=20?=
+ =?UTF-8?q?de=20partida=20(llena=20y=20vac=C3=ADa)?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -1347,8 +1347,8 @@ index 1d31927..1c97238 100644
 From ab99d5e6ac28e9b2f4e608dfce1368e0978a392e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:05:47 +0000
-Subject: [PATCH 4/9] =?UTF-8?q?Pie=20de=20la=20portada=20m=C3=A1s=20profes?=
- =?UTF-8?q?ional=20y=20p=C3=A1ginas=20legales=20en=20blanco?=
+Subject: [PATCH 04/11] =?UTF-8?q?Pie=20de=20la=20portada=20m=C3=A1s=20prof?=
+ =?UTF-8?q?esional=20y=20p=C3=A1ginas=20legales=20en=20blanco?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -1480,8 +1480,8 @@ index 1c97238..f796b10 100644
 From d6a9fbf4edabb94099103472e4028b412b3d3c38 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:35:43 +0000
-Subject: [PATCH 5/9] Permisos: ocultar en vez de bloquear + vista previa de la
- web limpia y responsive
+Subject: [PATCH 05/11] Permisos: ocultar en vez de bloquear + vista previa de
+ la web limpia y responsive
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -1711,9 +1711,9 @@ index f796b10..6d2df7d 100644
 From e439cd1191fe054965a6efafcf830a771fb8d6f3 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:09:09 +0000
-Subject: [PATCH 6/9] =?UTF-8?q?QR=20de=20papeleta=20que=20funciona:=20abre?=
- =?UTF-8?q?=20una=20p=C3=A1gina=20de=20verificaci=C3=B3n=20con=20los=20dat?=
- =?UTF-8?q?os?=
+Subject: [PATCH 06/11] =?UTF-8?q?QR=20de=20papeleta=20que=20funciona:=20ab?=
+ =?UTF-8?q?re=20una=20p=C3=A1gina=20de=20verificaci=C3=B3n=20con=20los=20d?=
+ =?UTF-8?q?atos?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -2129,8 +2129,8 @@ index 6d2df7d..c202e19 100644
 From 29d5e23a7c9e186077624551f6af09a56590e4c2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:22:01 +0000
-Subject: [PATCH 7/9] Acceso demo del hermano siempre visible y funcional en la
- primera pantalla
+Subject: [PATCH 07/11] Acceso demo del hermano siempre visible y funcional en
+ la primera pantalla
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -2269,8 +2269,8 @@ index a2f1492..7e1c37e 100644
 From 736a9971243a08432d7c85905459fc33013e2b74 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:27:13 +0000
-Subject: [PATCH 8/9] =?UTF-8?q?Aviso=20al=20hermano=20cuando=20la=20secret?=
- =?UTF-8?q?ar=C3=ADa=20cambia=20sus=20datos=20(correo=20simulado)?=
+Subject: [PATCH 08/11] =?UTF-8?q?Aviso=20al=20hermano=20cuando=20la=20secr?=
+ =?UTF-8?q?etar=C3=ADa=20cambia=20sus=20datos=20(correo=20simulado)?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -2652,8 +2652,8 @@ index c202e19..b12d308 100644
 From 1b7e4b5c44924c12e885bdc7529aa1e3822f7e3f Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:44:35 +0000
-Subject: [PATCH 9/9] =?UTF-8?q?Cabeceras=20de=20cach=C3=A9=20en=20Vercel:?=
- =?UTF-8?q?=20los=20cambios=20se=20ven=20sin=20navegaci=C3=B3n=20privada?=
+Subject: [PATCH 09/11] =?UTF-8?q?Cabeceras=20de=20cach=C3=A9=20en=20Vercel?=
+ =?UTF-8?q?:=20los=20cambios=20se=20ven=20sin=20navegaci=C3=B3n=20privada?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -2692,6 +2692,138 @@ index 0d199b2..5a1e561 100644
 +    }
    ]
  }
+-- 
+2.43.0
+
+
+From 89ccf1e2e944d0e2b02c17f870ebb98dc03fa2dd Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 05:51:40 +0000
+Subject: [PATCH 10/11] Demo llena: el cortejo se puebla de verdad
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Las papeletas de ejemplo de 2027 se emitían con tramoId null (personalizadas),
+así que el cortejo salía casi vacío. Ahora la mayoría se asignan a tramos
+reales (cirios, insignias, música, presidencia), repartidas en los dos pasos,
+para poder revisar el cortejo con datos. Las mantillas y renuncias siguen
+aparte. Las incidencias se mantienen vacías a propósito (se registran el día
+de la salida).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/data/papeletas.ts | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/src/data/papeletas.ts b/src/data/papeletas.ts
+index e7e0482..6258773 100644
+--- a/src/data/papeletas.ts
++++ b/src/data/papeletas.ts
+@@ -99,15 +99,24 @@ function generarPapeletasDemo(): Papeleta[] {
+     }
+     if (baja) continue
+     const est = estados2027[i % estados2027.length]
+-    const opcion = opciones[i % opciones.length]
+-    const importe = est === 'Renuncia' ? 0 : opcion === 'Mantilla' ? 15 : 18
++    const opcionBase = opciones[i % opciones.length]
++    // La mayoría de los que salen se colocan en un tramo REAL del cortejo, para
++    // que el cortejo de la demo se vea bien poblado. Las mantillas y las
++    // renuncias van aparte (sin tramo). Reparto por cirios, insignias y música.
++    const tramosCortejo = ['t3', 't4', 't6', 't7', 't2', 't5', 't8', 't3', 't4', 't6', 't7', 't1']
++    const enCortejo = est === 'Entregada' || est === 'Pagada' || est === 'Asignada'
++    const esMantilla = opcionBase === 'Mantilla'
++    const enTramo = enCortejo && !esMantilla
++    const tramoId = enTramo ? tramosCortejo[i % tramosCortejo.length] : null
++    const opcion = est === 'Renuncia' ? null : enTramo ? null : opcionBase
++    const importe = est === 'Renuncia' ? 0 : esMantilla ? 15 : tramoId === 't1' ? 22 : 18
+     out.push({
+       id: `pd27-${i}`,
+       numero: num++,
+       hermanoId: id,
+       anio: 2027,
+-      tramoId: null,
+-      opcion: est === 'Renuncia' ? null : opcion,
++      tramoId,
++      opcion,
+       importe,
+       estado: est,
+       fechaSolicitud: '15 ene 2027',
+-- 
+2.43.0
+
+
+From dc4872559039df7ea10931e92f5d777660478ce9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 05:57:30 +0000
+Subject: [PATCH 11/11] F1: aceptar una solicitud coloca la papeleta directa en
+ el cortejo
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Al aceptar una solicitud, la papeleta se emitía sin tramo (opcion), así que no
+entraba en el cortejo y había que colocarla a mano. Ahora se le asigna un tramo
+del cuerpo pedido (cirio por número para nazareno/penitente; si no, el primero
+del cuerpo), de modo que entra directa en el cortejo. La secretaría puede
+recolocarla luego desde Cortejo.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/pages/app/Papeletas.tsx | 27 +++++++++++++++++++++++----
+ 1 file changed, 23 insertions(+), 4 deletions(-)
+
+diff --git a/src/pages/app/Papeletas.tsx b/src/pages/app/Papeletas.tsx
+index 7fcfff4..461e496 100644
+--- a/src/pages/app/Papeletas.tsx
++++ b/src/pages/app/Papeletas.tsx
+@@ -381,21 +381,40 @@ export default function Papeletas() {
+   }
+ 
+   /** Acepta una solicitud online: le emite la papeleta con lo pedido y marca la solicitud como aceptada. */
++  /**
++   * Tramo del cortejo con el que se emite una solicitud aceptada, para que la
++   * papeleta entre directa en el cortejo (sin colocarla a mano). Se elige del
++   * cuerpo pedido: cirio (reparto por número) para nazareno/penitente, o el
++   * primer tramo del cuerpo en otro caso. La secretaría puede recolocarlo luego.
++   */
++  function tramoParaSolicitud(s: SolicitudPapeleta): Tramo | null {
++    const cuerpo = s.tramoSolicitado && s.tramoSolicitado !== 'Sin preferencia' ? s.tramoSolicitado : null
++    const candidatos = cuerpo ? tramosDeCuerpo(cuerpo, tramos) : tramos
++    if (candidatos.length === 0) return null
++    const prefiereCirio = s.modalidad === 'Nazareno' || s.modalidad === 'Penitente'
++    const cirio = candidatos.find((t) => esAutomatico(t))
++    return (prefiereCirio && cirio ? cirio : cirio ?? candidatos[0]) ?? null
++  }
++
+   function aceptarSolicitud(s: SolicitudPapeleta) {
+-    const opcion = `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
++    const tramo = tramoParaSolicitud(s)
++    const tramoId = tramo ? tramo.id : null
++    const importe = tramo ? precioDeTramo(tramo, precioBase) : precioBase
++    // Con tramo → va al cortejo; sin tramo (sin cuerpo posible) → papeleta suelta.
++    const opcion = tramoId ? null : `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
+     setPapeletas((prev) => {
+       const actual = prev.find((p) => p.hermanoId === s.hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
+       if (actual) {
+-        return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId: null, estado: 'Asignada', importe: precioBase } : p))
++        return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId, estado: 'Asignada', importe } : p))
+       }
+       const nueva: Papeleta = {
+         id: nuevoId(),
+         numero: siguienteNumero(prev),
+         hermanoId: s.hermanoId,
+         anio: campana.anio,
+-        tramoId: null,
++        tramoId,
+         opcion,
+-        importe: precioBase,
++        importe,
+         estado: 'Asignada',
+         fechaSolicitud: hoy(),
+       }
 -- 
 2.43.0
 
