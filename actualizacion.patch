@@ -1,0 +1,2127 @@
+From f69465b9ed3a99cc6eeb8da42c94cd8419a79e1d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 17 Aug 2026 18:27:15 +0000
+Subject: [PATCH 1/6] =?UTF-8?q?Papeletas=20Fase=203:=20solicitud=20online?=
+ =?UTF-8?q?=20del=20hermano=20+=20convocatoria=20+=20fechas=20de=20campa?=
+ =?UTF-8?q?=C3=B1a?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- El hermano solicita su papeleta de sitio (modalidad, tramo preferido,
+  preferencia y comentario) en lugar de auto-asignársela; queda Pendiente
+  hasta que la secretaría la acepte o rechace.
+- Papeletas: botón "Solicitudes (N)", banda de aviso y cajón para aceptar
+  (emite la papeleta) o rechazar. Botón "Convocar papeletas" que avisa a
+  todos los hermanos con correo (comunicado por Email, envío simulado).
+- Campaña con fechas separadas de apertura para quienes participaron y
+  quienes no participaron el año anterior, más fecha límite; el portal
+  abre/cierra la solicitud según corresponda a cada hermano.
+- Fechas de la campaña de muestra ajustadas para que el plazo esté abierto
+  en la demo.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/lib/campana.ts             |  24 ++-
+ src/lib/convocatoria.ts        |  72 +++++++++
+ src/lib/solicitudesPapeleta.ts |  70 +++++++++
+ src/pages/HermanoPortal.tsx    | 279 +++++++++++++++++----------------
+ src/pages/app/Papeletas.tsx    | 140 ++++++++++++++++-
+ src/styles/global.css          |  15 +-
+ 6 files changed, 454 insertions(+), 146 deletions(-)
+ create mode 100644 src/lib/convocatoria.ts
+ create mode 100644 src/lib/solicitudesPapeleta.ts
+
+diff --git a/src/lib/campana.ts b/src/lib/campana.ts
+index 7b83c7c..589539e 100644
+--- a/src/lib/campana.ts
++++ b/src/lib/campana.ts
+@@ -8,7 +8,11 @@ import type { Papeleta } from '../data/papeletas'
+  */
+ export interface Campana {
+   anio: number
+-  /** Fecha límite para renovar el sitio del año anterior (ISO yyyy-mm-dd). */
++  /** Día en que se abre el plazo para los hermanos que participaron el año anterior (renovadores). */
++  fechaInicioParticiparon: string
++  /** Día en que se abre el plazo para los que NO participaron el año anterior (suele ser algo más tarde). */
++  fechaInicioNoParticiparon: string
++  /** Fecha límite (fin del plazo) para solicitar/renovar (ISO yyyy-mm-dd). */
+   fechaLimiteRenovacion: string
+   /** Día de la estación de penitencia de esta edición (ISO), informativo. */
+   fechaSalida: string | null
+@@ -16,8 +20,14 @@ export interface Campana {
+ 
+ const STORAGE_KEY = 'cabildo-campana'
+ 
++// Fechas de la campaña de muestra: pensadas para que el plazo esté ABIERTO al
++// abrir la demo (así se ve funcionar la solicitud del hermano). Cada hermandad
++// las ajusta desde Papeletas › Ajustes de campaña. La apertura para quienes NO
++// participaron el año anterior va unos días por detrás de la de renovadores.
+ const CAMPANA_POR_DEFECTO: Campana = {
+   anio: 2027,
++  fechaInicioParticiparon: '2026-06-01',
++  fechaInicioNoParticiparon: '2026-06-20',
+   fechaLimiteRenovacion: '2027-02-28',
+   fechaSalida: '2027-03-28',
+ }
+@@ -43,11 +53,21 @@ export function diasHasta(iso: string): number {
+   return Math.round((new Date(`${iso}T00:00:00`).getTime() - hoy.getTime()) / 86_400_000)
+ }
+ 
+-/** ¿Sigue abierta la ventana de renovación? */
++/** ¿Sigue abierta la ventana de renovación? (hasta la fecha límite). */
+ export function ventanaAbierta(campana: Campana): boolean {
+   return diasHasta(campana.fechaLimiteRenovacion) >= 0
+ }
+ 
++/**
++ * ¿Puede este hermano solicitar/renovar HOY, según haya participado o no el
++ * año anterior? Los que participaron pueden desde `fechaInicioParticiparon`;
++ * el resto desde `fechaInicioNoParticiparon`. Ambos hasta la fecha límite.
++ */
++export function ventanaAbiertaPara(campana: Campana, participoElAnoAnterior: boolean): boolean {
++  const inicio = participoElAnoAnterior ? campana.fechaInicioParticiparon : campana.fechaInicioNoParticiparon
++  return diasHasta(inicio) <= 0 && diasHasta(campana.fechaLimiteRenovacion) >= 0
++}
++
+ export type EstadoRenovacion =
+   | 'Renovada'
+   | 'Nueva'
+diff --git a/src/lib/convocatoria.ts b/src/lib/convocatoria.ts
+new file mode 100644
+index 0000000..ac86b80
+--- /dev/null
++++ b/src/lib/convocatoria.ts
+@@ -0,0 +1,72 @@
++import { useEffect, useState } from 'react'
++import { CLAVES_DATOS, leerPersistido } from './persistencia'
++import { COMUNICADOS_INICIALES, type Comunicado } from '../data/comunicados'
++import type { Hermano } from '../data/hermanos'
++import { nuevoId } from './supabaseSync'
++
++/**
++ * Convocatoria de papeletas: cuando la secretaría abre el plazo, avisa a TODOS
++ * los hermanos que pueden sacar papeleta (los activos con correo). El aviso se
++ * registra como un comunicado por email (envío simulado hasta conectar el
++ * proveedor) y se guarda que ya se convocó ese año.
++ */
++
++export interface Convocatoria {
++  anio: number
++  fecha: string
++  total: number
++}
++
++const CLAVE = 'cabildo-convocatoria'
++
++export function getConvocatoria(): Convocatoria | null {
++  return leerPersistido<Convocatoria | null>(CLAVE, null)
++}
++
++export function useConvocatoria(): [Convocatoria | null, () => void] {
++  const [conv, setConv] = useState<Convocatoria | null>(() => getConvocatoria())
++  useEffect(() => {
++    const sync = () => setConv(getConvocatoria())
++    window.addEventListener('storage', sync)
++    return () => window.removeEventListener('storage', sync)
++  }, [])
++  const refrescar = () => setConv(getConvocatoria())
++  return [conv, refrescar]
++}
++
++/** Hermanos que pueden sacar papeleta y a los que llegaría el aviso (activos con correo). */
++export function destinatariosConvocatoria(hermanos: Hermano[]): Hermano[] {
++  return hermanos.filter((h) => h.estado !== 'Baja' && h.email && h.email.includes('@'))
++}
++
++/**
++ * Registra la convocatoria del año: crea el comunicado por email a todos los
++ * hermanos y guarda la marca de «convocado». Devuelve a cuántos se avisó.
++ */
++export function enviarConvocatoria(anio: number, hermanos: Hermano[], fechaLimite: string): number {
++  const destinatarios = destinatariosConvocatoria(hermanos)
++  const hoyIso = new Date().toISOString().slice(0, 10)
++
++  // Comunicado por email (aparece en el módulo Comunicados; envío simulado).
++  const comunicados = leerPersistido<Comunicado[]>(CLAVES_DATOS.comunicados, COMUNICADOS_INICIALES)
++  const nuevo: Comunicado = {
++    id: nuevoId(),
++    numero: Math.max(0, ...comunicados.map((c) => c.numero)) + 1,
++    titulo: `Apertura del plazo de papeletas de sitio ${anio}`,
++    cuerpo: `Se ha abierto el plazo para solicitar la papeleta de sitio de la Estación de Penitencia ${anio}. Puedes solicitarla desde tu área del hermano hasta el ${fechaLimite}.`,
++    canal: 'Email',
++    redes: null,
++    destinatarios: 'Todos los hermanos',
++    estado: 'Enviado',
++    fechaCreacion: hoyIso,
++    fechaProgramada: null,
++    fechaEnvio: hoyIso,
++    autor: 'Secretaría',
++    alcance: destinatarios.length,
++  }
++  localStorage.setItem(CLAVES_DATOS.comunicados, JSON.stringify([nuevo, ...comunicados]))
++
++  const conv: Convocatoria = { anio, fecha: hoyIso, total: destinatarios.length }
++  localStorage.setItem(CLAVE, JSON.stringify(conv))
++  return destinatarios.length
++}
+diff --git a/src/lib/solicitudesPapeleta.ts b/src/lib/solicitudesPapeleta.ts
+new file mode 100644
+index 0000000..77cb6db
+--- /dev/null
++++ b/src/lib/solicitudesPapeleta.ts
+@@ -0,0 +1,70 @@
++import { useEffect, useState } from 'react'
++import { leerPersistido } from './persistencia'
++
++/**
++ * Solicitud de papeleta de sitio que el hermano envía desde su área. La
++ * secretaría la revisa desde Papeletas: al aceptarla se le emite la papeleta
++ * en el tramo/modalidad pedidos; al rechazarla queda constancia. Es el paso
++ * online que evita que el hermano tenga que pasar por secretaría.
++ *
++ * Por ahora se guarda en el navegador (modo local); con Supabase pasará a una
++ * tabla propia (como solicitudes_alta).
++ */
++
++export type ModalidadPapeleta = 'Nazareno' | 'Penitente' | 'Acólito' | 'Otro'
++export const MODALIDADES: ModalidadPapeleta[] = ['Nazareno', 'Penitente', 'Acólito', 'Otro']
++
++export type EstadoSolicitudPapeleta = 'Pendiente' | 'Aceptada' | 'Rechazada'
++
++export interface SolicitudPapeleta {
++  id: string
++  hermanoId: string
++  hermanoNombre: string
++  hermanoNumero: number
++  anio: number
++  modalidad: ModalidadPapeleta
++  /** Preferencia libre (p. ej. «Cirio», «Mantilla»…). */
++  preferencia: string
++  /** Tramo o cuerpo solicitado, o «Sin preferencia». */
++  tramoSolicitado: string
++  comentario: string
++  fecha: string
++  estado: EstadoSolicitudPapeleta
++}
++
++const CLAVE = 'cabildo-solicitudes-papeleta'
++
++export function getSolicitudesPapeleta(): SolicitudPapeleta[] {
++  return leerPersistido<SolicitudPapeleta[]>(CLAVE, [])
++}
++
++export function saveSolicitudesPapeleta(lista: SolicitudPapeleta[]) {
++  localStorage.setItem(CLAVE, JSON.stringify(lista))
++}
++
++/** Añade una solicitud (desde el área del hermano). */
++export function crearSolicitudPapeleta(nueva: SolicitudPapeleta) {
++  saveSolicitudesPapeleta([nueva, ...getSolicitudesPapeleta()])
++}
++
++/** Hook reactivo con las solicitudes de papeleta (se refresca entre pestañas). */
++export function useSolicitudesPapeleta(): [SolicitudPapeleta[], (lista: SolicitudPapeleta[]) => void] {
++  const [lista, setListaState] = useState<SolicitudPapeleta[]>(() => getSolicitudesPapeleta())
++  useEffect(() => {
++    function sync() {
++      setListaState(getSolicitudesPapeleta())
++    }
++    window.addEventListener('storage', sync)
++    return () => window.removeEventListener('storage', sync)
++  }, [])
++  function setLista(next: SolicitudPapeleta[]) {
++    setListaState(next)
++    saveSolicitudesPapeleta(next)
++  }
++  return [lista, setLista]
++}
++
++/** ¿Tiene este hermano una solicitud de papeleta pendiente para el año dado? */
++export function tieneSolicitudPendiente(hermanoId: string, anio: number): boolean {
++  return getSolicitudesPapeleta().some((s) => s.hermanoId === hermanoId && s.anio === anio && s.estado === 'Pendiente')
++}
+diff --git a/src/pages/HermanoPortal.tsx b/src/pages/HermanoPortal.tsx
+index 5884ad0..5c54b44 100644
+--- a/src/pages/HermanoPortal.tsx
++++ b/src/pages/HermanoPortal.tsx
+@@ -8,20 +8,21 @@ import { getModeloPapeleta } from '../lib/modeloPapeleta'
+ import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
+ import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
+ import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
+-import { getOpcionesPapeleta, type OpcionPapeleta } from '../lib/opcionesPapeleta'
+ import { useHermandadSettings } from '../lib/hermandadSettings'
+ import {
+   getTramos,
+-  tramosDeCuerpo,
+   etiquetaTramo,
+-  esAutomatico,
+-  gruposAutomaticos,
+   cuerposPresentes,
+   getPrecioBase,
+   precioDeTramo,
+ } from '../lib/tramos'
+ import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
+-import { getCampana, renovacionDeHermano, ventanaAbierta } from '../lib/campana'
++import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta } from '../lib/campana'
++import {
++  useSolicitudesPapeleta,
++  MODALIDADES,
++  type ModalidadPapeleta,
++} from '../lib/solicitudesPapeleta'
+ import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
+ import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
+ import { supabase } from '../lib/supabase'
+@@ -48,8 +49,6 @@ const SESION_KEY = 'cabildo-hermano-portal'
+ const CONSENT_KEY = 'cabildo-hermano-consent'
+ const DNI_DEMO = 'h4' // Francisco Gómez Nieto, nº 501 · usado por el botón "hermano de prueba"
+ 
+-/** Valor centinela del selector para «papeleta personalizada» (no puede chocar con un nombre de cuerpo). */
+-const PERSONALIZADA = '__personalizada'
+ 
+ interface Sesion {
+   hermandadId: string
+@@ -162,7 +161,6 @@ export default function HermanoPortal() {
+ 
+   const tramos = useMemo(() => getTramos(), [])
+   const campana = useMemo(() => getCampana(), [])
+-  const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
+   const precioBase = useMemo(() => getPrecioBase(), [])
+   const modeloPapeleta = useMemo(() => getModeloPapeleta(), [])
+ 
+@@ -180,13 +178,19 @@ export default function HermanoPortal() {
+   const [solicitudEnviada, setSolicitudEnviada] = useState(false)
+   const [errorSolicitud, setErrorSolicitud] = useState<string | null>(null)
+ 
+-  const [pendingCuerpo, setPendingCuerpo] = useState<string>('')
+   const [datosGuardados, setDatosGuardados] = useState(false)
+   const [bajaMuestraSolicitada, setBajaMuestraSolicitada] = useState(false)
+   const [consent, setConsent] = useState<boolean>(() => localStorage.getItem(CONSENT_KEY) === 'si')
+   const [claveError, setClaveError] = useState<string | null>(null)
+   const [claveGuardada, setClaveGuardada] = useState(false)
+ 
++  // Solicitud de papeleta de sitio (el hermano la pide; la secretaría la acepta o rechaza).
++  const [solicitudesPapeleta, setSolicitudesPapeleta] = useSolicitudesPapeleta()
++  const [solModalidad, setSolModalidad] = useState<ModalidadPapeleta>('Nazareno')
++  const [solTramo, setSolTramo] = useState('')
++  const [solPreferencia, setSolPreferencia] = useState('')
++  const [solComentario, setSolComentario] = useState('')
++
+   const esPrincipal = sesion?.hermandadId === ID_HERMANDAD_PRINCIPAL
+   const hermanoPrincipal = useMemo(
+     () => (esPrincipal && sesion ? hermanos.find((h) => h.id === sesion.hermanoId) ?? null : null),
+@@ -383,7 +387,9 @@ export default function HermanoPortal() {
+     setClaveInput('')
+     setSolicitudEnviada(false)
+     setErrorSolicitud(null)
+-    setPendingCuerpo('')
++    setSolTramo('')
++    setSolPreferencia('')
++    setSolComentario('')
+     setDatosGuardados(false)
+     setBajaMuestraSolicitada(false)
+     setErrorLogin(null)
+@@ -485,9 +491,15 @@ export default function HermanoPortal() {
+   }, [papeletas, campana.anio, tramos, hermanos, renovacion])
+ 
+   const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
+-  const tramosDelCuerpo = useMemo(
+-    () => (pendingCuerpo && pendingCuerpo !== PERSONALIZADA ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
+-    [pendingCuerpo, tramos],
++  /** ¿Participó el año anterior? (tuvo sitio con puesto): decide qué fecha de apertura le aplica. */
++  const participoAnoAnterior = renovacion?.sitioAnterior != null
++  /** Solicitud de papeleta que este hermano ya envió para la campaña activa (si la hay). */
++  const miSolicitud = useMemo(
++    () =>
++      hermanoPrincipal
++        ? solicitudesPapeleta.find((s) => s.hermanoId === hermanoPrincipal.id && s.anio === campana.anio) ?? null
++        : null,
++    [solicitudesPapeleta, hermanoPrincipal, campana.anio],
+   )
+ 
+   function nextNumeroPapeleta() {
+@@ -525,59 +537,31 @@ export default function HermanoPortal() {
+     setPapeletas((prev) => [renuncia, ...prev])
+   }
+ 
+-  function sacarEnTramo(tramoId: string) {
+-    if (!hermanoPrincipal) return
+-    const importe = precioDeTramo(tramos.find((t) => t.id === tramoId), precioBase)
+-    setPapeletas((prev) => {
+-      const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
+-      if (actual) {
+-        return prev.map((p) =>
+-          p.id === actual.id
+-            ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null }
+-            : p,
+-        )
+-      }
+-      const nueva: Papeleta = {
+-        id: nuevoId(),
+-        numero: nextNumeroPapeleta(),
+-        hermanoId: hermanoPrincipal.id,
+-        anio: campana.anio,
+-        tramoId,
+-        importe,
+-        estado: 'Asignada',
+-        fechaSolicitud: hoy(),
+-      }
+-      return [nueva, ...prev]
+-    })
+-    setPendingCuerpo('')
+-  }
+-
+-  /** Saca una papeleta personalizada de la hermandad (mantilla, simbólica…), sin sitio en el cortejo. */
+-  function sacarConOpcion(opcion: OpcionPapeleta) {
++  /**
++   * El hermano envía su solicitud de papeleta de sitio. No se emite la papeleta
++   * todavía: queda «Pendiente» hasta que la secretaría la acepte o rechace desde
++   * el módulo Papeletas. Así el reparto lo controla siempre la hermandad.
++   */
++  function enviarSolicitudPapeleta(e: FormEvent) {
++    e.preventDefault()
+     if (!hermanoPrincipal) return
+-    setPapeletas((prev) => {
+-      const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
+-      if (actual) {
+-        return prev.map((p) =>
+-          p.id === actual.id
+-            ? { ...p, tramoId: null, opcion: opcion.nombre, estado: 'Asignada', importe: opcion.importe, pagoComunicado: null }
+-            : p,
+-        )
+-      }
+-      const nueva: Papeleta = {
+-        id: nuevoId(),
+-        numero: nextNumeroPapeleta(),
+-        hermanoId: hermanoPrincipal.id,
+-        anio: campana.anio,
+-        tramoId: null,
+-        opcion: opcion.nombre,
+-        importe: opcion.importe,
+-        estado: 'Asignada',
+-        fechaSolicitud: hoy(),
+-      }
+-      return [nueva, ...prev]
+-    })
+-    setPendingCuerpo('')
++    const nueva = {
++      id: nuevoId(),
++      hermanoId: hermanoPrincipal.id,
++      hermanoNombre: hermanoPrincipal.nombre,
++      hermanoNumero: hermanoPrincipal.numero,
++      anio: campana.anio,
++      modalidad: solModalidad,
++      preferencia: solPreferencia.trim(),
++      tramoSolicitado: solTramo || 'Sin preferencia',
++      comentario: solComentario.trim(),
++      fecha: hoy(),
++      estado: 'Pendiente' as const,
++    }
++    setSolicitudesPapeleta([nueva, ...solicitudesPapeleta])
++    setSolPreferencia('')
++    setSolComentario('')
++    setSolTramo('')
+   }
+ 
+   /** El hermano avisa de que ya ha pagado su papeleta por Bizum o transferencia; la secretaría lo confirma. */
+@@ -1017,10 +1001,13 @@ export default function HermanoPortal() {
+                     <p className="portal__lead">
+                       El año pasado saliste en{' '}
+                       <b>{etiquetaTramo(tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)!)}</b>. La renovación
+-                      está {ventanaAbierta(campana) ? 'abierta' : 'cerrada'}
+-                      {ventanaAbierta(campana) ? ` hasta el ${formatDate(new Date(`${campana.fechaLimiteRenovacion}T00:00:00`))}` : ''}.
++                      está {ventanaAbiertaPara(campana, true) ? 'abierta' : 'cerrada'}
++                      {ventanaAbiertaPara(campana, true)
++                        ? ` hasta el ${formatDate(new Date(`${campana.fechaLimiteRenovacion}T00:00:00`))}`
++                        : ''}
++                      .
+                     </p>
+-                    {ventanaAbierta(campana) ? (
++                    {ventanaAbiertaPara(campana, true) ? (
+                       <div className="assign-box__row">
+                         <button className="btn btn-primary" onClick={renovarSitio}>
+                           Renovar mi sitio
+@@ -1029,77 +1016,102 @@ export default function HermanoPortal() {
+                           Este año no salgo
+                         </button>
+                       </div>
++                    ) : diasHasta(campana.fechaInicioParticiparon) > 0 ? (
++                      <p className="form-hint">
++                        La renovación abre el {formatDate(new Date(`${campana.fechaInicioParticiparon}T00:00:00`))}.
++                      </p>
+                     ) : (
+                       <p className="form-hint">El plazo de renovación ha terminado. Contacta con la secretaría.</p>
+                     )}
+                   </>
+                 )}
+ 
+-                {(renovacion.estado === 'Sin papeleta' || renovacion.estado === 'No renovada') && ventanaAbierta(campana) && (
+-                  <div className="assign-box">
+-                    <label htmlFor="cuerpoPortal">Sacar mi papeleta</label>
+-                    <div className="form-grid-2">
+-                      <select
+-                        id="cuerpoPortal"
+-                        value={pendingCuerpo}
+-                        onChange={(e) => setPendingCuerpo(e.target.value)}
+-                      >
+-                        <option value="">Elige un cuerpo</option>
+-                        {cuerposDisponibles.map((c) => (
+-                          <option key={c} value={c}>{c}</option>
+-                        ))}
+-                        {opcionesPersonalizadas.length > 0 && (
+-                          <option value={PERSONALIZADA}>Otra papeleta (mantilla, simbólica…)</option>
+-                        )}
+-                      </select>
+-                      <select
+-                        defaultValue=""
+-                        disabled={!pendingCuerpo}
+-                        key={pendingCuerpo}
+-                        onChange={(e) => {
+-                          if (!e.target.value) return
+-                          if (pendingCuerpo === PERSONALIZADA) {
+-                            const op = opcionesPersonalizadas.find((o) => o.id === e.target.value)
+-                            if (op) sacarConOpcion(op)
+-                          } else {
+-                            sacarEnTramo(e.target.value)
+-                          }
+-                        }}
+-                      >
+-                        <option value="" disabled>
+-                          {pendingCuerpo === PERSONALIZADA
+-                            ? 'Elige tu papeleta…'
+-                            : pendingCuerpo
+-                              ? 'Elige tu puesto…'
+-                              : 'Elige antes un cuerpo'}
+-                        </option>
+-                        {pendingCuerpo === PERSONALIZADA
+-                          ? opcionesPersonalizadas.map((o) => (
+-                              <option key={o.id} value={o.id}>{o.nombre} — {o.importe} €</option>
+-                            ))
+-                          : (() => {
+-                              const grupos = gruposAutomaticos(tramosDelCuerpo)
+-                              const designados = tramosDelCuerpo.filter((t) => !esAutomatico(t))
+-                              return (
+-                                <>
+-                                  {grupos.map((g) => (
+-                                    <option key={g.tramos[0].id} value={g.tramos[0].id}>
+-                                      {g.etiqueta} (te coloca la hermandad por número) — {precioDeTramo(g.tramos[0], precioBase)} €
+-                                    </option>
+-                                  ))}
+-                                  {designados.map((t) => (
+-                                    <option key={t.id} value={t.id}>
+-                                      {t.nombre}{t.tipo ? ` (${t.tipo})` : ''} — {precioDeTramo(t, precioBase)} €
+-                                    </option>
+-                                  ))}
+-                                </>
+-                              )
+-                            })()}
+-                      </select>
++                {(renovacion.estado === 'Sin papeleta' || renovacion.estado === 'No renovada') &&
++                  (miSolicitud && miSolicitud.estado === 'Pendiente' ? (
++                    <div className="assign-box assign-box--wait">
++                      <label>Solicitud enviada</label>
++                      <p className="portal__lead">
++                        Pediste <b>{miSolicitud.modalidad}</b>
++                        {miSolicitud.tramoSolicitado !== 'Sin preferencia' ? ` · ${miSolicitud.tramoSolicitado}` : ''}. La
++                        secretaría la revisará y te avisará.
++                      </p>
++                      <p className="form-hint">Enviada el {miSolicitud.fecha} · pendiente de revisión.</p>
+                     </div>
+-                    <p className="form-hint">El puesto exacto lo asigna la hermandad; en los tramos por número, según tu número de hermano.</p>
+-                  </div>
+-                )}
++                  ) : ventanaAbiertaPara(campana, participoAnoAnterior) ? (
++                    <form className="assign-box" onSubmit={enviarSolicitudPapeleta}>
++                      <label>Solicitar mi papeleta de sitio</label>
++                      {miSolicitud && miSolicitud.estado === 'Rechazada' && (
++                        <p className="form-hint form-hint--error">
++                          Tu solicitud anterior no fue aceptada. Puedes enviar una nueva.
++                        </p>
++                      )}
++                      <div className="form-grid-2">
++                        <div className="field">
++                          <label htmlFor="solModalidad">Modalidad</label>
++                          <select
++                            id="solModalidad"
++                            value={solModalidad}
++                            onChange={(e) => setSolModalidad(e.target.value as ModalidadPapeleta)}
++                          >
++                            {MODALIDADES.map((m) => (
++                              <option key={m} value={m}>{m}</option>
++                            ))}
++                          </select>
++                        </div>
++                        <div className="field">
++                          <label htmlFor="solTramo">Cuerpo o tramo preferido</label>
++                          <select id="solTramo" value={solTramo} onChange={(e) => setSolTramo(e.target.value)}>
++                            <option value="">Sin preferencia</option>
++                            {cuerposDisponibles.map((c) => (
++                              <option key={c} value={c}>{c}</option>
++                            ))}
++                          </select>
++                        </div>
++                      </div>
++                      <div className="field">
++                        <label htmlFor="solPreferencia">Preferencia (opcional)</label>
++                        <input
++                          id="solPreferencia"
++                          type="text"
++                          value={solPreferencia}
++                          placeholder="P. ej. cirio junto a mi hermano"
++                          onChange={(e) => setSolPreferencia(e.target.value)}
++                        />
++                      </div>
++                      <div className="field">
++                        <label htmlFor="solComentario">Comentario para la secretaría (opcional)</label>
++                        <textarea
++                          id="solComentario"
++                          rows={2}
++                          value={solComentario}
++                          onChange={(e) => setSolComentario(e.target.value)}
++                        />
++                      </div>
++                      <button type="submit" className="btn btn-primary">
++                        Enviar solicitud
++                      </button>
++                      <p className="form-hint">
++                        No se te cobra ni se te asigna nada todavía: la secretaría revisa tu solicitud y te confirma el
++                        puesto.
++                      </p>
++                    </form>
++                  ) : diasHasta(
++                      participoAnoAnterior ? campana.fechaInicioParticiparon : campana.fechaInicioNoParticiparon,
++                    ) > 0 ? (
++                    <p className="form-hint">
++                      El plazo de solicitud de papeletas abre el{' '}
++                      {formatDate(
++                        new Date(
++                          `${participoAnoAnterior ? campana.fechaInicioParticiparon : campana.fechaInicioNoParticiparon}T00:00:00`,
++                        ),
++                      )}
++                      .
++                    </p>
++                  ) : (
++                    <p className="form-hint">
++                      El plazo de solicitud de papeletas ha terminado. Contacta con la secretaría.
++                    </p>
++                  ))}
+ 
+                 {(renovacion.estado === 'Renovada' || renovacion.estado === 'Nueva') && renovacion.papeletaActual && hermanoPrincipal && (
+                   <>
+@@ -1148,9 +1160,6 @@ export default function HermanoPortal() {
+                   </>
+                 )}
+ 
+-                {renovacion.estado === 'No renovada' && !ventanaAbierta(campana) && (
+-                  <p className="form-hint">No renovaste tu sitio este año y el plazo ha terminado.</p>
+-                )}
+               </div>
+             )}
+           </section>
+diff --git a/src/pages/app/Papeletas.tsx b/src/pages/app/Papeletas.tsx
+index 5268f0a..7fcfff4 100644
+--- a/src/pages/app/Papeletas.tsx
++++ b/src/pages/app/Papeletas.tsx
+@@ -9,6 +9,8 @@ import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
+ import { PAPELETAS_INICIALES, METODOS_PAGO_PAPELETA, type MetodoPagoPapeleta, type Papeleta } from '../../data/papeletas'
+ import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
+ import { useAjustesCuotas } from '../../lib/ajustesCuotas'
++import { useConvocatoria, enviarConvocatoria, destinatariosConvocatoria } from '../../lib/convocatoria'
++import { useSolicitudesPapeleta, type SolicitudPapeleta } from '../../lib/solicitudesPapeleta'
+ import { useAuth } from '../../context/AuthContext'
+ import { useHermandadSettings } from '../../lib/hermandadSettings'
+ import { formatDate, formatCurrency } from '../../lib/format'
+@@ -111,6 +113,13 @@ export default function Papeletas() {
+   const [imprimirOpen, setImprimirOpen] = useState(false)
+   const [imprimirEstados, setImprimirEstados] = useState<Record<string, boolean>>({ Asignada: true, Pagada: true, Entregada: true })
+   const [listaImpresion, setListaImpresion] = useState<ItemImpresion[] | null>(null)
++  const [convocatoria, refrescarConvocatoria] = useConvocatoria()
++  const [solicitudes, setSolicitudes] = useSolicitudesPapeleta()
++  const [solicitudesOpen, setSolicitudesOpen] = useState(false)
++  const solicitudesPendientes = useMemo(
++    () => solicitudes.filter((s) => s.anio === campana.anio && s.estado === 'Pendiente'),
++    [solicitudes, campana.anio],
++  )
+ 
+   function guardarCampana(next: Campana) {
+     setCampanaState(next)
+@@ -361,6 +370,44 @@ export default function Papeletas() {
+     .filter((e) => imprimirEstados[e])
+     .reduce((s, e) => s + (contadorImpresion[e] ?? 0), 0)
+ 
++  /** Abre el plazo avisando a todos los hermanos (email simulado + registro en Comunicados). */
++  function convocar() {
++    const total = enviarConvocatoria(campana.anio, hermanos, fmtIso(campana.fechaLimiteRenovacion))
++    refrescarConvocatoria()
++    window.alert(
++      `Convocatoria enviada (simulada) a ${total} hermanos con correo. Queda registrada en Comunicados. ` +
++        'El envío real de email se activará al conectar el proveedor.',
++    )
++  }
++
++  /** Acepta una solicitud online: le emite la papeleta con lo pedido y marca la solicitud como aceptada. */
++  function aceptarSolicitud(s: SolicitudPapeleta) {
++    const opcion = `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
++    setPapeletas((prev) => {
++      const actual = prev.find((p) => p.hermanoId === s.hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
++      if (actual) {
++        return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId: null, estado: 'Asignada', importe: precioBase } : p))
++      }
++      const nueva: Papeleta = {
++        id: nuevoId(),
++        numero: siguienteNumero(prev),
++        hermanoId: s.hermanoId,
++        anio: campana.anio,
++        tramoId: null,
++        opcion,
++        importe: precioBase,
++        estado: 'Asignada',
++        fechaSolicitud: hoy(),
++      }
++      return [nueva, ...prev]
++    })
++    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Aceptada' } : x)))
++  }
++
++  function rechazarSolicitud(s: SolicitudPapeleta) {
++    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Rechazada' } : x)))
++  }
++
+   function generarImpresion() {
+     const lista: ItemImpresion[] = papeletasActivas
+       .filter((p) => imprimirEstados[p.estado])
+@@ -393,6 +440,8 @@ export default function Papeletas() {
+     const anio = campana.anio + 1
+     guardarCampana({
+       anio,
++      fechaInicioParticiparon: `${anio}-01-15`,
++      fechaInicioNoParticiparon: `${anio}-02-01`,
+       fechaLimiteRenovacion: `${anio}-02-28`,
+       fechaSalida: null,
+     })
+@@ -416,6 +465,11 @@ export default function Papeletas() {
+           </p>
+         </div>
+         <div className="dash-head__actions">
++          {solicitudesPendientes.length > 0 && (
++            <button className="btn btn-outline" onClick={() => setSolicitudesOpen(true)}>
++              Solicitudes ({solicitudesPendientes.length})
++            </button>
++          )}
+           <button className="btn btn-primary" onClick={() => setImprimirOpen(true)}>
+             Imprimir papeletas
+           </button>
+@@ -443,18 +497,38 @@ export default function Papeletas() {
+         )}
+       </div>
+ 
++      {/* Convocatoria: avisar a todos los hermanos de la apertura del plazo */}
++      <div className="banner-inline banner-inline--accent" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
++        {convocatoria && convocatoria.anio === campana.anio ? (
++          <span>
++            📣 Convocatoria enviada el {fmtIso(convocatoria.fecha)} a <b>{convocatoria.total}</b> hermanos. Ya pueden
++            solicitar su papeleta desde su área.
++          </span>
++        ) : (
++          <span>
++            Avisa a los <b>{destinatariosConvocatoria(hermanos).length}</b> hermanos de que pueden solicitar su papeleta
++            de sitio {campana.anio}.
++          </span>
++        )}
++        <button className="btn btn-primary btn-sm" onClick={convocar}>
++          {convocatoria && convocatoria.anio === campana.anio ? 'Reenviar convocatoria' : 'Convocar papeletas'}
++        </button>
++      </div>
++
+       {/* Avisos de portada: lo que la secretaría debe mirar de un vistazo */}
+-      {(stats.pendientePago > 0 || tramosCasiLlenos.length > 0 || stats.solicitudes > 0 || (abierta && stats.porRenovar > 0)) && (
++      {(stats.pendientePago > 0 || tramosCasiLlenos.length > 0 || solicitudesPendientes.length > 0 || (abierta && stats.porRenovar > 0)) && (
+         <div className="avisos-band">
++          {solicitudesPendientes.length > 0 && (
++            <button type="button" className="aviso aviso--info" onClick={() => setSolicitudesOpen(true)} style={{ cursor: 'pointer' }}>
++              🔔 {solicitudesPendientes.length} solicitud{solicitudesPendientes.length === 1 ? '' : 'es'} de papeleta por revisar
++            </button>
++          )}
+           {stats.pendientePago > 0 && (
+             <span className="aviso aviso--warn">⚠️ {stats.pendientePago} papeleta{stats.pendientePago === 1 ? '' : 's'} pendiente{stats.pendientePago === 1 ? '' : 's'} de pago</span>
+           )}
+           {tramosCasiLlenos.map((nombre) => (
+             <span key={nombre} className="aviso aviso--warn">🟡 {nombre} casi completo</span>
+           ))}
+-          {stats.solicitudes > 0 && (
+-            <span className="aviso aviso--info">🔔 {stats.solicitudes} solicitud{stats.solicitudes === 1 ? '' : 'es'} por asignar</span>
+-          )}
+           {abierta && stats.porRenovar > 0 && (
+             <span className="aviso aviso--neutral">↻ {stats.porRenovar} por renovar</span>
+           )}
+@@ -853,15 +927,37 @@ export default function Papeletas() {
+         subtitle={`Edición ${campana.anio}`}
+       >
+         <div className="app-form">
++          <div className="form-grid-2">
++            <div className="form-row">
++              <label htmlFor="fechaIniPart">Inicio · participaron el año pasado</label>
++              <input
++                id="fechaIniPart"
++                type="date"
++                value={campana.fechaInicioParticiparon}
++                onChange={(e) => guardarCampana({ ...campana, fechaInicioParticiparon: e.target.value })}
++              />
++              <p className="form-hint">Desde este día pueden solicitar los que salieron el año anterior (renovar).</p>
++            </div>
++            <div className="form-row">
++              <label htmlFor="fechaIniNuevos">Inicio · no participaron</label>
++              <input
++                id="fechaIniNuevos"
++                type="date"
++                value={campana.fechaInicioNoParticiparon}
++                onChange={(e) => guardarCampana({ ...campana, fechaInicioNoParticiparon: e.target.value })}
++              />
++              <p className="form-hint">Desde este día pueden solicitar el resto de hermanos (los que no salieron).</p>
++            </div>
++          </div>
+           <div className="form-row">
+-            <label htmlFor="fechaLimite">Fecha límite de renovación</label>
++            <label htmlFor="fechaLimite">Fin del plazo (fecha límite)</label>
+             <input
+               id="fechaLimite"
+               type="date"
+               value={campana.fechaLimiteRenovacion}
+               onChange={(e) => guardarCampana({ ...campana, fechaLimiteRenovacion: e.target.value })}
+             />
+-            <p className="form-hint">Pasada esta fecha, quien no haya renovado pierde su sitio del año anterior.</p>
++            <p className="form-hint">Último día del plazo. Pasada esta fecha, quien no haya renovado pierde su sitio.</p>
+           </div>
+           <div className="form-row">
+             <label htmlFor="fechaSalida">Día de la estación de penitencia</label>
+@@ -963,6 +1059,38 @@ export default function Papeletas() {
+         </div>
+       </Drawer>
+ 
++      {/* Solicitudes de papeleta enviadas por los hermanos desde su área */}
++      <Drawer
++        open={solicitudesOpen}
++        onClose={() => setSolicitudesOpen(false)}
++        title="Solicitudes de papeleta"
++        subtitle={`${solicitudesPendientes.length} pendiente${solicitudesPendientes.length === 1 ? '' : 's'}`}
++      >
++        {solicitudesPendientes.length === 0 ? (
++          <p className="form-hint">No hay solicitudes pendientes. Las que envíen los hermanos desde su área aparecerán aquí.</p>
++        ) : (
++          solicitudesPendientes.map((s) => (
++            <div className="assign-box" key={s.id}>
++              <div className="ficha__row">
++                <b>{s.hermanoNombre}</b>
++                <span className="pill pill--info">Nº {s.hermanoNumero}</span>
++              </div>
++              <dl className="ficha__list">
++                <div><dt>Modalidad</dt><dd>{s.modalidad}</dd></div>
++                {s.preferencia && <div><dt>Preferencia</dt><dd>{s.preferencia}</dd></div>}
++                <div><dt>Tramo solicitado</dt><dd>{s.tramoSolicitado}</dd></div>
++                {s.comentario && <div><dt>Comentario</dt><dd>{s.comentario}</dd></div>}
++                <div><dt>Enviada</dt><dd>{s.fecha}</dd></div>
++              </dl>
++              <div className="assign-box__row">
++                <button className="btn btn-primary btn-sm" onClick={() => aceptarSolicitud(s)}>Aceptar y emitir</button>
++                <button className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => rechazarSolicitud(s)}>Rechazar</button>
++              </div>
++            </div>
++          ))
++        )}
++      </Drawer>
++
+       {/* Zona de impresión masiva: oculta en pantalla, visible al imprimir con la clase print-masivo */}
+       {listaImpresion && (
+         <div className="impresion-masiva" aria-hidden="true">
+diff --git a/src/styles/global.css b/src/styles/global.css
+index a1585f3..1d31927 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -1298,12 +1298,21 @@ h1, h2, h3,
+ .assign-box label { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+ .assign-box__row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+ .assign-box__row select,
+-.assign-box__row input[type='text'] {
+-  flex: 1; padding: 0.6rem 0.7rem; font: inherit; font-size: 0.88rem;
++.assign-box__row input[type='text'],
++.assign-box select,
++.assign-box input[type='text'],
++.assign-box textarea {
++  flex: 1; width: 100%; padding: 0.6rem 0.7rem; font: inherit; font-size: 0.88rem;
+   color: var(--text); background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+ }
++.assign-box textarea { resize: vertical; min-height: 3.2rem; }
++.assign-box .field label { color: var(--text); }
+ .assign-box__row select:focus,
+-.assign-box__row input[type='text']:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
++.assign-box__row input[type='text']:focus,
++.assign-box select:focus,
++.assign-box input[type='text']:focus,
++.assign-box textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
++.assign-box--wait { border-style: dashed; }
+ 
+ .ticket-doc {
+   background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
+-- 
+2.43.0
+
+
+From 8c25d94db1a4fb94f2700b7932c1636c17365a6a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 17 Aug 2026 18:34:34 +0000
+Subject: [PATCH 2/6] =?UTF-8?q?Fase=203:=20la=20apertura=20por=20participa?=
+ =?UTF-8?q?ci=C3=B3n=20cuenta=20tambi=C3=A9n=20papeletas=20sin=20tramo=20y?=
+ =?UTF-8?q?=20evita=20renovaciones=20duplicadas?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Tras revisión de código:
+- participoEnCampana(): decide la fecha de apertura (renovadores vs. nuevos)
+  contando cualquier papeleta emitida el año anterior, con tramo o
+  personalizada (incluidas las aceptadas online), no solo las de sitio en el
+  cortejo. Antes, quien salió con mantilla/simbólica se trataba como nuevo.
+- renovarSitio()/noRenovar() del portal reutilizan la papeleta del año si ya
+  existe, igual que el panel, para no crear filas duplicadas con doble clic.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/lib/campana.ts          | 13 +++++++
+ src/pages/HermanoPortal.tsx | 71 ++++++++++++++++++++++++-------------
+ 2 files changed, 59 insertions(+), 25 deletions(-)
+
+diff --git a/src/lib/campana.ts b/src/lib/campana.ts
+index 589539e..22f3036 100644
+--- a/src/lib/campana.ts
++++ b/src/lib/campana.ts
+@@ -68,6 +68,19 @@ export function ventanaAbiertaPara(campana: Campana, participoElAnoAnterior: boo
+   return diasHasta(inicio) <= 0 && diasHasta(campana.fechaLimiteRenovacion) >= 0
+ }
+ 
++/**
++ * ¿Participó el hermano en la campaña de ese año? Cuenta cualquier papeleta
++ * emitida —de tramo o personalizada (mantilla, simbólica, aceptada online)—
++ * salvo las anuladas y las renuncias. Sirve para decidir qué fecha de apertura
++ * le aplica en la campaña siguiente (renovadores vs. nuevos), sin excluir a
++ * quien salió con una papeleta sin sitio en el cortejo.
++ */
++export function participoEnCampana(hermanoId: string, papeletas: Papeleta[], anio: number): boolean {
++  return papeletas.some(
++    (p) => p.hermanoId === hermanoId && p.anio === anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia',
++  )
++}
++
+ export type EstadoRenovacion =
+   | 'Renovada'
+   | 'Nueva'
+diff --git a/src/pages/HermanoPortal.tsx b/src/pages/HermanoPortal.tsx
+index 5c54b44..7999c03 100644
+--- a/src/pages/HermanoPortal.tsx
++++ b/src/pages/HermanoPortal.tsx
+@@ -17,7 +17,7 @@ import {
+   precioDeTramo,
+ } from '../lib/tramos'
+ import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
+-import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta } from '../lib/campana'
++import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
+ import {
+   useSolicitudesPapeleta,
+   MODALIDADES,
+@@ -491,8 +491,10 @@ export default function HermanoPortal() {
+   }, [papeletas, campana.anio, tramos, hermanos, renovacion])
+ 
+   const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
+-  /** ¿Participó el año anterior? (tuvo sitio con puesto): decide qué fecha de apertura le aplica. */
+-  const participoAnoAnterior = renovacion?.sitioAnterior != null
++  /** ¿Participó el año anterior? (cualquier papeleta emitida, con o sin tramo): decide qué fecha de apertura le aplica. */
++  const participoAnoAnterior = hermanoPrincipal
++    ? participoEnCampana(hermanoPrincipal.id, papeletas, campana.anio - 1)
++    : false
+   /** Solicitud de papeleta que este hermano ya envió para la campaña activa (si la hay). */
+   const miSolicitud = useMemo(
+     () =>
+@@ -509,32 +511,51 @@ export default function HermanoPortal() {
+   function renovarSitio() {
+     if (!hermanoPrincipal || !renovacion?.sitioAnterior?.tramoId) return
+     const tramoAnterior = tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)
+-    const nueva: Papeleta = {
+-      id: nuevoId(),
+-      numero: nextNumeroPapeleta(),
+-      hermanoId: hermanoPrincipal.id,
+-      anio: campana.anio,
+-      tramoId: renovacion.sitioAnterior.tramoId,
+-      importe: renovacion.sitioAnterior.importe || precioDeTramo(tramoAnterior, precioBase),
+-      estado: 'Asignada',
+-      fechaSolicitud: hoy(),
+-    }
+-    setPapeletas((prev) => [nueva, ...prev])
++    const tramoId = renovacion.sitioAnterior.tramoId
++    const importe = renovacion.sitioAnterior.importe || precioDeTramo(tramoAnterior, precioBase)
++    setPapeletas((prev) => {
++      // Reutilizamos la papeleta del año si ya existe, para no crear una fila duplicada.
++      const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
++      if (actual) {
++        return prev.map((p) =>
++          p.id === actual.id ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null } : p,
++        )
++      }
++      const nueva: Papeleta = {
++        id: nuevoId(),
++        numero: nextNumeroPapeleta(),
++        hermanoId: hermanoPrincipal.id,
++        anio: campana.anio,
++        tramoId,
++        importe,
++        estado: 'Asignada',
++        fechaSolicitud: hoy(),
++      }
++      return [nueva, ...prev]
++    })
+   }
+ 
+   function noRenovar() {
+     if (!hermanoPrincipal) return
+-    const renuncia: Papeleta = {
+-      id: nuevoId(),
+-      numero: nextNumeroPapeleta(),
+-      hermanoId: hermanoPrincipal.id,
+-      anio: campana.anio,
+-      tramoId: null,
+-      importe: 0,
+-      estado: 'Renuncia',
+-      fechaSolicitud: hoy(),
+-    }
+-    setPapeletas((prev) => [renuncia, ...prev])
++    setPapeletas((prev) => {
++      const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
++      if (actual) {
++        return prev.map((p) =>
++          p.id === actual.id ? { ...p, tramoId: null, opcion: null, estado: 'Renuncia', importe: 0, pagoComunicado: null } : p,
++        )
++      }
++      const renuncia: Papeleta = {
++        id: nuevoId(),
++        numero: nextNumeroPapeleta(),
++        hermanoId: hermanoPrincipal.id,
++        anio: campana.anio,
++        tramoId: null,
++        importe: 0,
++        estado: 'Renuncia',
++        fechaSolicitud: hoy(),
++      }
++      return [renuncia, ...prev]
++    })
+   }
+ 
+   /**
+-- 
+2.43.0
+
+
+From d73c2d4a36040fd540cb4188399c4a79497a57e5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 17 Aug 2026 19:02:59 +0000
+Subject: [PATCH 3/6] =?UTF-8?q?Modo=20demo=20fiable=20y=20dos=20demos=20de?=
+ =?UTF-8?q?=20partida=20(llena=20y=20vac=C3=ADa)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+El acceso demo fallaba cuando Supabase está configurado pero en pausa: los
+hooks consultaban Supabase (vacío por RLS) en vez de los datos de ejemplo, así
+que el hermano de prueba "no estaba disponible".
+
+- Nuevo flag de modo demo: con él, useSupabaseTable lee siempre en local
+  (censo, papeletas, cuotas de ejemplo) sin depender de Supabase. Se limpia al
+  iniciar sesión de verdad.
+- Acceso demo del hermano a prueba de balas: si el navegador tiene un censo
+  viejo sin el hermano de muestra, restaura el censo de ejemplo y entra igual.
+- Dos puntos de partida en el acceso: "Datos de ejemplo (llena)" y "Empezar de
+  cero (vacía)", para probar con datos o crear una hermandad desde cero.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/components/AuthForm.tsx |  38 ++++++++++++-
+ src/context/AuthContext.tsx |   3 +
+ src/lib/demo.ts             | 106 ++++++++++++++++++++++++++++++++++++
+ src/lib/supabaseSync.ts     |  15 +++--
+ src/pages/HermanoPortal.tsx |  12 +++-
+ src/styles/global.css       |   3 +
+ 6 files changed, 169 insertions(+), 8 deletions(-)
+ create mode 100644 src/lib/demo.ts
+
+diff --git a/src/components/AuthForm.tsx b/src/components/AuthForm.tsx
+index bc5b76c..feeb9cc 100644
+--- a/src/components/AuthForm.tsx
++++ b/src/components/AuthForm.tsx
+@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
+ import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
+ import { useAuth, DEMO_EMAIL, DEMO_PASSWORD } from '../context/AuthContext'
+ import { getPersonal } from '../lib/personal'
++import { sembrarDemoLlena, sembrarDemoVacia } from '../lib/demo'
+ 
+ type Mode = 'login' | 'signup' | 'reset'
+ 
+@@ -160,6 +161,17 @@ export default function AuthForm({ mode }: { mode: Mode }) {
+     }
+   }
+ 
++  /**
++   * Entra en la demo eligiendo el punto de partida: LLENA (datos de ejemplo) o
++   * VACÍA (hermandad sin datos, para crearlo todo). Sembramos localStorage y
++   * entramos como titular; el panel se monta leyendo ya esos datos.
++   */
++  async function elegirDemo(modo: 'llena' | 'vacia') {
++    if (modo === 'llena') sembrarDemoLlena()
++    else sembrarDemoVacia()
++    await entrarComoDemo(DEMO_EMAIL, DEMO_PASSWORD)
++  }
++
+   const cuentasDemo = useMemo(
+     () => [
+       { id: 'titular', nombre: 'Usuario Demo', cargo: 'Titular · acceso completo', email: DEMO_EMAIL, clave: DEMO_PASSWORD },
+@@ -226,9 +238,29 @@ export default function AuthForm({ mode }: { mode: Mode }) {
+       {!configured && mode === 'login' && (
+         <div className="banner banner--info banner--demo" role="status">
+           <div>
+-            <strong>Modo demostración.</strong> Entra con un clic como cualquiera de estas
+-            personas y comprueba cómo cada cargo ve solo lo que le corresponde. El formulario ya
+-            viene relleno con el titular.
++            <strong>Modo demostración.</strong> Elige cómo empezar: con datos de ejemplo para
++            ver las funciones ya en marcha, o con una hermandad vacía para crearlo todo desde cero.
++          </div>
++          <div className="demo-modos">
++            <button
++              type="button"
++              className="btn btn-primary"
++              onClick={() => elegirDemo('llena')}
++              disabled={submitting}
++            >
++              Datos de ejemplo (llena)
++            </button>
++            <button
++              type="button"
++              className="btn btn-outline"
++              onClick={() => elegirDemo('vacia')}
++              disabled={submitting}
++            >
++              Empezar de cero (vacía)
++            </button>
++          </div>
++          <div className="demo-accounts__label">
++            O entra como un cargo concreto (con los datos actuales) y comprueba qué ve cada uno:
+           </div>
+           <div className="demo-accounts">
+             {cuentasDemo.map((c) => (
+diff --git a/src/context/AuthContext.tsx b/src/context/AuthContext.tsx
+index adbb51a..1da7c39 100644
+--- a/src/context/AuthContext.tsx
++++ b/src/context/AuthContext.tsx
+@@ -8,6 +8,7 @@ import {
+ } from 'react'
+ import { supabase, isSupabaseConfigured, supabaseDisponible } from '../lib/supabase'
+ import { getPersonal } from '../lib/personal'
++import { limpiarModoDemo } from '../lib/demo'
+ 
+ type AuthResult = { error: string | null }
+ 
+@@ -175,6 +176,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
+           try {
+             const { error } = await supabase.auth.signInWithPassword({ email, password })
+             if (error) return { error: translateError(error.message) }
++            // Acceso real con éxito: salimos del modo demo si lo hubiera.
++            limpiarModoDemo()
+             const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+             const mfaRequerido = Boolean(data && data.currentLevel === 'aal1' && data.nextLevel === 'aal2')
+             return { error: null, mfaRequerido }
+diff --git a/src/lib/demo.ts b/src/lib/demo.ts
+new file mode 100644
+index 0000000..899ebb1
+--- /dev/null
++++ b/src/lib/demo.ts
+@@ -0,0 +1,106 @@
++import { CLAVES_DATOS } from './persistencia'
++
++/**
++ * Modo demostración con dos puntos de partida, para probar la app sin base de
++ * datos:
++ *   - LLENA: censo, papeletas, cuotas… de ejemplo (para ver funciones ya con
++ *     datos).
++ *   - VACÍA: una hermandad sin hermanos ni registros (para empezar de cero y
++ *     crear tus propios datos), pero con la configuración por defecto (tramos,
++ *     cargos, campaña) para que todo siga funcionando.
++ *
++ * Ambas escriben en localStorage y NO tocan el usuario demo. Los módulos leen
++ * su colección al montarse, así que basta con navegar o recargar para verlo.
++ */
++
++/** Colecciones de personas y registros que se vacían en la demo vacía. */
++const CLAVES_COLECCIONES = [
++  CLAVES_DATOS.hermanos,
++  CLAVES_DATOS.cuotas,
++  CLAVES_DATOS.papeletas,
++  CLAVES_DATOS.incidencias,
++  CLAVES_DATOS.movimientos,
++  CLAVES_DATOS.enseres,
++  CLAVES_DATOS.documentos,
++  CLAVES_DATOS.comunicados,
++  CLAVES_DATOS.cuentasSociales,
++  'cabildo-solicitudes-papeleta',
++  'cabildo-convocatoria',
++]
++
++/** Se conservan al restablecer una demo (sesión demo y consentimiento del hermano). */
++const CLAVES_CONSERVADAS = new Set(['cabildo-demo-user', 'cabildo-hermano-consent'])
++
++const CLAVE_MODO = 'cabildo-demo-modo'
++
++/** Borra todo dato guardado de la app salvo las claves que se conservan. */
++function limpiarTodo() {
++  Object.keys(localStorage)
++    .filter((k) => k.startsWith('cabildo-') && !CLAVES_CONSERVADAS.has(k))
++    .forEach((k) => localStorage.removeItem(k))
++}
++
++/** Deja el navegador con los datos de ejemplo completos (censo, papeletas, cuotas…). */
++export function sembrarDemoLlena() {
++  limpiarTodo()
++  localStorage.setItem(CLAVE_MODO, 'llena')
++}
++
++/** Deja una hermandad vacía: sin hermanos, papeletas ni registros (config por defecto). */
++export function sembrarDemoVacia() {
++  limpiarTodo()
++  CLAVES_COLECCIONES.forEach((k) => localStorage.setItem(k, '[]'))
++  localStorage.setItem(CLAVE_MODO, 'vacia')
++}
++
++/**
++ * Restaura solo el censo/papeletas/cuotas de ejemplo, sin tocar el resto
++ * (web, colores, tramos…). Sirve para que el acceso demo del hermano funcione
++ * siempre, aunque el navegador tenga un censo viejo de pruebas anteriores.
++ */
++export function restaurarCensoDemo() {
++  localStorage.removeItem(CLAVES_DATOS.hermanos)
++  localStorage.removeItem(CLAVES_DATOS.papeletas)
++  localStorage.removeItem(CLAVES_DATOS.cuotas)
++}
++
++/** Punto de partida de demo activo, si se eligió alguno. */
++export function demoModo(): 'llena' | 'vacia' | null {
++  try {
++    const v = localStorage.getItem(CLAVE_MODO)
++    return v === 'llena' || v === 'vacia' ? v : null
++  } catch {
++    return null
++  }
++}
++
++/**
++ * ¿Estamos en modo demo? Cuando lo estamos, los datos deben leerse en local
++ * (censo, papeletas… de ejemplo) sin depender de Supabase, aunque el proyecto
++ * esté configurado pero en pausa. Así el acceso demo funciona siempre.
++ */
++export function modoDemoActivo(): boolean {
++  try {
++    return localStorage.getItem(CLAVE_MODO) !== null
++  } catch {
++    return false
++  }
++}
++
++/** Marca el modo demo (sin borrar nada) si aún no había ninguno elegido. */
++export function marcarModoDemo() {
++  try {
++    if (!localStorage.getItem(CLAVE_MODO)) localStorage.setItem(CLAVE_MODO, 'llena')
++  } catch {
++    // sin localStorage: la app sigue en memoria
++  }
++}
++
++/** Sale del modo demo (p. ej. al iniciar sesión de verdad contra Supabase). */
++export function limpiarModoDemo() {
++  try {
++    localStorage.removeItem(CLAVE_MODO)
++  } catch {
++    // nada que hacer
++  }
++}
+diff --git a/src/lib/supabaseSync.ts b/src/lib/supabaseSync.ts
+index c62dd87..5f7e30e 100644
+--- a/src/lib/supabaseSync.ts
++++ b/src/lib/supabaseSync.ts
+@@ -1,6 +1,7 @@
+ import { useEffect, useRef, useState } from 'react'
+ import { supabase, isSupabaseConfigured } from './supabase'
+ import { leerPersistido } from './persistencia'
++import { modoDemoActivo } from './demo'
+ 
+ /**
+  * Id nuevo para cualquier registro que se vaya a crear. Antes se usaba
+@@ -50,13 +51,19 @@ export function useSupabaseTable<T extends { id: string }>(
+   fromRow: (row: Record<string, unknown>) => T,
+   orderBy?: string,
+ ) {
++  // Modo local efectivo: sin Supabase configurado, o en modo demostración
++  // (aunque Supabase esté configurado pero en pausa). En demo leemos siempre
++  // los datos de ejemplo del navegador, sin consultar Supabase, para que el
++  // censo/papeletas/cuotas estén disponibles al instante y el acceso funcione.
++  const [local] = useState(() => !isSupabaseConfigured || modoDemoActivo())
++
+   const [items, setItemsState] = useState<T[]>(() =>
+-    isSupabaseConfigured ? [] : leerPersistido(claveLocal, inicial),
++    local ? leerPersistido(claveLocal, inicial) : [],
+   )
+-  const cargado = useRef(!isSupabaseConfigured)
++  const cargado = useRef(local)
+ 
+   useEffect(() => {
+-    if (!isSupabaseConfigured || !supabase) return
++    if (local || !supabase) return
+     let cancelado = false
+ 
+     function cargar() {
+@@ -102,7 +109,7 @@ export function useSupabaseTable<T extends { id: string }>(
+   function setItems(actualizador: Actualizador<T>) {
+     setItemsState((prev) => {
+       const next = typeof actualizador === 'function' ? (actualizador as (p: T[]) => T[])(prev) : actualizador
+-      if (isSupabaseConfigured && supabase) {
++      if (!local && supabase) {
+         if (cargado.current) sincronizar(tabla, prev, next, toRow)
+         espejarEnLocal(claveLocal, next)
+       } else {
+diff --git a/src/pages/HermanoPortal.tsx b/src/pages/HermanoPortal.tsx
+index 7999c03..a2f1492 100644
+--- a/src/pages/HermanoPortal.tsx
++++ b/src/pages/HermanoPortal.tsx
+@@ -24,6 +24,7 @@ import {
+   type ModalidadPapeleta,
+ } from '../lib/solicitudesPapeleta'
+ import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
++import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
+ import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
+ import { supabase } from '../lib/supabase'
+ import { useAuth } from '../context/AuthContext'
+@@ -357,10 +358,19 @@ export default function HermanoPortal() {
+   }
+ 
+   function entrarComoDemo(hermanoId: string = DNI_DEMO) {
++    // El navegador puede tener un censo viejo (de pruebas anteriores) que ya no
++    // incluye a este hermano de muestra. En vez de fallar, restauramos el censo
++    // de ejemplo y recargamos: la sesión queda guardada y, al volver, el hermano
++    // ya existe. Así el acceso demo funciona siempre, sin depender del estado
++    // previo del navegador.
+     if (!hermanos.some((h) => h.id === hermanoId)) {
+-      setErrorLogin('Ese hermano de prueba no está disponible ahora mismo. Elige tu hermandad y entra con un DNI y contraseña del censo.')
++      marcarModoDemo()
++      restaurarCensoDemo()
++      guardarSesion({ hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId })
++      window.location.reload()
+       return
+     }
++    marcarModoDemo()
+     const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId }
+     guardarSesion(nueva)
+     setSesion(nueva)
+diff --git a/src/styles/global.css b/src/styles/global.css
+index 1d31927..1c97238 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -761,6 +761,9 @@ h1, h2, h3,
+ }
+ 
+ /* cuentas demo: entra con un clic como el titular o cualquier cargo de personal */
++.demo-modos { display: flex; gap: 0.6rem; flex-wrap: wrap; }
++.demo-modos .btn { flex: 1; min-width: 12rem; }
++.demo-accounts__label { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.2rem; }
+ .demo-accounts { display: flex; flex-direction: column; gap: 0.5rem; }
+ .demo-account {
+   display: flex; align-items: center; gap: 0.65rem;
+-- 
+2.43.0
+
+
+From ab99d5e6ac28e9b2f4e608dfce1368e0978a392e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 17 Aug 2026 19:05:47 +0000
+Subject: [PATCH 4/6] =?UTF-8?q?Pie=20de=20la=20portada=20m=C3=A1s=20profes?=
+ =?UTF-8?q?ional=20y=20p=C3=A1ginas=20legales=20en=20blanco?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Footer: se quitan los enlaces que no llevaban a ningún sitio (Novedades,
+  Ayuda, Migrar, Soporte). Producto ahora lleva a secciones reales (Funciones,
+  Para quién es, Precios) y Acceso incluye el Área del hermano.
+- Páginas legales (aviso legal, privacidad, condiciones, cookies) se dejan en
+  blanco a propósito, con un aviso de "pendiente de publicación": cada titular
+  debe publicar sus textos redactados y revisados por un profesional.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/pages/Landing.tsx     | 11 ++---------
+ src/pages/PaginaLegal.tsx | 40 ++++++++++-----------------------------
+ src/styles/global.css     |  5 +++++
+ 3 files changed, 17 insertions(+), 39 deletions(-)
+
+diff --git a/src/pages/Landing.tsx b/src/pages/Landing.tsx
+index 8bc0693..5fc3c84 100644
+--- a/src/pages/Landing.tsx
++++ b/src/pages/Landing.tsx
+@@ -235,16 +235,8 @@ export default function Landing() {
+             <h4>Producto</h4>
+             <ul>
+               <li><a href="#funciones">Funciones</a></li>
++              <li><a href="#audiencia">Para quién es</a></li>
+               <li><a href="#precios">Precios</a></li>
+-              <li><a href="#">Novedades</a></li>
+-            </ul>
+-          </div>
+-          <div>
+-            <h4>Recursos</h4>
+-            <ul>
+-              <li><a href="#">Ayuda y tutoriales</a></li>
+-              <li><a href="#">Migrar desde Excel</a></li>
+-              <li><a href="#">Soporte técnico</a></li>
+             </ul>
+           </div>
+           <div>
+@@ -252,6 +244,7 @@ export default function Landing() {
+             <ul>
+               <li><Link to="/login">Iniciar sesión</Link></li>
+               <li><Link to="/registro">Crear hermandad</Link></li>
++              <li><Link to="/hermano">Área del hermano</Link></li>
+             </ul>
+           </div>
+           <div>
+diff --git a/src/pages/PaginaLegal.tsx b/src/pages/PaginaLegal.tsx
+index 2ffb5f6..dbc6fe4 100644
+--- a/src/pages/PaginaLegal.tsx
++++ b/src/pages/PaginaLegal.tsx
+@@ -7,10 +7,9 @@ export default function PaginaLegal() {
+   const doc = slug ? getDocumentoLegal(slug) : undefined
+   if (!doc) return <Navigate to="/" replace />
+ 
+-  // Si aún quedan campos por rellenar ([...]), se avisa: son plantillas que el
+-  // titular debe completar con sus datos reales y revisar antes de publicar.
+-  const pendiente = JSON.stringify(doc).includes('[')
+-
++  // Los textos legales se dejan EN BLANCO a propósito: cada titular debe
++  // publicar los suyos, redactados y revisados por un profesional. Aquí solo
++  // se muestra la página con su título y un aviso, lista para completar.
+   return (
+     <div className="legal-page">
+       <header className="legal-header">
+@@ -26,33 +25,14 @@ export default function PaginaLegal() {
+         <article className="legal-doc">
+           <p className="eyebrow eyebrow--gold">Legal</p>
+           <h1>{doc.titulo}</h1>
+-          <p className="legal-doc__fecha">Última actualización: {doc.actualizado}</p>
+-
+-          {pendiente && (
+-            <div className="legal-aviso" role="note">
+-              <strong>Documento de ejemplo pendiente de completar.</strong> Los campos entre
+-              corchetes <code>[…]</code> deben rellenarse con los datos reales del titular, y el
+-              texto debe revisarse con un profesional antes de darle validez legal.
+-            </div>
+-          )}
+ 
+-          <p className="legal-doc__intro">{doc.intro}</p>
+-
+-          {doc.secciones.map((s, i) => (
+-            <section className="legal-seccion" key={i}>
+-              {s.titulo && <h2>{s.titulo}</h2>}
+-              {s.parrafos?.map((p, j) => (
+-                <p key={j}>{p}</p>
+-              ))}
+-              {s.lista && (
+-                <ul>
+-                  {s.lista.map((li, k) => (
+-                    <li key={k}>{li}</li>
+-                  ))}
+-                </ul>
+-              )}
+-            </section>
+-          ))}
++          <div className="legal-blank" role="note">
++            <p className="legal-blank__title">Documento pendiente de publicación</p>
++            <p>
++              El texto de este documento se publicará próximamente. Debe redactarlo y revisarlo un
++              profesional con los datos reales del titular antes de darle validez legal.
++            </p>
++          </div>
+         </article>
+ 
+         <nav className="legal-otros" aria-label="Otros documentos legales">
+diff --git a/src/styles/global.css b/src/styles/global.css
+index 1c97238..f796b10 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -2069,6 +2069,11 @@ h1, h2, h3,
+   border-radius: var(--radius-sm); padding: 0.9rem 1.05rem; margin: 0 0 1.6rem; font-size: 0.9rem; line-height: 1.6;
+ }
+ .legal-aviso code { background: var(--bg-sunken); border-radius: 4px; padding: 0.05rem 0.35rem; }
++.legal-blank {
++  background: var(--bg-sunken); border: 1px dashed var(--line-strong); color: var(--text-muted);
++  border-radius: var(--radius); padding: 2.2rem 1.6rem; margin: 1.6rem 0; text-align: center; line-height: 1.7;
++}
++.legal-blank__title { font-size: 1.05rem; font-weight: 700; color: var(--text); margin: 0 0 0.5rem; }
+ .legal-seccion { margin: 1.7rem 0; }
+ .legal-seccion h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+ .legal-seccion p { line-height: 1.7; margin: 0 0 0.8rem; color: var(--text); }
+-- 
+2.43.0
+
+
+From d6a9fbf4edabb94099103472e4028b412b3d3c38 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 17 Aug 2026 19:35:43 +0000
+Subject: [PATCH 5/6] Permisos: ocultar en vez de bloquear + vista previa de la
+ web limpia y responsive
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Permisos (que a cada cargo no le aparezca lo que no puede ver):
+- Archivo: los documentos que el cargo simulado no puede ver ya no salen como
+  "Restringido"; directamente no aparecen. El simulador indica cuántos se
+  ocultan. La ficha se cierra si el cargo pierde el acceso.
+- AppShell: entrar por URL a un módulo sin permiso ya no muestra "Acceso
+  restringido"; redirige a Inicio, de modo que la sección no existe para ese
+  cargo (la barra lateral ya lo ocultaba).
+
+Vista previa de la web (se veía rara: el título gigante en el marco pequeño):
+- .sitio pasa a ser un container query (container: sitio / inline-size) y el
+  hero (alto y tamaño del título) usa unidades de contenedor (cqi) en vez de
+  vw/vh. Así la vista previa y el móvil real se ven igual de limpios que el
+  escritorio, con el MISMO render. Añadidos ajustes para anchos estrechos.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/components/AppShell.tsx | 20 ++++----------------
+ src/pages/app/Archivo.tsx   | 31 +++++++++++++++++++------------
+ src/styles/global.css       | 36 ++++++++++++++++++++++++++----------
+ 3 files changed, 49 insertions(+), 38 deletions(-)
+
+diff --git a/src/components/AppShell.tsx b/src/components/AppShell.tsx
+index 6226286..74cdb07 100644
+--- a/src/components/AppShell.tsx
++++ b/src/components/AppShell.tsx
+@@ -1,5 +1,5 @@
+ import { useMemo, useState } from 'react'
+-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
++import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
+ import Logo, { LogoMark } from './Logo'
+ import ThemeToggle from './ThemeToggle'
+ import { useAuth } from '../context/AuthContext'
+@@ -228,21 +228,9 @@ export default function AppShell() {
+         </header>
+ 
+         <main className="app-content">
+-          {accesoBloqueado ? (
+-            <div className="acceso-denegado">
+-              <p className="eyebrow">Acceso restringido</p>
+-              <h1>No tienes permiso para ver esta sección</h1>
+-              <p>
+-                Tu cargo{cargo ? <> (<b>{cargo}</b>)</> : ''} no incluye este módulo. Si crees que
+-                deberías tener acceso, pídeselo a quien gestiona el personal de la hermandad.
+-              </p>
+-              <button className="btn btn-primary" onClick={() => navigate('/app')}>
+-                Volver a Inicio
+-              </button>
+-            </div>
+-          ) : (
+-            <Outlet />
+-          )}
++          {/* Sin acceso a este módulo por cargo: no se muestra "bloqueado", sino que
++              se redirige a Inicio, de modo que la sección simplemente no aparece. */}
++          {accesoBloqueado ? <Navigate to="/app" replace /> : <Outlet />}
+         </main>
+       </div>
+     </div>
+diff --git a/src/pages/app/Archivo.tsx b/src/pages/app/Archivo.tsx
+index 89811b2..dae6384 100644
+--- a/src/pages/app/Archivo.tsx
++++ b/src/pages/app/Archivo.tsx
+@@ -121,6 +121,11 @@ export default function Archivo() {
+     return { total, restringidos, contratosPorVencer, incorporadosEsteMes }
+   }, [documentos])
+ 
++  // Solo los documentos que el cargo simulado puede ver: los que no, no aparecen
++  // (se ocultan por completo, en vez de mostrarse como «Restringido»).
++  const visibles = useMemo(() => filtered.filter((d) => canView(d, viewAsCargo)), [filtered, viewAsCargo])
++  const ocultosPorCargo = filtered.length - visibles.length
++
+   function abrirNuevo() {
+     setCategoriaNueva('Acta')
+     setVisibilidadNueva('Todos')
+@@ -257,7 +262,10 @@ export default function Archivo() {
+             </option>
+           ))}
+         </select>
+-        . El control de acceso real por cargo llegará con la autenticación multiusuario.
++.{' '}
++        {ocultosPorCargo > 0
++          ? `${ocultosPorCargo} documento${ocultosPorCargo === 1 ? '' : 's'} no le aparece${ocultosPorCargo === 1 ? '' : 'n'} (los ve solo quien tiene acceso).`
++          : 'Ve todos los documentos actuales.'}
+       </div>
+ 
+       <section className="stat-grid">
+@@ -321,12 +329,10 @@ export default function Archivo() {
+             </tr>
+           </thead>
+           <tbody>
+-            {filtered.map((d) => {
+-              const visible = canView(d, viewAsCargo)
+-              return (
++            {visibles.map((d) => (
+                 <tr
+                   key={d.id}
+-                  className={`${d.id === justAddedId ? 'row--flash ' : ''}${!visible ? 'row--restricted' : ''}`.trim() || undefined}
++                  className={d.id === justAddedId ? 'row--flash' : undefined}
+                   onClick={() => abrirFicha(d)}
+                   style={{ cursor: 'pointer' }}
+                 >
+@@ -355,22 +361,23 @@ export default function Archivo() {
+                   <td>
+                     <button
+                       className="icon-btn"
+-                      title={visible ? 'Ver ficha' : `Solo visible para: ${d.cargosConAcceso?.join(', ')}`}
++                      title="Ver ficha"
+                       onClick={(e) => {
+                         e.stopPropagation()
+                         abrirFicha(d)
+                       }}
+                     >
+-                      {visible ? <EyeIcon /> : <LockIcon />}
++                      <EyeIcon />
+                     </button>
+                   </td>
+                 </tr>
+-              )
+-            })}
+-            {filtered.length === 0 && (
++            ))}
++            {visibles.length === 0 && (
+               <tr>
+                 <td colSpan={6} className="table-empty">
+-                  No hay documentos que coincidan con la búsqueda.
++                  {filtered.length > 0 && viewAsCargo
++                    ? `Ningún documento visible para ${viewAsCargo}.`
++                    : 'No hay documentos que coincidan con la búsqueda.'}
+                 </td>
+               </tr>
+             )}
+@@ -380,7 +387,7 @@ export default function Archivo() {
+ 
+       {/* Ficha del documento */}
+       <Drawer
+-        open={!!selected}
++        open={!!selected && canView(selected, viewAsCargo)}
+         onClose={cerrarFicha}
+         title={selected?.nombre ?? ''}
+         subtitle={selected ? `Documento nº ${selected.numero}` : undefined}
+diff --git a/src/styles/global.css b/src/styles/global.css
+index f796b10..6d2df7d 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -1560,12 +1560,10 @@ h1, h2, h3,
+   height: 640px; box-shadow: 0 12px 34px rgba(0,0,0,0.22);
+ }
+ .cms-preview__stage { width: 100%; }
+-/* Dentro del marco, el sitio no debe forzar alturas de viewport */
++/* Dentro del marco, el sitio no fuerza el alto de la ventana: se adapta al
++   ancho del marco gracias a las container queries de .sitio (mismo render que
++   el sitio real, pero en tamaño móvil). */
+ .cms-preview__stage .sitio { min-height: 0; }
+-.cms-preview__stage .sitio__hero--compacta { min-height: 190px; }
+-.cms-preview__stage .sitio__hero--media { min-height: 240px; }
+-.cms-preview__stage .sitio__hero--completa { min-height: 320px; }
+-.cms-preview__stage .sitio__nav { position: static; }
+ .cms-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+ 
+ /* Editor de la web: secciones (orden/visibilidad) y galería */
+@@ -1579,6 +1577,10 @@ h1, h2, h3,
+ /* Página pública — usa variables: --sitio-color, --sitio-color2, --sitio-fuente.
+    Colores base según el tema (claro/oscuro). */
+ .sitio {
++  /* Container query: el sitio se mide por SU propio ancho, no por el de la
++     ventana. Así la vista previa (marco estrecho) y el móvil real se ven igual
++     de limpios que el escritorio, con el mismo render. */
++  container: sitio / inline-size;
+   min-height: 100vh;
+   font-family: var(--sitio-fuente, Georgia, serif);
+   --sitio-bg: #ffffff; --sitio-bg2: #f6f2ec; --sitio-fg: #222; --sitio-muted: #666; --sitio-linea: rgba(0,0,0,0.1);
+@@ -1602,12 +1604,12 @@ h1, h2, h3,
+   padding: 3rem 1.5rem; background-size: cover; background-position: center;
+   color: #fff; position: relative;
+ }
+-.sitio__hero--compacta { min-height: 40vh; }
+-.sitio__hero--media { min-height: 60vh; }
+-.sitio__hero--completa { min-height: 88vh; }
++.sitio__hero--compacta { min-height: clamp(200px, 40cqi, 460px); }
++.sitio__hero--media { min-height: clamp(240px, 52cqi, 620px); }
++.sitio__hero--completa { min-height: clamp(280px, 64cqi, 800px); }
+ .sitio__hero-overlay { position: absolute; inset: 0; }
+ .sitio__hero-inner { position: relative; max-width: 800px; }
+-.sitio__hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); margin-bottom: 0.6rem; }
++.sitio__hero h1 { font-size: clamp(1.7rem, 7cqi, 3.4rem); margin-bottom: 0.6rem; line-height: 1.1; }
+ .sitio__lema { font-size: 1.15rem; opacity: 0.94; margin-bottom: 1.4rem; }
+ 
+ .sitio__main { max-width: 980px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+@@ -1677,7 +1679,7 @@ h1, h2, h3,
+ 
+ /* MODERNA — impacto, portada enorme, titulares grandes, tarjetas con sombra */
+ .sitio[data-plantilla='moderna'] .sitio__nav { text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+-.sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2.6rem, 8vw, 5rem); font-weight: 800; letter-spacing: -1px; line-height: 1.05; }
++.sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2rem, 10cqi, 5rem); font-weight: 800; letter-spacing: -1px; line-height: 1.05; }
+ .sitio[data-plantilla='moderna'] .sitio__lema { font-size: 1.3rem; }
+ .sitio[data-plantilla='moderna'] .sitio__seccion h2 { font-size: 2rem; font-weight: 800; }
+ .sitio[data-plantilla='moderna'] .sitio__seccion h2::after { height: 5px; width: 70px; border-radius: 4px; }
+@@ -1687,6 +1689,20 @@ h1, h2, h3,
+ .sitio[data-plantilla='moderna'] .sitio__culto { border-radius: 16px; }
+ .sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 40px; padding: 13px 30px; font-weight: 700; }
+ 
++/* Adaptación a anchos estrechos (vista previa y móvil real): mismo diseño,
++   pero con menos aire y la navegación que fluye a varias líneas. */
++@container sitio (max-width: 560px) {
++  .sitio__nav { padding: 0.7rem 1rem; gap: 0.45rem 0.8rem; flex-wrap: wrap; }
++  .sitio__menu { gap: 0.55rem 0.9rem; }
++  .sitio__menu a { font-size: 0.82rem; }
++  .sitio__hero { padding: 2rem 1.1rem; }
++  .sitio__lema { font-size: 1rem; }
++  .sitio__main { padding: 1.8rem 1.1rem; }
++  .sitio__seccion { margin-bottom: 2rem; }
++  .sitio[data-plantilla='moderna'] .sitio__seccion h2 { font-size: 1.6rem; }
++  .sitio[data-plantilla='moderna'] .sitio__lema { font-size: 1.05rem; }
++}
++
+ /* Noticias (Actualidad) */
+ .sitio__noticias { display: flex; flex-direction: column; gap: 1rem; }
+ .sitio__noticia { display: flex; gap: 1rem; border: 1px solid var(--sitio-linea); border-radius: 10px; padding: 0.9rem 1.1rem; background: var(--sitio-bg2); }
+-- 
+2.43.0
+
+
+From e439cd1191fe054965a6efafcf830a771fb8d6f3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 05:09:09 +0000
+Subject: [PATCH 6/6] =?UTF-8?q?QR=20de=20papeleta=20que=20funciona:=20abre?=
+ =?UTF-8?q?=20una=20p=C3=A1gina=20de=20verificaci=C3=B3n=20con=20los=20dat?=
+ =?UTF-8?q?os?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Antes el QR solo llevaba texto (al escanear no "hacía" nada) y los modelos
+propios no tenían QR.
+
+- El QR ahora codifica una URL a /verificar con los datos de la papeleta
+  empaquetados en el propio enlace: al escanearlo desde cualquier móvil se abre
+  una tarjeta con el hermano, nº de papeleta, sitio y hermandad (sin necesidad
+  de base de datos). La verificación reforzada llegará con Supabase.
+- Nuevo campo "Código QR" para el modelo de papeleta propio: se coloca y se
+  dimensiona como cualquier dato, y en la papeleta sale un QR real y escaneable.
+- Nueva página pública /verificar (decodifica el enlace; maneja códigos no
+  válidos).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/App.tsx                             |  2 +
+ src/components/ModeloPapeletaEditor.tsx | 33 ++++++++----
+ src/components/PapeletaModeloRender.tsx | 14 +++++
+ src/components/PapeletaTicket.tsx       | 14 +++--
+ src/lib/modeloPapeleta.ts               | 15 ++++++
+ src/lib/verificacion.ts                 | 69 +++++++++++++++++++++++++
+ src/pages/VerificarPapeleta.tsx         | 66 +++++++++++++++++++++++
+ src/styles/global.css                   | 21 ++++++++
+ 8 files changed, 220 insertions(+), 14 deletions(-)
+ create mode 100644 src/lib/verificacion.ts
+ create mode 100644 src/pages/VerificarPapeleta.tsx
+
+diff --git a/src/App.tsx b/src/App.tsx
+index 4a2c962..67d05da 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -7,6 +7,7 @@ import HermanoPortal from './pages/HermanoPortal'
+ import SitioPublico from './pages/SitioPublico'
+ import EntradaUnificada from './pages/EntradaUnificada'
+ import PaginaLegal from './pages/PaginaLegal'
++import VerificarPapeleta from './pages/VerificarPapeleta'
+ import AppShell from './components/AppShell'
+ import DashboardHome from './pages/app/DashboardHome'
+ import Hermanos from './pages/app/Hermanos'
+@@ -35,6 +36,7 @@ export default function App() {
+       <Route path="/hermano" element={<HermanoPortal />} />
+       <Route path="/w/:slug" element={<SitioPublico />} />
+       <Route path="/legal/:slug" element={<PaginaLegal />} />
++      <Route path="/verificar" element={<VerificarPapeleta />} />
+ 
+       <Route
+         path="/app"
+diff --git a/src/components/ModeloPapeletaEditor.tsx b/src/components/ModeloPapeletaEditor.tsx
+index b3be51f..ae627ea 100644
+--- a/src/components/ModeloPapeletaEditor.tsx
++++ b/src/components/ModeloPapeletaEditor.tsx
+@@ -199,14 +199,31 @@ export default function ModeloPapeletaEditor({
+           >
+             <img src={modelo.imagenDataUrl} alt="Modelo de papeleta" className="modelo-editor__img" draggable={false} />
+             {modelo.campos.map((campo) => {
+-              const mostrado =
+-                campo.clave === 'textoFijo'
+-                  ? campo.texto || 'Texto'
+-                  : ejemploDe(campo.clave)
++              const seleccionado = seleccion === campo.id
++              const onDown = (e: PointerEvent) => {
++                e.preventDefault()
++                setSeleccion(campo.id)
++                setArrastrando(campo.id)
++              }
++              // El QR se muestra como un recuadro con la etiqueta, del tamaño real,
++              // para poder colocarlo; en la papeleta final saldrá el QR de verdad.
++              if (campo.clave === 'qr') {
++                return (
++                  <span
++                    key={campo.id}
++                    className={`modelo-campo modelo-campo--qr modelo-editor__campo modelo-editor__campo--qr${seleccionado ? ' modelo-editor__campo--sel' : ''}`}
++                    style={{ left: `${campo.xPct}%`, top: `${campo.yPct}%`, width: `${campo.tamanoPct * 3.2}cqw` }}
++                    onPointerDown={onDown}
++                  >
++                    QR
++                  </span>
++                )
++              }
++              const mostrado = campo.clave === 'textoFijo' ? campo.texto || 'Texto' : ejemploDe(campo.clave)
+               return (
+                 <span
+                   key={campo.id}
+-                  className={`modelo-campo modelo-campo--${campo.align} modelo-editor__campo${seleccion === campo.id ? ' modelo-editor__campo--sel' : ''}`}
++                  className={`modelo-campo modelo-campo--${campo.align} modelo-editor__campo${seleccionado ? ' modelo-editor__campo--sel' : ''}`}
+                   style={{
+                     left: `${campo.xPct}%`,
+                     top: `${campo.yPct}%`,
+@@ -214,11 +231,7 @@ export default function ModeloPapeletaEditor({
+                     fontWeight: campo.negrita ? 700 : 400,
+                     color: campo.color,
+                   }}
+-                  onPointerDown={(e) => {
+-                    e.preventDefault()
+-                    setSeleccion(campo.id)
+-                    setArrastrando(campo.id)
+-                  }}
++                  onPointerDown={onDown}
+                 >
+                   {mostrado}
+                 </span>
+diff --git a/src/components/PapeletaModeloRender.tsx b/src/components/PapeletaModeloRender.tsx
+index 7fc249b..9e75770 100644
+--- a/src/components/PapeletaModeloRender.tsx
++++ b/src/components/PapeletaModeloRender.tsx
+@@ -1,4 +1,5 @@
+ import { valorDeCampo, type DatosModelo, type ModeloPapeleta } from '../lib/modeloPapeleta'
++import QrCode from './QrCode'
+ 
+ interface Props {
+   modelo: ModeloPapeleta
+@@ -24,6 +25,19 @@ export default function PapeletaModeloRender({ modelo, datos, maxAncho }: Props)
+         {modelo.campos.map((campo) => {
+           const texto = valorDeCampo(campo, datos)
+           if (!texto) return null
++          // El campo QR se dibuja como un código real (escaneable), del tamaño
++          // que se le haya dado; el resto de campos son texto.
++          if (campo.clave === 'qr') {
++            return (
++              <span
++                key={campo.id}
++                className="modelo-campo modelo-campo--qr"
++                style={{ left: `${campo.xPct}%`, top: `${campo.yPct}%`, width: `${campo.tamanoPct * 3.2}cqw` }}
++              >
++                <QrCode value={texto} size={240} />
++              </span>
++            )
++          }
+           return (
+             <span
+               key={campo.id}
+diff --git a/src/components/PapeletaTicket.tsx b/src/components/PapeletaTicket.tsx
+index edfd91d..c68eaa6 100644
+--- a/src/components/PapeletaTicket.tsx
++++ b/src/components/PapeletaTicket.tsx
+@@ -5,6 +5,7 @@ import type { Papeleta } from '../data/papeletas'
+ import type { HermandadSettings } from '../lib/hermandadSettings'
+ import { etiquetaTramo, type Tramo } from '../lib/tramos'
+ import { formatCurrency } from '../lib/format'
++import { datosVerificacionDe, urlVerificacion } from '../lib/verificacion'
+ 
+ function estadoPillClass(estado: Papeleta['estado']) {
+   if (estado === 'Entregada' || estado === 'Pagada') return 'pill--ok'
+@@ -75,11 +76,16 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
+ 
+         <div className="ticket-doc__qr">
+           <QrCode
+-            value={`Papeleta nº ${papeleta.numero} · ${hermano.nombre} (nº ${hermano.numero}) · ${
+-              tramo ? etiquetaTramo(tramo) : opcion ?? 'Sin tramo'
+-            } · ${hermandad.nombreLegal || 'Tu hermandad'}`}
++            value={urlVerificacion(
++              datosVerificacionDe(
++                papeleta,
++                hermano,
++                tramo ? etiquetaTramo(tramo) : opcion ?? 'Sin tramo',
++                hermandad.nombreLegal || 'Tu hermandad',
++              ),
++            )}
+           />
+-          <span>Escanéalo para leer los datos</span>
++          <span>Escanéalo para verificar la papeleta</span>
+         </div>
+       </div>
+ 
+diff --git a/src/lib/modeloPapeleta.ts b/src/lib/modeloPapeleta.ts
+index c8eeeb6..3de77bc 100644
+--- a/src/lib/modeloPapeleta.ts
++++ b/src/lib/modeloPapeleta.ts
+@@ -2,6 +2,7 @@ import type { Hermano } from '../data/hermanos'
+ import type { Papeleta } from '../data/papeletas'
+ import { formatCurrency } from './format'
+ import { guardarConAviso } from './persistencia'
++import { datosVerificacionDe, urlVerificacion } from './verificacion'
+ 
+ /**
+  * Modelo de papeleta personalizado. La hermandad sube la imagen de SU propio
+@@ -28,6 +29,7 @@ export type ClaveDato =
+   | 'fechaSalida'
+   | 'hermandad'
+   | 'anio'
++  | 'qr'
+   | 'textoFijo'
+ 
+ export const CLAVES_DATO: { clave: ClaveDato; etiqueta: string; ejemplo: string }[] = [
+@@ -45,6 +47,7 @@ export const CLAVES_DATO: { clave: ClaveDato; etiqueta: string; ejemplo: string
+   { clave: 'fechaSalida', etiqueta: 'Día de la estación', ejemplo: '2026-03-27' },
+   { clave: 'hermandad', etiqueta: 'Nombre de la hermandad', ejemplo: 'Hermandad de la Vera-Cruz' },
+   { clave: 'anio', etiqueta: 'Año de la campaña', ejemplo: '2026' },
++  { clave: 'qr', etiqueta: 'Código QR (verificación)', ejemplo: 'QR' },
+   { clave: 'textoFijo', etiqueta: 'Texto fijo (etiqueta)', ejemplo: 'Titular:' },
+ ]
+ 
+@@ -135,6 +138,18 @@ export function valorDeCampo(campo: CampoModelo, datos: DatosModelo): string {
+       return datos.hermandadNombre || ''
+     case 'anio':
+       return papeleta ? String(papeleta.anio) : ''
++    case 'qr':
++      // Devuelve la URL de verificación; PapeletaModeloRender la dibuja como QR.
++      return papeleta
++        ? urlVerificacion(
++            datosVerificacionDe(
++              papeleta,
++              hermano,
++              datos.tramoEtiqueta || papeleta.opcion || 'Sin tramo',
++              datos.hermandadNombre || '',
++            ),
++          )
++        : ''
+     case 'textoFijo':
+       return campo.texto ?? ''
+     default:
+diff --git a/src/lib/verificacion.ts b/src/lib/verificacion.ts
+new file mode 100644
+index 0000000..3dfb4f7
+--- /dev/null
++++ b/src/lib/verificacion.ts
+@@ -0,0 +1,69 @@
++import type { Papeleta } from '../data/papeletas'
++import type { Hermano } from '../data/hermanos'
++
++/**
++ * Verificación de papeletas por QR. El QR de cada papeleta codifica una URL a
++ * la página pública /verificar con los datos de la papeleta empaquetados en el
++ * propio enlace. Así, al escanearlo con CUALQUIER móvil, se abre una tarjeta
++ * con los datos del sitio (sin necesidad de base de datos ni de tener el censo
++ * en ese teléfono). La verificación reforzada (comprobar contra el sistema de
++ * la hermandad, marcar «entregada» en el día de salida) llegará con Supabase.
++ */
++
++export interface DatosVerificacion {
++  /** Número de papeleta. */
++  n: number
++  /** Nombre del hermano. */
++  h: string
++  /** Número de hermano. */
++  nh: number
++  /** Tramo / puesto / modalidad (texto legible). */
++  t: string
++  /** Nombre de la hermandad. */
++  hd: string
++  /** Año de la campaña. */
++  a: number
++}
++
++/** Base64 seguro para UTF-8 (nombres con acentos, ñ…). */
++function b64Encode(texto: string): string {
++  return btoa(unescape(encodeURIComponent(texto)))
++}
++function b64Decode(b64: string): string {
++  return decodeURIComponent(escape(atob(b64)))
++}
++
++/** Construye los datos de verificación de una papeleta ya asignada. */
++export function datosVerificacionDe(
++  papeleta: Papeleta,
++  hermano: Pick<Hermano, 'nombre' | 'numero'>,
++  tramoEtiqueta: string,
++  hermandadNombre: string,
++): DatosVerificacion {
++  return {
++    n: papeleta.numero,
++    h: hermano.nombre,
++    nh: hermano.numero,
++    t: tramoEtiqueta || papeleta.opcion || 'Sin tramo',
++    hd: hermandadNombre || 'Tu hermandad',
++    a: papeleta.anio,
++  }
++}
++
++/** URL absoluta que codifica los datos, para meter en el QR. */
++export function urlVerificacion(datos: DatosVerificacion): string {
++  const origin = typeof window !== 'undefined' ? window.location.origin : ''
++  return `${origin}/verificar?d=${b64Encode(JSON.stringify(datos))}`
++}
++
++/** Decodifica el parámetro `d` de /verificar. Devuelve null si no es válido. */
++export function decodificarVerificacion(param: string | null): DatosVerificacion | null {
++  if (!param) return null
++  try {
++    const o = JSON.parse(b64Decode(param)) as DatosVerificacion
++    if (typeof o.n === 'number' && typeof o.h === 'string') return o
++  } catch {
++    // parámetro corrupto o de otro formato
++  }
++  return null
++}
+diff --git a/src/pages/VerificarPapeleta.tsx b/src/pages/VerificarPapeleta.tsx
+new file mode 100644
+index 0000000..ad25b0c
+--- /dev/null
++++ b/src/pages/VerificarPapeleta.tsx
+@@ -0,0 +1,66 @@
++import { Link, useSearchParams } from 'react-router-dom'
++import Logo from '../components/Logo'
++import { decodificarVerificacion } from '../lib/verificacion'
++
++/**
++ * Página pública a la que apunta el QR de la papeleta. Los datos vienen
++ * codificados en el propio enlace, así que se ven al escanear desde cualquier
++ * móvil, sin base de datos. La comprobación reforzada contra el sistema de la
++ * hermandad (y marcar «entregada» el día de salida) llegará con Supabase.
++ */
++export default function VerificarPapeleta() {
++  const [params] = useSearchParams()
++  const datos = decodificarVerificacion(params.get('d'))
++
++  return (
++    <div className="verificar">
++      <header className="verificar__head">
++        <Logo size={32} />
++        <Link className="btn btn-outline btn-sm" to="/">
++          Ir a Cabildo
++        </Link>
++      </header>
++
++      <main className="verificar__main">
++        {datos ? (
++          <article className="verificar__card">
++            <p className="eyebrow eyebrow--gold">Papeleta de sitio · {datos.a}</p>
++            <div className="verificar__sello" aria-hidden="true">✓</div>
++            <h1>{datos.h}</h1>
++            <p className="verificar__sub">Hermano/a nº {datos.nh}</p>
++
++            <dl className="verificar__list">
++              <div>
++                <dt>Papeleta</dt>
++                <dd>nº {String(datos.n).padStart(4, '0')}</dd>
++              </div>
++              <div>
++                <dt>Sitio</dt>
++                <dd>{datos.t}</dd>
++              </div>
++              <div>
++                <dt>Hermandad</dt>
++                <dd>{datos.hd}</dd>
++              </div>
++            </dl>
++
++            <p className="verificar__nota">
++              Datos leídos del propio código. La verificación reforzada (comprobar contra el sistema
++              de la hermandad y marcar la entrega el día de salida) estará disponible al conectar la
++              base de datos.
++            </p>
++          </article>
++        ) : (
++          <article className="verificar__card verificar__card--error">
++            <div className="verificar__sello verificar__sello--err" aria-hidden="true">!</div>
++            <h1>Código no válido</h1>
++            <p className="verificar__nota">
++              Este enlace no contiene una papeleta legible. Vuelve a escanear el código de una
++              papeleta de sitio.
++            </p>
++          </article>
++        )}
++      </main>
++    </div>
++  )
++}
+diff --git a/src/styles/global.css b/src/styles/global.css
+index 6d2df7d..c202e19 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -1421,6 +1421,8 @@ h1, h2, h3,
+ }
+ .modelo-campo--center { transform: translate(-50%, -50%); }
+ .modelo-campo--right { transform: translate(-100%, -50%); }
++.modelo-campo--qr { transform: translate(-50%, -50%); line-height: 0; white-space: normal; }
++.modelo-campo--qr img { width: 100%; height: auto; display: block; }
+ 
+ /* Editor: cada dato es arrastrable y seleccionable. */
+ .modelo-editor__lienzo { touch-action: none; cursor: default; margin: 0.6rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+@@ -1434,6 +1436,10 @@ h1, h2, h3,
+   outline: 2px solid var(--accent, #c5a059);
+   background: rgba(197, 160, 89, 0.14);
+ }
++.modelo-editor__campo--qr {
++  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
++  background: rgba(255, 255, 255, 0.7); color: #333; font-weight: 700; letter-spacing: 1px; font-size: 0.75rem;
++}
+ .modelo-editor__barra { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.4rem; }
+ .modelo-editor__panel {
+   border: 1px solid var(--border);
+@@ -2090,6 +2096,21 @@ h1, h2, h3,
+   border-radius: var(--radius); padding: 2.2rem 1.6rem; margin: 1.6rem 0; text-align: center; line-height: 1.7;
+ }
+ .legal-blank__title { font-size: 1.05rem; font-weight: 700; color: var(--text); margin: 0 0 0.5rem; }
++
++/* Página de verificación de papeleta (destino del QR) */
++.verificar { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; }
++.verificar__head { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem 1.4rem; border-bottom: 1px solid var(--line); }
++.verificar__main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 1.6rem; }
++.verificar__card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--glass-shadow); padding: 2.2rem 1.8rem; max-width: 420px; width: 100%; text-align: center; }
++.verificar__sello { width: 64px; height: 64px; margin: 0.2rem auto 1rem; border-radius: 50%; background: #e6f4ea; color: #1a7f37; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800; }
++.verificar__sello--err { background: #fdecec; color: #b3261e; }
++.verificar__card h1 { font-size: 1.4rem; margin: 0.2rem 0; }
++.verificar__sub { color: var(--text-muted); margin: 0 0 0.6rem; }
++.verificar__list { display: flex; flex-direction: column; gap: 0.6rem; text-align: left; margin: 1.3rem 0 0.4rem; }
++.verificar__list > div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
++.verificar__list dt { color: var(--text-muted); font-size: 0.85rem; }
++.verificar__list dd { margin: 0; font-weight: 600; text-align: right; }
++.verificar__nota { font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin: 1rem 0 0; }
+ .legal-seccion { margin: 1.7rem 0; }
+ .legal-seccion h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
+ .legal-seccion p { line-height: 1.7; margin: 0 0 0.8rem; color: var(--text); }
+-- 
+2.43.0
+

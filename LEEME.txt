@@ -1,26 +1,15 @@
-ACTUALIZACIÓN — Modo demo fiable, dos demos, Fase 3 y portada
-=============================================================
+ACTUALIZACIÓN — QR de papeleta que funciona (+ todo lo anterior)
+===============================================================
+Incluye TODO lo nuevo desde la Fase 5 (Fase 3, demos, permisos, web, etc.).
 
-Incluye TODO lo nuevo desde la Fase 5 (por si no aplicaste aún la Fase 3):
-  · Fase 3: solicitud online del hermano + convocatoria + fechas de campaña.
-  · Modo demo fiable + dos demos de partida (llena / vacía).
-  · Pie de la portada profesional + páginas legales en blanco.
+Aplicar: copia "archivos/" sobre el proyecto, o  git am actualizacion.patch
+(probado: aplica limpio, compila y construye sobre main).
 
-Aplicar (elige una):
-  A) Copiar la carpeta "archivos/" sobre la raíz del proyecto (respeta rutas).
-     Sobrescribe los modificados y añade los nuevos (demo.ts, convocatoria.ts,
-     solicitudesPapeleta.ts).
-  B) git am actualizacion-demo-web.patch   (probado: aplica limpio sobre main)
-
-LO MÁS IMPORTANTE DE ESTA ENTREGA
-  - EL MODO DEMO YA ARRANCA SIEMPRE. El fallo "Ese hermano de prueba no está
-    disponible" pasaba porque, con Supabase configurado pero en pausa, la app
-    pedía los datos a Supabase (vacío) en vez de a los de ejemplo. Ahora, en
-    modo demo, los datos se leen siempre en local.
-  - Dos demos en la pantalla de acceso (modo demostración):
-      · "Datos de ejemplo (llena)"  -> entra con censo, papeletas y cuotas.
-      · "Empezar de cero (vacía)"    -> hermandad vacía para crearlo tú.
-  - El acceso del hermano "Entrar en modo demo" se autorepara si el navegador
-    tenía datos viejos.
-
-Probado de punta a punta con navegador real. Sin errores.
+NUEVO EN ESTA ENTREGA — QR
+ - El QR de la papeleta ya ABRE algo al escanearlo: una página /verificar con
+   los datos (hermano, nº de papeleta, sitio, hermandad). Funciona desde
+   cualquier móvil, sin base de datos, porque los datos viajan en el enlace.
+ - Puedes poner el QR en TU modelo propio: en el editor del modelo, "+ Añadir
+   dato" -> "Código QR (verificación)". Lo colocas y dimensionas como los demás.
+ - La verificación reforzada (comprobar contra el sistema y marcar entrega el
+   día de salida) llegará con Supabase.
