@@ -17,6 +17,12 @@
 --    miembros; solicitudes_alta: contraseña elegida por quien pide el alta)
 --    quedan también restringidas en LECTURA al módulo "personal"/"hermanos".
 
+-- ATENCIÓN: esta versión de `modulo_permitido` da acceso total a cualquier
+-- cuenta que no esté en `personal`, y eso incluye a quien se registre por su
+-- cuenta en /registro. La sustituye `rls-endurecer.sql`, que hay que ejecutar
+-- justo después de este archivo. Se deja aquí solo para no romper el orden de
+-- las migraciones ya aplicadas.
+--
 -- ¿Puede el personal actual ESCRIBIR en este módulo? El titular (sin fila en
 -- `personal`) siempre puede. El personal con cargo, solo si su cargo tiene
 -- el módulo permitido en `permisos_cargo` y sigue activo. security definer:

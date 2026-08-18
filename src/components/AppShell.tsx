@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Logo, { LogoMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
+import PaletaComandos, { type DestinoPaleta } from './PaletaComandos'
 import { useAuth } from '../context/AuthContext'
-import { puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
+import { cargoDeCuenta, puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
+import { getPersonal } from '../lib/personal'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
-import type { Cargo } from '../data/documentos'
 
 interface NavItem {
   to: string
@@ -156,7 +157,17 @@ export default function AppShell() {
 
   const hermandad = (user?.user_metadata?.hermandad as string | undefined) ?? 'Tu hermandad'
   const nombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Hermano/a'
-  const cargo = user?.user_metadata?.cargo as Cargo | undefined
+  /**
+   * El cargo se resuelve contra la lista REAL de personal, no contra el
+   * metadata de la sesión: ese valor lo puede reescribir el propio usuario
+   * (`auth.updateUser({ data: { cargo: null } })`) y borrarlo abría el panel
+   * entero. El metadata solo se usa para saber QUÉ cuenta de personal es.
+   */
+  const cargo = useMemo(() => {
+    const personalId = user?.user_metadata?.personalId as string | undefined
+    return cargoDeCuenta(personalId, getPersonal())
+    // `permisosVersion` no entra aquí: el cargo no cambia con los permisos.
+  }, [user])
   // Trae los permisos reales de Supabase en cuanto cargan (no solo los que hubiera en este navegador).
   const permisosVersion = usePermisosSincronizados()
 
@@ -179,7 +190,27 @@ export default function AppShell() {
     [cargo, permisosVersion, suscripcion],
   )
 
+  /** Los destinos que ve este cargo, para la paleta de comandos (Ctrl+K). */
+  const destinosPaleta = useMemo<DestinoPaleta[]>(
+    () =>
+      navFiltrado.flatMap((g) =>
+        g.items.map((i) => ({ to: i.to, label: i.label, grupo: g.label ?? 'Ir a', icon: i.icon })),
+      ),
+    [navFiltrado],
+  )
+
   const moduloActual = moduloIdDeRuta(location.pathname)
+
+  useEffect(() => {
+    // Con varias pestañas abiertas, todas ponían «Cabildo» y no se distinguían.
+    // Se busca el enlace más largo que encaje: así «/app/hermanos/lo-que-sea»
+    // sigue diciendo «Hermanos», y «/app» a secas cae en «Inicio».
+    const enlace = NAV.flatMap((g) => g.items)
+      .filter((i) => location.pathname === i.to || location.pathname.startsWith(`${i.to}/`))
+      .sort((a, b) => b.to.length - a.to.length)[0]
+    const nombre = enlace?.label ?? 'Inicio'
+    document.title = `${nombre} · ${hermandad} · Cabildo`
+  }, [location.pathname, hermandad])
   const accesoBloqueado =
     moduloActual !== null &&
     (!puedeVerModulo(cargo, moduloActual) || !moduloPermitidoPorPack(suscripcion, moduloActual))
@@ -202,6 +233,9 @@ export default function AppShell() {
 
   return (
     <div className="app-shell">
+      {/* Con teclado había que pasar por los quince enlaces del menú en cada
+          página antes de llegar al contenido. */}
+      <a className="saltar-al-contenido" href="#contenido">Saltar al contenido</a>
       <aside className={`app-side${drawerOpen ? ' app-side--open' : ''}`}>
         <div className="app-side__brand">
           <LogoMark size={30} />
@@ -240,6 +274,8 @@ export default function AppShell() {
         </div>
       </aside>
 
+      <PaletaComandos destinos={destinosPaleta} onCerrarSesion={handleSignOut} />
+
       {drawerOpen && <button className="app-scrim" aria-label="Cerrar menú" onClick={() => setDrawerOpen(false)} />}
 
       <div className="app-main">
@@ -252,6 +288,17 @@ export default function AppShell() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
           <Logo size={26} withText={false} />
+          {/* Ir a cualquier módulo sin buscar el menú: el atajo se enseña aquí
+              porque si no, nadie descubre que existe. */}
+          <button
+            type="button"
+            className="app-buscar"
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" strokeLinecap="round" /></svg>
+            <span>Ir a…</span>
+            <kbd>Ctrl</kbd><kbd>K</kbd>
+          </button>
           <div className="app-topbar__right">
             <ThemeToggle />
             <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
@@ -273,7 +320,7 @@ export default function AppShell() {
           </div>
         )}
 
-        <main className="app-content">
+        <main className="app-content" id="contenido" tabIndex={-1}>
           {/* Sin acceso a este módulo por cargo: no se muestra "bloqueado", sino que
               se redirige a Inicio, de modo que la sección simplemente no aparece. */}
           {accesoBloqueado ? <Navigate to="/app" replace /> : <Outlet />}

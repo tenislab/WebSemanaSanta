@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { guardarConAviso, leerPersistido } from './persistencia'
 
 /**
@@ -10,7 +10,7 @@ import { guardarConAviso, leerPersistido } from './persistencia'
  * (localStorage) y, más adelante, en una tabla propia de Supabase.
  */
 
-export type PlantillaWeb = 'clasica' | 'sobria' | 'moderna'
+export type PlantillaWeb = 'clasica' | 'sobria' | 'moderna' | 'revista' | 'cartel'
 export type TemaWeb = 'claro' | 'oscuro'
 /** Id de tipografía; se resuelve contra TIPOGRAFIAS (ver abajo). */
 export type TipografiaWeb = string
@@ -30,6 +30,75 @@ export const PLANTILLAS: { id: PlantillaWeb; nombre: string; descripcion: string
   { id: 'clasica', nombre: 'Clásica', descripcion: 'Serif, tonos cálidos y aire tradicional cofrade.' },
   { id: 'sobria', nombre: 'Sobria', descripcion: 'Líneas limpias, mucho blanco y tipografía discreta.' },
   { id: 'moderna', nombre: 'Moderna', descripcion: 'Portada a pantalla completa y contraste marcado.' },
+  { id: 'revista', nombre: 'Revista', descripcion: 'Como un boletín impreso: columnas, filetes y capitulares.' },
+  { id: 'cartel', nombre: 'Cartel', descripcion: 'Titulares enormes centrados, mucho aire, poca caja.' },
+]
+
+/**
+ * Parejas tipográficas ya combinadas: una fuente para los títulos y otra para
+ * el texto. Elegir dos fuentes sueltas que peguen es lo que peor sale cuando
+ * uno no es diseñador, y era justo lo que pedía el editor antes.
+ */
+export interface ParejaTipografica {
+  id: string
+  nombre: string
+  /** Para qué sirve, en cristiano. */
+  nota: string
+  titulos: string
+  texto: string
+}
+
+export const PAREJAS_TIPOGRAFICAS: ParejaTipografica[] = [
+  {
+    id: 'canonica', nombre: 'Canónica', nota: 'La de siempre: seria y sin estridencias.',
+    titulos: "'Cinzel', Georgia, serif", texto: "'EB Garamond', Georgia, serif",
+  },
+  {
+    id: 'sevillana', nombre: 'Sevillana', nota: 'Elegante y con carácter, muy de cartel de Semana Santa.',
+    titulos: "'Playfair Display', Georgia, serif", texto: "'Lora', Georgia, serif",
+  },
+  {
+    id: 'clasica-legible', nombre: 'Clásica legible', nota: 'Serifas de toda la vida, cómodas de leer en textos largos.',
+    titulos: "'Cormorant Garamond', Georgia, serif", texto: "'Merriweather', Georgia, serif",
+  },
+  {
+    id: 'sobria-actual', nombre: 'Sobria actual', nota: 'Título con serifa y texto de palo seco: contraste limpio.',
+    titulos: "'Playfair Display', Georgia, serif", texto: "'Lato', system-ui, sans-serif",
+  },
+  {
+    id: 'moderna', nombre: 'Moderna', nota: 'Todo de palo seco. Se ve muy bien en el móvil.',
+    titulos: "'Montserrat', system-ui, sans-serif", texto: "'Lato', system-ui, sans-serif",
+  },
+  {
+    id: 'impacto', nombre: 'De impacto', nota: 'Titulares grandes y rotundos. Para webs con mucha foto.',
+    titulos: "'Oswald', system-ui, sans-serif", texto: "'Raleway', system-ui, sans-serif",
+  },
+  {
+    id: 'institucional', nombre: 'Institucional', nota: 'Neutra y seria, como una web de la diócesis.',
+    titulos: "Georgia, 'Times New Roman', serif", texto: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  },
+]
+
+/**
+ * Paletas ya combinadas, con los colores que de verdad se usan en las
+ * hermandades. Antes había dos ruedas de color y salían webs fucsia.
+ */
+export interface PaletaWeb {
+  id: string
+  nombre: string
+  primario: string
+  secundario: string
+}
+
+export const PALETAS: PaletaWeb[] = [
+  { id: 'burdeos', nombre: 'Burdeos y oro', primario: '#6A1A23', secundario: '#C5A059' },
+  { id: 'morado', nombre: 'Morado de Cuaresma', primario: '#4A2258', secundario: '#C9A227' },
+  { id: 'negro', nombre: 'Negro y plata', primario: '#1F1D1D', secundario: '#A9A9A9' },
+  { id: 'verde', nombre: 'Verde esperanza', primario: '#1F5136', secundario: '#D4B24C' },
+  { id: 'azul', nombre: 'Azul de la Virgen', primario: '#1E3A5F', secundario: '#C0C7D1' },
+  { id: 'granate', nombre: 'Granate y crema', primario: '#7B1E28', secundario: '#E3D3B6' },
+  { id: 'carmesi', nombre: 'Carmesí y oro viejo', primario: '#8C2A36', secundario: '#B08D4F' },
+  { id: 'sepia', nombre: 'Sepia', primario: '#5C4630', secundario: '#B79A6B' },
 ]
 
 export const TIPOGRAFIAS: { id: TipografiaWeb; nombre: string; css: string }[] = [
@@ -97,6 +166,21 @@ export interface FotoGaleria {
   pie: string
 }
 
+/**
+ * Un álbum de la galería («Salida 2026», «Restauración del paso»). Antes la
+ * galería era un montón único de fotos sin orden ni contexto: con doce salidas
+ * seguidas no había forma de saber qué era cada cosa.
+ */
+export interface AlbumGaleria {
+  id: string
+  titulo: string
+  /** Una línea de contexto bajo el título. */
+  descripcion: string
+  /** Texto libre a propósito: «Viernes Santo de 2026», «Cuaresma de 1998». */
+  fecha: string
+  fotos: FotoGaleria[]
+}
+
 export interface CultoWeb {
   id: string
   titulo: string
@@ -156,13 +240,29 @@ export interface PaginaWeb {
   enMenu?: boolean
 }
 
-/** Boletín en PDF (por ahora se guarda el título; el PDF, al conectar almacenamiento). */
+/** Boletín en PDF: subido (si es pequeño) o enlazado donde ya esté colgado. */
 export interface Boletin {
   id: string
   titulo: string
   subtitulo: string
   pdfNombre: string | null
+  /**
+   * El PDF, de una de estas dos formas:
+   *  - `pdfDataUrl`: el archivo subido. Solo para los pequeños: el navegador
+   *    guarda unos 5 MB en total y un boletín en color se los come entero.
+   *  - `pdfUrl`: la dirección donde ya está colgado (la nube de la hermandad,
+   *    Drive, el servidor de la parroquia…). Es lo que aguanta de verdad.
+   */
+  pdfDataUrl: string | null
+  pdfUrl: string
+  /** Portada del boletín: la sección se ve como un expositor, no como fichas grises. */
+  portadaDataUrl: string | null
+  /** Texto libre: «Cuaresma 2026», «nº 34». */
+  fecha: string
 }
+
+/** Tope del PDF subido, en bytes. Por encima hay que dar la dirección. */
+export const MAX_PDF_SUBIDO = 2 * 1024 * 1024
 
 export interface RedWeb {
   id: string
@@ -219,6 +319,106 @@ export const PIE_INICIAL: PieWeb = {
   textoLegal: '',
 }
 
+/** Lo que se ve al compartir el enlace y en los resultados de búsqueda. */
+export interface SeoWeb {
+  /** Título de la pestaña y del resultado de Google. Vacío = el de la web. */
+  titulo: string
+  /** Las dos líneas de descripción. Google corta sobre los 155 caracteres. */
+  descripcion: string
+  /** La imagen que sale al pegar el enlace en WhatsApp. Vacía = la de portada. */
+  imagenDataUrl: string | null
+}
+
+export const SEO_INICIAL: SeoWeb = { titulo: '', descripcion: '', imagenDataUrl: null }
+
+/**
+ * Un estilo completo: plantilla, colores, tipografía, esquinas, aire y fondo,
+ * ya combinados. Es la forma sencilla de montar la web: se pulsa uno y queda
+ * hecha. Quien quiera afinar cada pieza, puede, pero no hace falta.
+ */
+export interface EstiloWeb {
+  id: string
+  nombre: string
+  descripcion: string
+  plantilla: PlantillaWeb
+  paleta: string
+  pareja: string
+  tema: TemaWeb
+  redondeo: 'recto' | 'suave' | 'redondo'
+  densidad: 'compacta' | 'normal' | 'amplia'
+}
+
+export const ESTILOS: EstiloWeb[] = [
+  {
+    id: 'tradicional', nombre: 'Tradicional',
+    descripcion: 'Lo que espera ver un hermano de toda la vida: serifas, burdeos y oro.',
+    plantilla: 'clasica', paleta: 'burdeos', pareja: 'canonica', tema: 'claro', redondeo: 'suave', densidad: 'normal',
+  },
+  {
+    id: 'cuaresma', nombre: 'Cuaresma',
+    descripcion: 'Morado y oro sobre fondo oscuro. Recogido y sobrio.',
+    plantilla: 'clasica', paleta: 'morado', pareja: 'sevillana', tema: 'oscuro', redondeo: 'suave', densidad: 'amplia',
+  },
+  {
+    id: 'boletin', nombre: 'Boletín',
+    descripcion: 'Como la revista impresa de la hermandad, con columnas y capitulares.',
+    plantilla: 'revista', paleta: 'sepia', pareja: 'clasica-legible', tema: 'claro', redondeo: 'recto', densidad: 'normal',
+  },
+  {
+    id: 'cartel', nombre: 'Cartel',
+    descripcion: 'Titulares enormes y mucho aire, como un cartel de Semana Santa.',
+    plantilla: 'cartel', paleta: 'negro', pareja: 'impacto', tema: 'oscuro', redondeo: 'redondo', densidad: 'amplia',
+  },
+  {
+    id: 'luminosa', nombre: 'Luminosa',
+    descripcion: 'Blanco, aire y letra fina. Se lee de maravilla en el móvil.',
+    plantilla: 'sobria', paleta: 'granate', pareja: 'sobria-actual', tema: 'claro', redondeo: 'suave', densidad: 'amplia',
+  },
+  {
+    id: 'moderna', nombre: 'Moderna',
+    descripcion: 'Portada a pantalla completa y contraste marcado. Para webs con buenas fotos.',
+    plantilla: 'moderna', paleta: 'carmesi', pareja: 'moderna', tema: 'claro', redondeo: 'redondo', densidad: 'normal',
+  },
+  {
+    id: 'esperanza', nombre: 'Esperanza',
+    descripcion: 'Verde y oro, la combinación de las hermandades de gloria.',
+    plantilla: 'clasica', paleta: 'verde', pareja: 'sevillana', tema: 'claro', redondeo: 'suave', densidad: 'normal',
+  },
+  {
+    id: 'institucional', nombre: 'Institucional',
+    descripcion: 'Azul sereno y tipografía neutra. Seria y sin adornos.',
+    plantilla: 'sobria', paleta: 'azul', pareja: 'institucional', tema: 'claro', redondeo: 'recto', densidad: 'normal',
+  },
+]
+
+/** Los cambios que aplica un estilo, listos para volcar sobre la web. */
+export function cambiosDeEstilo(estilo: EstiloWeb): Partial<WebPublica> {
+  const paleta = PALETAS.find((p) => p.id === estilo.paleta) ?? PALETAS[0]
+  return {
+    plantilla: estilo.plantilla,
+    colorPrimario: paleta.primario,
+    colorSecundario: paleta.secundario,
+    pareja: estilo.pareja,
+    tema: estilo.tema,
+    redondeo: estilo.redondeo,
+    densidad: estilo.densidad,
+  }
+}
+
+/** ¿Qué estilo tiene puesto ahora mismo esta web? Null si está a medio camino. */
+export function estiloActual(web: WebPublica): EstiloWeb | null {
+  return ESTILOS.find((e) => {
+    const c = cambiosDeEstilo(e)
+    return c.plantilla === web.plantilla
+      && c.colorPrimario?.toLowerCase() === web.colorPrimario.toLowerCase()
+      && c.colorSecundario?.toLowerCase() === web.colorSecundario.toLowerCase()
+      && c.pareja === web.pareja
+      && c.tema === web.tema
+      && c.redondeo === web.redondeo
+      && c.densidad === web.densidad
+  }) ?? null
+}
+
 export interface WebPublica {
   publicada: boolean
   plantilla: PlantillaWeb
@@ -253,7 +453,8 @@ export interface WebPublica {
   historia: ContenidoRico
   titulares: Titular[]
   cultos: CultoWeb[]
-  galeria: FotoGaleria[]
+  /** La galería, en álbumes. Antes era una lista suelta de fotos. */
+  albumes: AlbumGaleria[]
   noticias: Noticia[]
   paginas: PaginaWeb[]
   boletines: Boletin[]
@@ -269,8 +470,21 @@ export interface WebPublica {
   // Cabecera y pie
   cabecera: CabeceraWeb
   pie: PieWeb
+  /** Pareja tipográfica (títulos + texto). Ver PAREJAS_TIPOGRAFICAS. */
+  pareja: string
+  /** Cuánto se redondean tarjetas, botones y fotos. */
+  redondeo: 'recto' | 'suave' | 'redondo'
+  /** Cuánto aire hay entre secciones. */
+  densidad: 'compacta' | 'normal' | 'amplia'
+  /** Cómo se ve la web al compartirla y en Google. */
+  seo: SeoWeb
   /** Enseña el mapa incrustado en la sección de contacto (además del enlace). */
   mapaIncrustado: boolean
+  /**
+   * La sección de Cultos saca también los próximos eventos del calendario
+   * (módulo de Eventos), sin tener que copiarlos a mano cada vez.
+   */
+  cultosDelCalendario: boolean
 
   // Pie
   textoPie: string
@@ -348,7 +562,7 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
       fecha: 'Viernes Santo, 17:30', lugar: 'Desde la parroquia', fotoDataUrl: null,
     },
   ],
-  galeria: [],
+  albumes: [],
   noticias: [
     { id: 'not-1', titulo: 'Convocatoria de Cabildo General', fecha: '2026-02-02', resumen: 'Por orden del Hermano Mayor se convoca a todos los hermanos al Cabildo General.', fotoDataUrl: null, publicada: true },
   ],
@@ -372,6 +586,11 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   cabecera: CABECERA_INICIAL,
   pie: PIE_INICIAL,
   mapaIncrustado: true,
+  cultosDelCalendario: true,
+  pareja: 'canonica',
+  redondeo: 'suave',
+  densidad: 'normal',
+  seo: SEO_INICIAL,
 }
 
 /**
@@ -485,6 +704,15 @@ function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
       : (guardado as { heroFotoDataUrl?: string | null }).heroFotoDataUrl
         ? [(guardado as { heroFotoDataUrl?: string }).heroFotoDataUrl as string]
         : []
+  // La galería era una lista suelta de fotos; ahora va por álbumes. Lo que
+  // hubiera se conserva, metido en un primer álbum, sin perder ni un pie.
+  const sueltas = (guardado as { galeria?: FotoGaleria[] }).galeria
+  const albumes: AlbumGaleria[] =
+    guardado.albumes && guardado.albumes.length
+      ? guardado.albumes
+      : sueltas && sueltas.length
+        ? [{ id: 'album-1', titulo: 'Galería', descripcion: '', fecha: '', fotos: sueltas }]
+        : []
   // Si los datos son antiguos y no traían las secciones nuevas, se completan.
   const secciones = guardado.secciones && guardado.secciones.length ? guardado.secciones : SECCIONES_POR_DEFECTO
   const tiposPresentes = new Set(secciones.map((s) => s.tipo))
@@ -505,6 +733,7 @@ function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
     // Cabecera y pie: los que vengan de antes no los traen.
     cabecera: { ...CABECERA_INICIAL, ...(guardado.cabecera ?? {}) },
     pie: { ...PIE_INICIAL, ...(guardado.pie ?? {}) },
+    seo: { ...SEO_INICIAL, ...(guardado.seo ?? {}) },
     // Se leen como parciales a propósito: lo guardado por una versión anterior
     // NO trae los campos nuevos, aunque el tipo diga que sí.
     titulares: (guardado.titulares ?? WEB_PUBLICA_INICIAL.titulares).map((t: Partial<Titular>) => ({
@@ -523,10 +752,20 @@ function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
       lugar: c.lugar ?? '',
       fotoDataUrl: c.fotoDataUrl ?? null,
     })),
-    galeria: guardado.galeria ?? [],
+    albumes,
     noticias: guardado.noticias ?? WEB_PUBLICA_INICIAL.noticias,
     paginas: guardado.paginas ?? WEB_PUBLICA_INICIAL.paginas,
-    boletines: guardado.boletines ?? [],
+    // Los boletines ganaron portada, fecha y el PDF de verdad (subido o enlazado).
+    boletines: (guardado.boletines ?? []).map((b: Partial<Boletin>) => ({
+      id: b.id ?? 'bol',
+      titulo: b.titulo ?? '',
+      subtitulo: b.subtitulo ?? '',
+      pdfNombre: b.pdfNombre ?? null,
+      pdfDataUrl: b.pdfDataUrl ?? null,
+      pdfUrl: b.pdfUrl ?? '',
+      portadaDataUrl: b.portadaDataUrl ?? null,
+      fecha: b.fecha ?? '',
+    })),
     redes: guardado.redes ?? [],
   }
 }
@@ -557,13 +796,17 @@ export function useWebPublica(): [WebPublica, (siguiente: WebPublica | ((actual:
    * imagen, comprimirla…): con el objeto capturado se perdían los cambios
    * hechos mientras tanto.
    */
-  function setWeb(siguiente: WebPublica | ((actual: WebPublica) => WebPublica)) {
+  // Memorizado: sin esto era una función nueva en cada render, y cualquier
+  // efecto que dependiera de ella se disparaba sin parar.
+  const setWeb = useCallback((siguiente: WebPublica | ((actual: WebPublica) => WebPublica)) => {
     setWebState((actual) => {
       const valor = typeof siguiente === 'function' ? siguiente(actual) : siguiente
+      // Si no cambia nada, no se guarda ni se vuelve a pintar.
+      if (valor === actual) return actual
       saveWebPublica(valor)
       return valor
     })
-  }
+  }, [])
 
   return [web, setWeb]
 }

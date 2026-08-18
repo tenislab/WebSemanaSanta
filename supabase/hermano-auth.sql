@@ -7,6 +7,10 @@
 alter table hermanos add column if not exists auth_user_id uuid references auth.users(id) on delete set null;
 create unique index if not exists hermanos_auth_user_id_idx on hermanos(auth_user_id) where auth_user_id is not null;
 
+-- ATENCIÓN: esta versión se fía de `user_metadata`, que el propio usuario
+-- puede reescribir con `auth.updateUser`. La sustituye `rls-endurecer.sql`
+-- (mira la tabla `hermanos`), que hay que ejecutar después.
+--
 -- Distingue una sesión de hermano de una de personal: se marca en el
 -- user_metadata al crear la cuenta (ver signUp en la app).
 create or replace function auth_es_hermano() returns boolean

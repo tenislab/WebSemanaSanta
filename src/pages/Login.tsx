@@ -5,13 +5,16 @@ import AuthForm from '../components/AuthForm'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
-  const { session } = useAuth()
+  const { session, mfaPendiente } = useAuth()
   const navigate = useNavigate()
 
-  // Si ya hay sesión, no tiene sentido mostrar el login.
+  // Si ya hay sesión, no tiene sentido mostrar el login… salvo que falte el
+  // segundo factor: entonces hay que quedarse AQUÍ para pedir el código. Sin
+  // esa condición, /login empujaba a /app, ProtectedRoute devolvía a /login y
+  // quien activaba la verificación en dos pasos no podía volver a entrar.
   useEffect(() => {
-    if (session) navigate('/app', { replace: true })
-  }, [session, navigate])
+    if (session && !mfaPendiente) navigate('/app', { replace: true })
+  }, [session, mfaPendiente, navigate])
 
   return (
     <AuthLayout

@@ -134,14 +134,28 @@ export function useHermandadSettings(fallbackNombre?: string): HermandadSettings
   return settings
 }
 
-export async function saveHermandadSettings(settings: HermandadSettings) {
+/**
+ * Guarda la configuración. Devuelve qué ha fallado, si algo, para que la
+ * pantalla no diga «Guardado correctamente» pase lo que pase: se guardaban
+ * logos de 800 KB que no cabían y el usuario se iba tan tranquilo.
+ */
+export async function saveHermandadSettings(settings: HermandadSettings): Promise<{ ok: boolean; error?: string }> {
   if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase.from('hermandad_settings').update(settingsToRow(settings)).eq('id', 1)
-    if (error) console.error('No se pudo guardar la configuración de la hermandad:', error.message)
+    // `upsert`, no `update`: en una base recién creada la fila 1 no existe y el
+    // update afectaba a cero filas sin devolver error.
+    const { error } = await supabase.from('hermandad_settings').upsert({ id: 1, ...settingsToRow(settings) })
+    if (error) {
+      console.error('No se pudo guardar la configuración de la hermandad:', error.message)
+      return { ok: false, error: 'No se pudo guardar en la base de datos. Revisa la conexión.' }
+    }
   }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
   } catch {
-    // sin espacio o sin localStorage: la app sigue funcionando en memoria
+    return {
+      ok: false,
+      error: 'No cabe en el navegador. Suele pasar con logos muy grandes: prueba con una imagen más ligera.',
+    }
   }
+  return { ok: true }
 }

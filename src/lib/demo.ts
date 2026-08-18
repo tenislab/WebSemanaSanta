@@ -71,7 +71,7 @@ export function restaurarCensoDemo() {
 /** Punto de partida de demo activo, si se eligió alguno. */
 export function demoModo(): 'llena' | 'vacia' | null {
   try {
-    const v = localStorage.getItem(CLAVE_MODO)
+    const v = localStorage.getItem(CLAVE_MODO) ?? sessionStorage.getItem(CLAVE_MODO)
     return v === 'llena' || v === 'vacia' ? v : null
   } catch {
     return null
@@ -85,18 +85,31 @@ export function demoModo(): 'llena' | 'vacia' | null {
  */
 export function modoDemoActivo(): boolean {
   try {
-    return localStorage.getItem(CLAVE_MODO) !== null
+    // Los dos sitios: en `localStorage` lo deja «sembrar datos de ejemplo»
+    // (deliberado, dura entre sesiones); en `sessionStorage`, el acceso rápido
+    // del portal del hermano, que solo debe durar esta pestaña.
+    return localStorage.getItem(CLAVE_MODO) !== null || sessionStorage.getItem(CLAVE_MODO) !== null
   } catch {
     return false
   }
 }
 
-/** Marca el modo demo (sin borrar nada) si aún no había ninguno elegido. */
+/**
+ * Marca el modo demo (sin borrar nada) si aún no había ninguno elegido.
+ *
+ * En `sessionStorage`, no en `localStorage`: la marca no debe sobrevivir al
+ * cierre del navegador. Un clic en «entrar en modo demo» dejaba el panel
+ * trabajando SOLO contra el navegador —sin escribir en la base de datos y sin
+ * avisar de nada— para siempre, y la secretaría podía pasar días dando altas
+ * que no existían en ningún otro sitio.
+ */
 export function marcarModoDemo() {
   try {
-    if (!localStorage.getItem(CLAVE_MODO)) localStorage.setItem(CLAVE_MODO, 'llena')
+    if (!sessionStorage.getItem(CLAVE_MODO) && !localStorage.getItem(CLAVE_MODO)) {
+      sessionStorage.setItem(CLAVE_MODO, 'llena')
+    }
   } catch {
-    // sin localStorage: la app sigue en memoria
+    // sin almacenamiento: la app sigue en memoria
   }
 }
 
@@ -104,6 +117,7 @@ export function marcarModoDemo() {
 export function limpiarModoDemo() {
   try {
     localStorage.removeItem(CLAVE_MODO)
+    sessionStorage.removeItem(CLAVE_MODO)
   } catch {
     // nada que hacer
   }

@@ -106,12 +106,18 @@ export async function saveSolicitudes(solicitudes: SolicitudAlta[]) {
  * `solicitudes_alta`, no el guardado por diferencia (que necesitaría poder
  * leer la tabla, y una persona anónima no puede).
  */
-export async function crearSolicitudPrincipal(nueva: SolicitudAlta) {
+export async function crearSolicitudPrincipal(nueva: SolicitudAlta): Promise<{ ok: boolean; error?: string }> {
   if (isSupabaseConfigured && supabase) {
     const { error } = await supabase.from('solicitudes_alta').insert(solicitudToRow(nueva))
-    if (error) console.error('No se pudo enviar la solicitud a Supabase:', error.message)
+    if (error) {
+      console.error('No se pudo enviar la solicitud a Supabase:', error.message)
+      // Antes se seguía adelante y la pantalla decía «tu solicitud se ha
+      // enviado a la secretaría», cuando solo existía en SU propio navegador.
+      return { ok: false, error: 'No se pudo enviar la solicitud. Inténtalo de nuevo en un momento.' }
+    }
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify([nueva, ...getSolicitudes()]))
+  return { ok: true }
 }
 
 /** Clave de almacenamiento de las solicitudes de una hermandad de muestra (su propio buzón, aislado del resto). */

@@ -1,10 +1,14 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
+import MenuAcciones from '../../components/MenuAcciones'
 import Recibo from '../../components/Recibo'
 import ReciboModeloRender from '../../components/ReciboModeloRender'
 import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
 import HermanoPicker from '../../components/HermanoPicker'
+import { cargoDeCuenta } from '../../lib/permisos'
+import { getPersonal } from '../../lib/personal'
+import { hermanosAsignables } from '../../lib/asignables'
 import {
   CLAVES_DATO_RECIBO,
   getModeloRecibo,
@@ -110,7 +114,8 @@ export default function Cuotas() {
 
   // La mora solo la ponen/quitan el tesorero, el secretario o el titular
   // (quien no tiene cargo asignado es el titular, con acceso completo).
-  const cargo = user?.user_metadata?.cargo as string | undefined
+  // Contra la lista real de personal, no contra el metadata (reescribible).
+  const cargo = cargoDeCuenta(user?.user_metadata?.personalId as string | undefined, getPersonal()) as string | null
   const puedeMora = !cargo || cargo === 'Tesorero/a' || cargo === 'Secretario/a'
   const [remesaOpen, setRemesaOpen] = useState(false)
   const [fechaRemesa, setFechaRemesa] = useState('')
@@ -311,7 +316,9 @@ export default function Cuotas() {
   function abrirRemesa() {
     const dentroCincoDias = new Date()
     dentroCincoDias.setDate(dentroCincoDias.getDate() + 5)
-    setFechaRemesa(dentroCincoDias.toISOString().slice(0, 10))
+    // isoLocal, no toISOString: si no, se propone un día antes y encima se
+    // arrastra al fichero del banco.
+    setFechaRemesa(isoLocal(dentroCincoDias))
     setRemesaOpen(true)
   }
 
@@ -332,7 +339,7 @@ export default function Cuotas() {
         numero: c.numero,
         importe: c.importe,
         concepto: `${c.concepto} — ${hermandad.nombreLegal || 'Hermandad'}`,
-        deudor: { nombre: h.nombre, iban: h.iban ?? '', numeroHermano: h.numero, antiguedad: h.antiguedad },
+        deudor: { nombre: h.nombre, iban: h.iban ?? '', hermanoId: h.id, numeroHermano: h.numero, antiguedad: h.antiguedad },
       }
     })
     const xml = buildSepaXml(acreedor, recibos, new Date(`${fechaRemesa}T00:00:00`), new Date())
@@ -411,35 +418,37 @@ export default function Cuotas() {
           <p className="eyebrow">Cuotas</p>
           <h1>Cuotas y recibos</h1>
           <p className="dash-head__lead">
-            {stats.total} recibos emitidos · datos de ejemplo mientras conectamos la base de
-            datos.{' '}
+            {stats.total} recibos del ejercicio {ejercicioEnCurso} · {cuotas.length} en total ·
+            datos de ejemplo mientras conectamos la base de datos.{' '}
             <Link to="/app/configuracion" className="dash-head__link">
               Personalizar datos de la hermandad
             </Link>
           </p>
         </div>
         <div className="dash-head__actions">
-          <button className="btn btn-outline" onClick={() => setAjustesOpen(true)}>
-            Ajustes
-          </button>
-          <button className="btn btn-outline" onClick={() => setModeloOpen(true)}>
-            Modelo de recibo
-          </button>
-          <button
-            className="btn btn-outline"
-            onClick={abrirRemesa}
-            disabled={recibosRemesables.length === 0}
-            title={
-              recibosRemesables.length === 0
-                ? 'No hay recibos pendientes domiciliados con IBAN'
-                : `${recibosRemesables.length} recibos pendientes domiciliados`
-            }
-          >
-            Remesa ({recibosRemesables.length})
-          </button>
-          <button className="btn btn-outline" onClick={abrirEmision}>
-            Emitir ejercicio
-          </button>
+          <MenuAcciones>
+            <button type="button" onClick={abrirEmision}>
+              Emitir el ejercicio entero
+            </button>
+            <button
+              type="button"
+              onClick={abrirRemesa}
+              disabled={recibosRemesables.length === 0}
+              title={
+                recibosRemesables.length === 0
+                  ? 'No hay recibos pendientes domiciliados con IBAN'
+                  : `${recibosRemesables.length} recibos pendientes domiciliados`
+              }
+            >
+              Preparar remesa <small>{recibosRemesables.length}</small>
+            </button>
+            <button type="button" onClick={() => setModeloOpen(true)}>
+              Modelo de recibo
+            </button>
+            <button type="button" onClick={() => setAjustesOpen(true)}>
+              Ajustes de cuotas
+            </button>
+          </MenuAcciones>
           <button className="btn btn-primary" onClick={abrirNuevaCuota}>
             + Nueva cuota
           </button>
@@ -694,10 +703,10 @@ export default function Cuotas() {
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
             <HermanoPicker
-              hermanos={hermanos}
+              hermanos={hermanosAsignables(hermanos)}
               name="hermanoId"
               id="hermanoId"
-              onSelect={setHermanoNuevaCuota}
+              onSelect={(p) => setHermanoNuevaCuota(p ? (hermanos.find((h) => h.id === p.id) ?? null) : null)}
             />
           </div>
           <div className="form-row">

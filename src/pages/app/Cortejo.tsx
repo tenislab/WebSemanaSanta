@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import HermanoPicker from '../../components/HermanoPicker'
+import { hermanosAsignables } from '../../lib/asignables'
 import { LogoMark } from '../../components/Logo'
 import AsistenciaTramo from '../../components/AsistenciaTramo'
 import { useAsistencias, registroDe } from '../../lib/asistencia'
@@ -151,7 +152,8 @@ export default function Cortejo() {
       const reparto = (repartos.get(t.id) ?? []).filter((a) => a.estado !== 'Excede aforo')
       cubiertos += reparto.length
       total += t.capacidad
-      if (reparto.length >= t.capacidad) completos += 1
+      // Un tramo de aforo 0 no está «completo»: está sin configurar.
+      if (t.capacidad > 0 && reparto.length >= t.capacidad) completos += 1
     })
     return {
       cubiertos,
@@ -440,21 +442,23 @@ export default function Cortejo() {
         </div>
       </div>
 
-      <label className="checkbox-row cortejo-daymode-toggle" htmlFor="diaDeSalida">
+      <label className={`interruptor cortejo-daymode-toggle${diaDeSalida ? ' interruptor--on' : ''}`} htmlFor="diaDeSalida">
         <input
           id="diaDeSalida"
           type="checkbox"
           checked={diaDeSalida}
           onChange={(e) => setDiaDeSalida(e.target.checked)}
         />
-        Modo día de salida
+        <span className="interruptor__palanca" aria-hidden="true" />
+        <span className="interruptor__texto">
+          <b>Modo día de salida</b>
+          <small>
+            {diaDeSalida
+              ? 'Marca presentes y registra incidencias desde cada tramo.'
+              : 'Actívalo el día de la estación de penitencia para pasar lista.'}
+          </small>
+        </span>
       </label>
-      {diaDeSalida && (
-        <div className="banner-inline banner-inline--accent">
-          Modo día de salida activo · marca presentes y registra incidencias directamente desde
-          cada tramo.
-        </div>
-      )}
 
       {vista === 'tarjetas' ? (
         <>
@@ -593,7 +597,7 @@ export default function Cortejo() {
           {asignarError && <div className="form-hint form-hint--error">{asignarError}</div>}
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
-            <HermanoPicker hermanos={hermanos} name="hermanoId" id="hermanoId" />
+            <HermanoPicker hermanos={hermanosAsignables(hermanos)} name="hermanoId" id="hermanoId" />
           </div>
           <div className="form-grid-2">
             <div className="form-row">
@@ -658,6 +662,11 @@ export default function Cortejo() {
         }
       >
         <div className="cortejo-orden print-doc">
+          {/* Se repite en cada hoja: un cortejo largo se reparte por tramos y
+              la hoja suelta tiene que decir de qué documento es. */}
+          <div className="print-hoja">
+            {hermandad.nombreLegal || 'Tu hermandad'} · Orden del cortejo · Edición {edicionActual}
+          </div>
           <div className="cortejo-orden__head">
             <span className="ticket-doc__logo">
               {hermandad.logoDataUrl ? <img src={hermandad.logoDataUrl} alt="" /> : <LogoMark size={26} />}
@@ -768,7 +777,8 @@ function TramoCard({
   const conIncidencia = reparto.filter((a) => a.estado === 'Con incidencia').length
   const excede = reparto.filter((a) => a.estado === 'Excede aforo').length
   const pct = capacidad > 0 ? Math.min(100, Math.round((ocupados / capacidad) * 100)) : 0
-  const lleno = ocupados >= capacidad
+  // Con aforo 0 la tarjeta salía marcada como llena y al 0 % a la vez.
+  const lleno = capacidad > 0 && ocupados >= capacidad
   const visibles = confirmados.slice(0, 5)
   const resto = ocupados - visibles.length
 
@@ -930,6 +940,11 @@ function TramoFicha({
 
       {/* Documento imprimible: solo aparece en el papel, no en la ficha en pantalla (ver .screen-hidden). */}
       <div className="cortejo-orden screen-hidden print-doc">
+        {/* Se repite en cada hoja (ver .print-hoja): un tramo de 40 nombres
+            ocupa varias, y la hoja suelta debe decir de qué tramo es. */}
+        <div className="print-hoja">
+          {hermandad.nombreLegal || 'Tu hermandad'} · {etiquetaTramo(tramo)} · Edición {edicionActual}
+        </div>
         <div className="cortejo-orden__head">
           <span className="ticket-doc__logo">
             {hermandad.logoDataUrl ? <img src={hermandad.logoDataUrl} alt="" /> : <LogoMark size={26} />}

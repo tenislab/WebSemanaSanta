@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
+import EditorSegmento from '../../components/EditorSegmento'
 import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
 import {
   CANALES,
@@ -542,67 +543,12 @@ export default function Comunicados() {
             <span>Segmentación avanzada (elegir a quién por criterios)</span>
           </label>
           {segmentarAvanzado && (
-            <div className="assign-box">
-              <div className="form-grid-2">
-                <div className="form-row">
-                  <label>Estado</label>
-                  <select
-                    value={criterios.estado}
-                    onChange={(e) => setCriterios((c) => ({ ...c, estado: e.target.value as CriteriosSegmento['estado'] }))}
-                  >
-                    <option value="Activo">Activos</option>
-                    <option value="Todos">Todos (menos bajas)</option>
-                    <option value="Nuevo">Nuevos</option>
-                    <option value="Baja">Bajas</option>
-                  </select>
-                </div>
-                <div className="form-row">
-                  <label>Edad</label>
-                  <select
-                    value={criterios.edad}
-                    onChange={(e) => setCriterios((c) => ({ ...c, edad: e.target.value as CriteriosSegmento['edad'] }))}
-                  >
-                    <option value="Todos">Cualquier edad</option>
-                    <option value="Mayores">Solo mayores de edad</option>
-                    <option value="Menores">Solo menores de edad</option>
-                  </select>
-                </div>
-              </div>
-              <div className="form-grid-2">
-                <div className="form-row">
-                  <label>Cuota</label>
-                  <select
-                    value={criterios.cuota}
-                    onChange={(e) => setCriterios((c) => ({ ...c, cuota: e.target.value as CriteriosSegmento['cuota'] }))}
-                  >
-                    <option value="Todos">Cualquiera</option>
-                    <option value="AlDia">Al día</option>
-                    <option value="Pendiente">Pendiente</option>
-                  </select>
-                </div>
-                <div className="form-row">
-                  <label>Etiqueta</label>
-                  <select value={criterios.etiqueta} onChange={(e) => setCriterios((c) => ({ ...c, etiqueta: e.target.value }))}>
-                    <option value="">Cualquiera</option>
-                    {etiquetas.map((et) => (
-                      <option key={et} value={et}>{et}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={criterios.soloConEmail}
-                  onChange={(e) => setCriterios((c) => ({ ...c, soloConEmail: e.target.checked }))}
-                />
-                <span>Solo hermanos con correo (para envíos por email)</span>
-              </label>
-              <p className="form-hint">
-                Llegará a <b>{segmentoHermanos.length}</b> hermano{segmentoHermanos.length === 1 ? '' : 's'}:{' '}
-                {etiquetaSegmento(criterios)}.
-              </p>
-            </div>
+            <EditorSegmento
+              criterios={criterios}
+              onChange={setCriterios}
+              cuantos={segmentoHermanos.length}
+              onLimpiar={() => setCriterios(CRITERIOS_POR_DEFECTO)}
+            />
           )}
 
           {canalesNuevos.includes('Redes sociales') && (

@@ -18,7 +18,12 @@ export interface SepaAcreedor {
 export interface SepaDeudor {
   nombre: string
   iban: string
-  /** Para sintetizar el identificador de mandato y su fecha de firma. */
+  /**
+   * Id del hermano en la base. Es lo que identifica el mandato, porque NO
+   * cambia: el número de hermano se renumera con cada baja.
+   */
+  hermanoId?: string
+  /** Solo para mostrar; ya no se usa para el identificador de mandato. */
   numeroHermano: number
   antiguedad: number
 }
@@ -43,8 +48,15 @@ function escaparXml(texto: string) {
     .replace(/'/g, '&apos;')
 }
 
+/**
+ * Fecha en ISO pero con la hora LOCAL. Con `toISOString()` la medianoche
+ * española es el día ANTERIOR en UTC, así que la fecha de cobro del fichero
+ * salía siempre un día antes de lo pedido — todo el año, no solo de madrugada.
+ * Si el día elegido era el mínimo de presentación, el banco rechazaba la
+ * remesa entera por fuera de plazo.
+ */
 function fechaIso(d: Date) {
-  return d.toISOString().slice(0, 10)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** Comprueba que hay lo mínimo para poder generar la remesa. */
@@ -67,7 +79,11 @@ export function buildSepaXml(acreedor: SepaAcreedor, recibos: SepaRecibo[], fech
 
   const transacciones = recibos
     .map((r) => {
-      const mndtId = `MND-${r.deudor.numeroHermano}`
+      // Del id del hermano, que NO cambia. Con el número de hermano, cada baja
+  // renumera el censo y el mismo hermano se presentaba al banco cada mes con
+  // un identificador de mandato distinto —el que era del vecino—; además,
+  // todos los de baja compartían «MND-0».
+  const mndtId = `MND-${r.deudor.hermanoId ?? r.deudor.numeroHermano}`
       const fechaFirma = `${r.deudor.antiguedad}-01-01`
       return `      <DrctDbtTxInf>
         <PmtId>

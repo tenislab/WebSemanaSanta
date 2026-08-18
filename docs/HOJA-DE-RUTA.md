@@ -4,8 +4,9 @@ Estado del proyecto y lo que queda para cerrarlo. Actualizado en agosto de 2026.
 
 La app está **completa como producto de gestión en modo local**: se puede enseñar
 entera, con datos de ejemplo, y todos los flujos funcionan de principio a fin.
-Lo que queda va en dos bloques: **F10–F13 se pueden hacer ya** (no dependen de
-nada de fuera) y **F14–F17 necesitan Supabase, el banco o el dominio**.
+**Todo lo que se podía hacer sin depender de servicios de fuera está cerrado**
+(F1–F13, el constructor de webs y el acabado). Lo que queda —F14 a F17— necesita
+Supabase, el banco o el dominio: son trámites que solo puede hacer la hermandad.
 
 ---
 
@@ -21,7 +22,16 @@ nada de fuera) y **F14–F17 necesitan Supabase, el banco o el dominio**.
 | **F7** | Eventos y tareas: calendario, tareas por evento y trabajadores asignados. |
 | **F8** | Contenidos de la web editables de verdad: Historia y páginas con entradilla, párrafos con subtítulo y fotos reordenables; titulares con autoría y texto largo; cultos con cuándo, dónde y foto; secciones renombrables; la vista previa salta a lo que se está editando. Buscador de hermano en vez de lista desplegable. |
 | **F9** | Cabecera y pie configurables, mapa incrustado y la pestaña «Contacto» sacada a la luz. Ver abajo. |
-| **Auditorías** | Dos rondas (unas 60 incidencias). Corregidos, entre otros: el QR no se podía escanear, la impresión en tema oscuro salía ilegible, un token de CSS inexistente borraba bordes en media interfaz, doble cobro en fraccionamientos mensuales y un día de desfase en todas las fechas de cobro. |
+| **F10** | Galería por álbumes con visor a pantalla completa; portada con varias fotos reordenables; boletines con PDF de verdad (subido o enlazado), portada y fecha. |
+| **F11** | Los ocho documentos imprimibles, depurados de verdad: el orden del cortejo salía en media hoja y repetido, sin márgenes de la segunda página en adelante y con las tablas partidas. |
+| **F12** | Campos propios en la ficha del hermano (texto, número, sí/no, lista, fecha), sesgos guardados con nombre y el mismo editor de sesgos en el censo y en los comunicados. |
+| **F13** | Tareas asignables a las cuentas del personal, «mis tareas» al entrar, y la sección de Cultos de la web sacando sola los próximos actos del calendario. |
+| **Web premium** | Paletas y parejas tipográficas ya combinadas, esquinas y aire, cinco plantillas, vista previa en móvil/tableta/escritorio a tamaño real, deshacer y rehacer, tarjeta de «al compartir» con etiquetas Open Graph de verdad, y aviso de legibilidad de los colores. |
+| **Acabado** | Veinte detalles: título de pestaña por módulo, saltar al contenido, foco visible, «reducir movimiento», ordenar el censo, exportar e imprimir con el sesgo aplicado, atajos de teclado, arrastrar y pegar fotos, estados vacíos que explican qué pasa… |
+| **Eventos que se repiten** | Un acto puede repetirse a diario, semanal, mensual o anualmente, con fecha de fin o «siempre». Las repeticiones se calculan al vuelo (no se guardan copias), así un ensayo semanal para siempre no ocupa nada. El hermano ve el calendario de la hermandad en su área, con el detalle del día al lado. Las tareas se pueden asignar a un **cargo** o a una **etiqueta**, no solo a una persona. |
+| **Web en un clic** | Ocho estilos completos (plantilla, colores, letra, esquinas y aire ya combinados) con miniatura de verdad: se pulsa uno y la web queda hecha, con una sola entrada en el historial. Todo lo demás se pliega en «Afinar a mano». Los avisos pasan de lista de reproches a barra de progreso. |
+| **Interfaz limpia** | Un solo calendario en toda la app, con los nombres de los actos dentro de las casillas. Paleta de comandos (Ctrl+K). Menús de acciones secundarias en las cabeceras. Interruptores con explicación en vez de casillas sueltas. Acciones sobre muchos hermanos a la vez en el censo. Casillas y radios con el color de la casa, cabeceras de tabla consistentes, áreas pulsables cómodas con el dedo. |
+| **Auditorías** | Tres rondas (unas 80 incidencias). Corregidos, entre otros: el QR no se podía escanear, la impresión en tema oscuro salía ilegible, un token de CSS inexistente borraba bordes en media interfaz, doble cobro en fraccionamientos mensuales, un día de desfase en todas las fechas de cobro, la fecha del fichero SEPA siempre un día antes, permisos que se abrían solos ante un cargo desconocido, la verificación en dos pasos inalcanzable y los campos propios de la ficha inusables. |
 
 ### Qué entró en F9
 
@@ -45,16 +55,11 @@ nada de fuera) y **F14–F17 necesitan Supabase, el banco o el dominio**.
 
 ## Lo que queda
 
-El orden es el acordado: primero todo lo que se puede dejar terminado **sin
-configurar nada fuera**, y al final lo que depende de Supabase, del banco y del
-dominio.
+Ya **no queda nada que se pueda hacer sin configurar servicios de fuera**. Lo
+que sigue depende de Supabase, del banco o del dominio.
 
 | Fase | Qué entra |
 |------|-----------|
-| **F10** | Galería por álbumes, portada y boletines. |
-| **F11** | Los documentos imprimibles, uno a uno, empezando por el orden del cortejo. |
-| **F12** | Campos propios en la ficha del hermano y sesgos guardados con nombre. |
-| **F13** | Calendario y tareas asignadas a cuentas del personal («mis tareas»). |
 | **F14** | Conectar Supabase. |
 | **F15** | Correos de verdad. |
 | **F16** | Cobros y domiciliaciones. |
@@ -71,6 +76,10 @@ La fase bisagra: todo lo demás depende de ella.
 
 **Qué hay preparado ya:**
 - `supabase/schema.sql` — para crear la base desde cero.
+- `supabase/rls-endurecer.sql` — **obligatorio**: cierra los dos «permitir por
+  defecto» de la seguridad (quien se registra por su cuenta no es el titular, y
+  el tipo de cuenta se saca de las tablas y no del token, que el usuario puede
+  reescribir). Al final del archivo se explica cómo dar de alta al titular.
 - `supabase/migracion-2026-08.sql` — para una base ya creada antes.
 - Todos los módulos usan `useSupabaseTable`, que ya sabe hablar con Supabase.
 

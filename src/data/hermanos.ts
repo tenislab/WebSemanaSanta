@@ -24,6 +24,13 @@ export interface Hermano {
   bajaSolicitada?: boolean
   /** Fecha de nacimiento (ISO yyyy-mm-dd), para segmentar por edad (mayores/menores). Opcional. */
   fechaNacimiento?: string
+  /**
+   * Campos a medida de la hermandad (talla de túnica, nº de llave…),
+   * indexados por el id del campo. Ver `lib/camposPropios.ts`. El valor va
+   * siempre como texto: si mañana cambia el tipo del campo, lo escrito no se
+   * pierde.
+   */
+  campos?: Record<string, string>
 }
 
 /**

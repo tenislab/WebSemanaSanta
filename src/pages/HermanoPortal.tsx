@@ -28,7 +28,14 @@ import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
 import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
 import { useAvisosHermano } from '../lib/avisosHermano'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
-import { supabase } from '../lib/supabase'
+import CalendarioMes from '../components/CalendarioMes'
+import { claseTipo, fechaLarga } from '../lib/calendario'
+import { EVENTOS_INICIALES, type Aparicion, type Evento, type TipoEvento } from '../data/eventos'
+import { eventoToRow, rowToEvento } from '../lib/db/eventos'
+
+/** Lo que se le enseña al hermano: los cabildos y la formación interna no. */
+const TIPOS_PARA_HERMANOS = new Set<TipoEvento>(['Culto', 'Salida', 'Caridad', 'Convivencia', 'Formación'])
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { hermanoToRow, rowToHermano } from '../lib/db/hermanos'
 import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
@@ -153,6 +160,16 @@ export default function HermanoPortal() {
     cuotaToRow,
     rowToCuota,
   )
+
+  // El calendario de la hermandad, para enseñárselo al hermano. Solo lectura.
+  const [eventos] = useSupabaseTable<Evento>(
+    'eventos',
+    CLAVES_DATOS.eventos,
+    EVENTOS_INICIALES,
+    eventoToRow,
+    rowToEvento,
+  )
+  const [diaCalendario, setDiaCalendario] = useState<{ fecha: string; delDia: Aparicion[] } | null>(null)
 
   // Censo y papeletas de cada hermandad de muestra: cada una guarda los suyos
   // aparte, igual que en la base de datos real cada hermandad vería solo sus filas.
@@ -355,10 +372,19 @@ export default function HermanoPortal() {
     }
 
     if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
-      crearSolicitudPrincipal(nueva)
-    } else {
-      guardarSolicitudMuestra(hermandadElegida.id, nueva)
+      // Se espera al resultado: antes se decía «tu solicitud se ha enviado a
+      // la secretaría» aunque no hubiera salido del navegador.
+      crearSolicitudPrincipal(nueva).then((r) => {
+        if (r.ok) {
+          setErrorSolicitud(null)
+          setSolicitudEnviada(true)
+        } else {
+          setErrorSolicitud(r.error ?? 'No se pudo enviar la solicitud.')
+        }
+      })
+      return
     }
+    guardarSolicitudMuestra(hermandadElegida.id, nueva)
     setErrorSolicitud(null)
     setSolicitudEnviada(true)
   }
@@ -384,9 +410,17 @@ export default function HermanoPortal() {
 
   // Unos cuantos hermanos del censo para entrar de un clic en modo local (igual
   // que los accesos rápidos del panel de la hermandad, pero del lado del hermano).
+  /**
+   * Accesos rápidos de demostración. Solo cuando NO hay Supabase configurado
+   * en absoluto: `usarSupabase` también es false cuando Supabase está caído o
+   * en pausa, y en ese caso `hermanos` no son los de ejemplo sino el CENSO
+   * REAL espejado en este navegador. Enseñar ahí el DNI y la contraseña de
+   * cuatro hermanos de verdad, en una pantalla pública, es una fuga.
+   */
+  const hayDemo = !isSupabaseConfigured
   const hermanosDemo = useMemo(
-    () => hermanos.filter((h) => h.estado !== 'Baja').slice(0, 4),
-    [hermanos],
+    () => (hayDemo ? hermanos.filter((h) => h.estado !== 'Baja').slice(0, 4) : []),
+    [hermanos, hayDemo],
   )
 
   function salir() {
@@ -754,7 +788,7 @@ export default function HermanoPortal() {
                   )}
                 </ul>
 
-                {!usarSupabase && (
+                {hayDemo && (
                   <div className="banner banner--info banner--demo" role="status" style={{ marginTop: '0.4rem' }}>
                     <div>
                       <strong>Modo demostración.</strong> Entra con datos de ejemplo (censo, cuotas y
@@ -1033,6 +1067,56 @@ export default function HermanoPortal() {
             </ul>
           </section>
         )}
+
+        {/* Calendario de la hermandad: lo que viene, con las repeticiones ya
+            desplegadas. El hermano ve los actos abiertos, no los cabildos
+            internos ni la formación de la junta. */}
+        <section className="portal__section">
+          <h2>Calendario de la hermandad</h2>
+          <p className="portal__lead">
+            Cultos, salidas y actos. Pulsa un día para ver lo que hay.
+          </p>
+          <div className="portal__calendario-fila">
+          <div className="portal__calendario">
+            <CalendarioMes
+              eventos={eventos}
+              filtrar={(e) => TIPOS_PARA_HERMANOS.has(e.tipo)}
+              onAbrirDia={(fecha, delDia) => setDiaCalendario({ fecha, delDia })}
+              compacto
+            />
+            <div className="eventos-cal__leyenda">
+              <span><i className="eventos-cal__punto evento-tipo--culto" /> Culto</span>
+              <span><i className="eventos-cal__punto evento-tipo--salida" /> Salida</span>
+              <span><i className="eventos-cal__punto evento-tipo--caridad" /> Caridad</span>
+              <span><i className="eventos-cal__punto evento-tipo--otro" /> Otros</span>
+            </div>
+          </div>
+          {diaCalendario ? (
+            <div className="portal__dia">
+              <div className="portal__dia-head">
+                <b>{fechaLarga(diaCalendario.fecha)}</b>
+                <button type="button" className="icon-btn" onClick={() => setDiaCalendario(null)} aria-label="Cerrar el día">✕</button>
+              </div>
+              <ul className="portal__dia-lista">
+                {diaCalendario.delDia.map(({ evento, vuelta }) => (
+                  <li key={`${evento.id}-${vuelta}`}>
+                    <span className={`eventos-item__tipo ${claseTipo(evento.tipo)}`}>{evento.tipo}</span>
+                    <div>
+                      <b>{evento.titulo}</b>
+                      <small>
+                        {[evento.hora, evento.lugar].filter(Boolean).join(' · ')}
+                      </small>
+                      {evento.descripcion && <p>{evento.descripcion}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="form-hint">Pulsa un día marcado para ver qué hay.</p>
+          )}
+          </div>
+        </section>
 
         {/* Diputado de tramo: asistencia de los hermanos de su tramo el día de salida */}
         {esDiputadoTramo && (

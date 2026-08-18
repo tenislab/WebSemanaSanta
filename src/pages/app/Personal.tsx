@@ -228,7 +228,8 @@ export default function Personal() {
           asignado.
         </p>
         <div className="table-card" style={{ overflowX: 'auto' }}>
-          <table>
+          {/* La primera columna se queda fija al desplazar (ver .permisos-tabla). */}
+          <table className="permisos-tabla">
             <thead>
               <tr>
                 <th>Cargo</th>

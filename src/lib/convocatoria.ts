@@ -45,7 +45,9 @@ export function destinatariosConvocatoria(hermanos: Hermano[]): Hermano[] {
  */
 export function enviarConvocatoria(anio: number, hermanos: Hermano[], fechaLimite: string): number {
   const destinatarios = destinatariosConvocatoria(hermanos)
-  const hoyIso = new Date().toISOString().slice(0, 10)
+  // Hora local: con toISOString, convocar de madrugada la fechaba el día antes.
+  const ahora = new Date()
+  const hoyIso = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`
 
   // Comunicado por email (aparece en el módulo Comunicados; envío simulado).
   const comunicados = leerPersistido<Comunicado[]>(CLAVES_DATOS.comunicados, COMUNICADOS_INICIALES)

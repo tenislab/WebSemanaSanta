@@ -18,7 +18,13 @@ export default function QrCode({ value, size = 96 }: QrCodeProps) {
 
   useEffect(() => {
     let cancelado = false
-    QRCode.toDataURL(value, { width: size, margin: 1, errorCorrectionLevel: 'M' })
+    // Se genera SIEMPRE grande (480 px) y se enseña al tamaño que pida quien lo
+    // use. Rasterizándolo a 96 px, un QR de 65 módulos salía a 1,4 px por
+    // módulo y con la rejilla desigual (la librería redondea hacia abajo):
+    // en pantalla pasaba, pero impreso a un centímetro no lo leía casi ningún
+    // móvil. Al escalar una imagen grande hacia abajo, el navegador remuestrea
+    // y los módulos quedan parejos.
+    QRCode.toDataURL(value, { width: 480, margin: 1, errorCorrectionLevel: 'M' })
       .then((url) => {
         if (!cancelado) setDataUrl(url)
       })

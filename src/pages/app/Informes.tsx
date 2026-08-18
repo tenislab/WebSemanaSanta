@@ -15,6 +15,7 @@ import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
+import { getCamposPropios, valorLegible } from '../../lib/camposPropios'
 
 interface Informe {
   id: string
@@ -36,6 +37,7 @@ function construirInformes(): Informe[] {
   const movimientosActuales = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
   const enseresActuales = leerPersistido(CLAVES_DATOS.enseres, ENSERES_INICIALES)
 
+  const camposPropios = getCamposPropios().filter((c) => c.nombre.trim())
   const hermanoDe = (id: string) => hermanosActuales.find((h) => h.id === id)
   const tramos = getTramos()
 
@@ -101,9 +103,14 @@ function construirInformes(): Informe[] {
         { etiqueta: 'Con cuota al día', valor: String(alDia) },
         { etiqueta: 'Sin IBAN', valor: String(sinIban) },
       ],
-      columnas: ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota al día'],
+      // Los campos propios de la hermandad se listan también: si se molestan en
+      // apuntar la talla de túnica, el padrón tiene que poder sacarla.
+      columnas: ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota al día', ...camposPropios.map((c) => c.nombre)],
       filas: hermanosActuales.map((h) => [
-        h.numero, h.nombre, h.estado, h.antiguedad, h.email, h.telefono, h.cuotaAlDia ? 'Sí' : 'No',
+        // Los de baja tienen numero 0, no un número real: en papel eso se lee
+        // como «el hermano cero». Se pinta igual que en el resto de la app.
+        h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.email, h.telefono, h.cuotaAlDia ? 'Sí' : 'No',
+        ...camposPropios.map((c) => valorLegible(c, h.campos?.[c.id])),
       ]),
     },
     {

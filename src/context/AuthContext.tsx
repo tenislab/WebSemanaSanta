@@ -125,9 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
         setMfaPendiente(Boolean(data && data.currentLevel === 'aal1' && data.nextLevel === 'aal2'))
       } catch {
-        // Si no se puede comprobar el nivel (fallo puntual), se falla del lado
-        // seguro: no dejar la sesión bloqueada en "comprobando" para siempre.
-        setMfaPendiente(false)
+        // Si no se puede comprobar el nivel, se falla CERRADO: se pide el
+        // segundo factor. Antes se dejaba pasar, así que un fallo de red al
+        // consultar el nivel bastaba para saltarse la verificación en dos pasos.
+        setMfaPendiente(true)
       }
     }
 

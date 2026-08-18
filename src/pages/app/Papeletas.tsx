@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
+import MenuAcciones from '../../components/MenuAcciones'
 import PapeletaTicket from '../../components/PapeletaTicket'
 import PapeletaModeloRender from '../../components/PapeletaModeloRender'
 import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
@@ -406,8 +407,18 @@ export default function Papeletas() {
         (p) => p.tramoId === tId && p.anio === campana.anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia',
       ).length
     const libres = (t: Tramo) => (t.capacidad ?? 999) - ocupados(t.id)
-    const ciriosConHueco = enCuerpo.filter((t) => esAutomatico(t) && libres(t) > 0).sort((a, b) => libres(b) - libres(a))
-    if (ciriosConHueco.length > 0) return ciriosConHueco[0]
+    // En los tramos por número el reparto es en CASCADA sobre el grupo entero,
+    // y todas las papeletas se guardan con el id del primer tramo del grupo.
+    // Mirando tramo a tramo, el 2º tramo de un grupo lleno parecía vacío y se
+    // aceptaba (y se cobraba) una papeleta que luego salía «Excede aforo».
+    const gruposConHueco = gruposAutomaticos(enCuerpo)
+      .map((g) => ({
+        grupo: g,
+        libres: g.tramos.reduce((n, t) => n + (t.capacidad ?? 999), 0) - g.tramos.reduce((n, t) => n + ocupados(t.id), 0),
+      }))
+      .filter((g) => g.libres > 0)
+      .sort((a, b) => b.libres - a.libres)
+    if (gruposConHueco.length > 0) return gruposConHueco[0].grupo.tramos[0]
     const conHueco = enCuerpo.filter((t) => libres(t) > 0)
     return (conHueco[0] ?? enCuerpo[0]) ?? null
   }
@@ -505,14 +516,16 @@ export default function Papeletas() {
               Solicitudes ({solicitudesPendientes.length})
             </button>
           )}
+          <MenuAcciones>
+            <button type="button" onClick={() => setModeloOpen(true)}>
+              Modelo de papeleta
+            </button>
+            <button type="button" onClick={() => setAjustesOpen(true)}>
+              Ajustes de campaña
+            </button>
+          </MenuAcciones>
           <button className="btn btn-primary" onClick={() => setImprimirOpen(true)}>
             Imprimir papeletas
-          </button>
-          <button className="btn btn-outline" onClick={() => setModeloOpen(true)}>
-            Modelo de papeleta
-          </button>
-          <button className="btn btn-outline" onClick={() => setAjustesOpen(true)}>
-            Ajustes de campaña
           </button>
         </div>
       </div>
@@ -759,7 +772,11 @@ export default function Papeletas() {
                     <div className="assign-box__row">
                       <button
                         className="btn btn-primary"
-                        onClick={() => renovar(h.id, r.sitioAnterior!.tramoId!, r.sitioAnterior!.importe || precioDeTramo(tramoAnterior, precioBase))}
+                        // El precio es el de ESTE año, no el de la papeleta
+                        // anterior: si la hermandad sube el precio del tramo,
+                        // quien renovaba seguía pagando el viejo y dos hermanos
+                        // del mismo tramo pagaban cantidades distintas.
+                        onClick={() => renovar(h.id, r.sitioAnterior!.tramoId!, precioDeTramo(tramoAnterior, precioBase))}
                       >
                         Renovar {etiquetaTramo(tramoAnterior)}
                       </button>

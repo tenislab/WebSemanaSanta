@@ -97,13 +97,37 @@ export async function savePermisosPorCargo(permisos: Record<Cargo, string[]>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(permisos))
 }
 
-/** Módulos visibles para un cargo, o null si no tiene restricción (titular de la hermandad). */
+/**
+ * Módulos visibles para un cargo, o null si no tiene restricción.
+ *
+ * `null` significa «titular de la hermandad», y por eso NO puede ser lo que
+ * salga cuando el cargo no se reconoce: el cargo viene del metadata de la
+ * cuenta, y bastaba con borrarlo para que la aplicación abriera todos los
+ * módulos. Un cargo que no está en el catálogo no tiene permisos, punto.
+ */
 export function permisosDeCargo(cargo: Cargo | undefined | null): string[] | null {
-  if (!cargo) return null
+  if (cargo === null || cargo === undefined) return null
   return getPermisosPorCargo()[cargo] ?? []
 }
 
+/**
+ * ¿Puede este cargo ver el módulo? Solo el titular (sin cargo) lo ve todo; con
+ * cargo, hay que tenerlo concedido explícitamente.
+ */
 export function puedeVerModulo(cargo: Cargo | undefined | null, moduloId: string) {
   const permisos = permisosDeCargo(cargo)
   return permisos === null || permisos.includes(moduloId)
+}
+
+/**
+ * ¿Es una cuenta de personal (con cargo) o el titular? Se decide por la lista
+ * real de personal, no por lo que diga el metadata de la sesión, que el propio
+ * usuario puede reescribir con `auth.updateUser`.
+ */
+export function cargoDeCuenta(personalId: string | undefined, personal: { id: string; cargo: Cargo; activo: boolean }[]): Cargo | null {
+  if (!personalId) return null
+  const miembro = personal.find((m) => m.id === personalId)
+  // Un id de personal que ya no existe (o está desactivado) NO es el titular:
+  // se queda sin permisos hasta que alguien lo arregle.
+  return miembro && miembro.activo ? miembro.cargo : ('__desconocido__' as Cargo)
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, nombreSeccion, urlMapaIncrustado, urlSegura, type ContenidoRico, type TipoSeccion, type WebPublica } from '../lib/webPublica'
+import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, nombreSeccion, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type TipoSeccion, type WebPublica } from '../lib/webPublica'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
@@ -22,10 +22,17 @@ export default function SitioContenido({
   hermandad,
   interactivo = true,
   seccionActiva,
+  cultosDelCalendario = [],
 }: {
   web: WebPublica
   hermandad: HermandadSettings
   interactivo?: boolean
+  /**
+   * Los próximos cultos sacados del módulo de Eventos. Se pasan de fuera a
+   * propósito: este componente pinta lo que le dan y no lee datos por su
+   * cuenta, así sirve igual para la web pública y para la vista previa.
+   */
+  cultosDelCalendario?: CultoWeb[]
   /** Sección que se está editando: se resalta y se trae a la vista (solo en la vista previa). */
   seccionActiva?: FocoPreview
 }) {
@@ -42,9 +49,17 @@ export default function SitioContenido({
   const titulo = web.titulo || hermandad.nombreLegal || 'Nuestra Hermandad'
   const color = web.colorPrimario || hermandad.colorPrimario || '#6A1A23'
   const color2 = web.colorSecundario || '#C5A059'
-  const fuente = TIPOGRAFIAS.find((t) => t.id === web.tipografia)?.css ?? TIPOGRAFIAS[0].css
+  // La pareja manda; `tipografia` se conserva para las webs de antes, que no
+  // tenían pareja elegida.
+  const pareja = PAREJAS_TIPOGRAFICAS.find((p) => p.id === web.pareja)
+  const fuente = pareja?.texto ?? TIPOGRAFIAS.find((t) => t.id === web.tipografia)?.css ?? TIPOGRAFIAS[0].css
+  const fuenteTitulos = pareja?.titulos ?? fuente
+  const radio = { recto: '0px', suave: '10px', redondo: '20px' }[web.redondeo] ?? '10px'
+  const aire = { compacta: '0.72', normal: '1', amplia: '1.35' }[web.densidad] ?? '1'
   const logo = web.logoDataUrl || hermandad.logoDataUrl
   const seccionesVisibles = web.secciones.filter((s) => s.visible)
+  // Los del calendario van primero: son los que están al caer.
+  const cultosVisibles = web.cultosDelCalendario ? [...cultosDelCalendario, ...web.cultos] : web.cultos
 
   /**
    * ¿Tiene esta sección algo que enseñar? El menú solo enlaza secciones con
@@ -54,8 +69,8 @@ export default function SitioContenido({
   function tieneContenido(tipo: TipoSeccion): boolean {
     if (tipo === 'historia') return !contenidoVacio(web.historia)
     if (tipo === 'titulares') return web.titulares.length > 0
-    if (tipo === 'cultos') return web.cultos.length > 0
-    if (tipo === 'galeria') return web.galeria.length > 0
+    if (tipo === 'cultos') return cultosVisibles.length > 0
+    if (tipo === 'galeria') return web.albumes.some((a) => a.fotos.length > 0)
     if (tipo === 'actualidad') return web.noticias.some((n) => n.publicada)
     if (tipo === 'paginas') return web.paginas.filter((p) => p.enMenu !== false).length > 0
     if (tipo === 'boletines') return web.boletines.length > 0
@@ -63,13 +78,6 @@ export default function SitioContenido({
       return Boolean(web.direccion || hermandad.direccion || web.telefono || hermandad.telefono || web.email || hermandad.email || web.mapaUrl)
     return true
   }
-
-  const Boton = ({ children, clase }: { children: ReactNode; clase: string }) =>
-    interactivo ? (
-      <Link to="/hermano" className={clase}>{children}</Link>
-    ) : (
-      <span className={clase}>{children}</span>
-    )
 
   return (
     <div
@@ -81,6 +89,9 @@ export default function SitioContenido({
         ['--sitio-color' as string]: color,
         ['--sitio-color2' as string]: color2,
         ['--sitio-fuente' as string]: fuente,
+        ['--sitio-fuente-titulos' as string]: fuenteTitulos,
+        ['--sitio-radio' as string]: radio,
+        ['--sitio-aire' as string]: aire,
       }}
     >
       <header
@@ -111,12 +122,12 @@ export default function SitioContenido({
             )
           })}
           {web.cabecera.textoBoton.trim() && (
-            <Boton clase="sitio-btn sitio-btn--entrar">{web.cabecera.textoBoton}</Boton>
+            <BotonEntrar interactivo={interactivo} clase="sitio-btn sitio-btn--entrar">{web.cabecera.textoBoton}</BotonEntrar>
           )}
         </nav>
       </header>
 
-      <HeroFondo web={web} titulo={titulo} Boton={Boton} />
+      <HeroFondo web={web} titulo={titulo} interactivo={interactivo} />
 
       <main className="sitio__main">
         {seccionesVisibles.map((s) => (
@@ -126,17 +137,19 @@ export default function SitioContenido({
             nombre={s.nombre}
             activa={s.tipo === seccionActiva}
             interactivo={interactivo}
+            cultos={cultosVisibles}
             web={web}
             hermandad={hermandad}
           />
         ))}
       </main>
 
+      {interactivo && <VolverArriba />}
+
       <PieSitio
         web={web}
         hermandad={hermandad}
         titulo={titulo}
-        Boton={Boton}
         interactivo={interactivo}
         activo={seccionActiva === 'pie'}
       />
@@ -144,7 +157,45 @@ export default function SitioContenido({
   )
 }
 
-function HeroFondo({ web, titulo, Boton }: { web: WebPublica; titulo: string; Boton: (p: { children: ReactNode; clase: string }) => ReactNode }) {
+/**
+ * Botón que lleva al área del hermano. Vive en el módulo, NO dentro de
+ * SitioContenido: definido allí se recreaba en cada render y React desmontaba
+ * y volvía a montar el botón entero en cada tecla del editor.
+ */
+function BotonEntrar({ interactivo, clase, children }: { interactivo: boolean; clase: string; children: ReactNode }) {
+  return interactivo
+    ? <Link to="/hermano" className={clase}>{children}</Link>
+    : <span className={clase}>{children}</span>
+}
+
+/**
+ * Botón para volver arriba. Aparece al bajar un par de pantallas: una web de
+ * hermandad con historia, titulares, cultos y galería es larguísima en el
+ * móvil, y había que arrastrar hasta arriba para llegar al menú.
+ */
+function VolverArriba() {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    function alDesplazar() { setVisible(window.scrollY > 900) }
+    alDesplazar()
+    window.addEventListener('scroll', alDesplazar, { passive: true })
+    return () => window.removeEventListener('scroll', alDesplazar)
+  }, [])
+  return (
+    <button
+      type="button"
+      className={`sitio__arriba${visible ? ' sitio__arriba--visible' : ''}`}
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      aria-label="Volver arriba"
+      tabIndex={visible ? 0 : -1}
+      aria-hidden={!visible}
+    >
+      ↑
+    </button>
+  )
+}
+
+function HeroFondo({ web, titulo, interactivo }: { web: WebPublica; titulo: string; interactivo: boolean }) {
   const fotos = web.heroFotos
   const [i, setI] = useState(0)
   useEffect(() => {
@@ -163,7 +214,7 @@ function HeroFondo({ web, titulo, Boton }: { web: WebPublica; titulo: string; Bo
       <div className="sitio__hero-inner">
         <h1>{titulo}</h1>
         {web.lema && <p className="sitio__lema">{web.lema}</p>}
-        <Boton clase="sitio-btn sitio-btn--hero">{web.heroTextoBoton || 'Portal del hermano'} →</Boton>
+        <BotonEntrar interactivo={interactivo} clase="sitio-btn sitio-btn--hero">{web.heroTextoBoton || 'Portal del hermano'} →</BotonEntrar>
       </div>
     </section>
   )
@@ -179,14 +230,12 @@ function PieSitio({
   web,
   hermandad,
   titulo,
-  Boton,
   interactivo,
   activo,
 }: {
   web: WebPublica
   hermandad: HermandadSettings
   titulo: string
-  Boton: (p: { children: ReactNode; clase: string }) => ReactNode
   /** En la vista previa del panel los enlaces no navegan. */
   interactivo: boolean
   /** Se está editando el pie en el panel: se marca en la vista previa. */
@@ -241,11 +290,116 @@ function PieSitio({
         <span>{web.textoPie || `© ${titulo}`}</span>
         <div className="sitio__foot-right">
           {web.pie.mostrarRedes && <Redes web={web} interactivo={interactivo} />}
-          <Boton clase="sitio-btn sitio-btn--sm">Área del hermano</Boton>
+          <BotonEntrar interactivo={interactivo} clase="sitio-btn sitio-btn--sm">Área del hermano</BotonEntrar>
         </div>
       </div>
       {web.pie.textoLegal.trim() && <p className="sitio__foot-legal">{web.pie.textoLegal}</p>}
     </footer>
+  )
+}
+
+/**
+ * La galería, por álbumes, con visor a pantalla completa. Antes era un montón
+ * único de fotos sin contexto: con doce salidas seguidas no había forma de
+ * saber qué era cada cosa.
+ */
+function Galeria({ albumes, interactivo }: { albumes: AlbumGaleria[]; interactivo: boolean }) {
+  // Todas las fotos en una sola lista para poder pasar de una a la siguiente
+  // aunque estén en álbumes distintos.
+  const todas = albumes.flatMap((a) => a.fotos.map((f) => ({ ...f, album: a.titulo })))
+  const [abierta, setAbierta] = useState<number | null>(null)
+  const cerrarRef = useRef<HTMLButtonElement>(null)
+
+  const hayVisor = interactivo && abierta !== null
+  useEffect(() => {
+    if (!hayVisor) return
+    function tecla(e: KeyboardEvent) {
+      if (e.key === 'Escape') setAbierta(null)
+      if (e.key === 'ArrowRight') setAbierta((i) => (i === null ? null : (i + 1) % todas.length))
+      if (e.key === 'ArrowLeft') setAbierta((i) => (i === null ? null : (i - 1 + todas.length) % todas.length))
+    }
+    window.addEventListener('keydown', tecla)
+    // El foco entra en el visor: si no, al abrirlo con el teclado seguías
+    // tabulando por la página de detrás sin ver dónde estabas.
+    cerrarRef.current?.focus()
+    // Con el visor abierto, el fondo no debe desplazarse detrás.
+    const previo = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', tecla)
+      document.body.style.overflow = previo
+    }
+  }, [hayVisor, todas.length])
+
+  const foto = abierta === null ? null : todas[abierta]
+
+  return (
+    <>
+      {albumes.map((a) => (
+        <div className="sitio__album" key={a.id}>
+          {(a.titulo.trim() || a.fecha.trim() || a.descripcion.trim()) && (
+            <div className="sitio__album-head">
+              {a.titulo.trim() && <h3>{a.titulo}</h3>}
+              {a.fecha.trim() && <span className="sitio__album-fecha">{a.fecha}</span>}
+              {a.descripcion.trim() && <p>{a.descripcion}</p>}
+            </div>
+          )}
+          <div className="sitio__galeria">
+            {a.fotos.map((f) => {
+              const i = todas.findIndex((t) => t.id === f.id)
+              return (
+                <figure className="sitio__foto" key={f.id}>
+                  {interactivo ? (
+                    <button type="button" className="sitio__foto-boton" onClick={() => setAbierta(i)}>
+                      <img src={f.fotoDataUrl} alt={f.pie || a.titulo} loading="lazy" />
+                      <span className="sitio__foto-lupa" aria-hidden="true">⤢</span>
+                    </button>
+                  ) : (
+                    <img src={f.fotoDataUrl} alt={f.pie || a.titulo} loading="lazy" />
+                  )}
+                  {f.pie && <figcaption>{f.pie}</figcaption>}
+                </figure>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+
+      {foto && (
+        <div className="sitio__visor" role="dialog" aria-modal="true" aria-label="Foto ampliada">
+          {/* El fondo cierra: es lo que todo el mundo intenta primero. */}
+          <button type="button" className="sitio__visor-fondo" aria-label="Cerrar" onClick={() => setAbierta(null)} />
+          <button ref={cerrarRef} type="button" className="sitio__visor-cerrar" aria-label="Cerrar" onClick={() => setAbierta(null)}>✕</button>
+          {todas.length > 1 && (
+            <button
+              type="button"
+              className="sitio__visor-flecha sitio__visor-flecha--izq"
+              aria-label="Foto anterior"
+              onClick={() => setAbierta((i) => (i === null ? null : (i - 1 + todas.length) % todas.length))}
+            >
+              ‹
+            </button>
+          )}
+          <figure className="sitio__visor-figura">
+            <img src={foto.fotoDataUrl} alt={foto.pie || foto.album} />
+            <figcaption>
+              {foto.pie || foto.album}
+              {todas.length > 1 && <span className="sitio__visor-n">{(abierta ?? 0) + 1} / {todas.length}</span>}
+            </figcaption>
+          </figure>
+          {todas.length > 1 && (
+            <button
+              type="button"
+              className="sitio__visor-flecha sitio__visor-flecha--der"
+              aria-label="Foto siguiente"
+              onClick={() => setAbierta((i) => (i === null ? null : (i + 1) % todas.length))}
+            >
+              ›
+            </button>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -307,6 +461,7 @@ function Seccion({
   nombre,
   activa,
   interactivo,
+  cultos,
   web,
   hermandad,
 }: {
@@ -317,6 +472,8 @@ function Seccion({
   activa?: boolean
   /** En la vista previa del panel los enlaces no navegan. */
   interactivo: boolean
+  /** Los del calendario ya mezclados con los escritos a mano. */
+  cultos: CultoWeb[]
   web: WebPublica
   hermandad: HermandadSettings
 }) {
@@ -364,12 +521,12 @@ function Seccion({
     )
   }
   if (tipo === 'cultos') {
-    if (web.cultos.length === 0) return null
+    if (cultos.length === 0) return null
     return (
       <section id="cultos" {...props}>
         <h2>{titulo(SECCIONES_INFO.cultos.publico)}</h2>
         <div className="sitio__cultos">
-          {web.cultos.map((c) => (
+          {cultos.map((c) => (
             <article key={c.id} className="sitio__culto">
               {c.fotoDataUrl && <img className="sitio__culto-foto" src={c.fotoDataUrl} alt="" />}
               <h3>{c.titulo}</h3>
@@ -386,11 +543,12 @@ function Seccion({
     )
   }
   if (tipo === 'galeria') {
-    if (web.galeria.length === 0) return null
+    const albumes = web.albumes.filter((a) => a.fotos.length > 0)
+    if (albumes.length === 0) return null
     return (
       <section id="galeria" {...props}>
         <h2>{titulo(SECCIONES_INFO.galeria.publico)}</h2>
-        <div className="sitio__galeria">{web.galeria.map((g) => <figure key={g.id} className="sitio__foto"><img src={g.fotoDataUrl} alt={g.pie} />{g.pie && <figcaption>{g.pie}</figcaption>}</figure>)}</div>
+        <Galeria albumes={albumes} interactivo={interactivo} />
       </section>
     )
   }
@@ -435,7 +593,39 @@ function Seccion({
     return (
       <section id="boletines" {...props}>
         <h2>{titulo(SECCIONES_INFO.boletines.publico)}</h2>
-        <div className="sitio__cultos">{web.boletines.map((bo) => <article key={bo.id} className="sitio__culto"><h3>{bo.titulo}</h3><p>{bo.subtitulo}{bo.pdfNombre ? ` · ${bo.pdfNombre}` : ''}</p></article>)}</div>
+        <div className="sitio__boletines">
+          {web.boletines.map((bo) => {
+            // Se puede haber subido el archivo o dado la dirección donde está.
+            const destino = bo.pdfDataUrl || urlSegura(bo.pdfUrl)
+            return (
+              <article key={bo.id} className="sitio__boletin">
+                <div className="sitio__boletin-portada">
+                  {bo.portadaDataUrl
+                    ? <img src={bo.portadaDataUrl} alt="" />
+                    : <span className="sitio__boletin-sinportada" aria-hidden="true">PDF</span>}
+                </div>
+                <div className="sitio__boletin-datos">
+                  {bo.fecha.trim() && <span className="sitio__boletin-fecha">{bo.fecha}</span>}
+                  <h3>{bo.titulo}</h3>
+                  {bo.subtitulo.trim() && <p>{bo.subtitulo}</p>}
+                  {destino ? (
+                    <a
+                      href={interactivo ? destino : undefined}
+                      {...(interactivo ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                      {...(interactivo && bo.pdfDataUrl ? { download: bo.pdfNombre ?? 'boletin.pdf' } : {})}
+                      className="sitio-btn sitio-btn--sm"
+                    >
+                      Descargar PDF
+                    </a>
+                  ) : (
+                    // Sin archivo ni dirección no se promete una descarga que no existe.
+                    <span className="sitio__boletin-pendiente">Próximamente</span>
+                  )}
+                </div>
+              </article>
+            )
+          })}
+        </div>
       </section>
     )
   }

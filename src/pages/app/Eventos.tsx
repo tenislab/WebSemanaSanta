@@ -1,44 +1,30 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import CalendarioMes from '../../components/CalendarioMes'
 import Drawer from '../../components/Drawer'
 import HermanoPicker from '../../components/HermanoPicker'
-import { EVENTOS_INICIALES, TIPOS_EVENTO, type Evento, type TareaEvento, type TipoEvento } from '../../data/eventos'
-import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
+import { esRol, hermanosAsignables, personalAsignable, rolesAsignables, type PersonaAsignable } from '../../lib/asignables'
+import { useEtiquetas } from '../../lib/etiquetas'
+import { CARGOS } from '../../data/documentos'
+import { getPersonal } from '../../lib/personal'
+import { useAuth } from '../../context/AuthContext'
+import {
+  EVENTOS_INICIALES,
+  REPETICIONES,
+  SIN_REPETICION,
+  TIPOS_EVENTO,
+  textoRepeticion,
+  type Aparicion,
+  type Evento,
+  type Repeticion,
+  type TareaEvento,
+  type TipoEvento,
+} from '../../data/eventos'
+import { HERMANOS_INICIALES } from '../../data/hermanos'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
-
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
-
-function claseTipo(tipo: TipoEvento): string {
-  if (tipo === 'Culto') return 'evento-tipo--culto'
-  if (tipo === 'Salida') return 'evento-tipo--salida'
-  if (tipo === 'Cabildo') return 'evento-tipo--cabildo'
-  if (tipo === 'Caridad') return 'evento-tipo--caridad'
-  return 'evento-tipo--otro'
-}
-
-function fechaLarga(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-/** Días del mes en una rejilla de semanas que empieza en lunes (null = hueco). */
-function rejillaDelMes(anio: number, mes: number): (number | null)[] {
-  const primero = new Date(anio, mes, 1)
-  // getDay(): 0=domingo … 6=sábado → lo pasamos a 0=lunes … 6=domingo
-  const offset = (primero.getDay() + 6) % 7
-  const dias = new Date(anio, mes + 1, 0).getDate()
-  const celdas: (number | null)[] = Array(offset).fill(null)
-  for (let d = 1; d <= dias; d++) celdas.push(d)
-  return celdas
-}
-
-function iso(anio: number, mes: number, dia: number): string {
-  return `${anio}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
-}
+import { claseTipo, fechaLarga, iso } from '../../lib/calendario'
 
 export default function Eventos() {
   const [eventos, setEventos] = useSupabaseTable<Evento>(
@@ -48,32 +34,55 @@ export default function Eventos() {
     eventoToRow,
     rowToEvento,
   )
+  const { user } = useAuth()
   const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanosActivos = useMemo(() => hermanos.filter((h) => h.estado !== 'Baja'), [hermanos])
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string | null) => (id ? map.get(id) : undefined)
   }, [hermanos])
+  // Una tarea puede recaer en un hermano del censo o en alguien del personal
+  // con acceso al panel (secretaría, tesorería…), que no tiene número.
+  const personal = useMemo(() => getPersonal(), [])
+  const [etiquetas] = useEtiquetas()
+  // Primero los cargos y los grupos: muchas tareas son «de secretaría» o «de
+  // los costaleros», y buscar un nombre concreto para eso sobra.
+  const asignables = useMemo(
+    () => [
+      ...rolesAsignables(CARGOS, etiquetas),
+      ...personalAsignable(personal),
+      ...hermanosAsignables(hermanosActivos),
+    ],
+    [personal, hermanosActivos, etiquetas],
+  )
+  /** Cómo se llama el asignado de una tarea, esté donde esté. */
+  const nombreDeTrabajador = useCallback(
+    (t: TareaEvento) =>
+      hermanoDe(t.trabajadorId)?.nombre
+      ?? personal.find((m) => m.id === t.trabajadorId)?.nombre
+      ?? t.trabajadorNombre,
+    [hermanoDe, personal],
+  )
 
   const ahora = new Date()
-  const [mesVista, setMesVista] = useState({ anio: ahora.getFullYear(), mes: ahora.getMonth() })
   const [seleccionado, setSeleccionado] = useState<Evento | null>(null)
   /** Día abierto en el calendario, cuando tiene más de un evento. */
-  const [diaAbierto, setDiaAbierto] = useState<string | null>(null)
+  const [diaAbierto, setDiaAbierto] = useState<{ fecha: string; lista: Aparicion[] } | null>(null)
+  /** Mes al que salta el calendario tras crear un evento. */
+  const [saltarA, setSaltarA] = useState<string | undefined>(undefined)
   const [formOpen, setFormOpen] = useState(false)
+  // La paleta de comandos (Ctrl+K) manda aquí con ?nuevo=1 para crear un
+  // evento sin tener que buscar el botón.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    if (params.get('nuevo') === null) return
+    setFormOpen(true)
+    setParams({}, { replace: true })
+  }, [params, setParams])
   const [nuevaTarea, setNuevaTarea] = useState('')
+  const [repNueva, setRepNueva] = useState<Repeticion>(SIN_REPETICION)
 
   const hoyIso = iso(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
-
-  const eventosPorDia = useMemo(() => {
-    const map = new Map<string, Evento[]>()
-    eventos.forEach((e) => {
-      const lista = map.get(e.fecha) ?? []
-      lista.push(e)
-      map.set(e.fecha, lista)
-    })
-    return map
-  }, [eventos])
 
   const proximos = useMemo(
     () =>
@@ -92,10 +101,37 @@ export default function Eventos() {
     return { proximosN, pendientes, sinAsignar }
   }, [eventos, hoyIso])
 
+  /**
+   * Las tareas de quien está usando la aplicación. Se busca por su cuenta de
+   * personal y, si además es hermano, por su correo en el censo: el mismo
+   * secretario puede tener tareas asignadas de las dos formas.
+   */
+  const misTareas = useMemo(() => {
+    const personalId = String(user?.user_metadata?.personalId ?? '')
+    const correo = (user?.email ?? '').trim().toLowerCase()
+    const yoHermano = correo ? hermanos.find((h) => h.email.trim().toLowerCase() === correo) : undefined
+    // También lo que le toca por su CARGO o por sus grupos: una tarea «de
+    // secretaría» es de quien sea secretario, sin poner su nombre.
+    const miCargo = personal.find((m) => m.id === personalId)?.cargo
+    const misEtiquetas = yoHermano?.etiquetas ?? []
+    const mios = new Set([
+      personalId,
+      yoHermano?.id,
+      miCargo && `rol:cargo:${miCargo}`,
+      ...misEtiquetas.map((e) => `rol:etiqueta:${e}`),
+    ].filter(Boolean) as string[])
+    if (mios.size === 0) return []
+    return [...eventos]
+      .sort((a, b) => a.fecha.localeCompare(b.fecha))
+      .flatMap((e) => e.tareas.filter((t) => !t.hecha && t.trabajadorId && mios.has(t.trabajadorId)).map((t) => ({ evento: e, tarea: t })))
+  }, [eventos, hermanos, personal, user])
+  const nombreUsuario = String(user?.user_metadata?.nombre ?? '').split(' ')[0] || 'compañero'
+
   /** Tareas pendientes agrupadas por trabajador (los sin asignar, al final). */
   const tareasPorTrabajador = useMemo(() => {
     const grupos = new Map<string, { id: string; nombre: string; tareas: { evento: Evento; tarea: TareaEvento }[] }>()
     const sinAsignar: { evento: Evento; tarea: TareaEvento }[] = []
+    // (el tipo explícito de arriba hace falta: sin él TS lo infiere como never[])
     const ordenados = [...eventos].sort((a, b) => a.fecha.localeCompare(b.fecha))
     ordenados.forEach((e) => {
       e.tareas.forEach((t) => {
@@ -104,14 +140,14 @@ export default function Eventos() {
           sinAsignar.push({ evento: e, tarea: t })
           return
         }
-        const nombre = hermanoDe(t.trabajadorId)?.nombre ?? t.trabajadorNombre ?? 'Trabajador'
+        const nombre = nombreDeTrabajador(t) ?? 'Trabajador'
         const g = grupos.get(t.trabajadorId) ?? { id: t.trabajadorId, nombre, tareas: [] }
         g.tareas.push({ evento: e, tarea: t })
         grupos.set(t.trabajadorId, g)
       })
     })
     return { grupos: [...grupos.values()].sort((a, b) => b.tareas.length - a.tareas.length), sinAsignar }
-  }, [eventos, hermanoDe])
+  }, [eventos, nombreDeTrabajador])
 
   function aplicarEvento(id: string, cambios: Partial<Evento>) {
     setEventos((prev) => prev.map((e) => (e.id === id ? { ...e, ...cambios } : e)))
@@ -126,16 +162,35 @@ export default function Eventos() {
     })
   }
 
-  function asignarTarea(eventoId: string, tareaId: string, trabajador: Hermano | null) {
+  function asignarTarea(eventoId: string, tareaId: string, trabajador: PersonaAsignable | null) {
     const evento = eventos.find((e) => e.id === eventoId)
     if (!evento) return
     aplicarEvento(eventoId, {
       tareas: evento.tareas.map((t) =>
         t.id === tareaId
-          ? { ...t, trabajadorId: trabajador?.id ?? null, trabajadorNombre: trabajador?.nombre }
+          ? {
+              ...t,
+              trabajadorId: trabajador?.id ?? null,
+              trabajadorNombre: trabajador?.nombre,
+              // Se guarda el nombre y el tipo porque el asignado puede no estar
+              // en el censo: el secretario o el tesorero entran con su cuenta
+              // del panel y no tienen número de hermano.
+              trabajadorTipo: !trabajador
+                ? undefined
+                : esRol(trabajador.id) ? 'rol'
+                  : personal.some((m) => m.id === trabajador.id) ? 'personal' : 'hermano',
+            }
           : t,
       ),
     })
+  }
+
+  /** Abre la ficha de un evento dejando limpio el campo de tarea nueva. */
+  function abrirEvento(e: Evento | null) {
+    setSeleccionado(e)
+    // Si no, lo escrito y no añadido en un evento aparecía en el siguiente y se
+    // creaba la tarea donde no era.
+    setNuevaTarea('')
   }
 
   function anadirTarea(eventoId: string) {
@@ -171,6 +226,7 @@ export default function Eventos() {
     const descripcion = String(data.get('descripcion') ?? '').trim()
     if (!titulo || !fecha) return
     const nuevo: Evento = {
+      repeticion: repNueva.tipo === 'no' ? undefined : repNueva,
       id: nuevoId(),
       titulo,
       tipo,
@@ -183,19 +239,9 @@ export default function Eventos() {
     setEventos((prev) => [...prev, nuevo])
     setFormOpen(false)
     // Abrimos el mes del evento recién creado y su ficha, para seguir con las tareas.
-    const d = new Date(`${fecha}T00:00:00`)
-    if (!Number.isNaN(d.getTime())) setMesVista({ anio: d.getFullYear(), mes: d.getMonth() })
-    setSeleccionado(nuevo)
+    setSaltarA(fecha)
+    abrirEvento(nuevo)
   }
-
-  function moverMes(delta: number) {
-    setMesVista((v) => {
-      const d = new Date(v.anio, v.mes + delta, 1)
-      return { anio: d.getFullYear(), mes: d.getMonth() }
-    })
-  }
-
-  const celdas = rejillaDelMes(mesVista.anio, mesVista.mes)
 
   return (
     <div className="dash">
@@ -240,58 +286,44 @@ export default function Eventos() {
 
       <div className="eventos-layout">
         {/* -------- Calendario mensual -------- */}
-        <div className="panel eventos-cal">
-          <div className="eventos-cal__head">
-            <button className="icon-btn" aria-label="Mes anterior" onClick={() => moverMes(-1)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 6l-6 6 6 6" /></svg>
-            </button>
-            <h2>
-              {MESES[mesVista.mes]} {mesVista.anio}
-            </h2>
-            <button className="icon-btn" aria-label="Mes siguiente" onClick={() => moverMes(1)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 6l6 6-6 6" /></svg>
-            </button>
-          </div>
-          <div className="eventos-cal__grid" role="grid">
-            {DIAS_SEMANA.map((d) => (
-              <span key={d} className="eventos-cal__dow">{d}</span>
-            ))}
-            {celdas.map((dia, i) => {
-              if (dia === null) return <span key={`x${i}`} className="eventos-cal__celda eventos-cal__celda--vacia" />
-              const fecha = iso(mesVista.anio, mesVista.mes, dia)
-              const delDia = eventosPorDia.get(fecha) ?? []
-              const esHoy = fecha === hoyIso
-              return (
-                <button
-                  type="button"
-                  key={fecha}
-                  className={`eventos-cal__celda${esHoy ? ' eventos-cal__celda--hoy' : ''}${delDia.length ? ' eventos-cal__celda--con' : ''}`}
-                  onClick={() => {
-                    if (delDia.length === 1) setSeleccionado(delDia[0])
-                    else if (delDia.length > 1) setDiaAbierto(fecha)
-                  }}
-                  title={delDia.map((e) => e.titulo).join(' · ') || undefined}
-                >
-                  <span className="eventos-cal__dia">{dia}</span>
-                  {delDia.length > 0 && (
-                    <span className="eventos-cal__puntos">
-                      {delDia.slice(0, 3).map((e) => (
-                        <i key={e.id} className={`eventos-cal__punto ${claseTipo(e.tipo)}`} />
-                      ))}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-          <div className="eventos-cal__leyenda">
-            <span><i className="eventos-cal__punto evento-tipo--culto" /> Culto</span>
-            <span><i className="eventos-cal__punto evento-tipo--salida" /> Salida</span>
-            <span><i className="eventos-cal__punto evento-tipo--cabildo" /> Cabildo</span>
-            <span><i className="eventos-cal__punto evento-tipo--caridad" /> Caridad</span>
-            <span><i className="eventos-cal__punto evento-tipo--otro" /> Otros</span>
-          </div>
+        <div className="panel">
+          <CalendarioMes
+            eventos={eventos}
+            titulos
+            leyenda
+            saltarA={saltarA}
+            onAbrirDia={(fecha, delDia) => {
+              if (delDia.length === 1) abrirEvento(delDia[0].evento)
+              else setDiaAbierto({ fecha, lista: delDia })
+            }}
+          />
         </div>
+
+        {/* -------- Mis tareas -------- */}
+        {misTareas.length > 0 && (
+          <div className="panel panel--mias">
+            <div className="panel__head">
+              <h2>Mis tareas</h2>
+              <span className="pill pill--warn">{misTareas.length}</span>
+            </div>
+            <p className="form-hint">
+              Lo que te toca a ti, {nombreUsuario}. Marca la casilla cuando esté hecho.
+            </p>
+            <ul className="eventos-mias">
+              {misTareas.map(({ evento, tarea }) => (
+                <li key={tarea.id}>
+                  <label className="checkbox">
+                    <input type="checkbox" checked={tarea.hecha} onChange={() => toggleTarea(evento.id, tarea.id)} />
+                    <span>{tarea.titulo}</span>
+                  </label>
+                  <button type="button" className="eventos-tarea-link" onClick={() => abrirEvento(evento)}>
+                    {evento.titulo} · {fechaLarga(evento.fecha)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* -------- Tareas pendientes por trabajador -------- */}
         <div className="panel">
@@ -310,7 +342,7 @@ export default function Eventos() {
                   <ul>
                     {g.tareas.map(({ evento, tarea }) => (
                       <li key={tarea.id}>
-                        <button type="button" className="eventos-tarea-link" onClick={() => setSeleccionado(evento)}>
+                        <button type="button" className="eventos-tarea-link" onClick={() => abrirEvento(evento)}>
                           {tarea.titulo}
                         </button>
                         <small>{evento.titulo} · {fechaLarga(evento.fecha)}</small>
@@ -327,7 +359,7 @@ export default function Eventos() {
                   <ul>
                     {tareasPorTrabajador.sinAsignar.map(({ evento, tarea }) => (
                       <li key={tarea.id}>
-                        <button type="button" className="eventos-tarea-link" onClick={() => setSeleccionado(evento)}>
+                        <button type="button" className="eventos-tarea-link" onClick={() => abrirEvento(evento)}>
                           {tarea.titulo}
                         </button>
                         <small>{evento.titulo} · {fechaLarga(evento.fecha)}</small>
@@ -354,7 +386,7 @@ export default function Eventos() {
               const pendientes = e.tareas.filter((t) => !t.hecha).length
               return (
                 <li key={e.id}>
-                  <button type="button" className="eventos-item" onClick={() => setSeleccionado(e)}>
+                  <button type="button" className="eventos-item" onClick={() => abrirEvento(e)}>
                     <span className={`eventos-item__tipo ${claseTipo(e.tipo)}`}>{e.tipo}</span>
                     <span className="eventos-item__cuerpo">
                       <b>{e.titulo}</b>
@@ -381,26 +413,29 @@ export default function Eventos() {
       <Drawer
         open={!!diaAbierto}
         onClose={() => setDiaAbierto(null)}
-        title={diaAbierto ? fechaLarga(diaAbierto) : ''}
-        subtitle={`${diaAbierto ? (eventosPorDia.get(diaAbierto) ?? []).length : 0} eventos ese día`}
+        title={diaAbierto ? fechaLarga(diaAbierto.fecha) : ''}
+        subtitle={`${diaAbierto?.lista.length ?? 0} eventos ese día`}
       >
         <ul className="eventos-lista">
-          {(diaAbierto ? eventosPorDia.get(diaAbierto) ?? [] : []).map((e) => {
+          {(diaAbierto?.lista ?? []).map(({ evento: e, vuelta }) => {
             const pend = e.tareas.filter((t) => !t.hecha).length
             return (
-              <li key={e.id}>
+              <li key={`${e.id}-${vuelta}`}>
                 <button
                   type="button"
                   className="eventos-item"
                   onClick={() => {
                     setDiaAbierto(null)
-                    setSeleccionado(e)
+                    abrirEvento(e)
                   }}
                 >
                   <span className={`eventos-item__tipo ${claseTipo(e.tipo)}`}>{e.tipo}</span>
                   <span className="eventos-item__cuerpo">
                     <b>{e.titulo}</b>
-                    <small>{e.hora ?? ''}{e.lugar ? ` · ${e.lugar}` : ''}</small>
+                    <small>
+                      {e.hora ?? ''}{e.lugar ? ` · ${e.lugar}` : ''}
+                      {vuelta > 0 && ' · se repite'}
+                    </small>
                   </span>
                   {pend > 0 ? <span className="pill pill--warn">{pend}</span> : <span className="pill pill--ok">Listo</span>}
                 </button>
@@ -413,7 +448,7 @@ export default function Eventos() {
       {/* -------- Ficha del evento -------- */}
       <Drawer
         open={!!seleccionado}
-        onClose={() => setSeleccionado(null)}
+        onClose={() => abrirEvento(null)}
         title={seleccionado?.titulo ?? ''}
         subtitle={seleccionado ? `${seleccionado.tipo} · ${fechaLarga(seleccionado.fecha)}${seleccionado.hora ? ` · ${seleccionado.hora}` : ''}` : undefined}
       >
@@ -424,10 +459,58 @@ export default function Eventos() {
             )}
             {seleccionado.descripcion && <p className="portal__lead">{seleccionado.descripcion}</p>}
 
+            {/* Repetición: se ve y se cambia desde la propia ficha. */}
+            <div className="assign-box">
+              <label htmlFor="repFicha">Repetición</label>
+              <select
+                id="repFicha"
+                value={(seleccionado.repeticion ?? SIN_REPETICION).tipo}
+                onChange={(e) => {
+                  const tipo = e.target.value as Repeticion['tipo']
+                  const base = seleccionado.repeticion ?? SIN_REPETICION
+                  aplicarEvento(seleccionado.id, { repeticion: tipo === 'no' ? undefined : { ...base, tipo } })
+                }}
+              >
+                {REPETICIONES.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+              </select>
+              {seleccionado.repeticion && seleccionado.repeticion.tipo !== 'no' && (
+                <>
+                  <div className="form-grid-2" style={{ marginTop: '0.6rem' }}>
+                    <div className="form-row">
+                      <label htmlFor="repFichaCada">Cada</label>
+                      <input
+                        id="repFichaCada"
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={seleccionado.repeticion.cada}
+                        onChange={(e) => aplicarEvento(seleccionado.id, {
+                          repeticion: { ...seleccionado.repeticion!, cada: Math.max(1, Number(e.target.value) || 1) },
+                        })}
+                      />
+                    </div>
+                    <div className="form-row">
+                      <label htmlFor="repFichaHasta">Hasta (vacío = siempre)</label>
+                      <input
+                        id="repFichaHasta"
+                        type="date"
+                        value={seleccionado.repeticion.hasta}
+                        onChange={(e) => aplicarEvento(seleccionado.id, {
+                          repeticion: { ...seleccionado.repeticion!, hasta: e.target.value },
+                        })}
+                      />
+                    </div>
+                  </div>
+                  <p className="form-hint">{textoRepeticion(seleccionado.repeticion)}.</p>
+                </>
+              )}
+            </div>
+
             <div className="assign-box">
               <label>Tareas del evento</label>
               <p className="form-hint">
-                Marca lo hecho y asigna cada tarea a un trabajador (cualquier hermano del censo).
+                Marca lo hecho y asigna cada tarea a quien la lleve: un hermano del censo, alguien
+                del personal con acceso al panel, o un cargo entero.
               </p>
               {seleccionado.tareas.length === 0 && (
                 <p className="form-hint">Sin tareas todavía. Añade la primera abajo.</p>
@@ -447,12 +530,12 @@ export default function Eventos() {
                       {/* Buscador, no lista: con un censo de verdad son cientos de
                           nombres y un desplegable no hay quien lo use. */}
                       <HermanoPicker
-                        hermanos={hermanosActivos}
+                        hermanos={asignables}
                         valorId={t.trabajadorId}
                         onSelect={(h) => asignarTarea(seleccionado.id, t.id, h)}
-                        placeholder="Buscar hermano…"
+                        placeholder="Buscar persona…"
                         textoVacio="Sin asignar"
-                        nombreFueraDeLista={hermanoDe(t.trabajadorId)?.nombre ?? t.trabajadorNombre}
+                        nombreFueraDeLista={nombreDeTrabajador(t)}
                       />
                       <button
                         type="button"
@@ -542,6 +625,50 @@ export default function Eventos() {
             <label htmlFor="descEvento">Descripción (opcional)</label>
             <textarea id="descEvento" name="descripcion" rows={3} placeholder="Detalles, horarios, avisos…" />
           </div>
+
+          {/* Repetición: la mayoría de los actos de una hermandad vuelven. */}
+          <div className="assign-box">
+            <label htmlFor="repEvento">¿Se repite?</label>
+            <select
+              id="repEvento"
+              value={repNueva.tipo}
+              onChange={(e) => setRepNueva((r) => ({ ...r, tipo: e.target.value as Repeticion['tipo'] }))}
+            >
+              {REPETICIONES.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+            <p className="form-hint">{REPETICIONES.find((r) => r.id === repNueva.tipo)?.nota}</p>
+            {repNueva.tipo !== 'no' && (
+              <div className="form-grid-2" style={{ marginTop: '0.6rem' }}>
+                <div className="form-row">
+                  <label htmlFor="repCada">Cada</label>
+                  <div className="assign-box__row">
+                    <input
+                      id="repCada"
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={repNueva.cada}
+                      onChange={(e) => setRepNueva((r) => ({ ...r, cada: Math.max(1, Number(e.target.value) || 1) }))}
+                      style={{ maxWidth: '5rem' }}
+                    />
+                    <span className="table-subtle">
+                      {{ diaria: 'días', semanal: 'semanas', mensual: 'meses', anual: 'años' }[repNueva.tipo]}
+                    </span>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <label htmlFor="repHasta">Hasta (vacío = siempre)</label>
+                  <input
+                    id="repHasta"
+                    type="date"
+                    value={repNueva.hasta}
+                    onChange={(e) => setRepNueva((r) => ({ ...r, hasta: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           <p className="form-hint">Las tareas se añaden después, desde la ficha del evento.</p>
         </form>
       </Drawer>

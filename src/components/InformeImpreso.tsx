@@ -24,6 +24,10 @@ export default function InformeImpreso({
 
   return (
     <div className={`recibo-doc print-doc informe-doc ${className}`.trim()}>
+      {/* Se repite en cada hoja impresa (ver .print-hoja). */}
+      <div className="print-hoja">
+        {hermandad.nombreLegal || 'Tu hermandad'} · {titulo}
+      </div>
       <div className="recibo-doc__head">
         <div className="recibo-doc__brand">
           <span className="recibo-doc__logo">

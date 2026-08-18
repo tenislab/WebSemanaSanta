@@ -7,8 +7,9 @@ import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { DOCUMENTOS_INICIALES } from '../../data/documentos'
 import { EVENTOS_INICIALES } from '../../data/eventos'
-import type { Cargo } from '../../data/documentos'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { cargoDeCuenta } from '../../lib/permisos'
+import { getPersonal } from '../../lib/personal'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
 import { formatCurrency } from '../../lib/format'
 import { puedeVerModulo } from '../../lib/permisos'
@@ -59,7 +60,9 @@ function diasHasta(iso: string) {
 export default function DashboardHome() {
   const { user } = useAuth()
   const nombre = (user?.user_metadata?.nombre as string | undefined)?.split(' ')[0]
-  const cargo = user?.user_metadata?.cargo as Cargo | undefined
+  // Contra la lista real de personal, no contra el metadata (que el usuario
+  // puede reescribir). Ver lib/permisos.ts.
+  const cargo = cargoDeCuenta(user?.user_metadata?.personalId as string | undefined, getPersonal())
   const { suscripcion } = useSuscripcion()
 
   // Todo lo que muestra el Inicio se calcula en vivo de los mismos datos que

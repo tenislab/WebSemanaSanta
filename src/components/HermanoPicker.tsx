@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Hermano } from '../data/hermanos'
+import type { PersonaAsignable } from '../lib/asignables'
 
 interface HermanoPickerProps {
-  hermanos: Hermano[]
+  hermanos: PersonaAsignable[]
   /** Para usarlo dentro de un <form>: nombre del campo oculto con el id elegido. */
   name?: string
   id?: string
   placeholder?: string
-  /** Se llama con el hermano elegido, o null si se borra/cambia la búsqueda. */
-  onSelect?: (hermano: Hermano | null) => void
+  /** Se llama con quien se elija, o null si se borra/cambia la búsqueda. */
+  onSelect?: (persona: PersonaAsignable | null) => void
   /** Id ya asignado (modo controlado): aparece escrito de partida y se puede cambiar. */
   valorId?: string | null
   /** Cómo llamar a «nadie»: se ofrece como opción para dejarlo sin asignar. */
@@ -39,8 +39,8 @@ export default function HermanoPicker({
 }: HermanoPickerProps) {
   const controlado = valorId !== undefined
   const asignado = valorId ? (hermanos.find((h) => h.id === valorId) ?? null) : null
-  /** Cómo se escribe un hermano en la caja de búsqueda. */
-  const etiqueta = (h: Hermano) => (h.numero > 0 ? `${h.numero} — ${h.nombre}` : h.nombre)
+  /** Cómo se escribe la persona elegida en la caja de búsqueda. */
+  const etiqueta = (h: PersonaAsignable) => (h.marca && h.marca !== '—' ? `${h.marca} — ${h.nombre}` : h.nombre)
   const textoAsignado = asignado
     ? etiqueta(asignado)
     : valorId && nombreFueraDeLista
@@ -67,7 +67,7 @@ export default function HermanoPicker({
     // la lista entera para poder cambiar de persona sin borrar antes.
     const filtrar = q && q !== textoAsignado.toLowerCase()
     const pool = filtrar
-      ? hermanos.filter((h) => h.nombre.toLowerCase().includes(q) || String(h.numero).includes(q))
+      ? hermanos.filter((h) => h.nombre.toLowerCase().includes(q) || h.marca.toLowerCase().includes(q))
       : hermanos
     return { results: pool.slice(0, MAX), deMas: Math.max(0, pool.length - MAX) }
   }, [hermanos, query, textoAsignado])
@@ -115,7 +115,7 @@ export default function HermanoPicker({
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [cerrarSinElegir])
 
-  function select(h: Hermano) {
+  function select(h: PersonaAsignable) {
     setSelectedId(h.id)
     setQuery(etiqueta(h))
     setOpen(false)
@@ -180,7 +180,7 @@ export default function HermanoPicker({
                 onMouseEnter={() => setResaltado(i)}
                 onClick={() => select(h)}
               >
-                <span className="hermano-picker__num">{h.numero > 0 ? `Nº ${h.numero}` : '—'}</span>
+                <span className="hermano-picker__num">{h.marca}</span>
                 <span>{h.nombre}</span>
               </button>
             </li>

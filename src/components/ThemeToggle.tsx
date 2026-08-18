@@ -1,28 +1,14 @@
-import { useEffect, useState } from 'react'
-
-type Theme = 'light' | 'dark'
-
-function getInitialTheme(): Theme {
-  const stored = localStorage.getItem('cabildo-theme') as Theme | null
-  if (stored === 'light' || stored === 'dark') return stored
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
+import { useTema } from '../lib/tema'
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme)
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('cabildo-theme', theme)
-  }, [theme])
-
-  const isDark = theme === 'dark'
+  const [tema, ponerTema] = useTema()
+  const isDark = tema === 'dark'
 
   return (
     <button
       type="button"
       className="theme-toggle"
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      onClick={() => ponerTema(isDark ? 'light' : 'dark')}
       aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
       title={isDark ? 'Modo claro' : 'Modo oscuro'}
     >

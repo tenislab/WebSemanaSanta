@@ -44,6 +44,11 @@ Antes de dar por buena cualquier tarea: `typecheck`, `lint` y `build`, los tres.
 ## Conectar Supabase
 
 La app entera está cableada; solo faltan las claves. Para crear las tablas:
+`supabase/rls-endurecer.sql` **es obligatorio**: sin él, cualquiera que se
+registre en `/registro` obtiene acceso de escritura a toda la base de datos.
+Léelo antes de ejecutarlo: al final explica que hay que dar de alta al titular
+a mano.
+
 `supabase/schema.sql` (base nueva) o `supabase/migracion-2026-08.sql` (base ya
 creada con una versión anterior).
 

@@ -61,6 +61,10 @@ export default function EstadoCuentas({
 
   return (
     <div className={`recibo-doc print-doc estado-cuentas ${className}`.trim()}>
+      {/* Se repite en cada hoja impresa (ver .print-hoja). */}
+      <div className="print-hoja">
+        {hermandad.nombreLegal || 'Tu hermandad'} · Estado de cuentas
+      </div>
       <div className="recibo-doc__head">
         <div className="recibo-doc__brand">
           <span className="recibo-doc__logo">

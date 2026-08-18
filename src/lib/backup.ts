@@ -108,11 +108,25 @@ export function esCopiaValida(obj: unknown): obj is CopiaSeguridad {
  * por los de la copia (localStorage + archivos adjuntos). No toca la sesión.
  */
 export async function restaurarCopia(copia: CopiaSeguridad): Promise<void> {
+  // Primero se prepara TODO en memoria y se guarda una copia de lo que hay.
+  // Antes se borraba el almacenamiento y luego se escribía: si a mitad no
+  // cabía (las copias llevan fotos y PDF en base64), quedaban los datos viejos
+  // borrados y los nuevos a medias, con un mensaje que decía «no se pudo leer
+  // el archivo», como si no hubiera pasado nada.
+  const entradas = Object.entries(copia.datos)
+    .filter(([k]) => k.startsWith(PREFIJO) && !EXCLUIR.has(k))
+    .map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)] as const)
+
+  const anterior = clavesCabildo().map((k) => [k, localStorage.getItem(k)] as const)
   clavesCabildo().forEach((k) => localStorage.removeItem(k))
-  Object.entries(copia.datos).forEach(([k, v]) => {
-    if (!k.startsWith(PREFIJO) || EXCLUIR.has(k)) return
-    localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v))
-  })
+  try {
+    entradas.forEach(([k, v]) => localStorage.setItem(k, v))
+  } catch {
+    // Marcha atrás: se deja el navegador como estaba y se avisa de verdad.
+    clavesCabildo().forEach((k) => localStorage.removeItem(k))
+    anterior.forEach(([k, v]) => { if (v !== null) localStorage.setItem(k, v) })
+    throw new Error('La copia no cabe en este navegador (suele ser por las fotos y los PDF). No se ha cambiado nada.')
+  }
   // Solo se vacía el almacén de adjuntos si la copia trae adjuntos: si no,
   // una copia antigua (sin esa sección) borraba todos los archivos guardados.
   if (copia.archivos && copia.archivos.length > 0) {

@@ -111,7 +111,12 @@ export function EditorFotos({
   titulo = 'Fotos',
 }: {
   fotos: string[]
-  onChange: (siguiente: string[]) => void
+  /**
+   * Acepta también una función de la lista actual: al subir una foto, el
+   * archivo se lee y se comprime en segundo plano, y con la lista capturada en
+   * el render se perdía lo editado entretanto.
+   */
+  onChange: (siguiente: string[] | ((actual: string[]) => string[])) => void
   /** Lee el archivo elegido y devuelve la imagen ya comprimida. */
   onSubir: (e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void) => void
   titulo?: string
@@ -134,7 +139,7 @@ export function EditorFotos({
             type="file"
             accept="image/*"
             hidden
-            onChange={(e) => onSubir(e, (d) => onChange([...fotos, d]))}
+            onChange={(e) => onSubir(e, (d) => onChange((actuales) => [...actuales, d]))}
           />
         </label>
       </div>

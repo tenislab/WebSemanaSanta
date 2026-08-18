@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
+import MenuAcciones from '../../components/MenuAcciones'
+import CamposPropiosForm from '../../components/CamposPropios'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
@@ -11,9 +14,32 @@ import { isSupabaseConfigured, supabaseAlta } from '../../lib/supabase'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
-import { descargarArchivo } from '../../lib/csv'
+import { toCsv, descargarArchivo } from '../../lib/csv'
 import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
 import { useEtiquetas } from '../../lib/etiquetas'
+import { useCamposPropios, valorLegible } from '../../lib/camposPropios'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
+import EditorSegmento from '../../components/EditorSegmento'
+import InformeImpreso from '../../components/InformeImpreso'
+import { etiquetaSegmento, filtrarSegmento, limpiarCriterios, mismosCriterios, type CriteriosSegmento } from '../../lib/segmentacion'
+
+/**
+ * En el censo, «sin sesgo» significa enseñarlo ENTERO, bajas incluidas. No
+ * vale CRITERIOS_POR_DEFECTO, que ya filtra a activos con correo.
+ */
+type OrdenCampo = 'numero' | 'nombre' | 'estado' | 'cuota' | 'antiguedad'
+const COLUMNAS: { id: OrdenCampo | 'tramo'; label: string; orden: boolean }[] = [
+  { id: 'numero', label: 'Nº', orden: true },
+  { id: 'nombre', label: 'Hermano', orden: true },
+  { id: 'tramo', label: 'Tramo', orden: false },
+  { id: 'estado', label: 'Estado', orden: true },
+  { id: 'cuota', label: 'Cuota', orden: true },
+  { id: 'antiguedad', label: 'Antigüedad', orden: true },
+]
+
+const SIN_SESGO: CriteriosSegmento = {
+  estado: 'Cualquiera', cuota: 'Todos', edad: 'Todos', etiqueta: '', soloConEmail: false, campos: [],
+}
 import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
 
 /**
@@ -61,12 +87,60 @@ export default function Hermanos() {
     rowToHermano,
     'numero',
   )
-  const [query, setQuery] = useState('')
+  // La paleta de comandos (Ctrl+K) manda aquí con ?q=…, para buscar un hermano
+  // desde cualquier pantalla sin pasar por el menú.
+  const [params, setParams] = useSearchParams()
+  const [query, setQuery] = useState(() => params.get('q') ?? '')
+  useEffect(() => {
+    const q = params.get('q')
+    const nuevo = params.get('nuevo')
+    if (q === null && nuevo === null) return
+    if (q !== null) setQuery(q)
+    if (nuevo !== null) { setDniError(null); setFormOpen(true) }
+    // Se limpia la URL: si no, al recargar vuelve a filtrar y desconcierta.
+    setParams({}, { replace: true })
+  }, [params, setParams])
   const [filter, setFilter] = useState<'Todos' | EstadoHermano>('Todos')
   const [filtroEtiqueta, setFiltroEtiqueta] = useState<string>('')
-  const [selected, setSelected] = useState<Hermano | null>(null)
+  /**
+   * La ficha abierta se DERIVA del censo, no se copia. Guardar una copia en
+   * estado obligaba a acordarse de actualizarla en cada mutador; el que se
+   * olvidaba (los campos propios) dejaba el formulario escribiendo sobre un
+   * valor viejo: se veía revertir cada tecla y solo se guardaba la última.
+   */
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = useMemo(() => hermanos.find((h) => h.id === selectedId) ?? null, [hermanos, selectedId])
   const [etiquetas, setEtiquetas] = useEtiquetas()
+  const [camposPropios] = useCamposPropios()
+  const hermandad = useHermandadSettings()
+  // Sesgo aplicado al censo. Arranca en «no sesga nada»: el censo se ve entero,
+  // bajas incluidas, hasta que alguien pide lo contrario.
+  const [sesgando, setSesgando] = useState(false)
+  // Ordenación de la tabla. Por número y ascendente, que es lo de siempre.
+  const [orden, setOrden] = useState<{ campo: OrdenCampo; asc: boolean }>({ campo: 'numero', asc: true })
+  function ordenarPor(campo: OrdenCampo) {
+    setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: true }))
+  }
+  const [criterios, setCriterios] = useState<CriteriosSegmento>(SIN_SESGO)
+  const sesgoActivo = !mismosCriterios(criterios, SIN_SESGO)
+  const sesgados = useMemo(
+    () => (sesgoActivo ? filtrarSegmento(hermanos, limpiarCriterios(criterios)) : hermanos),
+    [hermanos, criterios, sesgoActivo],
+  )
+  const camposDeAlta = camposPropios.filter((c) => c.enAlta && c.nombre.trim())
+  // Los campos propios del alta no van en el <form> (no son inputs con name):
+  // se llevan aparte y se vuelcan al crear.
+  const [camposNuevo, setCamposNuevo] = useState<Record<string, string>>({})
+  // Mientras se crea la cuenta en Supabase el botón se bloquea: si no, dos
+  // clics seguidos daban de alta dos veces al mismo hermano.
+  const [guardandoAlta, setGuardandoAlta] = useState(false)
   const [nuevaEtiqueta, setNuevaEtiqueta] = useState('')
+  /**
+   * Selección múltiple. Con mil doscientos hermanos, poner «Costalero» de uno
+   * en uno abriendo la ficha era media tarde de trabajo.
+   */
+  const [marcados, setMarcados] = useState<Set<string>>(() => new Set())
+  const [avisoMasivo, setAvisoMasivo] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [dniError, setDniError] = useState<string | null>(null)
@@ -154,7 +228,9 @@ export default function Hermanos() {
   }, [selected?.id])
 
   const filtered = useMemo(() => {
-    return hermanos
+    // El sesgo va ANTES que los filtros de la barra: los de la barra afinan lo
+    // que el sesgo ya ha dejado.
+    return sesgados
       .filter((h) => (filter === 'Todos' ? true : h.estado === filter))
       .filter((h) => (filtroEtiqueta ? (h.etiquetas ?? []).includes(filtroEtiqueta) : true))
       .filter((h) => {
@@ -162,9 +238,16 @@ export default function Hermanos() {
         if (!q) return true
         return h.nombre.toLowerCase().includes(q) || String(h.numero).includes(q)
       })
-      // Por número; los de baja (sin número activo) van al final, no delante del nº 1.
-      .sort((a, b) => (a.numero || Infinity) - (b.numero || Infinity))
-  }, [hermanos, query, filter, filtroEtiqueta])
+      // Los de baja (sin número activo) van al final, nunca delante del nº 1.
+      .sort((a, b) => {
+        const signo = orden.asc ? 1 : -1
+        if (orden.campo === 'nombre') return signo * a.nombre.localeCompare(b.nombre, 'es')
+        if (orden.campo === 'estado') return signo * a.estado.localeCompare(b.estado, 'es')
+        if (orden.campo === 'cuota') return signo * (Number(a.cuotaAlDia) - Number(b.cuotaAlDia))
+        if (orden.campo === 'antiguedad') return signo * (a.antiguedad - b.antiguedad)
+        return signo * ((a.numero || Infinity) - (b.numero || Infinity))
+      })
+  }, [sesgados, query, filter, filtroEtiqueta, orden])
 
   /** Añade o quita una etiqueta a un hermano (y refleja el cambio en la ficha abierta). */
   function toggleEtiquetaHermano(hermanoId: string, etiqueta: string) {
@@ -178,14 +261,6 @@ export default function Hermanos() {
         return { ...h, etiquetas: siguiente }
       }),
     )
-    setSelected((s) => {
-      if (!s || s.id !== hermanoId) return s
-      const actuales = s.etiquetas ?? []
-      const siguiente = actuales.includes(etiqueta)
-        ? actuales.filter((e) => e !== etiqueta)
-        : [...actuales, etiqueta]
-      return { ...s, etiquetas: siguiente }
-    })
   }
 
   /** Crea una etiqueta nueva en el catálogo y se la asigna al hermano abierto. */
@@ -225,6 +300,91 @@ export default function Hermanos() {
     return map
   }, [tramos, hermanoDe])
 
+  /** Campos a medida: se escriben sobre el estado más reciente, no sobre el del render. */
+  /** El listado que se ve, tal cual, en un CSV que abre Excel. */
+  // Si hay un alta a medias, el navegador pregunta antes de cerrar o recargar.
+  useEffect(() => {
+    if (!formOpen) return
+    function avisar(e: BeforeUnloadEvent) { e.preventDefault() }
+    window.addEventListener('beforeunload', avisar)
+    return () => window.removeEventListener('beforeunload', avisar)
+  }, [formOpen])
+
+  // 17. La barra «/» enfoca el buscador, como en las aplicaciones de siempre.
+  const buscador = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    function tecla(e: KeyboardEvent) {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
+      const dentro = document.activeElement
+      if (dentro instanceof HTMLInputElement || dentro instanceof HTMLTextAreaElement || dentro instanceof HTMLSelectElement) return
+      e.preventDefault()
+      buscador.current?.focus()
+    }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [])
+
+  const fechaLarga = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  function exportarCsv(lista: Hermano[] = filtered) {
+    const columnas = ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota al día',
+      ...camposPropios.filter((c) => c.nombre.trim()).map((c) => c.nombre)]
+    const filas = lista.map((h) => [
+      h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.email, h.telefono,
+      h.cuotaAlDia ? 'Sí' : 'No',
+      ...camposPropios.filter((c) => c.nombre.trim()).map((c) => valorLegible(c, h.campos?.[c.id])),
+    ])
+    const hoy = new Date()
+    const fecha = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    descargarArchivo(`censo-${fecha}.csv`, toCsv(columnas, filas))
+  }
+
+  /* ------------------------- Selección múltiple ------------------------- */
+  const marcadosVisibles = useMemo(() => filtered.filter((h) => marcados.has(h.id)), [filtered, marcados])
+  const todosMarcados = filtered.length > 0 && marcadosVisibles.length === filtered.length
+
+  function alternarMarca(id: string) {
+    setMarcados((prev) => {
+      const siguiente = new Set(prev)
+      if (siguiente.has(id)) siguiente.delete(id)
+      else siguiente.add(id)
+      return siguiente
+    })
+  }
+  /** Marca o desmarca TODO lo que se está viendo (con los filtros puestos). */
+  function alternarTodos() {
+    setMarcados((prev) => {
+      const siguiente = new Set(prev)
+      if (todosMarcados) filtered.forEach((h) => siguiente.delete(h.id))
+      else filtered.forEach((h) => siguiente.add(h.id))
+      return siguiente
+    })
+  }
+  function ponerEtiquetaMasiva(etiqueta: string) {
+    if (!etiqueta) return
+    setHermanos((prev) =>
+      prev.map((h) =>
+        marcados.has(h.id) && !(h.etiquetas ?? []).includes(etiqueta)
+          ? { ...h, etiquetas: [...(h.etiquetas ?? []), etiqueta] }
+          : h,
+      ),
+    )
+    setAvisoMasivo(`Etiqueta «${etiqueta}» puesta a ${marcados.size} hermano${marcados.size === 1 ? '' : 's'}.`)
+  }
+  function quitarEtiquetaMasiva(etiqueta: string) {
+    if (!etiqueta) return
+    setHermanos((prev) =>
+      prev.map((h) =>
+        marcados.has(h.id) ? { ...h, etiquetas: (h.etiquetas ?? []).filter((x) => x !== etiqueta) } : h,
+      ),
+    )
+    setAvisoMasivo(`Etiqueta «${etiqueta}» quitada a ${marcados.size} hermano${marcados.size === 1 ? '' : 's'}.`)
+  }
+
+  function guardarCampos(id: string, campos: Record<string, string>) {
+    setHermanos((prev) => prev.map((h) => (h.id === id ? { ...h, campos } : h)))
+  }
+
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = e.currentTarget
@@ -233,6 +393,8 @@ export default function Hermanos() {
     const email = String(data.get('email') ?? '').trim()
     const dni = String(data.get('dni') ?? '').trim().toUpperCase()
     if (!nombre || !email || !dni) return
+    if (guardandoAlta) return
+    setGuardandoAlta(true)
 
     if (hermanos.some((h) => h.dni.toUpperCase() === dni)) {
       setDniError(`Ya hay un hermano registrado con el DNI ${dni}.`)
@@ -262,14 +424,32 @@ export default function Hermanos() {
       claveAcceso: dni,
       authUserId: null,
       fechaNacimiento,
+      campos: Object.keys(camposNuevo).length ? camposNuevo : undefined,
     }
     nuevo.authUserId = await crearAccesoHermano(email, dni, dni, nombre)
-    setHermanos((prev) => [...prev, { ...nuevo, numero: Math.max(0, ...prev.map((h) => h.numero)) + 1 }])
+    // El duplicado se vuelve a mirar DENTRO del updater: entre el clic y la
+    // respuesta de Supabase pasan segundos, y pulsando dos veces se daban de
+    // alta dos hermanos con el mismo DNI.
+    let duplicado = false
+    setHermanos((prev) => {
+      if (prev.some((h) => h.dni.trim().toUpperCase() === dni)) {
+        duplicado = true
+        return prev
+      }
+      return [...prev, { ...nuevo, numero: Math.max(0, ...prev.map((h) => h.numero)) + 1 }]
+    })
+    if (duplicado) {
+      setDniError('Ya hay un hermano con ese DNI.')
+      setGuardandoAlta(false)
+      return
+    }
     setJustAddedId(nuevo.id)
     setFormOpen(false)
     setFilter('Todos')
     setQuery('')
     form.reset()
+    setCamposNuevo({})
+    setGuardandoAlta(false)
     setTimeout(() => setJustAddedId(null), 3000)
   }
 
@@ -286,7 +466,6 @@ export default function Hermanos() {
       agregarAvisoHermano(selected.id, 'La secretaría ha actualizado tu cuenta bancaria.')
     }
     setHermanos((prev) => prev.map((h) => (h.id === selected.id ? { ...h, iban: nuevoIban } : h)))
-    setSelected((prev) => (prev ? { ...prev, iban: nuevoIban } : prev))
     setIbanError(null)
     setIbanSaved(true)
     setTimeout(() => setIbanSaved(false), 2500)
@@ -303,7 +482,6 @@ export default function Hermanos() {
     }
     avisarCambiosHermano(selected, nuevo)
     setHermanos((prev) => prev.map((h) => (h.id === selected.id ? nuevo : h)))
-    setSelected(nuevo)
     setContactoSaved(true)
     setTimeout(() => setContactoSaved(false), 2500)
   }
@@ -332,7 +510,6 @@ export default function Hermanos() {
       })
     })
     agregarAvisoHermano(hermanoId, 'La secretaría ha tramitado tu baja en la hermandad.')
-    setSelected((prev) => (prev && prev.id === hermanoId ? { ...prev, estado: 'Baja', numero: 0, bajaSolicitada: false } : prev))
   }
 
   /** Reactiva a un hermano de baja: vuelve al censo con el último número disponible. */
@@ -345,7 +522,6 @@ export default function Hermanos() {
       siguiente = Math.max(0, ...prev.map((h) => h.numero)) + 1
       return prev.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo', numero: siguiente } : h))
     })
-    setSelected((prev) => (prev && prev.id === hermanoId ? { ...prev, estado: 'Activo', numero: siguiente } : prev))
   }
 
   async function descargarDatosRgpd(hermano: Hermano) {
@@ -370,7 +546,7 @@ export default function Hermanos() {
     } else {
       setHermanos(censo)
     }
-    setSelected(null)
+    setSelectedId(null)
   }
 
   return (
@@ -390,6 +566,16 @@ export default function Hermanos() {
               Solicitudes de alta ({pendientes.length})
             </button>
           )}
+          {/* Se exporta y se imprime EXACTAMENTE lo que hay en pantalla: si has
+              sesgado por «costaleros al día», eso es lo que sale. */}
+          <MenuAcciones etiqueta="Exportar">
+            <button type="button" onClick={() => exportarCsv()} disabled={filtered.length === 0}>
+              Descargar en Excel (CSV) <small>{filtered.length}</small>
+            </button>
+            <button type="button" className="no-print" onClick={() => window.print()} disabled={filtered.length === 0}>
+              Imprimir el listado <small>{filtered.length}</small>
+            </button>
+          </MenuAcciones>
           <button className="btn btn-primary" onClick={() => { setDniError(null); setFormOpen(true) }}>
             + Nuevo hermano
           </button>
@@ -431,8 +617,10 @@ export default function Hermanos() {
 
       <div className="toolbar">
         <input
+          ref={buscador}
           className="search-box"
-          placeholder="Buscar por nombre o número de hermano"
+          placeholder="Buscar por nombre o número  ( / )"
+          aria-label="Buscar por nombre o número de hermano"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -448,6 +636,14 @@ export default function Hermanos() {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className={`chip${sesgando ? ' chip--active' : ''}`}
+          onClick={() => setSesgando((v) => !v)}
+          aria-expanded={sesgando}
+        >
+          {sesgoActivo ? '✓ Sesgado' : 'Sesgar'}
+        </button>
         {etiquetas.length > 0 && (
           <select
             className="search-box"
@@ -464,16 +660,79 @@ export default function Hermanos() {
         )}
       </div>
 
+      {sesgando && (
+        <EditorSegmento
+          criterios={criterios}
+          onChange={setCriterios}
+          cuantos={sesgados.length}
+          conFiltroEmail={false}
+          onLimpiar={sesgoActivo ? () => setCriterios(SIN_SESGO) : undefined}
+        />
+      )}
+
+      {marcados.size > 0 && (
+        <div className="masiva" role="region" aria-label="Acciones sobre los seleccionados">
+          <b>{marcados.size} seleccionado{marcados.size === 1 ? '' : 's'}</b>
+          {etiquetas.length > 0 && (
+            <>
+              <select
+                value=""
+                onChange={(e) => { ponerEtiquetaMasiva(e.target.value); e.currentTarget.value = '' }}
+                aria-label="Poner una etiqueta a los seleccionados"
+              >
+                <option value="">Poner etiqueta…</option>
+                {etiquetas.map((et) => <option key={et} value={et}>{et}</option>)}
+              </select>
+              <select
+                value=""
+                onChange={(e) => { quitarEtiquetaMasiva(e.target.value); e.currentTarget.value = '' }}
+                aria-label="Quitar una etiqueta de los seleccionados"
+              >
+                <option value="">Quitar etiqueta…</option>
+                {etiquetas.map((et) => <option key={et} value={et}>{et}</option>)}
+              </select>
+            </>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => exportarCsv(hermanos.filter((h) => marcados.has(h.id)))}
+          >
+            Exportar los {marcados.size}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setMarcados(new Set()); setAvisoMasivo(null) }}>
+            Quitar selección
+          </button>
+          {avisoMasivo && <span className="masiva__hecho">✓ {avisoMasivo}</span>}
+        </div>
+      )}
+
       <div className="table-card">
         <table>
           <thead>
             <tr>
-              <th>Nº</th>
-              <th>Hermano</th>
-              <th>Tramo</th>
-              <th>Estado</th>
-              <th>Cuota</th>
-              <th>Antigüedad</th>
+              <th className="col-marca">
+                <input
+                  type="checkbox"
+                  checked={todosMarcados}
+                  onChange={alternarTodos}
+                  disabled={filtered.length === 0}
+                  aria-label={todosMarcados ? 'Quitar la marca a todos' : 'Marcar todos los que se ven'}
+                  title={todosMarcados ? 'Quitar la marca a todos' : `Marcar los ${filtered.length} que se ven`}
+                />
+              </th>
+              {COLUMNAS.map((c) => (
+                <th key={c.id} className={c.orden ? 'th-ordenable' : undefined}>
+                  {c.orden ? (
+                    <button type="button" onClick={() => ordenarPor(c.id as OrdenCampo)} aria-label={`Ordenar por ${c.label}`}>
+                      {c.label}
+                      <span aria-hidden="true" className="th-flecha">
+                        {orden.campo === c.id ? (orden.asc ? '▲' : '▼') : '⇅'}
+                      </span>
+                    </button>
+                  ) : c.label}
+                </th>
+              ))}
               <th></th>
             </tr>
           </thead>
@@ -482,9 +741,17 @@ export default function Hermanos() {
               <tr
                 key={h.id}
                 className={h.id === justAddedId ? 'row--flash' : undefined}
-                onClick={() => setSelected(h)}
+                onClick={() => setSelectedId(h.id)}
                 style={{ cursor: 'pointer' }}
               >
+                <td className="col-marca" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={marcados.has(h.id)}
+                    onChange={() => alternarMarca(h.id)}
+                    aria-label={`Marcar a ${h.nombre}`}
+                  />
+                </td>
                 <td className="num">{h.numero > 0 ? h.numero : '—'}</td>
                 <td>
                   <div className="row-person">
@@ -513,7 +780,7 @@ export default function Hermanos() {
                     title="Ver ficha"
                     onClick={(e) => {
                       e.stopPropagation()
-                      setSelected(h)
+                      setSelectedId(h.id)
                     }}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -523,8 +790,38 @@ export default function Hermanos() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="table-empty">
-                  No hay hermanos que coincidan con la búsqueda.
+                <td colSpan={8} className="table-empty">
+                  {/* Decir POR QUÉ está vacío y ofrecer la salida, en vez de
+                      dejar al usuario mirando un «no hay resultados». */}
+                  <p className="vacio__titulo">
+                    {hermanos.length === 0 ? 'Todavía no hay nadie en el censo' : 'Ningún hermano coincide'}
+                  </p>
+                  <p className="vacio__texto">
+                    {hermanos.length === 0
+                      ? 'Da de alta al primero, o restaura una copia de seguridad desde Configuración.'
+                      : [
+                          query.trim() && `la búsqueda «${query.trim()}»`,
+                          filter !== 'Todos' && `el filtro «${filter}»`,
+                          filtroEtiqueta && `la etiqueta «${filtroEtiqueta}»`,
+                          sesgoActivo && 'el sesgo aplicado',
+                        ].filter(Boolean).join(', ').replace(/,([^,]*)$/, ' y$1') || 'los filtros'}
+                    {hermanos.length > 0 && ' no deja pasar a nadie del censo.'}
+                  </p>
+                  <div className="vacio__acciones">
+                    {hermanos.length === 0 ? (
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => { setDniError(null); setFormOpen(true) }}>
+                        + Dar de alta al primero
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => { setQuery(''); setFilter('Todos'); setFiltroEtiqueta(''); setCriterios(SIN_SESGO) }}
+                      >
+                        Quitar todos los filtros
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
@@ -535,7 +832,7 @@ export default function Hermanos() {
       {/* Ficha individual */}
       <Drawer
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
         title={selected?.nombre ?? ''}
         subtitle={selected ? (selected.numero > 0 ? `Hermano nº ${selected.numero}` : 'De baja · sin número activo') : undefined}
       >
@@ -643,6 +940,22 @@ export default function Hermanos() {
               </div>
             </div>
 
+            {camposPropios.length > 0 && (
+              <div className="assign-box">
+                <label>Datos propios de la hermandad</label>
+                <p className="form-hint">
+                  Los campos que habéis definido en <Link to="/app/configuracion">Configuración</Link>.
+                  Se guardan al escribir.
+                </p>
+                <CamposPropiosForm
+                  campos={camposPropios}
+                  valores={selected.campos ?? {}}
+                  onChange={(valores) => guardarCampos(selected.id, valores)}
+                  idPrefijo="ficha"
+                />
+              </div>
+            )}
+
             <div className="assign-box">
               <label htmlFor="ibanHermano">
                 Cuenta bancaria (para domiciliar sus cuotas)
@@ -749,8 +1062,8 @@ export default function Hermanos() {
             <button className="btn btn-ghost" onClick={() => setFormOpen(false)}>
               Cancelar
             </button>
-            <button className="btn btn-primary" form="hermano-form" type="submit">
-              Guardar hermano
+            <button className="btn btn-primary" form="hermano-form" type="submit" disabled={guardandoAlta}>
+              {guardandoAlta ? 'Guardando…' : 'Guardar hermano'}
             </button>
           </>
         }
@@ -788,6 +1101,12 @@ export default function Hermanos() {
             <label htmlFor="iban">Cuenta bancaria (opcional)</label>
             <input id="iban" name="iban" type="text" placeholder="ES00 0000 0000 0000 0000 0000" />
           </div>
+          <CamposPropiosForm
+            campos={camposDeAlta}
+            valores={camposNuevo}
+            onChange={setCamposNuevo}
+            idPrefijo="alta"
+          />
           <p className="form-hint">
             Se le asignará automáticamente el siguiente número de hermano disponible y quedará en
             estado «Nuevo». Su usuario será su DNI y la contraseña provisional también su DNI, que
@@ -798,6 +1117,23 @@ export default function Hermanos() {
       </Drawer>
 
       {/* Solicitudes de alta pedidas desde el área del hermano */}
+      {/* Documento imprimible: solo aparece en el papel (ver .screen-hidden). */}
+      <InformeImpreso
+        className="screen-hidden"
+        hermandad={hermandad}
+        titulo="Censo de hermanos"
+        generadoEl={fechaLarga}
+        resumen={[
+          { etiqueta: 'En este listado', valor: String(filtered.length) },
+          { etiqueta: 'Censo completo', valor: String(hermanos.length) },
+          ...(sesgoActivo ? [{ etiqueta: 'Sesgo', valor: etiquetaSegmento(criterios, camposPropios) }] : []),
+        ]}
+        columnas={['Nº', 'Hermano', 'Estado', 'Antigüedad', 'Cuota']}
+        filas={filtered.map((h) => [
+          h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.cuotaAlDia ? 'Al día' : 'Pendiente',
+        ])}
+      />
+
       <Drawer
         open={solicitudesOpen}
         onClose={() => setSolicitudesOpen(false)}
