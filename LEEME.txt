@@ -1,7 +1,3 @@
-ACTUALIZACIÓN — FASE 3 COMPLETA (comunicación segmentada)
+ACTUALIZACIÓN — CIERRE DE FASE 1 y FASE 2
 Aplicar: copia "archivos/" o  git am actualizacion.patch (probado sobre main).
-Ctrl+Shift+R la primera vez.
-F3 incluye:
- · Segmentar destinatarios (estado, edad -mayores/menores-, cuota, etiqueta).
- · Elegir VARIOS canales a la vez (un envío por canal).
- · Conectar redes sociales en un clic.
+IMPORTANTE la primera vez: tras redesplegar, UN Ctrl+Shift+R (arreglo de caché).

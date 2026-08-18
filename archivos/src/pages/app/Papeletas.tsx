@@ -110,6 +110,8 @@ export default function Papeletas() {
   const [ajustesOpen, setAjustesOpen] = useState(false)
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modelo, setModelo] = useState<ModeloPapeleta | null>(() => getModeloPapeleta())
+  // Dos salidas de la papeleta: móvil (con QR, para el correo) y física (sin QR, para imprimir).
+  const [variantePapeleta, setVariantePapeleta] = useState<'movil' | 'fisica'>('movil')
   const [imprimirOpen, setImprimirOpen] = useState(false)
   const [imprimirEstados, setImprimirEstados] = useState<Record<string, boolean>>({ Asignada: true, Pagada: true, Entregada: true })
   const [listaImpresion, setListaImpresion] = useState<ItemImpresion[] | null>(null)
@@ -857,9 +859,26 @@ export default function Papeletas() {
                 {/* Tiene papeleta este año: mostrar el ticket y sus acciones */}
                 {actual && actual.estado !== 'Renuncia' && (
                   <>
+                    <div className="assign-box__row no-print" style={{ marginBottom: '0.6rem' }}>
+                      <button
+                        type="button"
+                        className={`chip chip--toggle${variantePapeleta === 'movil' ? ' chip--active' : ''}`}
+                        onClick={() => setVariantePapeleta('movil')}
+                      >
+                        📱 Móvil (con QR)
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip chip--toggle${variantePapeleta === 'fisica' ? ' chip--active' : ''}`}
+                        onClick={() => setVariantePapeleta('fisica')}
+                      >
+                        🖨️ Física (sin QR)
+                      </button>
+                    </div>
                     {modelo ? (
                       <PapeletaModeloRender
                         modelo={modelo}
+                        sinQr={variantePapeleta === 'fisica'}
                         datos={{
                           hermano: h,
                           papeleta: actual,
@@ -878,8 +897,19 @@ export default function Papeletas() {
                         puesto={asig?.puesto ?? null}
                         excedeAforo={asig?.estado === 'Excede aforo'}
                         opcion={actual.opcion}
+                        sinQr={variantePapeleta === 'fisica'}
                       />
                     )}
+                    <p className="form-hint no-print">
+                      {variantePapeleta === 'movil'
+                        ? 'Versión de móvil: lleva el QR de verificación. Es la que se envía al hermano por correo (envío real al conectar la base de datos).'
+                        : 'Versión física: sin QR, pensada para imprimir en papel.'}
+                    </p>
+                    <div className="assign-box__row no-print" style={{ marginTop: '0.4rem' }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => window.print()}>
+                        {variantePapeleta === 'movil' ? 'Descargar / enviar (con QR)' : 'Imprimir física (sin QR)'}
+                      </button>
+                    </div>
                     {actual.estado === 'Asignada' && actual.pagoComunicado && (
                       <div className="banner-inline banner-inline--accent" style={{ marginTop: '1rem' }}>
                         {h.nombre.split(' ')[0]} avisó desde su área de que pagó por{' '}
@@ -921,9 +951,6 @@ export default function Papeletas() {
                           Marcar como entregada
                         </button>
                       )}
-                      <button className="btn btn-outline" onClick={() => window.print()}>
-                        Imprimir / Descargar
-                      </button>
                     </div>
                     {(actual.estado === 'Solicitada' || actual.estado === 'Asignada' || actual.estado === 'Pagada') && (
                       <button type="button" className="ticket-cancel" onClick={() => anularPapeleta(actual.id)}>

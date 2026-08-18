@@ -96,6 +96,23 @@ export function borrarModeloPapeleta() {
   localStorage.removeItem(CLAVE_STORAGE)
 }
 
+/**
+ * Campos que se colocan por defecto al subir un modelo, para que NUNCA salga en
+ * blanco: los datos más habituales repartidos por la papeleta. El usuario los
+ * arrastra luego a su sitio. `id` se pasa desde fuera (para tener uuid reales).
+ */
+export function camposPorDefecto(nuevoId: () => string): CampoModelo[] {
+  const base = { negrita: false, color: '#1a1a1a', align: 'left' as const }
+  return [
+    { id: nuevoId(), clave: 'nombre', xPct: 28, yPct: 40, tamanoPct: 3.6, ...base, negrita: true },
+    { id: nuevoId(), clave: 'numeroHermano', xPct: 28, yPct: 48, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'tramo', xPct: 28, yPct: 56, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'puesto', xPct: 28, yPct: 64, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'importe', xPct: 28, yPct: 72, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'qr', xPct: 82, yPct: 76, tamanoPct: 6, ...base },
+  ]
+}
+
 /** Contexto para resolver los valores de cada campo con datos reales. */
 export interface DatosModelo {
   hermano: Hermano

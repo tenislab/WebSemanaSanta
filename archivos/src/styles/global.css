@@ -1365,8 +1365,11 @@ h1, h2, h3,
 /* al imprimir (botón "Imprimir / Descargar"), solo se ve el documento activo */
 @media print {
   body * { visibility: hidden; }
+  .no-print { display: none !important; }
   .print-doc, .print-doc * { visibility: visible; }
-  .print-doc { position: absolute; inset: 0; margin: 1.5cm; border: none; box-shadow: none; }
+  /* El documento llena la página (sin el límite de ancho que tiene en pantalla). */
+  .print-doc { position: absolute; inset: 0; margin: 1.2cm; border: none; box-shadow: none; max-width: none !important; width: auto !important; }
+  .modelo-render { max-width: none !important; }
 }
 
 /* documentos imprimibles que van dentro de un panel con controles interactivos

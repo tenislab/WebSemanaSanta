@@ -1,7 +1,7 @@
 From f69465b9ed3a99cc6eeb8da42c94cd8419a79e1d Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 18:27:15 +0000
-Subject: [PATCH 01/15] =?UTF-8?q?Papeletas=20Fase=203:=20solicitud=20onlin?=
+Subject: [PATCH 01/16] =?UTF-8?q?Papeletas=20Fase=203:=20solicitud=20onlin?=
  =?UTF-8?q?e=20del=20hermano=20+=20convocatoria=20+=20fechas=20de=20campa?=
  =?UTF-8?q?=C3=B1a?=
 MIME-Version: 1.0
@@ -870,7 +870,7 @@ index a1585f3..1d31927 100644
 From 8c25d94db1a4fb94f2700b7932c1636c17365a6a Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 18:34:34 +0000
-Subject: [PATCH 02/15] =?UTF-8?q?Fase=203:=20la=20apertura=20por=20partici?=
+Subject: [PATCH 02/16] =?UTF-8?q?Fase=203:=20la=20apertura=20por=20partici?=
  =?UTF-8?q?paci=C3=B3n=20cuenta=20tambi=C3=A9n=20papeletas=20sin=20tramo?=
  =?UTF-8?q?=20y=20evita=20renovaciones=20duplicadas?=
 MIME-Version: 1.0
@@ -1023,7 +1023,7 @@ index 5c54b44..7999c03 100644
 From d73c2d4a36040fd540cb4188399c4a79497a57e5 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:02:59 +0000
-Subject: [PATCH 03/15] =?UTF-8?q?Modo=20demo=20fiable=20y=20dos=20demos=20?=
+Subject: [PATCH 03/16] =?UTF-8?q?Modo=20demo=20fiable=20y=20dos=20demos=20?=
  =?UTF-8?q?de=20partida=20(llena=20y=20vac=C3=ADa)?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1347,7 +1347,7 @@ index 1d31927..1c97238 100644
 From ab99d5e6ac28e9b2f4e608dfce1368e0978a392e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:05:47 +0000
-Subject: [PATCH 04/15] =?UTF-8?q?Pie=20de=20la=20portada=20m=C3=A1s=20prof?=
+Subject: [PATCH 04/16] =?UTF-8?q?Pie=20de=20la=20portada=20m=C3=A1s=20prof?=
  =?UTF-8?q?esional=20y=20p=C3=A1ginas=20legales=20en=20blanco?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1480,7 +1480,7 @@ index 1c97238..f796b10 100644
 From d6a9fbf4edabb94099103472e4028b412b3d3c38 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:35:43 +0000
-Subject: [PATCH 05/15] Permisos: ocultar en vez de bloquear + vista previa de
+Subject: [PATCH 05/16] Permisos: ocultar en vez de bloquear + vista previa de
  la web limpia y responsive
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1711,7 +1711,7 @@ index f796b10..6d2df7d 100644
 From e439cd1191fe054965a6efafcf830a771fb8d6f3 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:09:09 +0000
-Subject: [PATCH 06/15] =?UTF-8?q?QR=20de=20papeleta=20que=20funciona:=20ab?=
+Subject: [PATCH 06/16] =?UTF-8?q?QR=20de=20papeleta=20que=20funciona:=20ab?=
  =?UTF-8?q?re=20una=20p=C3=A1gina=20de=20verificaci=C3=B3n=20con=20los=20d?=
  =?UTF-8?q?atos?=
 MIME-Version: 1.0
@@ -2129,7 +2129,7 @@ index 6d2df7d..c202e19 100644
 From 29d5e23a7c9e186077624551f6af09a56590e4c2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:22:01 +0000
-Subject: [PATCH 07/15] Acceso demo del hermano siempre visible y funcional en
+Subject: [PATCH 07/16] Acceso demo del hermano siempre visible y funcional en
  la primera pantalla
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -2269,7 +2269,7 @@ index a2f1492..7e1c37e 100644
 From 736a9971243a08432d7c85905459fc33013e2b74 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:27:13 +0000
-Subject: [PATCH 08/15] =?UTF-8?q?Aviso=20al=20hermano=20cuando=20la=20secr?=
+Subject: [PATCH 08/16] =?UTF-8?q?Aviso=20al=20hermano=20cuando=20la=20secr?=
  =?UTF-8?q?etar=C3=ADa=20cambia=20sus=20datos=20(correo=20simulado)?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -2652,7 +2652,7 @@ index c202e19..b12d308 100644
 From 1b7e4b5c44924c12e885bdc7529aa1e3822f7e3f Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:44:35 +0000
-Subject: [PATCH 09/15] =?UTF-8?q?Cabeceras=20de=20cach=C3=A9=20en=20Vercel?=
+Subject: [PATCH 09/16] =?UTF-8?q?Cabeceras=20de=20cach=C3=A9=20en=20Vercel?=
  =?UTF-8?q?:=20los=20cambios=20se=20ven=20sin=20navegaci=C3=B3n=20privada?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -2699,7 +2699,7 @@ index 0d199b2..5a1e561 100644
 From 89ccf1e2e944d0e2b02c17f870ebb98dc03fa2dd Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:51:40 +0000
-Subject: [PATCH 10/15] Demo llena: el cortejo se puebla de verdad
+Subject: [PATCH 10/16] Demo llena: el cortejo se puebla de verdad
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -2757,7 +2757,7 @@ index e7e0482..6258773 100644
 From dc4872559039df7ea10931e92f5d777660478ce9 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:57:30 +0000
-Subject: [PATCH 11/15] F1: aceptar una solicitud coloca la papeleta directa en
+Subject: [PATCH 11/16] F1: aceptar una solicitud coloca la papeleta directa en
  el cortejo
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -2831,7 +2831,7 @@ index 7fcfff4..461e496 100644
 From 060e7afcb0b38f4feddbfaefdd252d6ef025daaf Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 06:13:40 +0000
-Subject: [PATCH 12/15] =?UTF-8?q?F1:=20repartir=20la=20papeleta=20aceptada?=
+Subject: [PATCH 12/16] =?UTF-8?q?F1:=20repartir=20la=20papeleta=20aceptada?=
  =?UTF-8?q?=20al=20cirio=20con=20m=C3=A1s=20hueco=20(no=20amontonar)?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -2906,7 +2906,7 @@ index 461e496..d2d5a6f 100644
 From aa5718b812f74afd679980cb21277342ad56e361 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 06:13:40 +0000
-Subject: [PATCH 13/15] Fase 2: las 3 plantillas de web ahora son claramente
+Subject: [PATCH 13/16] Fase 2: las 3 plantillas de web ahora son claramente
  distintas
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3022,7 +3022,7 @@ index b12d308..f399679 100644
 From ecb85e0414e8331135b96e8b8e73a2ec77b20fcf Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 06:21:22 +0000
-Subject: [PATCH 14/15] F3: segmentar destinatarios de comunicados (incl.
+Subject: [PATCH 14/16] F3: segmentar destinatarios de comunicados (incl.
  mayores/menores de edad)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3292,7 +3292,7 @@ index 4cca178..1358ae4 100644
 From 5854bc9ff7143b2ba6175c6bf6ef82fff8965d3d Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 06:28:38 +0000
-Subject: [PATCH 15/15] F3: comunicados a varios canales a la vez + conectar
+Subject: [PATCH 15/16] F3: comunicados a varios canales a la vez + conectar
  redes en un clic
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3471,6 +3471,419 @@ index 1358ae4..585f7df 100644
              <div className="form-row">
                <label>Publicar en</label>
                {cuentasConectadas.length === 0 ? (
+-- 
+2.43.0
+
+
+From 720f02acab4b4f53161431dc480e49a7de0ba0d7 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 06:40:02 +0000
+Subject: [PATCH 16/16] =?UTF-8?q?Cierre=20F1=20y=20F2:=20dos=20papeletas,?=
+ =?UTF-8?q?=20modelo=20con=20campos,=20impresi=C3=B3n,=20men=C3=BA=20de=20?=
+ =?UTF-8?q?p=C3=A1ginas,=20dominio?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+F1 (papeletas y cortejo):
+- Dos versiones de papeleta: Móvil (con QR, para el correo) y Física (sin QR,
+  para imprimir), con toggle en la ficha.
+- Al subir un modelo propio se colocan campos por defecto (nombre, nº, tramo,
+  puesto, importe, QR) para que no salga en blanco.
+- Impresión corregida: el documento llena la página (antes salía pequeño por un
+  max-width que ahora se anula al imprimir).
+- Huecos disponibles ya visibles en el selector de tramo (ocupados/capacidad).
+
+F2 (web profesional):
+- Menú de páginas: cada página puede mostrarse u ocultarse del menú (enMenu) y
+  reordenarse; en la web aparece como su propio enlace y sección anclable.
+- Dominio personalizado: campo + guía paso a paso (el enganche real, con
+  Vercel/Supabase).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ src/components/ModeloPapeletaEditor.tsx |  5 +--
+ src/components/PapeletaModeloRender.tsx |  5 ++-
+ src/components/PapeletaTicket.tsx       | 32 +++++++++--------
+ src/components/SitioContenido.tsx       | 29 +++++++++++-----
+ src/lib/modeloPapeleta.ts               | 17 +++++++++
+ src/lib/webPublica.ts                   |  4 +++
+ src/pages/app/Papeletas.tsx             | 33 ++++++++++++++++--
+ src/pages/app/WebPublica.tsx            | 46 ++++++++++++++++++++++++-
+ src/styles/global.css                   |  5 ++-
+ 9 files changed, 145 insertions(+), 31 deletions(-)
+
+diff --git a/src/components/ModeloPapeletaEditor.tsx b/src/components/ModeloPapeletaEditor.tsx
+index ae627ea..ef9823f 100644
+--- a/src/components/ModeloPapeletaEditor.tsx
++++ b/src/components/ModeloPapeletaEditor.tsx
+@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type PointerEvent } from 'react'
+ import {
+   CLAVES_DATO,
+   borrarModeloPapeleta,
++  camposPorDefecto,
+   saveModeloPapeleta,
+   type CampoModelo,
+   type ModeloPapeleta,
+@@ -93,12 +94,12 @@ export default function ModeloPapeletaEditor({
+         setCargando(true)
+         const { pdfPrimeraPaginaAImagen } = await import('../lib/pdfAImagen')
+         const imagen = await pdfPrimeraPaginaAImagen(file)
+-        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos ?? [] })
++        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
+       } else {
+         const lector = new FileReader()
+         lector.onload = async () => {
+           const comprimida = await comprimirImagen(String(lector.result))
+-          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos ?? [] })
++          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
+         }
+         lector.readAsDataURL(file)
+       }
+diff --git a/src/components/PapeletaModeloRender.tsx b/src/components/PapeletaModeloRender.tsx
+index 9e75770..0bf2b88 100644
+--- a/src/components/PapeletaModeloRender.tsx
++++ b/src/components/PapeletaModeloRender.tsx
+@@ -6,6 +6,8 @@ interface Props {
+   datos: DatosModelo
+   /** Ancho máximo en píxeles del render (por defecto ocupa el contenedor). */
+   maxAncho?: number
++  /** Versión física para imprimir: oculta el código QR (que es para la de móvil). */
++  sinQr?: boolean
+ }
+ 
+ /**
+@@ -17,12 +19,13 @@ interface Props {
+  * unidades `cqw` (porcentaje del ancho del contenedor), así que el resultado
+  * se ve idéntico en pantalla y en papel, sea cual sea el tamaño de la imagen.
+  */
+-export default function PapeletaModeloRender({ modelo, datos, maxAncho }: Props) {
++export default function PapeletaModeloRender({ modelo, datos, maxAncho, sinQr }: Props) {
+   return (
+     <div className="modelo-render print-doc" style={{ maxWidth: maxAncho }}>
+       <div className="modelo-render__lienzo">
+         <img src={modelo.imagenDataUrl} alt="Modelo de papeleta" className="modelo-render__img" />
+         {modelo.campos.map((campo) => {
++          if (sinQr && campo.clave === 'qr') return null
+           const texto = valorDeCampo(campo, datos)
+           if (!texto) return null
+           // El campo QR se dibuja como un código real (escaneable), del tamaño
+diff --git a/src/components/PapeletaTicket.tsx b/src/components/PapeletaTicket.tsx
+index c68eaa6..6ffb179 100644
+--- a/src/components/PapeletaTicket.tsx
++++ b/src/components/PapeletaTicket.tsx
+@@ -25,10 +25,12 @@ interface PapeletaTicketProps {
+   excedeAforo?: boolean
+   /** Papeleta personalizada de la hermandad (mantilla, simbólica…), cuando no va en un tramo. */
+   opcion?: string | null
++  /** Versión física para imprimir: sin QR (el QR es para la papeleta de móvil). */
++  sinQr?: boolean
+ }
+ 
+ /** La papeleta de sitio, personalizada con los datos de la hermandad y del hermano. */
+-export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto, excedeAforo, opcion }: PapeletaTicketProps) {
++export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto, excedeAforo, opcion, sinQr }: PapeletaTicketProps) {
+   return (
+     <div className="ticket-doc print-doc">
+       <div className="ticket-doc__head">
+@@ -74,19 +76,21 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
+           </div>
+         </div>
+ 
+-        <div className="ticket-doc__qr">
+-          <QrCode
+-            value={urlVerificacion(
+-              datosVerificacionDe(
+-                papeleta,
+-                hermano,
+-                tramo ? etiquetaTramo(tramo) : opcion ?? 'Sin tramo',
+-                hermandad.nombreLegal || 'Tu hermandad',
+-              ),
+-            )}
+-          />
+-          <span>Escanéalo para verificar la papeleta</span>
+-        </div>
++        {!sinQr && (
++          <div className="ticket-doc__qr">
++            <QrCode
++              value={urlVerificacion(
++                datosVerificacionDe(
++                  papeleta,
++                  hermano,
++                  tramo ? etiquetaTramo(tramo) : opcion ?? 'Sin tramo',
++                  hermandad.nombreLegal || 'Tu hermandad',
++                ),
++              )}
++            />
++            <span>Escanéalo para verificar la papeleta</span>
++          </div>
++        )}
+       </div>
+ 
+       <div className="ticket-doc__perf" aria-hidden="true" />
+diff --git a/src/components/SitioContenido.tsx b/src/components/SitioContenido.tsx
+index aa64c48..9cdd009 100644
+--- a/src/components/SitioContenido.tsx
++++ b/src/components/SitioContenido.tsx
+@@ -55,7 +55,17 @@ export default function SitioContenido({
+           <span>{titulo}</span>
+         </div>
+         <nav className="sitio__menu">
+-          {seccionesVisibles.map((s) => <a key={s.tipo} href={interactivo ? `#${s.tipo}` : undefined}>{anclaLabel[s.tipo]}</a>)}
++          {seccionesVisibles.map((s) => {
++            // La sección "paginas" no da un enlace, sino uno por cada página del menú.
++            if (s.tipo === 'paginas') {
++              return web.paginas
++                .filter((p) => p.enMenu !== false)
++                .map((p) => (
++                  <a key={p.id} href={interactivo ? `#pagina-${p.id}` : undefined}>{p.titulo || 'Página'}</a>
++                ))
++            }
++            return <a key={s.tipo} href={interactivo ? `#${s.tipo}` : undefined}>{anclaLabel[s.tipo]}</a>
++          })}
+           <Boton clase="sitio-btn sitio-btn--entrar">Entrar</Boton>
+         </nav>
+       </header>
+@@ -173,20 +183,21 @@ function Seccion({ tipo, web, hermandad }: { tipo: TipoSeccion; web: WebPublica;
+     )
+   }
+   if (tipo === 'paginas') {
+-    if (web.paginas.length === 0) return null
++    // Cada página del menú es su propia sección anclable (#pagina-<id>).
++    const pags = web.paginas.filter((p) => p.enMenu !== false)
++    if (pags.length === 0) return null
+     return (
+-      <section id="paginas" className="sitio__seccion">
+-        <h2>{SECCIONES_INFO.paginas.nombre}</h2>
+-        {web.paginas.map((p) => (
+-          <article key={p.id} className="sitio__pagina">
++      <>
++        {pags.map((p) => (
++          <section id={`pagina-${p.id}`} key={p.id} className="sitio__seccion">
++            <h2>{p.icono} {p.titulo}</h2>
+             {p.antetitulo && <span className="sitio__pagina-ante">{p.antetitulo}</span>}
+-            <h3>{p.icono} {p.titulo}</h3>
+             {p.entradilla && <p className="sitio__pagina-entradilla">{p.entradilla}</p>}
+             {p.fotos.length > 0 && <div className="sitio__galeria">{p.fotos.map((f, idx) => <figure key={idx} className="sitio__foto"><img src={f} alt="" /></figure>)}</div>}
+             {p.parrafos.map((par) => <div key={par.id} className="sitio__parrafo">{par.subtitulo && <h4>{par.subtitulo}</h4>}<p className="sitio__texto">{par.texto}</p></div>)}
+-          </article>
++          </section>
+         ))}
+-      </section>
++      </>
+     )
+   }
+   if (tipo === 'boletines') {
+diff --git a/src/lib/modeloPapeleta.ts b/src/lib/modeloPapeleta.ts
+index 3de77bc..12f57b2 100644
+--- a/src/lib/modeloPapeleta.ts
++++ b/src/lib/modeloPapeleta.ts
+@@ -96,6 +96,23 @@ export function borrarModeloPapeleta() {
+   localStorage.removeItem(CLAVE_STORAGE)
+ }
+ 
++/**
++ * Campos que se colocan por defecto al subir un modelo, para que NUNCA salga en
++ * blanco: los datos más habituales repartidos por la papeleta. El usuario los
++ * arrastra luego a su sitio. `id` se pasa desde fuera (para tener uuid reales).
++ */
++export function camposPorDefecto(nuevoId: () => string): CampoModelo[] {
++  const base = { negrita: false, color: '#1a1a1a', align: 'left' as const }
++  return [
++    { id: nuevoId(), clave: 'nombre', xPct: 28, yPct: 40, tamanoPct: 3.6, ...base, negrita: true },
++    { id: nuevoId(), clave: 'numeroHermano', xPct: 28, yPct: 48, tamanoPct: 3, ...base },
++    { id: nuevoId(), clave: 'tramo', xPct: 28, yPct: 56, tamanoPct: 3, ...base },
++    { id: nuevoId(), clave: 'puesto', xPct: 28, yPct: 64, tamanoPct: 3, ...base },
++    { id: nuevoId(), clave: 'importe', xPct: 28, yPct: 72, tamanoPct: 3, ...base },
++    { id: nuevoId(), clave: 'qr', xPct: 82, yPct: 76, tamanoPct: 6, ...base },
++  ]
++}
++
+ /** Contexto para resolver los valores de cada campo con datos reales. */
+ export interface DatosModelo {
+   hermano: Hermano
+diff --git a/src/lib/webPublica.ts b/src/lib/webPublica.ts
+index fc019fd..b9119a5 100644
+--- a/src/lib/webPublica.ts
++++ b/src/lib/webPublica.ts
+@@ -112,6 +112,8 @@ export interface PaginaWeb {
+   entradilla: string
+   parrafos: ParrafoPagina[]
+   fotos: string[]
++  /** Si aparece en el menú de la web (y se publica). Por defecto sí. */
++  enMenu?: boolean
+ }
+ 
+ /** Boletín en PDF (por ahora se guarda el título; el PDF, al conectar almacenamiento). */
+@@ -133,6 +135,8 @@ export interface WebPublica {
+   plantilla: PlantillaWeb
+   /** Parte final del enlace: …/w/<slug> */
+   slug: string
++  /** Dominio personalizado propio (p. ej. hermandaddetriana.es), si lo han configurado. */
++  dominio?: string
+ 
+   // Marca
+   titulo: string
+diff --git a/src/pages/app/Papeletas.tsx b/src/pages/app/Papeletas.tsx
+index d2d5a6f..421177d 100644
+--- a/src/pages/app/Papeletas.tsx
++++ b/src/pages/app/Papeletas.tsx
+@@ -110,6 +110,8 @@ export default function Papeletas() {
+   const [ajustesOpen, setAjustesOpen] = useState(false)
+   const [modeloOpen, setModeloOpen] = useState(false)
+   const [modelo, setModelo] = useState<ModeloPapeleta | null>(() => getModeloPapeleta())
++  // Dos salidas de la papeleta: móvil (con QR, para el correo) y física (sin QR, para imprimir).
++  const [variantePapeleta, setVariantePapeleta] = useState<'movil' | 'fisica'>('movil')
+   const [imprimirOpen, setImprimirOpen] = useState(false)
+   const [imprimirEstados, setImprimirEstados] = useState<Record<string, boolean>>({ Asignada: true, Pagada: true, Entregada: true })
+   const [listaImpresion, setListaImpresion] = useState<ItemImpresion[] | null>(null)
+@@ -857,9 +859,26 @@ export default function Papeletas() {
+                 {/* Tiene papeleta este año: mostrar el ticket y sus acciones */}
+                 {actual && actual.estado !== 'Renuncia' && (
+                   <>
++                    <div className="assign-box__row no-print" style={{ marginBottom: '0.6rem' }}>
++                      <button
++                        type="button"
++                        className={`chip chip--toggle${variantePapeleta === 'movil' ? ' chip--active' : ''}`}
++                        onClick={() => setVariantePapeleta('movil')}
++                      >
++                        📱 Móvil (con QR)
++                      </button>
++                      <button
++                        type="button"
++                        className={`chip chip--toggle${variantePapeleta === 'fisica' ? ' chip--active' : ''}`}
++                        onClick={() => setVariantePapeleta('fisica')}
++                      >
++                        🖨️ Física (sin QR)
++                      </button>
++                    </div>
+                     {modelo ? (
+                       <PapeletaModeloRender
+                         modelo={modelo}
++                        sinQr={variantePapeleta === 'fisica'}
+                         datos={{
+                           hermano: h,
+                           papeleta: actual,
+@@ -878,8 +897,19 @@ export default function Papeletas() {
+                         puesto={asig?.puesto ?? null}
+                         excedeAforo={asig?.estado === 'Excede aforo'}
+                         opcion={actual.opcion}
++                        sinQr={variantePapeleta === 'fisica'}
+                       />
+                     )}
++                    <p className="form-hint no-print">
++                      {variantePapeleta === 'movil'
++                        ? 'Versión de móvil: lleva el QR de verificación. Es la que se envía al hermano por correo (envío real al conectar la base de datos).'
++                        : 'Versión física: sin QR, pensada para imprimir en papel.'}
++                    </p>
++                    <div className="assign-box__row no-print" style={{ marginTop: '0.4rem' }}>
++                      <button className="btn btn-outline btn-sm" onClick={() => window.print()}>
++                        {variantePapeleta === 'movil' ? 'Descargar / enviar (con QR)' : 'Imprimir física (sin QR)'}
++                      </button>
++                    </div>
+                     {actual.estado === 'Asignada' && actual.pagoComunicado && (
+                       <div className="banner-inline banner-inline--accent" style={{ marginTop: '1rem' }}>
+                         {h.nombre.split(' ')[0]} avisó desde su área de que pagó por{' '}
+@@ -921,9 +951,6 @@ export default function Papeletas() {
+                           Marcar como entregada
+                         </button>
+                       )}
+-                      <button className="btn btn-outline" onClick={() => window.print()}>
+-                        Imprimir / Descargar
+-                      </button>
+                     </div>
+                     {(actual.estado === 'Solicitada' || actual.estado === 'Asignada' || actual.estado === 'Pagada') && (
+                       <button type="button" className="ticket-cancel" onClick={() => anularPapeleta(actual.id)}>
+diff --git a/src/pages/app/WebPublica.tsx b/src/pages/app/WebPublica.tsx
+index 3d92fc8..8a03715 100644
+--- a/src/pages/app/WebPublica.tsx
++++ b/src/pages/app/WebPublica.tsx
+@@ -194,6 +194,31 @@ function DisenoTab({
+             <button type="button" className="btn btn-outline btn-sm" onClick={copiarEnlace}>{copiado ? 'Copiado' : 'Copiar'}</button>
+           </div>
+         </div>
++
++        <div className="form-row" style={{ marginTop: '0.8rem' }}>
++          <label htmlFor="dominio">Dominio personalizado</label>
++          <input
++            id="dominio"
++            type="text"
++            value={web.dominio ?? ''}
++            onChange={(e) => editar('dominio', e.target.value.trim().toLowerCase())}
++            placeholder="hermandaddetriana.es"
++          />
++          <details className="form-hint" style={{ marginTop: '0.5rem' }}>
++            <summary>Cómo poner tu dominio propio (p. ej. hermandaddetriana.es)</summary>
++            <ol style={{ margin: '0.5rem 0 0 1rem', lineHeight: 1.7 }}>
++              <li>Compra el dominio en un registrador (IONOS, GoDaddy, Namecheap…).</li>
++              <li>Escríbelo aquí arriba y guarda.</li>
++              <li>En el panel de despliegue (Vercel) → <b>Domains</b> → añade tu dominio.</li>
++              <li>En tu registrador, apunta los DNS a Vercel (un registro <code>A</code> a la IP que te indica, o un <code>CNAME</code>).</li>
++              <li>En unos minutos tu web se verá en <b>tu dominio</b> en vez de en el enlace largo.</li>
++            </ol>
++            <p style={{ marginTop: '0.4rem' }}>
++              El enlace real al dominio se activa al conectar la base de datos y el despliegue; por
++              ahora este campo lo guarda para tenerlo listo.
++            </p>
++          </details>
++        </div>
+       </section>
+ 
+       <section className="settings-card">
+@@ -398,8 +423,16 @@ function CultosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica; editar: EditarFn; paginaSel: string | null; setPaginaSel: (id: string | null) => void }) {
+   const sel = web.paginas.find((p) => p.id === (paginaSel ?? web.paginas[0]?.id)) ?? null
+   function editarPagina(id: string, c: Partial<PaginaWeb>) { editar('paginas', web.paginas.map((p) => (p.id === id ? { ...p, ...c } : p))) }
++  function moverPagina(id: string, dir: -1 | 1) {
++    const i = web.paginas.findIndex((p) => p.id === id)
++    const j = i + dir
++    if (i < 0 || j < 0 || j >= web.paginas.length) return
++    const arr = [...web.paginas]
++    ;[arr[i], arr[j]] = [arr[j], arr[i]]
++    editar('paginas', arr)
++  }
+   function nuevaPagina() {
+-    const p: PaginaWeb = { id: nuevoId(), icono: '📄', antetitulo: '', titulo: 'Nueva página', entradilla: '', parrafos: [], fotos: [] }
++    const p: PaginaWeb = { id: nuevoId(), icono: '📄', antetitulo: '', titulo: 'Nueva página', entradilla: '', parrafos: [], fotos: [], enMenu: true }
+     editar('paginas', [...web.paginas, p])
+     setPaginaSel(p.id)
+   }
+@@ -423,6 +456,17 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
+           <div className="form-row"><label>Título de la página</label><input type="text" value={sel.titulo} onChange={(e) => editarPagina(sel.id, { titulo: e.target.value })} /></div>
+           <div className="form-row"><label>Entradilla</label><textarea rows={2} value={sel.entradilla} onChange={(e) => editarPagina(sel.id, { entradilla: e.target.value })} /></div>
+ 
++          <div className="assign-box__row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
++            <label className="checkbox">
++              <input type="checkbox" checked={sel.enMenu !== false} onChange={(e) => editarPagina(sel.id, { enMenu: e.target.checked })} />
++              <span>Mostrar en el menú de la web</span>
++            </label>
++            <div className="assign-box__row">
++              <button type="button" className="btn btn-ghost btn-sm" onClick={() => moverPagina(sel.id, -1)}>▲ Subir</button>
++              <button type="button" className="btn btn-ghost btn-sm" onClick={() => moverPagina(sel.id, 1)}>▼ Bajar</button>
++            </div>
++          </div>
++
+           <div className="settings-card__head" style={{ marginTop: '0.5rem' }}>
+             <h3 className="settings-card__title" style={{ fontSize: '1rem' }}>Párrafos</h3>
+             <button type="button" className="btn btn-outline btn-sm" onClick={() => editarPagina(sel.id, { parrafos: [...sel.parrafos, { id: nuevoId(), subtitulo: '', texto: '' } as ParrafoPagina] })}>+ Añadir párrafo</button>
+diff --git a/src/styles/global.css b/src/styles/global.css
+index f399679..3b356eb 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -1365,8 +1365,11 @@ h1, h2, h3,
+ /* al imprimir (botón "Imprimir / Descargar"), solo se ve el documento activo */
+ @media print {
+   body * { visibility: hidden; }
++  .no-print { display: none !important; }
+   .print-doc, .print-doc * { visibility: visible; }
+-  .print-doc { position: absolute; inset: 0; margin: 1.5cm; border: none; box-shadow: none; }
++  /* El documento llena la página (sin el límite de ancho que tiene en pantalla). */
++  .print-doc { position: absolute; inset: 0; margin: 1.2cm; border: none; box-shadow: none; max-width: none !important; width: auto !important; }
++  .modelo-render { max-width: none !important; }
+ }
+ 
+ /* documentos imprimibles que van dentro de un panel con controles interactivos
 -- 
 2.43.0
 

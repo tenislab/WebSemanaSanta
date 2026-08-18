@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type PointerEvent } from 'react'
 import {
   CLAVES_DATO,
   borrarModeloPapeleta,
+  camposPorDefecto,
   saveModeloPapeleta,
   type CampoModelo,
   type ModeloPapeleta,
@@ -93,12 +94,12 @@ export default function ModeloPapeletaEditor({
         setCargando(true)
         const { pdfPrimeraPaginaAImagen } = await import('../lib/pdfAImagen')
         const imagen = await pdfPrimeraPaginaAImagen(file)
-        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos ?? [] })
+        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
       } else {
         const lector = new FileReader()
         lector.onload = async () => {
           const comprimida = await comprimirImagen(String(lector.result))
-          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos ?? [] })
+          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
         }
         lector.readAsDataURL(file)
       }
