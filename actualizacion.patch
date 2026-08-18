@@ -1,7 +1,7 @@
 From f69465b9ed3a99cc6eeb8da42c94cd8419a79e1d Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 18:27:15 +0000
-Subject: [PATCH 1/6] =?UTF-8?q?Papeletas=20Fase=203:=20solicitud=20online?=
+Subject: [PATCH 1/8] =?UTF-8?q?Papeletas=20Fase=203:=20solicitud=20online?=
  =?UTF-8?q?=20del=20hermano=20+=20convocatoria=20+=20fechas=20de=20campa?=
  =?UTF-8?q?=C3=B1a?=
 MIME-Version: 1.0
@@ -870,7 +870,7 @@ index a1585f3..1d31927 100644
 From 8c25d94db1a4fb94f2700b7932c1636c17365a6a Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 18:34:34 +0000
-Subject: [PATCH 2/6] =?UTF-8?q?Fase=203:=20la=20apertura=20por=20participa?=
+Subject: [PATCH 2/8] =?UTF-8?q?Fase=203:=20la=20apertura=20por=20participa?=
  =?UTF-8?q?ci=C3=B3n=20cuenta=20tambi=C3=A9n=20papeletas=20sin=20tramo=20y?=
  =?UTF-8?q?=20evita=20renovaciones=20duplicadas?=
 MIME-Version: 1.0
@@ -1023,7 +1023,7 @@ index 5c54b44..7999c03 100644
 From d73c2d4a36040fd540cb4188399c4a79497a57e5 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:02:59 +0000
-Subject: [PATCH 3/6] =?UTF-8?q?Modo=20demo=20fiable=20y=20dos=20demos=20de?=
+Subject: [PATCH 3/8] =?UTF-8?q?Modo=20demo=20fiable=20y=20dos=20demos=20de?=
  =?UTF-8?q?=20partida=20(llena=20y=20vac=C3=ADa)?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1347,7 +1347,7 @@ index 1d31927..1c97238 100644
 From ab99d5e6ac28e9b2f4e608dfce1368e0978a392e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:05:47 +0000
-Subject: [PATCH 4/6] =?UTF-8?q?Pie=20de=20la=20portada=20m=C3=A1s=20profes?=
+Subject: [PATCH 4/8] =?UTF-8?q?Pie=20de=20la=20portada=20m=C3=A1s=20profes?=
  =?UTF-8?q?ional=20y=20p=C3=A1ginas=20legales=20en=20blanco?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1480,7 +1480,7 @@ index 1c97238..f796b10 100644
 From d6a9fbf4edabb94099103472e4028b412b3d3c38 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 17 Aug 2026 19:35:43 +0000
-Subject: [PATCH 5/6] Permisos: ocultar en vez de bloquear + vista previa de la
+Subject: [PATCH 5/8] Permisos: ocultar en vez de bloquear + vista previa de la
  web limpia y responsive
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1711,7 +1711,7 @@ index f796b10..6d2df7d 100644
 From e439cd1191fe054965a6efafcf830a771fb8d6f3 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 18 Aug 2026 05:09:09 +0000
-Subject: [PATCH 6/6] =?UTF-8?q?QR=20de=20papeleta=20que=20funciona:=20abre?=
+Subject: [PATCH 6/8] =?UTF-8?q?QR=20de=20papeleta=20que=20funciona:=20abre?=
  =?UTF-8?q?=20una=20p=C3=A1gina=20de=20verificaci=C3=B3n=20con=20los=20dat?=
  =?UTF-8?q?os?=
 MIME-Version: 1.0
@@ -2122,6 +2122,529 @@ index 6d2df7d..c202e19 100644
  .legal-seccion { margin: 1.7rem 0; }
  .legal-seccion h2 { font-size: 1.15rem; margin: 0 0 0.7rem; }
  .legal-seccion p { line-height: 1.7; margin: 0 0 0.8rem; color: var(--text); }
+-- 
+2.43.0
+
+
+From 29d5e23a7c9e186077624551f6af09a56590e4c2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 05:22:01 +0000
+Subject: [PATCH 7/8] Acceso demo del hermano siempre visible y funcional en la
+ primera pantalla
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+En modo demostración (Supabase en pausa) el censo llega vacío, así que el
+bloque de acceso demo, que dependía de que hubiera hermanos cargados, no se
+mostraba: parecía que no se podía entrar.
+
+- La primera pantalla del portal muestra ahora un botón "Entrar en modo demo
+  (datos de ejemplo)" siempre que se esté en modo local, aunque el censo aún no
+  esté cargado. Al pulsarlo se siembran los datos de ejemplo y se entra.
+- Los accesos rápidos por hermano concreto se mantienen debajo cuando hay censo.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ package-lock.json           | 14 ++++++++++
+ package.json                |  1 +
+ src/pages/HermanoPortal.tsx | 52 +++++++++++++++++++++++--------------
+ 3 files changed, 47 insertions(+), 20 deletions(-)
+
+diff --git a/package-lock.json b/package-lock.json
+index fc21c99..1d79611 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -20,6 +20,7 @@
+         "@types/react": "^18.3.5",
+         "@types/react-dom": "^18.3.0",
+         "@vitejs/plugin-react": "^4.3.1",
++        "playwright-core": "^1.47.2",
+         "typescript": "^5.5.4",
+         "vite": "^5.4.2"
+       }
+@@ -2284,6 +2285,19 @@
+       "dev": true,
+       "license": "ISC"
+     },
++    "node_modules/playwright-core": {
++      "version": "1.47.2",
++      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.47.2.tgz",
++      "integrity": "sha512-3JvMfF+9LJfe16l7AbSmU555PaTl2tPyQsVInqm3id16pdDfvZ8TTZ/pyzmkbDrZTQefyzU7AIHlZqQnxpqHVQ==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "bin": {
++        "playwright-core": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/pngjs": {
+       "version": "5.0.0",
+       "resolved": "https://registry.npmjs.org/pngjs/-/pngjs-5.0.0.tgz",
+diff --git a/package.json b/package.json
+index 5974198..e673c35 100644
+--- a/package.json
++++ b/package.json
+@@ -23,6 +23,7 @@
+     "@types/react": "^18.3.5",
+     "@types/react-dom": "^18.3.0",
+     "@vitejs/plugin-react": "^4.3.1",
++    "playwright-core": "^1.47.2",
+     "typescript": "^5.5.4",
+     "vite": "^5.4.2"
+   }
+diff --git a/src/pages/HermanoPortal.tsx b/src/pages/HermanoPortal.tsx
+index a2f1492..7e1c37e 100644
+--- a/src/pages/HermanoPortal.tsx
++++ b/src/pages/HermanoPortal.tsx
+@@ -725,29 +725,41 @@ export default function HermanoPortal() {
+                   )}
+                 </ul>
+ 
+-                {!usarSupabase && hermanosDemo.length > 0 && (
++                {!usarSupabase && (
+                   <div className="banner banner--info banner--demo" role="status" style={{ marginTop: '0.4rem' }}>
+                     <div>
+-                      <strong>Modo demostración.</strong> Entra de un clic como cualquier hermano de
+-                      prueba y verás su área con sus cuotas y su papeleta.
+-                    </div>
+-                    <div className="demo-accounts">
+-                      {hermanosDemo.map((h) => (
+-                        <button
+-                          type="button"
+-                          key={h.id}
+-                          className="demo-account"
+-                          onClick={() => entrarComoDemo(h.id)}
+-                        >
+-                          <span className="demo-account__avatar">{inicialesHermandad(h.nombre)}</span>
+-                          <span>
+-                            <b>{h.nombre}</b>
+-                            <small>Hermano/a nº {h.numero}</small>
+-                            <small className="demo-account__cred">DNI {h.dni} · {h.claveAcceso}</small>
+-                          </span>
+-                        </button>
+-                      ))}
++                      <strong>Modo demostración.</strong> Entra con datos de ejemplo (censo, cuotas y
++                      papeleta) y prueba el área del hermano sin escribir nada.
+                     </div>
++                    <button
++                      type="button"
++                      className="btn btn-primary btn-block"
++                      onClick={() => entrarComoDemo()}
++                    >
++                      Entrar en modo demo (datos de ejemplo)
++                    </button>
++                    {hermanosDemo.length > 0 && (
++                      <>
++                        <div className="demo-accounts__label">O entra como un hermano concreto:</div>
++                        <div className="demo-accounts">
++                          {hermanosDemo.map((h) => (
++                            <button
++                              type="button"
++                              key={h.id}
++                              className="demo-account"
++                              onClick={() => entrarComoDemo(h.id)}
++                            >
++                              <span className="demo-account__avatar">{inicialesHermandad(h.nombre)}</span>
++                              <span>
++                                <b>{h.nombre}</b>
++                                <small>Hermano/a nº {h.numero}</small>
++                                <small className="demo-account__cred">DNI {h.dni} · {h.claveAcceso}</small>
++                              </span>
++                            </button>
++                          ))}
++                        </div>
++                      </>
++                    )}
+                   </div>
+                 )}
+ 
+-- 
+2.43.0
+
+
+From 736a9971243a08432d7c85905459fc33013e2b74 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 18 Aug 2026 05:27:13 +0000
+Subject: [PATCH 8/8] =?UTF-8?q?Aviso=20al=20hermano=20cuando=20la=20secret?=
+ =?UTF-8?q?ar=C3=ADa=20cambia=20sus=20datos=20(correo=20simulado)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Nuevo registro de avisos por hermano (lib/avisosHermano): cada cambio en su
+  ficha genera un aviso (correo simulado hasta conectar el proveedor).
+- La ficha del hermano en el panel es ahora editable en sus datos de contacto
+  (correo, teléfono, dirección); al guardar, se detecta qué cambió y se avisa
+  al hermano. El cambio de IBAN también avisa.
+- El área del hermano muestra "Avisos de la secretaría" con contador de no
+  leídos y opción de marcarlos como leídos.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FSPnmgNrD2aeSYTbzoruWy
+---
+ package-lock.json           | 14 ------
+ package.json                |  1 -
+ src/lib/avisosHermano.ts    | 91 +++++++++++++++++++++++++++++++++++++
+ src/pages/HermanoPortal.tsx | 31 +++++++++++++
+ src/pages/app/Hermanos.tsx  | 77 +++++++++++++++++++++++++++++--
+ src/styles/global.css       | 16 +++++++
+ 6 files changed, 212 insertions(+), 18 deletions(-)
+ create mode 100644 src/lib/avisosHermano.ts
+
+diff --git a/package-lock.json b/package-lock.json
+index 1d79611..fc21c99 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -20,7 +20,6 @@
+         "@types/react": "^18.3.5",
+         "@types/react-dom": "^18.3.0",
+         "@vitejs/plugin-react": "^4.3.1",
+-        "playwright-core": "^1.47.2",
+         "typescript": "^5.5.4",
+         "vite": "^5.4.2"
+       }
+@@ -2285,19 +2284,6 @@
+       "dev": true,
+       "license": "ISC"
+     },
+-    "node_modules/playwright-core": {
+-      "version": "1.47.2",
+-      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.47.2.tgz",
+-      "integrity": "sha512-3JvMfF+9LJfe16l7AbSmU555PaTl2tPyQsVInqm3id16pdDfvZ8TTZ/pyzmkbDrZTQefyzU7AIHlZqQnxpqHVQ==",
+-      "dev": true,
+-      "license": "Apache-2.0",
+-      "bin": {
+-        "playwright-core": "cli.js"
+-      },
+-      "engines": {
+-        "node": ">=18"
+-      }
+-    },
+     "node_modules/pngjs": {
+       "version": "5.0.0",
+       "resolved": "https://registry.npmjs.org/pngjs/-/pngjs-5.0.0.tgz",
+diff --git a/package.json b/package.json
+index e673c35..5974198 100644
+--- a/package.json
++++ b/package.json
+@@ -23,7 +23,6 @@
+     "@types/react": "^18.3.5",
+     "@types/react-dom": "^18.3.0",
+     "@vitejs/plugin-react": "^4.3.1",
+-    "playwright-core": "^1.47.2",
+     "typescript": "^5.5.4",
+     "vite": "^5.4.2"
+   }
+diff --git a/src/lib/avisosHermano.ts b/src/lib/avisosHermano.ts
+new file mode 100644
+index 0000000..c0994b6
+--- /dev/null
++++ b/src/lib/avisosHermano.ts
+@@ -0,0 +1,91 @@
++import { useEffect, useState } from 'react'
++import { leerPersistido } from './persistencia'
++import { nuevoId } from './supabaseSync'
++import type { Hermano } from '../data/hermanos'
++
++/**
++ * Avisos al hermano cuando la secretaría cambia algo de sus datos. Cada cambio
++ * genera un aviso (correo simulado hasta conectar el proveedor) que el hermano
++ * ve en su área. Así el hermano se entera de cualquier modificación que haga la
++ * hermandad sobre su ficha.
++ */
++
++export interface AvisoHermano {
++  id: string
++  hermanoId: string
++  fecha: string
++  texto: string
++  leido: boolean
++}
++
++const CLAVE = 'cabildo-avisos-hermano'
++
++function hoy(): string {
++  return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
++}
++
++export function getAvisosHermano(): AvisoHermano[] {
++  return leerPersistido<AvisoHermano[]>(CLAVE, [])
++}
++
++function saveAvisos(lista: AvisoHermano[]) {
++  localStorage.setItem(CLAVE, JSON.stringify(lista))
++}
++
++/** Registra un aviso para un hermano (correo simulado). */
++export function agregarAvisoHermano(hermanoId: string, texto: string) {
++  const nuevo: AvisoHermano = { id: nuevoId(), hermanoId, fecha: hoy(), texto, leido: false }
++  saveAvisos([nuevo, ...getAvisosHermano()])
++}
++
++/** Etiquetas legibles de los campos que el hermano vería como "suyos". */
++const CAMPOS_AVISABLES: { campo: keyof Hermano; etiqueta: string }[] = [
++  { campo: 'nombre', etiqueta: 'nombre' },
++  { campo: 'email', etiqueta: 'correo electrónico' },
++  { campo: 'telefono', etiqueta: 'teléfono' },
++  { campo: 'direccion', etiqueta: 'dirección' },
++  { campo: 'iban', etiqueta: 'cuenta bancaria' },
++  { campo: 'estado', etiqueta: 'estado como hermano/a' },
++]
++
++/**
++ * Compara la ficha anterior con la nueva y, si cambió algún dato del hermano,
++ * le genera un aviso describiendo qué se cambió. Devuelve true si avisó.
++ */
++export function avisarCambiosHermano(anterior: Hermano, nuevo: Hermano): boolean {
++  const cambiados = CAMPOS_AVISABLES.filter(({ campo }) => (anterior[campo] ?? '') !== (nuevo[campo] ?? ''))
++  if (cambiados.length === 0) return false
++  const lista = cambiados.map((c) => c.etiqueta)
++  const enumerado =
++    lista.length === 1 ? lista[0] : `${lista.slice(0, -1).join(', ')} y ${lista[lista.length - 1]}`
++  agregarAvisoHermano(nuevo.id, `La secretaría ha actualizado tu ${enumerado}.`)
++  return true
++}
++
++/** Hook reactivo con los avisos de un hermano (más nuevos primero). */
++export function useAvisosHermano(hermanoId: string | null): {
++  avisos: AvisoHermano[]
++  sinLeer: number
++  marcarLeidos: () => void
++} {
++  const [todos, setTodos] = useState<AvisoHermano[]>(() => getAvisosHermano())
++  useEffect(() => {
++    const sync = () => setTodos(getAvisosHermano())
++    window.addEventListener('storage', sync)
++    return () => window.removeEventListener('storage', sync)
++  }, [])
++
++  const avisos = hermanoId ? todos.filter((a) => a.hermanoId === hermanoId) : []
++  const sinLeer = avisos.filter((a) => !a.leido).length
++
++  function marcarLeidos() {
++    if (!hermanoId) return
++    const actualizados = getAvisosHermano().map((a) =>
++      a.hermanoId === hermanoId ? { ...a, leido: true } : a,
++    )
++    saveAvisos(actualizados)
++    setTodos(actualizados)
++  }
++
++  return { avisos, sinLeer, marcarLeidos }
++}
+diff --git a/src/pages/HermanoPortal.tsx b/src/pages/HermanoPortal.tsx
+index 7e1c37e..31b37ab 100644
+--- a/src/pages/HermanoPortal.tsx
++++ b/src/pages/HermanoPortal.tsx
+@@ -25,6 +25,7 @@ import {
+ } from '../lib/solicitudesPapeleta'
+ import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
+ import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
++import { useAvisosHermano } from '../lib/avisosHermano'
+ import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
+ import { supabase } from '../lib/supabase'
+ import { useAuth } from '../context/AuthContext'
+@@ -208,6 +209,8 @@ export default function HermanoPortal() {
+   )
+ 
+   const hermanoActivo = hermanoPrincipal ?? hermanoMuestra
++  const { avisos: avisosSecretaria, sinLeer: avisosSinLeer, marcarLeidos: marcarAvisosLeidos } =
++    useAvisosHermano(hermanoActivo?.id ?? null)
+   const nombreHermandadActiva = esPrincipal ? nombrePrincipal : hermandadMuestra?.nombre ?? 'tu hermandad'
+   const colorActivo = esPrincipal ? hermandadPrincipal.colorPrimario : hermandadMuestra?.color ?? '#caa24a'
+   const contactoActivo = esPrincipal
+@@ -977,6 +980,34 @@ export default function HermanoPortal() {
+           </div>
+         )}
+ 
++        {/* Avisos de la secretaría: cambios que la hermandad ha hecho en tus datos */}
++        {avisosSecretaria.length > 0 && (
++          <section className="portal__section">
++            <div className="portal__avisos-head">
++              <h2>
++                Avisos de la secretaría
++                {avisosSinLeer > 0 && <span className="portal__avisos-badge">{avisosSinLeer}</span>}
++              </h2>
++              {avisosSinLeer > 0 && (
++                <button className="btn btn-ghost btn-sm" onClick={marcarAvisosLeidos}>
++                  Marcar como leídos
++                </button>
++              )}
++            </div>
++            <ul className="portal__avisos">
++              {avisosSecretaria.map((a) => (
++                <li key={a.id} className={`portal__aviso${a.leido ? '' : ' portal__aviso--nuevo'}`}>
++                  <span className="portal__aviso-icono" aria-hidden="true">✉️</span>
++                  <div>
++                    <p>{a.texto}</p>
++                    <small>{a.fecha}</small>
++                  </div>
++                </li>
++              ))}
++            </ul>
++          </section>
++        )}
++
+         {/* Papeletas de una hermandad de muestra: su propio subsistema, con sus papeletas y sus datos de pago */}
+         {!esPrincipal && hermandadMuestra && hermanoMuestra && (
+           <section className="portal__section">
+diff --git a/src/pages/app/Hermanos.tsx b/src/pages/app/Hermanos.tsx
+index e497f7b..6551c73 100644
+--- a/src/pages/app/Hermanos.tsx
++++ b/src/pages/app/Hermanos.tsx
+@@ -14,6 +14,7 @@ import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from
+ import { descargarArchivo } from '../../lib/csv'
+ import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
+ import { useEtiquetas } from '../../lib/etiquetas'
++import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
+ 
+ /**
+  * Con Supabase conectado, crea además una cuenta real de acceso (mismo
+@@ -73,6 +74,8 @@ export default function Hermanos() {
+   const [ibanDraft, setIbanDraft] = useState('')
+   const [ibanError, setIbanError] = useState<string | null>(null)
+   const [ibanSaved, setIbanSaved] = useState(false)
++  const [contacto, setContacto] = useState({ email: '', telefono: '', direccion: '' })
++  const [contactoSaved, setContactoSaved] = useState(false)
+ 
+   const solicitudesRemotas = useSolicitudes()
+   const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(solicitudesRemotas)
+@@ -121,6 +124,12 @@ export default function Hermanos() {
+     setIbanDraft(selected?.iban ?? '')
+     setIbanError(null)
+     setIbanSaved(false)
++    setContacto({
++      email: selected?.email ?? '',
++      telefono: selected?.telefono && selected.telefono !== 'Sin datos' ? selected.telefono : '',
++      direccion: selected?.direccion && selected.direccion !== 'Sin datos' ? selected.direccion : '',
++    })
++    setContactoSaved(false)
+   }, [selected?.id])
+ 
+   const filtered = useMemo(() => {
+@@ -248,6 +257,10 @@ export default function Hermanos() {
+       return
+     }
+     const nuevoIban = trimmed || null
++    if ((selected.iban ?? null) !== nuevoIban) {
++      // Cambio en los datos del hermano: se le avisa (correo simulado).
++      agregarAvisoHermano(selected.id, 'La secretaría ha actualizado tu cuenta bancaria.')
++    }
+     setHermanos((prev) => prev.map((h) => (h.id === selected.id ? { ...h, iban: nuevoIban } : h)))
+     setSelected((prev) => (prev ? { ...prev, iban: nuevoIban } : prev))
+     setIbanError(null)
+@@ -255,6 +268,22 @@ export default function Hermanos() {
+     setTimeout(() => setIbanSaved(false), 2500)
+   }
+ 
++  /** Guarda los datos de contacto editados en la ficha y avisa al hermano. */
++  function guardarContacto() {
++    if (!selected) return
++    const nuevo: Hermano = {
++      ...selected,
++      email: contacto.email.trim() || selected.email,
++      telefono: contacto.telefono.trim() || 'Sin datos',
++      direccion: contacto.direccion.trim() || 'Sin datos',
++    }
++    avisarCambiosHermano(selected, nuevo)
++    setHermanos((prev) => prev.map((h) => (h.id === selected.id ? nuevo : h)))
++    setSelected(nuevo)
++    setContactoSaved(true)
++    setTimeout(() => setContactoSaved(false), 2500)
++  }
++
+   async function descargarDatosRgpd(hermano: Hermano) {
+     const datos = await recopilarDatosHermano(hermano.id)
+     if (!datos) return
+@@ -449,12 +478,54 @@ export default function Hermanos() {
+ 
+             <dl className="ficha__list">
+               <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>
+-              <div><dt>Correo electrónico</dt><dd>{selected.email}</dd></div>
+-              <div><dt>Teléfono</dt><dd>{selected.telefono}</dd></div>
+-              <div><dt>Dirección</dt><dd>{selected.direccion}</dd></div>
+               <div><dt>Hermano desde</dt><dd>{selected.antiguedad}</dd></div>
+               <div><dt>Tramo en el cortejo</dt><dd>{tramoPorHermano.get(selected.id) ?? 'Sin papeleta este año'}</dd></div>
+             </dl>
++
++            <div className="assign-box">
++              <label>Datos de contacto</label>
++              <p className="form-hint">
++                Si cambias algún dato, el hermano recibe un aviso en su área (correo simulado hasta
++                conectar el proveedor).
++              </p>
++              <div className="form-row">
++                <label htmlFor="emailHermano">Correo electrónico</label>
++                <input
++                  id="emailHermano"
++                  type="email"
++                  value={contacto.email}
++                  onChange={(e) => setContacto((c) => ({ ...c, email: e.target.value }))}
++                />
++              </div>
++              <div className="form-grid-2">
++                <div className="form-row">
++                  <label htmlFor="telHermano">Teléfono</label>
++                  <input
++                    id="telHermano"
++                    type="tel"
++                    value={contacto.telefono}
++                    placeholder="600 000 000"
++                    onChange={(e) => setContacto((c) => ({ ...c, telefono: e.target.value }))}
++                  />
++                </div>
++                <div className="form-row">
++                  <label htmlFor="dirHermano">Dirección</label>
++                  <input
++                    id="dirHermano"
++                    type="text"
++                    value={contacto.direccion}
++                    placeholder="Calle y número"
++                    onChange={(e) => setContacto((c) => ({ ...c, direccion: e.target.value }))}
++                  />
++                </div>
++              </div>
++              <div className="assign-box__row">
++                <button type="button" className="btn btn-primary btn-sm" onClick={guardarContacto}>
++                  Guardar datos de contacto
++                </button>
++                {contactoSaved && <span className="form-hint form-hint--ok">Guardado · avisado al hermano.</span>}
++              </div>
++            </div>
+             <p className="form-hint">
+               Accede a su área del hermano con este DNI y la contraseña <code>{selected.claveAcceso}</code>, que
+               podrá cambiar desde su área.
+diff --git a/src/styles/global.css b/src/styles/global.css
+index c202e19..b12d308 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -2044,6 +2044,22 @@ h1, h2, h3,
+   border-left: 3px solid var(--gold);
+ }
+ .portal__papeleta { display: flex; flex-direction: column; gap: 0.8rem; }
++.portal__avisos-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.6rem; }
++.portal__avisos-head h2 { margin-bottom: 0; }
++.portal__avisos-badge {
++  display: inline-flex; align-items: center; justify-content: center; min-width: 1.3rem; height: 1.3rem;
++  padding: 0 0.35rem; margin-left: 0.5rem; border-radius: 999px; background: var(--gold, #c5a059);
++  color: #1a1a1a; font-size: 0.72rem; font-weight: 800; vertical-align: middle;
++}
++.portal__avisos { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
++.portal__aviso {
++  display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.7rem 0.9rem;
++  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-sunken);
++}
++.portal__aviso--nuevo { border-color: var(--gold, #c5a059); background: color-mix(in srgb, var(--gold, #c5a059) 12%, var(--bg-sunken)); }
++.portal__aviso p { margin: 0 0 0.15rem; }
++.portal__aviso small { color: var(--text-muted); font-size: 0.78rem; }
++.portal__aviso-icono { font-size: 1.1rem; line-height: 1.2; }
+ .portal__consent { display: flex; align-items: center; gap: 1rem; justify-content: space-between; flex-wrap: wrap; }
+ .portal__consent span { flex: 1; min-width: 240px; }
+ .portal__contact { text-align: center; font-size: 0.85rem; color: var(--text-muted); margin: 0.5rem 0 0; }
 -- 
 2.43.0
 

@@ -1,15 +1,14 @@
-ACTUALIZACIÓN — QR de papeleta que funciona (+ todo lo anterior)
-===============================================================
-Incluye TODO lo nuevo desde la Fase 5 (Fase 3, demos, permisos, web, etc.).
-
+ACTUALIZACIÓN — Modo demo del hermano + Avisos al hermano (+ todo lo anterior)
+=============================================================================
+Incluye TODO lo nuevo desde la Fase 5.
 Aplicar: copia "archivos/" sobre el proyecto, o  git am actualizacion.patch
 (probado: aplica limpio, compila y construye sobre main).
 
-NUEVO EN ESTA ENTREGA — QR
- - El QR de la papeleta ya ABRE algo al escanearlo: una página /verificar con
-   los datos (hermano, nº de papeleta, sitio, hermandad). Funciona desde
-   cualquier móvil, sin base de datos, porque los datos viajan en el enlace.
- - Puedes poner el QR en TU modelo propio: en el editor del modelo, "+ Añadir
-   dato" -> "Código QR (verificación)". Lo colocas y dimensionas como los demás.
- - La verificación reforzada (comprobar contra el sistema y marcar entrega el
-   día de salida) llegará con Supabase.
+NUEVO EN ESTA ENTREGA
+ · MODO DEMO DEL HERMANO: botón "Entrar en modo demo (datos de ejemplo)"
+   siempre visible en la primera pantalla del portal, aunque Supabase esté en
+   pausa. Entra directo y con datos rellenos (censo, cuotas, papeleta).
+ · AVISOS AL HERMANO: cuando la secretaría cambia datos del hermano (correo,
+   teléfono, dirección, IBAN…) el hermano recibe un aviso en su área
+   ("Avisos de la secretaría", con contador). Correo real: fase Supabase.
+   La ficha del panel ahora permite editar los datos de contacto del hermano.

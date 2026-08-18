@@ -25,6 +25,7 @@ import {
 } from '../lib/solicitudesPapeleta'
 import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
 import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
+import { useAvisosHermano } from '../lib/avisosHermano'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -208,6 +209,8 @@ export default function HermanoPortal() {
   )
 
   const hermanoActivo = hermanoPrincipal ?? hermanoMuestra
+  const { avisos: avisosSecretaria, sinLeer: avisosSinLeer, marcarLeidos: marcarAvisosLeidos } =
+    useAvisosHermano(hermanoActivo?.id ?? null)
   const nombreHermandadActiva = esPrincipal ? nombrePrincipal : hermandadMuestra?.nombre ?? 'tu hermandad'
   const colorActivo = esPrincipal ? hermandadPrincipal.colorPrimario : hermandadMuestra?.color ?? '#caa24a'
   const contactoActivo = esPrincipal
@@ -725,29 +728,41 @@ export default function HermanoPortal() {
                   )}
                 </ul>
 
-                {!usarSupabase && hermanosDemo.length > 0 && (
+                {!usarSupabase && (
                   <div className="banner banner--info banner--demo" role="status" style={{ marginTop: '0.4rem' }}>
                     <div>
-                      <strong>Modo demostración.</strong> Entra de un clic como cualquier hermano de
-                      prueba y verás su área con sus cuotas y su papeleta.
+                      <strong>Modo demostración.</strong> Entra con datos de ejemplo (censo, cuotas y
+                      papeleta) y prueba el área del hermano sin escribir nada.
                     </div>
-                    <div className="demo-accounts">
-                      {hermanosDemo.map((h) => (
-                        <button
-                          type="button"
-                          key={h.id}
-                          className="demo-account"
-                          onClick={() => entrarComoDemo(h.id)}
-                        >
-                          <span className="demo-account__avatar">{inicialesHermandad(h.nombre)}</span>
-                          <span>
-                            <b>{h.nombre}</b>
-                            <small>Hermano/a nº {h.numero}</small>
-                            <small className="demo-account__cred">DNI {h.dni} · {h.claveAcceso}</small>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      onClick={() => entrarComoDemo()}
+                    >
+                      Entrar en modo demo (datos de ejemplo)
+                    </button>
+                    {hermanosDemo.length > 0 && (
+                      <>
+                        <div className="demo-accounts__label">O entra como un hermano concreto:</div>
+                        <div className="demo-accounts">
+                          {hermanosDemo.map((h) => (
+                            <button
+                              type="button"
+                              key={h.id}
+                              className="demo-account"
+                              onClick={() => entrarComoDemo(h.id)}
+                            >
+                              <span className="demo-account__avatar">{inicialesHermandad(h.nombre)}</span>
+                              <span>
+                                <b>{h.nombre}</b>
+                                <small>Hermano/a nº {h.numero}</small>
+                                <small className="demo-account__cred">DNI {h.dni} · {h.claveAcceso}</small>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -963,6 +978,34 @@ export default function HermanoPortal() {
               Entendido
             </button>
           </div>
+        )}
+
+        {/* Avisos de la secretaría: cambios que la hermandad ha hecho en tus datos */}
+        {avisosSecretaria.length > 0 && (
+          <section className="portal__section">
+            <div className="portal__avisos-head">
+              <h2>
+                Avisos de la secretaría
+                {avisosSinLeer > 0 && <span className="portal__avisos-badge">{avisosSinLeer}</span>}
+              </h2>
+              {avisosSinLeer > 0 && (
+                <button className="btn btn-ghost btn-sm" onClick={marcarAvisosLeidos}>
+                  Marcar como leídos
+                </button>
+              )}
+            </div>
+            <ul className="portal__avisos">
+              {avisosSecretaria.map((a) => (
+                <li key={a.id} className={`portal__aviso${a.leido ? '' : ' portal__aviso--nuevo'}`}>
+                  <span className="portal__aviso-icono" aria-hidden="true">✉️</span>
+                  <div>
+                    <p>{a.texto}</p>
+                    <small>{a.fecha}</small>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {/* Papeletas de una hermandad de muestra: su propio subsistema, con sus papeletas y sus datos de pago */}
