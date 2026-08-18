@@ -20,6 +20,8 @@ export interface Hermano {
   authUserId: string | null
   /** Etiquetas del hermano (costalero, acólito, banda…), para segmentar avisos y listados. */
   etiquetas?: string[]
+  /** Fecha de nacimiento (ISO yyyy-mm-dd), para segmentar por edad (mayores/menores). Opcional. */
+  fechaNacimiento?: string
 }
 
 /**
@@ -62,12 +64,17 @@ function generarHermanosDemo(): Hermano[] {
   return NOMBRES_DEMO.map((nombre, i): Hermano => {
     const antiguedad = 1980 + ((i * 7) % 45)
     const dniNum = 10000000 + i * 137
+    // Fecha de nacimiento determinista: la mayoría adultos; ~1 de cada 8, menor
+    // de edad (nacido 2009-2012), para poder probar la segmentación por edad.
+    const anioNac = i % 8 === 3 ? 2009 + (i % 4) : 1955 + ((i * 13) % 50)
+    const fechaNacimiento = `${anioNac}-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + (i % 27)).padStart(2, '0')}`
     return {
       id: `hd${i + 1}`,
       numero: 800 + i,
       nombre,
       estado: antiguedad >= 2025 ? 'Nuevo' : i % 17 === 0 ? 'Baja' : 'Activo',
       antiguedad,
+      fechaNacimiento,
       email: `${nombre.split(' ')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}${i}@example.com`,
       telefono: `6${String(10000000 + i * 91).slice(0, 8)}`,
       direccion: `C/ Ejemplo, ${10 + i}`,

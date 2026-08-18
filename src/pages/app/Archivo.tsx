@@ -121,6 +121,11 @@ export default function Archivo() {
     return { total, restringidos, contratosPorVencer, incorporadosEsteMes }
   }, [documentos])
 
+  // Solo los documentos que el cargo simulado puede ver: los que no, no aparecen
+  // (se ocultan por completo, en vez de mostrarse como «Restringido»).
+  const visibles = useMemo(() => filtered.filter((d) => canView(d, viewAsCargo)), [filtered, viewAsCargo])
+  const ocultosPorCargo = filtered.length - visibles.length
+
   function abrirNuevo() {
     setCategoriaNueva('Acta')
     setVisibilidadNueva('Todos')
@@ -257,7 +262,10 @@ export default function Archivo() {
             </option>
           ))}
         </select>
-        . El control de acceso real por cargo llegará con la autenticación multiusuario.
+.{' '}
+        {ocultosPorCargo > 0
+          ? `${ocultosPorCargo} documento${ocultosPorCargo === 1 ? '' : 's'} no le aparece${ocultosPorCargo === 1 ? '' : 'n'} (los ve solo quien tiene acceso).`
+          : 'Ve todos los documentos actuales.'}
       </div>
 
       <section className="stat-grid">
@@ -321,12 +329,10 @@ export default function Archivo() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((d) => {
-              const visible = canView(d, viewAsCargo)
-              return (
+            {visibles.map((d) => (
                 <tr
                   key={d.id}
-                  className={`${d.id === justAddedId ? 'row--flash ' : ''}${!visible ? 'row--restricted' : ''}`.trim() || undefined}
+                  className={d.id === justAddedId ? 'row--flash' : undefined}
                   onClick={() => abrirFicha(d)}
                   style={{ cursor: 'pointer' }}
                 >
@@ -355,22 +361,23 @@ export default function Archivo() {
                   <td>
                     <button
                       className="icon-btn"
-                      title={visible ? 'Ver ficha' : `Solo visible para: ${d.cargosConAcceso?.join(', ')}`}
+                      title="Ver ficha"
                       onClick={(e) => {
                         e.stopPropagation()
                         abrirFicha(d)
                       }}
                     >
-                      {visible ? <EyeIcon /> : <LockIcon />}
+                      <EyeIcon />
                     </button>
                   </td>
                 </tr>
-              )
-            })}
-            {filtered.length === 0 && (
+            ))}
+            {visibles.length === 0 && (
               <tr>
                 <td colSpan={6} className="table-empty">
-                  No hay documentos que coincidan con la búsqueda.
+                  {filtered.length > 0 && viewAsCargo
+                    ? `Ningún documento visible para ${viewAsCargo}.`
+                    : 'No hay documentos que coincidan con la búsqueda.'}
                 </td>
               </tr>
             )}
@@ -380,7 +387,7 @@ export default function Archivo() {
 
       {/* Ficha del documento */}
       <Drawer
-        open={!!selected}
+        open={!!selected && canView(selected, viewAsCargo)}
         onClose={cerrarFicha}
         title={selected?.nombre ?? ''}
         subtitle={selected ? `Documento nº ${selected.numero}` : undefined}

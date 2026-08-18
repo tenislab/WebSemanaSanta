@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { leerPersistido } from './persistencia'
+import { modoDemoActivo } from './demo'
 
 /**
  * Id nuevo para cualquier registro que se vaya a crear. Antes se usaba
@@ -50,13 +51,19 @@ export function useSupabaseTable<T extends { id: string }>(
   fromRow: (row: Record<string, unknown>) => T,
   orderBy?: string,
 ) {
+  // Modo local efectivo: sin Supabase configurado, o en modo demostración
+  // (aunque Supabase esté configurado pero en pausa). En demo leemos siempre
+  // los datos de ejemplo del navegador, sin consultar Supabase, para que el
+  // censo/papeletas/cuotas estén disponibles al instante y el acceso funcione.
+  const [local] = useState(() => !isSupabaseConfigured || modoDemoActivo())
+
   const [items, setItemsState] = useState<T[]>(() =>
-    isSupabaseConfigured ? [] : leerPersistido(claveLocal, inicial),
+    local ? leerPersistido(claveLocal, inicial) : [],
   )
-  const cargado = useRef(!isSupabaseConfigured)
+  const cargado = useRef(local)
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return
+    if (local || !supabase) return
     let cancelado = false
 
     function cargar() {
@@ -102,7 +109,7 @@ export function useSupabaseTable<T extends { id: string }>(
   function setItems(actualizador: Actualizador<T>) {
     setItemsState((prev) => {
       const next = typeof actualizador === 'function' ? (actualizador as (p: T[]) => T[])(prev) : actualizador
-      if (isSupabaseConfigured && supabase) {
+      if (!local && supabase) {
         if (cargado.current) sincronizar(tabla, prev, next, toRow)
         espejarEnLocal(claveLocal, next)
       } else {

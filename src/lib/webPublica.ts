@@ -112,6 +112,8 @@ export interface PaginaWeb {
   entradilla: string
   parrafos: ParrafoPagina[]
   fotos: string[]
+  /** Si aparece en el menú de la web (y se publica). Por defecto sí. */
+  enMenu?: boolean
 }
 
 /** Boletín en PDF (por ahora se guarda el título; el PDF, al conectar almacenamiento). */
@@ -133,6 +135,8 @@ export interface WebPublica {
   plantilla: PlantillaWeb
   /** Parte final del enlace: …/w/<slug> */
   slug: string
+  /** Dominio personalizado propio (p. ej. hermandaddetriana.es), si lo han configurado. */
+  dominio?: string
 
   // Marca
   titulo: string

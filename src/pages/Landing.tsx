@@ -235,16 +235,8 @@ export default function Landing() {
             <h4>Producto</h4>
             <ul>
               <li><a href="#funciones">Funciones</a></li>
+              <li><a href="#audiencia">Para quién es</a></li>
               <li><a href="#precios">Precios</a></li>
-              <li><a href="#">Novedades</a></li>
-            </ul>
-          </div>
-          <div>
-            <h4>Recursos</h4>
-            <ul>
-              <li><a href="#">Ayuda y tutoriales</a></li>
-              <li><a href="#">Migrar desde Excel</a></li>
-              <li><a href="#">Soporte técnico</a></li>
             </ul>
           </div>
           <div>
@@ -252,6 +244,7 @@ export default function Landing() {
             <ul>
               <li><Link to="/login">Iniciar sesión</Link></li>
               <li><Link to="/registro">Crear hermandad</Link></li>
+              <li><Link to="/hermano">Área del hermano</Link></li>
             </ul>
           </div>
           <div>
@@ -266,7 +259,7 @@ export default function Landing() {
         </div>
         <div className="wrap footer-bottom">
           <span>© 2026 Cabildo · Todos los derechos reservados</span>
-          <span>Hecho con cariño para el mundo cofrade</span>
+          <span>Versión del {__BUILD_TIME__} · Hecho con cariño para el mundo cofrade</span>
         </div>
       </footer>
 

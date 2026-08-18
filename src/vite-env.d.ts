@@ -8,3 +8,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Fecha/hora de construcción de esta versión (inyectada por Vite en el build). */
+declare const __BUILD_TIME__: string

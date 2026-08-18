@@ -1,3 +1,0 @@
-ACTUALIZACIÓN — CIERRE DE FASE 1 y FASE 2
-Aplicar: copia "archivos/" o  git am actualizacion.patch (probado sobre main).
-IMPORTANTE la primera vez: tras redesplegar, UN Ctrl+Shift+R (arreglo de caché).

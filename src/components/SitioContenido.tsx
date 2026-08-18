@@ -55,7 +55,17 @@ export default function SitioContenido({
           <span>{titulo}</span>
         </div>
         <nav className="sitio__menu">
-          {seccionesVisibles.map((s) => <a key={s.tipo} href={interactivo ? `#${s.tipo}` : undefined}>{anclaLabel[s.tipo]}</a>)}
+          {seccionesVisibles.map((s) => {
+            // La sección "paginas" no da un enlace, sino uno por cada página del menú.
+            if (s.tipo === 'paginas') {
+              return web.paginas
+                .filter((p) => p.enMenu !== false)
+                .map((p) => (
+                  <a key={p.id} href={interactivo ? `#pagina-${p.id}` : undefined}>{p.titulo || 'Página'}</a>
+                ))
+            }
+            return <a key={s.tipo} href={interactivo ? `#${s.tipo}` : undefined}>{anclaLabel[s.tipo]}</a>
+          })}
           <Boton clase="sitio-btn sitio-btn--entrar">Entrar</Boton>
         </nav>
       </header>
@@ -173,20 +183,21 @@ function Seccion({ tipo, web, hermandad }: { tipo: TipoSeccion; web: WebPublica;
     )
   }
   if (tipo === 'paginas') {
-    if (web.paginas.length === 0) return null
+    // Cada página del menú es su propia sección anclable (#pagina-<id>).
+    const pags = web.paginas.filter((p) => p.enMenu !== false)
+    if (pags.length === 0) return null
     return (
-      <section id="paginas" className="sitio__seccion">
-        <h2>{SECCIONES_INFO.paginas.nombre}</h2>
-        {web.paginas.map((p) => (
-          <article key={p.id} className="sitio__pagina">
+      <>
+        {pags.map((p) => (
+          <section id={`pagina-${p.id}`} key={p.id} className="sitio__seccion">
+            <h2>{p.icono} {p.titulo}</h2>
             {p.antetitulo && <span className="sitio__pagina-ante">{p.antetitulo}</span>}
-            <h3>{p.icono} {p.titulo}</h3>
             {p.entradilla && <p className="sitio__pagina-entradilla">{p.entradilla}</p>}
             {p.fotos.length > 0 && <div className="sitio__galeria">{p.fotos.map((f, idx) => <figure key={idx} className="sitio__foto"><img src={f} alt="" /></figure>)}</div>}
             {p.parrafos.map((par) => <div key={par.id} className="sitio__parrafo">{par.subtitulo && <h4>{par.subtitulo}</h4>}<p className="sitio__texto">{par.texto}</p></div>)}
-          </article>
+          </section>
         ))}
-      </section>
+      </>
     )
   }
   if (tipo === 'boletines') {

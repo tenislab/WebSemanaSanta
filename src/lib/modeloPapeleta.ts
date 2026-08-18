@@ -2,6 +2,7 @@ import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import { formatCurrency } from './format'
 import { guardarConAviso } from './persistencia'
+import { datosVerificacionDe, urlVerificacion } from './verificacion'
 
 /**
  * Modelo de papeleta personalizado. La hermandad sube la imagen de SU propio
@@ -28,6 +29,7 @@ export type ClaveDato =
   | 'fechaSalida'
   | 'hermandad'
   | 'anio'
+  | 'qr'
   | 'textoFijo'
 
 export const CLAVES_DATO: { clave: ClaveDato; etiqueta: string; ejemplo: string }[] = [
@@ -45,6 +47,7 @@ export const CLAVES_DATO: { clave: ClaveDato; etiqueta: string; ejemplo: string 
   { clave: 'fechaSalida', etiqueta: 'Día de la estación', ejemplo: '2026-03-27' },
   { clave: 'hermandad', etiqueta: 'Nombre de la hermandad', ejemplo: 'Hermandad de la Vera-Cruz' },
   { clave: 'anio', etiqueta: 'Año de la campaña', ejemplo: '2026' },
+  { clave: 'qr', etiqueta: 'Código QR (verificación)', ejemplo: 'QR' },
   { clave: 'textoFijo', etiqueta: 'Texto fijo (etiqueta)', ejemplo: 'Titular:' },
 ]
 
@@ -93,6 +96,23 @@ export function borrarModeloPapeleta() {
   localStorage.removeItem(CLAVE_STORAGE)
 }
 
+/**
+ * Campos que se colocan por defecto al subir un modelo, para que NUNCA salga en
+ * blanco: los datos más habituales repartidos por la papeleta. El usuario los
+ * arrastra luego a su sitio. `id` se pasa desde fuera (para tener uuid reales).
+ */
+export function camposPorDefecto(nuevoId: () => string): CampoModelo[] {
+  const base = { negrita: false, color: '#1a1a1a', align: 'left' as const }
+  return [
+    { id: nuevoId(), clave: 'nombre', xPct: 28, yPct: 40, tamanoPct: 3.6, ...base, negrita: true },
+    { id: nuevoId(), clave: 'numeroHermano', xPct: 28, yPct: 48, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'tramo', xPct: 28, yPct: 56, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'puesto', xPct: 28, yPct: 64, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'importe', xPct: 28, yPct: 72, tamanoPct: 3, ...base },
+    { id: nuevoId(), clave: 'qr', xPct: 82, yPct: 76, tamanoPct: 6, ...base },
+  ]
+}
+
 /** Contexto para resolver los valores de cada campo con datos reales. */
 export interface DatosModelo {
   hermano: Hermano
@@ -135,6 +155,18 @@ export function valorDeCampo(campo: CampoModelo, datos: DatosModelo): string {
       return datos.hermandadNombre || ''
     case 'anio':
       return papeleta ? String(papeleta.anio) : ''
+    case 'qr':
+      // Devuelve la URL de verificación; PapeletaModeloRender la dibuja como QR.
+      return papeleta
+        ? urlVerificacion(
+            datosVerificacionDe(
+              papeleta,
+              hermano,
+              datos.tramoEtiqueta || papeleta.opcion || 'Sin tramo',
+              datos.hermandadNombre || '',
+            ),
+          )
+        : ''
     case 'textoFijo':
       return campo.texto ?? ''
     default:

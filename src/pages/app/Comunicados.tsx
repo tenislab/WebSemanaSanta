@@ -16,6 +16,12 @@ import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
 import { useEtiquetas } from '../../lib/etiquetas'
+import {
+  CRITERIOS_POR_DEFECTO,
+  filtrarSegmento,
+  etiquetaSegmento,
+  type CriteriosSegmento,
+} from '../../lib/segmentacion'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
@@ -74,8 +80,13 @@ export default function Comunicados() {
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
 
-  const [canalNuevo, setCanalNuevo] = useState<Canal>(() => canales[0] ?? 'Email')
+  const [canalesNuevos, setCanalesNuevos] = useState<Canal[]>(() => [canales[0] ?? 'Email'])
+  const toggleCanal = (c: Canal) =>
+    setCanalesNuevos((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]))
   const [estadoNuevo, setEstadoNuevo] = useState<EstadoComunicado>('Borrador')
+  const [segmentarAvanzado, setSegmentarAvanzado] = useState(false)
+  const [criterios, setCriterios] = useState<CriteriosSegmento>(CRITERIOS_POR_DEFECTO)
+  const segmentoHermanos = useMemo(() => filtrarSegmento(hermanos, criterios), [hermanos, criterios])
 
   const [conectando, setConectando] = useState<RedSocial | null>(null)
   const [usuarioInput, setUsuarioInput] = useState('')
@@ -111,7 +122,8 @@ export default function Comunicados() {
   }, [comunicados, cuentasConectadas])
 
   function abrirNuevo() {
-    setCanalNuevo(canales[0] ?? 'Email')
+    setCanalesNuevos([canales[0] ?? 'Email'])
+    setSegmentarAvanzado(false)
     setEstadoNuevo('Borrador')
     setFormOpen(true)
   }
@@ -144,37 +156,43 @@ export default function Comunicados() {
     const data = new FormData(form)
     const titulo = String(data.get('titulo') ?? '').trim()
     const cuerpo = String(data.get('cuerpo') ?? '').trim()
-    const canal = String(data.get('canal') ?? '') as Canal
-    const destinatarios = String(data.get('destinatarios') ?? segmentos[0])
+    const canalesSel = canalesNuevos.length > 0 ? canalesNuevos : [canales[0] ?? 'Email']
+    const destinatarios = segmentarAvanzado
+      ? etiquetaSegmento(criterios)
+      : String(data.get('destinatarios') ?? segmentos[0])
     const estado = String(data.get('estado') ?? 'Borrador') as EstadoComunicado
-    if (!titulo || !cuerpo || !canal) return
+    if (!titulo || !cuerpo || canalesSel.length === 0) return
 
-    const redes = canal === 'Redes sociales' ? (data.getAll('redes').map((v) => String(v)) as RedSocial[]) : null
-    if (canal === 'Redes sociales' && (!redes || redes.length === 0)) return
+    const redes = canalesSel.includes('Redes sociales')
+      ? (data.getAll('redes').map((v) => String(v)) as RedSocial[])
+      : null
+    if (canalesSel.includes('Redes sociales') && (!redes || redes.length === 0)) return
 
     const fechaProgramada = estado === 'Programado' ? String(data.get('fechaProgramada') ?? '') || null : null
     if (estado === 'Programado' && !fechaProgramada) return
 
     const hoy = new Date().toISOString().slice(0, 10)
     const nextNumero = Math.max(0, ...comunicados.map((c) => c.numero)) + 1
-    const alcanceEtiqueta = hermanosDeDestinatario(destinatarios).length
-    const nuevo: Comunicado = {
+    const alcanceEtiqueta = segmentarAvanzado ? segmentoHermanos.length : hermanosDeDestinatario(destinatarios).length
+    const alcance = estado === 'Enviado' && alcanceEtiqueta > 0 ? alcanceEtiqueta : null
+    // Un comunicado por cada canal elegido (así cada uno aparece en su canal).
+    const nuevos: Comunicado[] = canalesSel.map((canal, idx) => ({
       id: nuevoId(),
-      numero: nextNumero,
+      numero: nextNumero + idx,
       titulo,
       cuerpo,
       canal,
-      redes,
+      redes: canal === 'Redes sociales' ? redes : null,
       destinatarios,
       estado,
       fechaCreacion: hoy,
       fechaProgramada,
       fechaEnvio: estado === 'Enviado' ? hoy : null,
       autor: 'Tú',
-      alcance: estado === 'Enviado' && alcanceEtiqueta > 0 ? alcanceEtiqueta : null,
-    }
-    setComunicados((prev) => [nuevo, ...prev])
-    setJustAddedId(nuevo.id)
+      alcance,
+    }))
+    setComunicados((prev) => [...nuevos, ...prev])
+    setJustAddedId(nuevos[0].id)
     setFormOpen(false)
     setFiltroCanal('Todos')
     setQuery('')
@@ -220,11 +238,7 @@ export default function Comunicados() {
                 <span className={`pill ${c.conectada ? 'pill--ok' : 'pill--off'}`}>
                   {c.conectada ? 'Conectada' : 'No conectada'}
                 </span>
-                {c.conectada ? (
-                  <button className="btn btn-ghost btn-sm" onClick={() => desconectar(c.red)}>
-                    Desconectar
-                  </button>
-                ) : conectando === c.red ? (
+                {conectando === c.red ? (
                   <div className="red-card__connect-row">
                     <input
                       type="text"
@@ -237,14 +251,23 @@ export default function Comunicados() {
                       Guardar
                     </button>
                   </div>
+                ) : c.conectada ? (
+                  <>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        setConectando(c.red)
+                        setUsuarioInput(c.usuario ?? '')
+                      }}
+                    >
+                      Cambiar usuario
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => desconectar(c.red)}>
+                      Desconectar
+                    </button>
+                  </>
                 ) : (
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => {
-                      setConectando(c.red)
-                      setUsuarioInput('')
-                    }}
-                  >
+                  <button className="btn btn-primary btn-sm" onClick={() => conectar(c.red)}>
                     Conectar
                   </button>
                 )}
@@ -471,16 +494,26 @@ export default function Comunicados() {
 
           <div className="form-grid-2">
             <div className="form-row">
-              <label htmlFor="canal">Canal</label>
-              <select id="canal" name="canal" value={canalNuevo} onChange={(e) => setCanalNuevo(e.target.value as Canal)}>
-                {canales.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <label>Canales (puedes elegir varios)</label>
+              <div className="chips">
+                {canales.map((c) => {
+                  const activo = canalesNuevos.includes(c)
+                  return (
+                    <button
+                      type="button"
+                      key={c}
+                      className={`chip chip--toggle${activo ? ' chip--active' : ''}`}
+                      onClick={() => toggleCanal(c)}
+                    >
+                      {activo ? '✓ ' : ''}{c}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             <div className="form-row">
               <label htmlFor="destinatarios">Destinatarios</label>
-              <select id="destinatarios" name="destinatarios" defaultValue={segmentos[0]}>
+              <select id="destinatarios" name="destinatarios" defaultValue={segmentos[0]} disabled={segmentarAvanzado}>
                 {segmentos.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -495,7 +528,79 @@ export default function Comunicados() {
             </div>
           </div>
 
-          {canalNuevo === 'Redes sociales' && (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={segmentarAvanzado}
+              onChange={(e) => setSegmentarAvanzado(e.target.checked)}
+            />
+            <span>Segmentación avanzada (elegir a quién por criterios)</span>
+          </label>
+          {segmentarAvanzado && (
+            <div className="assign-box">
+              <div className="form-grid-2">
+                <div className="form-row">
+                  <label>Estado</label>
+                  <select
+                    value={criterios.estado}
+                    onChange={(e) => setCriterios((c) => ({ ...c, estado: e.target.value as CriteriosSegmento['estado'] }))}
+                  >
+                    <option value="Activo">Activos</option>
+                    <option value="Todos">Todos (menos bajas)</option>
+                    <option value="Nuevo">Nuevos</option>
+                    <option value="Baja">Bajas</option>
+                  </select>
+                </div>
+                <div className="form-row">
+                  <label>Edad</label>
+                  <select
+                    value={criterios.edad}
+                    onChange={(e) => setCriterios((c) => ({ ...c, edad: e.target.value as CriteriosSegmento['edad'] }))}
+                  >
+                    <option value="Todos">Cualquier edad</option>
+                    <option value="Mayores">Solo mayores de edad</option>
+                    <option value="Menores">Solo menores de edad</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-grid-2">
+                <div className="form-row">
+                  <label>Cuota</label>
+                  <select
+                    value={criterios.cuota}
+                    onChange={(e) => setCriterios((c) => ({ ...c, cuota: e.target.value as CriteriosSegmento['cuota'] }))}
+                  >
+                    <option value="Todos">Cualquiera</option>
+                    <option value="AlDia">Al día</option>
+                    <option value="Pendiente">Pendiente</option>
+                  </select>
+                </div>
+                <div className="form-row">
+                  <label>Etiqueta</label>
+                  <select value={criterios.etiqueta} onChange={(e) => setCriterios((c) => ({ ...c, etiqueta: e.target.value }))}>
+                    <option value="">Cualquiera</option>
+                    {etiquetas.map((et) => (
+                      <option key={et} value={et}>{et}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={criterios.soloConEmail}
+                  onChange={(e) => setCriterios((c) => ({ ...c, soloConEmail: e.target.checked }))}
+                />
+                <span>Solo hermanos con correo (para envíos por email)</span>
+              </label>
+              <p className="form-hint">
+                Llegará a <b>{segmentoHermanos.length}</b> hermano{segmentoHermanos.length === 1 ? '' : 's'}:{' '}
+                {etiquetaSegmento(criterios)}.
+              </p>
+            </div>
+          )}
+
+          {canalesNuevos.includes('Redes sociales') && (
             <div className="form-row">
               <label>Publicar en</label>
               {cuentasConectadas.length === 0 ? (

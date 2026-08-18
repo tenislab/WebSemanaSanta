@@ -14,6 +14,7 @@ import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from 
 import { descargarArchivo } from '../../lib/csv'
 import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
 import { useEtiquetas } from '../../lib/etiquetas'
+import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
 
 /**
  * Con Supabase conectado, crea además una cuenta real de acceso (mismo
@@ -73,6 +74,8 @@ export default function Hermanos() {
   const [ibanDraft, setIbanDraft] = useState('')
   const [ibanError, setIbanError] = useState<string | null>(null)
   const [ibanSaved, setIbanSaved] = useState(false)
+  const [contacto, setContacto] = useState({ email: '', telefono: '', direccion: '' })
+  const [contactoSaved, setContactoSaved] = useState(false)
 
   const solicitudesRemotas = useSolicitudes()
   const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(solicitudesRemotas)
@@ -121,6 +124,12 @@ export default function Hermanos() {
     setIbanDraft(selected?.iban ?? '')
     setIbanError(null)
     setIbanSaved(false)
+    setContacto({
+      email: selected?.email ?? '',
+      telefono: selected?.telefono && selected.telefono !== 'Sin datos' ? selected.telefono : '',
+      direccion: selected?.direccion && selected.direccion !== 'Sin datos' ? selected.direccion : '',
+    })
+    setContactoSaved(false)
   }, [selected?.id])
 
   const filtered = useMemo(() => {
@@ -248,11 +257,31 @@ export default function Hermanos() {
       return
     }
     const nuevoIban = trimmed || null
+    if ((selected.iban ?? null) !== nuevoIban) {
+      // Cambio en los datos del hermano: se le avisa (correo simulado).
+      agregarAvisoHermano(selected.id, 'La secretaría ha actualizado tu cuenta bancaria.')
+    }
     setHermanos((prev) => prev.map((h) => (h.id === selected.id ? { ...h, iban: nuevoIban } : h)))
     setSelected((prev) => (prev ? { ...prev, iban: nuevoIban } : prev))
     setIbanError(null)
     setIbanSaved(true)
     setTimeout(() => setIbanSaved(false), 2500)
+  }
+
+  /** Guarda los datos de contacto editados en la ficha y avisa al hermano. */
+  function guardarContacto() {
+    if (!selected) return
+    const nuevo: Hermano = {
+      ...selected,
+      email: contacto.email.trim() || selected.email,
+      telefono: contacto.telefono.trim() || 'Sin datos',
+      direccion: contacto.direccion.trim() || 'Sin datos',
+    }
+    avisarCambiosHermano(selected, nuevo)
+    setHermanos((prev) => prev.map((h) => (h.id === selected.id ? nuevo : h)))
+    setSelected(nuevo)
+    setContactoSaved(true)
+    setTimeout(() => setContactoSaved(false), 2500)
   }
 
   async function descargarDatosRgpd(hermano: Hermano) {
@@ -449,12 +478,54 @@ export default function Hermanos() {
 
             <dl className="ficha__list">
               <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>
-              <div><dt>Correo electrónico</dt><dd>{selected.email}</dd></div>
-              <div><dt>Teléfono</dt><dd>{selected.telefono}</dd></div>
-              <div><dt>Dirección</dt><dd>{selected.direccion}</dd></div>
               <div><dt>Hermano desde</dt><dd>{selected.antiguedad}</dd></div>
               <div><dt>Tramo en el cortejo</dt><dd>{tramoPorHermano.get(selected.id) ?? 'Sin papeleta este año'}</dd></div>
             </dl>
+
+            <div className="assign-box">
+              <label>Datos de contacto</label>
+              <p className="form-hint">
+                Si cambias algún dato, el hermano recibe un aviso en su área (correo simulado hasta
+                conectar el proveedor).
+              </p>
+              <div className="form-row">
+                <label htmlFor="emailHermano">Correo electrónico</label>
+                <input
+                  id="emailHermano"
+                  type="email"
+                  value={contacto.email}
+                  onChange={(e) => setContacto((c) => ({ ...c, email: e.target.value }))}
+                />
+              </div>
+              <div className="form-grid-2">
+                <div className="form-row">
+                  <label htmlFor="telHermano">Teléfono</label>
+                  <input
+                    id="telHermano"
+                    type="tel"
+                    value={contacto.telefono}
+                    placeholder="600 000 000"
+                    onChange={(e) => setContacto((c) => ({ ...c, telefono: e.target.value }))}
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="dirHermano">Dirección</label>
+                  <input
+                    id="dirHermano"
+                    type="text"
+                    value={contacto.direccion}
+                    placeholder="Calle y número"
+                    onChange={(e) => setContacto((c) => ({ ...c, direccion: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="assign-box__row">
+                <button type="button" className="btn btn-primary btn-sm" onClick={guardarContacto}>
+                  Guardar datos de contacto
+                </button>
+                {contactoSaved && <span className="form-hint form-hint--ok">Guardado · avisado al hermano.</span>}
+              </div>
+            </div>
             <p className="form-hint">
               Accede a su área del hermano con este DNI y la contraseña <code>{selected.claveAcceso}</code>, que
               podrá cambiar desde su área.

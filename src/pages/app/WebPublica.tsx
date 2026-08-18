@@ -194,6 +194,31 @@ function DisenoTab({
             <button type="button" className="btn btn-outline btn-sm" onClick={copiarEnlace}>{copiado ? 'Copiado' : 'Copiar'}</button>
           </div>
         </div>
+
+        <div className="form-row" style={{ marginTop: '0.8rem' }}>
+          <label htmlFor="dominio">Dominio personalizado</label>
+          <input
+            id="dominio"
+            type="text"
+            value={web.dominio ?? ''}
+            onChange={(e) => editar('dominio', e.target.value.trim().toLowerCase())}
+            placeholder="hermandaddetriana.es"
+          />
+          <details className="form-hint" style={{ marginTop: '0.5rem' }}>
+            <summary>Cómo poner tu dominio propio (p. ej. hermandaddetriana.es)</summary>
+            <ol style={{ margin: '0.5rem 0 0 1rem', lineHeight: 1.7 }}>
+              <li>Compra el dominio en un registrador (IONOS, GoDaddy, Namecheap…).</li>
+              <li>Escríbelo aquí arriba y guarda.</li>
+              <li>En el panel de despliegue (Vercel) → <b>Domains</b> → añade tu dominio.</li>
+              <li>En tu registrador, apunta los DNS a Vercel (un registro <code>A</code> a la IP que te indica, o un <code>CNAME</code>).</li>
+              <li>En unos minutos tu web se verá en <b>tu dominio</b> en vez de en el enlace largo.</li>
+            </ol>
+            <p style={{ marginTop: '0.4rem' }}>
+              El enlace real al dominio se activa al conectar la base de datos y el despliegue; por
+              ahora este campo lo guarda para tenerlo listo.
+            </p>
+          </details>
+        </div>
       </section>
 
       <section className="settings-card">
@@ -398,8 +423,16 @@ function CultosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
 function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica; editar: EditarFn; paginaSel: string | null; setPaginaSel: (id: string | null) => void }) {
   const sel = web.paginas.find((p) => p.id === (paginaSel ?? web.paginas[0]?.id)) ?? null
   function editarPagina(id: string, c: Partial<PaginaWeb>) { editar('paginas', web.paginas.map((p) => (p.id === id ? { ...p, ...c } : p))) }
+  function moverPagina(id: string, dir: -1 | 1) {
+    const i = web.paginas.findIndex((p) => p.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= web.paginas.length) return
+    const arr = [...web.paginas]
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    editar('paginas', arr)
+  }
   function nuevaPagina() {
-    const p: PaginaWeb = { id: nuevoId(), icono: '📄', antetitulo: '', titulo: 'Nueva página', entradilla: '', parrafos: [], fotos: [] }
+    const p: PaginaWeb = { id: nuevoId(), icono: '📄', antetitulo: '', titulo: 'Nueva página', entradilla: '', parrafos: [], fotos: [], enMenu: true }
     editar('paginas', [...web.paginas, p])
     setPaginaSel(p.id)
   }
@@ -422,6 +455,17 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
           </div>
           <div className="form-row"><label>Título de la página</label><input type="text" value={sel.titulo} onChange={(e) => editarPagina(sel.id, { titulo: e.target.value })} /></div>
           <div className="form-row"><label>Entradilla</label><textarea rows={2} value={sel.entradilla} onChange={(e) => editarPagina(sel.id, { entradilla: e.target.value })} /></div>
+
+          <div className="assign-box__row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <label className="checkbox">
+              <input type="checkbox" checked={sel.enMenu !== false} onChange={(e) => editarPagina(sel.id, { enMenu: e.target.checked })} />
+              <span>Mostrar en el menú de la web</span>
+            </label>
+            <div className="assign-box__row">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => moverPagina(sel.id, -1)}>▲ Subir</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => moverPagina(sel.id, 1)}>▼ Bajar</button>
+            </div>
+          </div>
 
           <div className="settings-card__head" style={{ marginTop: '0.5rem' }}>
             <h3 className="settings-card__title" style={{ fontSize: '1rem' }}>Párrafos</h3>

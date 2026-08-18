@@ -5,6 +5,7 @@ import type { Papeleta } from '../data/papeletas'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { etiquetaTramo, type Tramo } from '../lib/tramos'
 import { formatCurrency } from '../lib/format'
+import { datosVerificacionDe, urlVerificacion } from '../lib/verificacion'
 
 function estadoPillClass(estado: Papeleta['estado']) {
   if (estado === 'Entregada' || estado === 'Pagada') return 'pill--ok'
@@ -24,10 +25,12 @@ interface PapeletaTicketProps {
   excedeAforo?: boolean
   /** Papeleta personalizada de la hermandad (mantilla, simbólica…), cuando no va en un tramo. */
   opcion?: string | null
+  /** Versión física para imprimir: sin QR (el QR es para la papeleta de móvil). */
+  sinQr?: boolean
 }
 
 /** La papeleta de sitio, personalizada con los datos de la hermandad y del hermano. */
-export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto, excedeAforo, opcion }: PapeletaTicketProps) {
+export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, puesto, excedeAforo, opcion, sinQr }: PapeletaTicketProps) {
   return (
     <div className="ticket-doc print-doc">
       <div className="ticket-doc__head">
@@ -73,14 +76,21 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
           </div>
         </div>
 
-        <div className="ticket-doc__qr">
-          <QrCode
-            value={`Papeleta nº ${papeleta.numero} · ${hermano.nombre} (nº ${hermano.numero}) · ${
-              tramo ? etiquetaTramo(tramo) : opcion ?? 'Sin tramo'
-            } · ${hermandad.nombreLegal || 'Tu hermandad'}`}
-          />
-          <span>Escanéalo para leer los datos</span>
-        </div>
+        {!sinQr && (
+          <div className="ticket-doc__qr">
+            <QrCode
+              value={urlVerificacion(
+                datosVerificacionDe(
+                  papeleta,
+                  hermano,
+                  tramo ? etiquetaTramo(tramo) : opcion ?? 'Sin tramo',
+                  hermandad.nombreLegal || 'Tu hermandad',
+                ),
+              )}
+            />
+            <span>Escanéalo para verificar la papeleta</span>
+          </div>
+        )}
       </div>
 
       <div className="ticket-doc__perf" aria-hidden="true" />

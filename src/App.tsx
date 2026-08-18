@@ -7,6 +7,7 @@ import HermanoPortal from './pages/HermanoPortal'
 import SitioPublico from './pages/SitioPublico'
 import EntradaUnificada from './pages/EntradaUnificada'
 import PaginaLegal from './pages/PaginaLegal'
+import VerificarPapeleta from './pages/VerificarPapeleta'
 import AppShell from './components/AppShell'
 import DashboardHome from './pages/app/DashboardHome'
 import Hermanos from './pages/app/Hermanos'
@@ -35,6 +36,7 @@ export default function App() {
       <Route path="/hermano" element={<HermanoPortal />} />
       <Route path="/w/:slug" element={<SitioPublico />} />
       <Route path="/legal/:slug" element={<PaginaLegal />} />
+      <Route path="/verificar" element={<VerificarPapeleta />} />
 
       <Route
         path="/app"

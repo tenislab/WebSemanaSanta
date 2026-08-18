@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { supabase, isSupabaseConfigured, supabaseDisponible } from '../lib/supabase'
 import { getPersonal } from '../lib/personal'
+import { limpiarModoDemo } from '../lib/demo'
 
 type AuthResult = { error: string | null }
 
@@ -175,6 +176,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const { error } = await supabase.auth.signInWithPassword({ email, password })
             if (error) return { error: translateError(error.message) }
+            // Acceso real con éxito: salimos del modo demo si lo hubiera.
+            limpiarModoDemo()
             const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
             const mfaRequerido = Boolean(data && data.currentLevel === 'aal1' && data.nextLevel === 'aal2')
             return { error: null, mfaRequerido }

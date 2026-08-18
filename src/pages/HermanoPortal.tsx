@@ -8,21 +8,24 @@ import { getModeloPapeleta } from '../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
 import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
-import { getOpcionesPapeleta, type OpcionPapeleta } from '../lib/opcionesPapeleta'
 import { useHermandadSettings } from '../lib/hermandadSettings'
 import {
   getTramos,
-  tramosDeCuerpo,
   etiquetaTramo,
-  esAutomatico,
-  gruposAutomaticos,
   cuerposPresentes,
   getPrecioBase,
   precioDeTramo,
 } from '../lib/tramos'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
-import { getCampana, renovacionDeHermano, ventanaAbierta } from '../lib/campana'
+import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
+import {
+  useSolicitudesPapeleta,
+  MODALIDADES,
+  type ModalidadPapeleta,
+} from '../lib/solicitudesPapeleta'
 import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
+import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
+import { useAvisosHermano } from '../lib/avisosHermano'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
@@ -48,8 +51,6 @@ const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
 const DNI_DEMO = 'h4' // Francisco Gómez Nieto, nº 501 · usado por el botón "hermano de prueba"
 
-/** Valor centinela del selector para «papeleta personalizada» (no puede chocar con un nombre de cuerpo). */
-const PERSONALIZADA = '__personalizada'
 
 interface Sesion {
   hermandadId: string
@@ -162,7 +163,6 @@ export default function HermanoPortal() {
 
   const tramos = useMemo(() => getTramos(), [])
   const campana = useMemo(() => getCampana(), [])
-  const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
   const modeloPapeleta = useMemo(() => getModeloPapeleta(), [])
 
@@ -180,12 +180,18 @@ export default function HermanoPortal() {
   const [solicitudEnviada, setSolicitudEnviada] = useState(false)
   const [errorSolicitud, setErrorSolicitud] = useState<string | null>(null)
 
-  const [pendingCuerpo, setPendingCuerpo] = useState<string>('')
   const [datosGuardados, setDatosGuardados] = useState(false)
   const [bajaMuestraSolicitada, setBajaMuestraSolicitada] = useState(false)
   const [consent, setConsent] = useState<boolean>(() => localStorage.getItem(CONSENT_KEY) === 'si')
   const [claveError, setClaveError] = useState<string | null>(null)
   const [claveGuardada, setClaveGuardada] = useState(false)
+
+  // Solicitud de papeleta de sitio (el hermano la pide; la secretaría la acepta o rechaza).
+  const [solicitudesPapeleta, setSolicitudesPapeleta] = useSolicitudesPapeleta()
+  const [solModalidad, setSolModalidad] = useState<ModalidadPapeleta>('Nazareno')
+  const [solTramo, setSolTramo] = useState('')
+  const [solPreferencia, setSolPreferencia] = useState('')
+  const [solComentario, setSolComentario] = useState('')
 
   const esPrincipal = sesion?.hermandadId === ID_HERMANDAD_PRINCIPAL
   const hermanoPrincipal = useMemo(
@@ -203,6 +209,8 @@ export default function HermanoPortal() {
   )
 
   const hermanoActivo = hermanoPrincipal ?? hermanoMuestra
+  const { avisos: avisosSecretaria, sinLeer: avisosSinLeer, marcarLeidos: marcarAvisosLeidos } =
+    useAvisosHermano(hermanoActivo?.id ?? null)
   const nombreHermandadActiva = esPrincipal ? nombrePrincipal : hermandadMuestra?.nombre ?? 'tu hermandad'
   const colorActivo = esPrincipal ? hermandadPrincipal.colorPrimario : hermandadMuestra?.color ?? '#caa24a'
   const contactoActivo = esPrincipal
@@ -353,10 +361,19 @@ export default function HermanoPortal() {
   }
 
   function entrarComoDemo(hermanoId: string = DNI_DEMO) {
+    // El navegador puede tener un censo viejo (de pruebas anteriores) que ya no
+    // incluye a este hermano de muestra. En vez de fallar, restauramos el censo
+    // de ejemplo y recargamos: la sesión queda guardada y, al volver, el hermano
+    // ya existe. Así el acceso demo funciona siempre, sin depender del estado
+    // previo del navegador.
     if (!hermanos.some((h) => h.id === hermanoId)) {
-      setErrorLogin('Ese hermano de prueba no está disponible ahora mismo. Elige tu hermandad y entra con un DNI y contraseña del censo.')
+      marcarModoDemo()
+      restaurarCensoDemo()
+      guardarSesion({ hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId })
+      window.location.reload()
       return
     }
+    marcarModoDemo()
     const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId }
     guardarSesion(nueva)
     setSesion(nueva)
@@ -383,7 +400,9 @@ export default function HermanoPortal() {
     setClaveInput('')
     setSolicitudEnviada(false)
     setErrorSolicitud(null)
-    setPendingCuerpo('')
+    setSolTramo('')
+    setSolPreferencia('')
+    setSolComentario('')
     setDatosGuardados(false)
     setBajaMuestraSolicitada(false)
     setErrorLogin(null)
@@ -485,9 +504,17 @@ export default function HermanoPortal() {
   }, [papeletas, campana.anio, tramos, hermanos, renovacion])
 
   const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
-  const tramosDelCuerpo = useMemo(
-    () => (pendingCuerpo && pendingCuerpo !== PERSONALIZADA ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
-    [pendingCuerpo, tramos],
+  /** ¿Participó el año anterior? (cualquier papeleta emitida, con o sin tramo): decide qué fecha de apertura le aplica. */
+  const participoAnoAnterior = hermanoPrincipal
+    ? participoEnCampana(hermanoPrincipal.id, papeletas, campana.anio - 1)
+    : false
+  /** Solicitud de papeleta que este hermano ya envió para la campaña activa (si la hay). */
+  const miSolicitud = useMemo(
+    () =>
+      hermanoPrincipal
+        ? solicitudesPapeleta.find((s) => s.hermanoId === hermanoPrincipal.id && s.anio === campana.anio) ?? null
+        : null,
+    [solicitudesPapeleta, hermanoPrincipal, campana.anio],
   )
 
   function nextNumeroPapeleta() {
@@ -497,44 +524,14 @@ export default function HermanoPortal() {
   function renovarSitio() {
     if (!hermanoPrincipal || !renovacion?.sitioAnterior?.tramoId) return
     const tramoAnterior = tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)
-    const nueva: Papeleta = {
-      id: nuevoId(),
-      numero: nextNumeroPapeleta(),
-      hermanoId: hermanoPrincipal.id,
-      anio: campana.anio,
-      tramoId: renovacion.sitioAnterior.tramoId,
-      importe: renovacion.sitioAnterior.importe || precioDeTramo(tramoAnterior, precioBase),
-      estado: 'Asignada',
-      fechaSolicitud: hoy(),
-    }
-    setPapeletas((prev) => [nueva, ...prev])
-  }
-
-  function noRenovar() {
-    if (!hermanoPrincipal) return
-    const renuncia: Papeleta = {
-      id: nuevoId(),
-      numero: nextNumeroPapeleta(),
-      hermanoId: hermanoPrincipal.id,
-      anio: campana.anio,
-      tramoId: null,
-      importe: 0,
-      estado: 'Renuncia',
-      fechaSolicitud: hoy(),
-    }
-    setPapeletas((prev) => [renuncia, ...prev])
-  }
-
-  function sacarEnTramo(tramoId: string) {
-    if (!hermanoPrincipal) return
-    const importe = precioDeTramo(tramos.find((t) => t.id === tramoId), precioBase)
+    const tramoId = renovacion.sitioAnterior.tramoId
+    const importe = renovacion.sitioAnterior.importe || precioDeTramo(tramoAnterior, precioBase)
     setPapeletas((prev) => {
+      // Reutilizamos la papeleta del año si ya existe, para no crear una fila duplicada.
       const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
         return prev.map((p) =>
-          p.id === actual.id
-            ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null }
-            : p,
+          p.id === actual.id ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null } : p,
         )
       }
       const nueva: Papeleta = {
@@ -549,35 +546,56 @@ export default function HermanoPortal() {
       }
       return [nueva, ...prev]
     })
-    setPendingCuerpo('')
   }
 
-  /** Saca una papeleta personalizada de la hermandad (mantilla, simbólica…), sin sitio en el cortejo. */
-  function sacarConOpcion(opcion: OpcionPapeleta) {
+  function noRenovar() {
     if (!hermanoPrincipal) return
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
         return prev.map((p) =>
-          p.id === actual.id
-            ? { ...p, tramoId: null, opcion: opcion.nombre, estado: 'Asignada', importe: opcion.importe, pagoComunicado: null }
-            : p,
+          p.id === actual.id ? { ...p, tramoId: null, opcion: null, estado: 'Renuncia', importe: 0, pagoComunicado: null } : p,
         )
       }
-      const nueva: Papeleta = {
+      const renuncia: Papeleta = {
         id: nuevoId(),
         numero: nextNumeroPapeleta(),
         hermanoId: hermanoPrincipal.id,
         anio: campana.anio,
         tramoId: null,
-        opcion: opcion.nombre,
-        importe: opcion.importe,
-        estado: 'Asignada',
+        importe: 0,
+        estado: 'Renuncia',
         fechaSolicitud: hoy(),
       }
-      return [nueva, ...prev]
+      return [renuncia, ...prev]
     })
-    setPendingCuerpo('')
+  }
+
+  /**
+   * El hermano envía su solicitud de papeleta de sitio. No se emite la papeleta
+   * todavía: queda «Pendiente» hasta que la secretaría la acepte o rechace desde
+   * el módulo Papeletas. Así el reparto lo controla siempre la hermandad.
+   */
+  function enviarSolicitudPapeleta(e: FormEvent) {
+    e.preventDefault()
+    if (!hermanoPrincipal) return
+    const nueva = {
+      id: nuevoId(),
+      hermanoId: hermanoPrincipal.id,
+      hermanoNombre: hermanoPrincipal.nombre,
+      hermanoNumero: hermanoPrincipal.numero,
+      anio: campana.anio,
+      modalidad: solModalidad,
+      preferencia: solPreferencia.trim(),
+      tramoSolicitado: solTramo || 'Sin preferencia',
+      comentario: solComentario.trim(),
+      fecha: hoy(),
+      estado: 'Pendiente' as const,
+    }
+    setSolicitudesPapeleta([nueva, ...solicitudesPapeleta])
+    setSolPreferencia('')
+    setSolComentario('')
+    setSolTramo('')
   }
 
   /** El hermano avisa de que ya ha pagado su papeleta por Bizum o transferencia; la secretaría lo confirma. */
@@ -710,29 +728,41 @@ export default function HermanoPortal() {
                   )}
                 </ul>
 
-                {!usarSupabase && hermanosDemo.length > 0 && (
+                {!usarSupabase && (
                   <div className="banner banner--info banner--demo" role="status" style={{ marginTop: '0.4rem' }}>
                     <div>
-                      <strong>Modo demostración.</strong> Entra de un clic como cualquier hermano de
-                      prueba y verás su área con sus cuotas y su papeleta.
+                      <strong>Modo demostración.</strong> Entra con datos de ejemplo (censo, cuotas y
+                      papeleta) y prueba el área del hermano sin escribir nada.
                     </div>
-                    <div className="demo-accounts">
-                      {hermanosDemo.map((h) => (
-                        <button
-                          type="button"
-                          key={h.id}
-                          className="demo-account"
-                          onClick={() => entrarComoDemo(h.id)}
-                        >
-                          <span className="demo-account__avatar">{inicialesHermandad(h.nombre)}</span>
-                          <span>
-                            <b>{h.nombre}</b>
-                            <small>Hermano/a nº {h.numero}</small>
-                            <small className="demo-account__cred">DNI {h.dni} · {h.claveAcceso}</small>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      onClick={() => entrarComoDemo()}
+                    >
+                      Entrar en modo demo (datos de ejemplo)
+                    </button>
+                    {hermanosDemo.length > 0 && (
+                      <>
+                        <div className="demo-accounts__label">O entra como un hermano concreto:</div>
+                        <div className="demo-accounts">
+                          {hermanosDemo.map((h) => (
+                            <button
+                              type="button"
+                              key={h.id}
+                              className="demo-account"
+                              onClick={() => entrarComoDemo(h.id)}
+                            >
+                              <span className="demo-account__avatar">{inicialesHermandad(h.nombre)}</span>
+                              <span>
+                                <b>{h.nombre}</b>
+                                <small>Hermano/a nº {h.numero}</small>
+                                <small className="demo-account__cred">DNI {h.dni} · {h.claveAcceso}</small>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -950,6 +980,34 @@ export default function HermanoPortal() {
           </div>
         )}
 
+        {/* Avisos de la secretaría: cambios que la hermandad ha hecho en tus datos */}
+        {avisosSecretaria.length > 0 && (
+          <section className="portal__section">
+            <div className="portal__avisos-head">
+              <h2>
+                Avisos de la secretaría
+                {avisosSinLeer > 0 && <span className="portal__avisos-badge">{avisosSinLeer}</span>}
+              </h2>
+              {avisosSinLeer > 0 && (
+                <button className="btn btn-ghost btn-sm" onClick={marcarAvisosLeidos}>
+                  Marcar como leídos
+                </button>
+              )}
+            </div>
+            <ul className="portal__avisos">
+              {avisosSecretaria.map((a) => (
+                <li key={a.id} className={`portal__aviso${a.leido ? '' : ' portal__aviso--nuevo'}`}>
+                  <span className="portal__aviso-icono" aria-hidden="true">✉️</span>
+                  <div>
+                    <p>{a.texto}</p>
+                    <small>{a.fecha}</small>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Papeletas de una hermandad de muestra: su propio subsistema, con sus papeletas y sus datos de pago */}
         {!esPrincipal && hermandadMuestra && hermanoMuestra && (
           <section className="portal__section">
@@ -1017,10 +1075,13 @@ export default function HermanoPortal() {
                     <p className="portal__lead">
                       El año pasado saliste en{' '}
                       <b>{etiquetaTramo(tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)!)}</b>. La renovación
-                      está {ventanaAbierta(campana) ? 'abierta' : 'cerrada'}
-                      {ventanaAbierta(campana) ? ` hasta el ${formatDate(new Date(`${campana.fechaLimiteRenovacion}T00:00:00`))}` : ''}.
+                      está {ventanaAbiertaPara(campana, true) ? 'abierta' : 'cerrada'}
+                      {ventanaAbiertaPara(campana, true)
+                        ? ` hasta el ${formatDate(new Date(`${campana.fechaLimiteRenovacion}T00:00:00`))}`
+                        : ''}
+                      .
                     </p>
-                    {ventanaAbierta(campana) ? (
+                    {ventanaAbiertaPara(campana, true) ? (
                       <div className="assign-box__row">
                         <button className="btn btn-primary" onClick={renovarSitio}>
                           Renovar mi sitio
@@ -1029,77 +1090,102 @@ export default function HermanoPortal() {
                           Este año no salgo
                         </button>
                       </div>
+                    ) : diasHasta(campana.fechaInicioParticiparon) > 0 ? (
+                      <p className="form-hint">
+                        La renovación abre el {formatDate(new Date(`${campana.fechaInicioParticiparon}T00:00:00`))}.
+                      </p>
                     ) : (
                       <p className="form-hint">El plazo de renovación ha terminado. Contacta con la secretaría.</p>
                     )}
                   </>
                 )}
 
-                {(renovacion.estado === 'Sin papeleta' || renovacion.estado === 'No renovada') && ventanaAbierta(campana) && (
-                  <div className="assign-box">
-                    <label htmlFor="cuerpoPortal">Sacar mi papeleta</label>
-                    <div className="form-grid-2">
-                      <select
-                        id="cuerpoPortal"
-                        value={pendingCuerpo}
-                        onChange={(e) => setPendingCuerpo(e.target.value)}
-                      >
-                        <option value="">Elige un cuerpo</option>
-                        {cuerposDisponibles.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                        {opcionesPersonalizadas.length > 0 && (
-                          <option value={PERSONALIZADA}>Otra papeleta (mantilla, simbólica…)</option>
-                        )}
-                      </select>
-                      <select
-                        defaultValue=""
-                        disabled={!pendingCuerpo}
-                        key={pendingCuerpo}
-                        onChange={(e) => {
-                          if (!e.target.value) return
-                          if (pendingCuerpo === PERSONALIZADA) {
-                            const op = opcionesPersonalizadas.find((o) => o.id === e.target.value)
-                            if (op) sacarConOpcion(op)
-                          } else {
-                            sacarEnTramo(e.target.value)
-                          }
-                        }}
-                      >
-                        <option value="" disabled>
-                          {pendingCuerpo === PERSONALIZADA
-                            ? 'Elige tu papeleta…'
-                            : pendingCuerpo
-                              ? 'Elige tu puesto…'
-                              : 'Elige antes un cuerpo'}
-                        </option>
-                        {pendingCuerpo === PERSONALIZADA
-                          ? opcionesPersonalizadas.map((o) => (
-                              <option key={o.id} value={o.id}>{o.nombre} — {o.importe} €</option>
-                            ))
-                          : (() => {
-                              const grupos = gruposAutomaticos(tramosDelCuerpo)
-                              const designados = tramosDelCuerpo.filter((t) => !esAutomatico(t))
-                              return (
-                                <>
-                                  {grupos.map((g) => (
-                                    <option key={g.tramos[0].id} value={g.tramos[0].id}>
-                                      {g.etiqueta} (te coloca la hermandad por número) — {precioDeTramo(g.tramos[0], precioBase)} €
-                                    </option>
-                                  ))}
-                                  {designados.map((t) => (
-                                    <option key={t.id} value={t.id}>
-                                      {t.nombre}{t.tipo ? ` (${t.tipo})` : ''} — {precioDeTramo(t, precioBase)} €
-                                    </option>
-                                  ))}
-                                </>
-                              )
-                            })()}
-                      </select>
+                {(renovacion.estado === 'Sin papeleta' || renovacion.estado === 'No renovada') &&
+                  (miSolicitud && miSolicitud.estado === 'Pendiente' ? (
+                    <div className="assign-box assign-box--wait">
+                      <label>Solicitud enviada</label>
+                      <p className="portal__lead">
+                        Pediste <b>{miSolicitud.modalidad}</b>
+                        {miSolicitud.tramoSolicitado !== 'Sin preferencia' ? ` · ${miSolicitud.tramoSolicitado}` : ''}. La
+                        secretaría la revisará y te avisará.
+                      </p>
+                      <p className="form-hint">Enviada el {miSolicitud.fecha} · pendiente de revisión.</p>
                     </div>
-                    <p className="form-hint">El puesto exacto lo asigna la hermandad; en los tramos por número, según tu número de hermano.</p>
-                  </div>
-                )}
+                  ) : ventanaAbiertaPara(campana, participoAnoAnterior) ? (
+                    <form className="assign-box" onSubmit={enviarSolicitudPapeleta}>
+                      <label>Solicitar mi papeleta de sitio</label>
+                      {miSolicitud && miSolicitud.estado === 'Rechazada' && (
+                        <p className="form-hint form-hint--error">
+                          Tu solicitud anterior no fue aceptada. Puedes enviar una nueva.
+                        </p>
+                      )}
+                      <div className="form-grid-2">
+                        <div className="field">
+                          <label htmlFor="solModalidad">Modalidad</label>
+                          <select
+                            id="solModalidad"
+                            value={solModalidad}
+                            onChange={(e) => setSolModalidad(e.target.value as ModalidadPapeleta)}
+                          >
+                            {MODALIDADES.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label htmlFor="solTramo">Cuerpo o tramo preferido</label>
+                          <select id="solTramo" value={solTramo} onChange={(e) => setSolTramo(e.target.value)}>
+                            <option value="">Sin preferencia</option>
+                            {cuerposDisponibles.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="solPreferencia">Preferencia (opcional)</label>
+                        <input
+                          id="solPreferencia"
+                          type="text"
+                          value={solPreferencia}
+                          placeholder="P. ej. cirio junto a mi hermano"
+                          onChange={(e) => setSolPreferencia(e.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <label htmlFor="solComentario">Comentario para la secretaría (opcional)</label>
+                        <textarea
+                          id="solComentario"
+                          rows={2}
+                          value={solComentario}
+                          onChange={(e) => setSolComentario(e.target.value)}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary">
+                        Enviar solicitud
+                      </button>
+                      <p className="form-hint">
+                        No se te cobra ni se te asigna nada todavía: la secretaría revisa tu solicitud y te confirma el
+                        puesto.
+                      </p>
+                    </form>
+                  ) : diasHasta(
+                      participoAnoAnterior ? campana.fechaInicioParticiparon : campana.fechaInicioNoParticiparon,
+                    ) > 0 ? (
+                    <p className="form-hint">
+                      El plazo de solicitud de papeletas abre el{' '}
+                      {formatDate(
+                        new Date(
+                          `${participoAnoAnterior ? campana.fechaInicioParticiparon : campana.fechaInicioNoParticiparon}T00:00:00`,
+                        ),
+                      )}
+                      .
+                    </p>
+                  ) : (
+                    <p className="form-hint">
+                      El plazo de solicitud de papeletas ha terminado. Contacta con la secretaría.
+                    </p>
+                  ))}
 
                 {(renovacion.estado === 'Renovada' || renovacion.estado === 'Nueva') && renovacion.papeletaActual && hermanoPrincipal && (
                   <>
@@ -1148,9 +1234,6 @@ export default function HermanoPortal() {
                   </>
                 )}
 
-                {renovacion.estado === 'No renovada' && !ventanaAbierta(campana) && (
-                  <p className="form-hint">No renovaste tu sitio este año y el plazo ha terminado.</p>
-                )}
               </div>
             )}
           </section>

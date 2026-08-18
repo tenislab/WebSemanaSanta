@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type PointerEvent } from 'react'
 import {
   CLAVES_DATO,
   borrarModeloPapeleta,
+  camposPorDefecto,
   saveModeloPapeleta,
   type CampoModelo,
   type ModeloPapeleta,
@@ -93,12 +94,12 @@ export default function ModeloPapeletaEditor({
         setCargando(true)
         const { pdfPrimeraPaginaAImagen } = await import('../lib/pdfAImagen')
         const imagen = await pdfPrimeraPaginaAImagen(file)
-        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos ?? [] })
+        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
       } else {
         const lector = new FileReader()
         lector.onload = async () => {
           const comprimida = await comprimirImagen(String(lector.result))
-          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos ?? [] })
+          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
         }
         lector.readAsDataURL(file)
       }
@@ -199,14 +200,31 @@ export default function ModeloPapeletaEditor({
           >
             <img src={modelo.imagenDataUrl} alt="Modelo de papeleta" className="modelo-editor__img" draggable={false} />
             {modelo.campos.map((campo) => {
-              const mostrado =
-                campo.clave === 'textoFijo'
-                  ? campo.texto || 'Texto'
-                  : ejemploDe(campo.clave)
+              const seleccionado = seleccion === campo.id
+              const onDown = (e: PointerEvent) => {
+                e.preventDefault()
+                setSeleccion(campo.id)
+                setArrastrando(campo.id)
+              }
+              // El QR se muestra como un recuadro con la etiqueta, del tamaño real,
+              // para poder colocarlo; en la papeleta final saldrá el QR de verdad.
+              if (campo.clave === 'qr') {
+                return (
+                  <span
+                    key={campo.id}
+                    className={`modelo-campo modelo-campo--qr modelo-editor__campo modelo-editor__campo--qr${seleccionado ? ' modelo-editor__campo--sel' : ''}`}
+                    style={{ left: `${campo.xPct}%`, top: `${campo.yPct}%`, width: `${campo.tamanoPct * 3.2}cqw` }}
+                    onPointerDown={onDown}
+                  >
+                    QR
+                  </span>
+                )
+              }
+              const mostrado = campo.clave === 'textoFijo' ? campo.texto || 'Texto' : ejemploDe(campo.clave)
               return (
                 <span
                   key={campo.id}
-                  className={`modelo-campo modelo-campo--${campo.align} modelo-editor__campo${seleccion === campo.id ? ' modelo-editor__campo--sel' : ''}`}
+                  className={`modelo-campo modelo-campo--${campo.align} modelo-editor__campo${seleccionado ? ' modelo-editor__campo--sel' : ''}`}
                   style={{
                     left: `${campo.xPct}%`,
                     top: `${campo.yPct}%`,
@@ -214,11 +232,7 @@ export default function ModeloPapeletaEditor({
                     fontWeight: campo.negrita ? 700 : 400,
                     color: campo.color,
                   }}
-                  onPointerDown={(e) => {
-                    e.preventDefault()
-                    setSeleccion(campo.id)
-                    setArrastrando(campo.id)
-                  }}
+                  onPointerDown={onDown}
                 >
                   {mostrado}
                 </span>

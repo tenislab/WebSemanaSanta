@@ -99,15 +99,24 @@ function generarPapeletasDemo(): Papeleta[] {
     }
     if (baja) continue
     const est = estados2027[i % estados2027.length]
-    const opcion = opciones[i % opciones.length]
-    const importe = est === 'Renuncia' ? 0 : opcion === 'Mantilla' ? 15 : 18
+    const opcionBase = opciones[i % opciones.length]
+    // La mayoría de los que salen se colocan en un tramo REAL del cortejo, para
+    // que el cortejo de la demo se vea bien poblado. Las mantillas y las
+    // renuncias van aparte (sin tramo). Reparto por cirios, insignias y música.
+    const tramosCortejo = ['t3', 't4', 't6', 't7', 't2', 't5', 't8', 't3', 't4', 't6', 't7', 't1']
+    const enCortejo = est === 'Entregada' || est === 'Pagada' || est === 'Asignada'
+    const esMantilla = opcionBase === 'Mantilla'
+    const enTramo = enCortejo && !esMantilla
+    const tramoId = enTramo ? tramosCortejo[i % tramosCortejo.length] : null
+    const opcion = est === 'Renuncia' ? null : enTramo ? null : opcionBase
+    const importe = est === 'Renuncia' ? 0 : esMantilla ? 15 : tramoId === 't1' ? 22 : 18
     out.push({
       id: `pd27-${i}`,
       numero: num++,
       hermanoId: id,
       anio: 2027,
-      tramoId: null,
-      opcion: est === 'Renuncia' ? null : opcion,
+      tramoId,
+      opcion,
       importe,
       estado: est,
       fechaSolicitud: '15 ene 2027',

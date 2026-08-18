@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Logo, { LogoMark } from './Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../context/AuthContext'
@@ -228,21 +228,9 @@ export default function AppShell() {
         </header>
 
         <main className="app-content">
-          {accesoBloqueado ? (
-            <div className="acceso-denegado">
-              <p className="eyebrow">Acceso restringido</p>
-              <h1>No tienes permiso para ver esta sección</h1>
-              <p>
-                Tu cargo{cargo ? <> (<b>{cargo}</b>)</> : ''} no incluye este módulo. Si crees que
-                deberías tener acceso, pídeselo a quien gestiona el personal de la hermandad.
-              </p>
-              <button className="btn btn-primary" onClick={() => navigate('/app')}>
-                Volver a Inicio
-              </button>
-            </div>
-          ) : (
-            <Outlet />
-          )}
+          {/* Sin acceso a este módulo por cargo: no se muestra "bloqueado", sino que
+              se redirige a Inicio, de modo que la sección simplemente no aparece. */}
+          {accesoBloqueado ? <Navigate to="/app" replace /> : <Outlet />}
         </main>
       </div>
     </div>

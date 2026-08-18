@@ -9,6 +9,8 @@ import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, METODOS_PAGO_PAPELETA, type MetodoPagoPapeleta, type Papeleta } from '../../data/papeletas'
 import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
+import { useConvocatoria, enviarConvocatoria, destinatariosConvocatoria } from '../../lib/convocatoria'
+import { useSolicitudesPapeleta, type SolicitudPapeleta } from '../../lib/solicitudesPapeleta'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatDate, formatCurrency } from '../../lib/format'
@@ -108,9 +110,18 @@ export default function Papeletas() {
   const [ajustesOpen, setAjustesOpen] = useState(false)
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modelo, setModelo] = useState<ModeloPapeleta | null>(() => getModeloPapeleta())
+  // Dos salidas de la papeleta: móvil (con QR, para el correo) y física (sin QR, para imprimir).
+  const [variantePapeleta, setVariantePapeleta] = useState<'movil' | 'fisica'>('movil')
   const [imprimirOpen, setImprimirOpen] = useState(false)
   const [imprimirEstados, setImprimirEstados] = useState<Record<string, boolean>>({ Asignada: true, Pagada: true, Entregada: true })
   const [listaImpresion, setListaImpresion] = useState<ItemImpresion[] | null>(null)
+  const [convocatoria, refrescarConvocatoria] = useConvocatoria()
+  const [solicitudes, setSolicitudes] = useSolicitudesPapeleta()
+  const [solicitudesOpen, setSolicitudesOpen] = useState(false)
+  const solicitudesPendientes = useMemo(
+    () => solicitudes.filter((s) => s.anio === campana.anio && s.estado === 'Pendiente'),
+    [solicitudes, campana.anio],
+  )
 
   function guardarCampana(next: Campana) {
     setCampanaState(next)
@@ -361,6 +372,76 @@ export default function Papeletas() {
     .filter((e) => imprimirEstados[e])
     .reduce((s, e) => s + (contadorImpresion[e] ?? 0), 0)
 
+  /** Abre el plazo avisando a todos los hermanos (email simulado + registro en Comunicados). */
+  function convocar() {
+    const total = enviarConvocatoria(campana.anio, hermanos, fmtIso(campana.fechaLimiteRenovacion))
+    refrescarConvocatoria()
+    window.alert(
+      `Convocatoria enviada (simulada) a ${total} hermanos con correo. Queda registrada en Comunicados. ` +
+        'El envío real de email se activará al conectar el proveedor.',
+    )
+  }
+
+  /** Acepta una solicitud online: le emite la papeleta con lo pedido y marca la solicitud como aceptada. */
+  /**
+   * Tramo del cortejo con el que se emite una solicitud aceptada, para que la
+   * papeleta entre directa en el cortejo (sin colocarla a mano). Se elige del
+   * cuerpo pedido: cirio (reparto por número) para nazareno/penitente, o el
+   * primer tramo del cuerpo en otro caso. La secretaría puede recolocarlo luego.
+   */
+  /**
+   * Elige el tramo con el que se emite una solicitud aceptada, para que la
+   * papeleta entre directa en el cortejo. Del cuerpo pedido, prioriza el CIRIO
+   * con más hueco (reparto por número); si no queda cirio con sitio, cualquier
+   * tramo del cuerpo con hueco. `actuales` = papeletas del momento (para no
+   * amontonar ni desbordar). La secretaría puede recolocarlo luego en Cortejo.
+   */
+  function tramoParaSolicitud(s: SolicitudPapeleta, actuales: Papeleta[]): Tramo | null {
+    const cuerpo = s.tramoSolicitado && s.tramoSolicitado !== 'Sin preferencia' ? s.tramoSolicitado : null
+    const enCuerpo = cuerpo ? tramosDeCuerpo(cuerpo, tramos) : tramos
+    if (enCuerpo.length === 0) return null
+    const ocupados = (tId: string) =>
+      actuales.filter(
+        (p) => p.tramoId === tId && p.anio === campana.anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia',
+      ).length
+    const libres = (t: Tramo) => (t.capacidad ?? 999) - ocupados(t.id)
+    const ciriosConHueco = enCuerpo.filter((t) => esAutomatico(t) && libres(t) > 0).sort((a, b) => libres(b) - libres(a))
+    if (ciriosConHueco.length > 0) return ciriosConHueco[0]
+    const conHueco = enCuerpo.filter((t) => libres(t) > 0)
+    return (conHueco[0] ?? enCuerpo[0]) ?? null
+  }
+
+  function aceptarSolicitud(s: SolicitudPapeleta) {
+    setPapeletas((prev) => {
+      const tramo = tramoParaSolicitud(s, prev)
+      const tramoId = tramo ? tramo.id : null
+      const importe = tramo ? precioDeTramo(tramo, precioBase) : precioBase
+      // Con tramo → va al cortejo; sin tramo (sin cuerpo posible) → papeleta suelta.
+      const opcion = tramoId ? null : `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
+      const actual = prev.find((p) => p.hermanoId === s.hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
+      if (actual) {
+        return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId, estado: 'Asignada', importe } : p))
+      }
+      const nueva: Papeleta = {
+        id: nuevoId(),
+        numero: siguienteNumero(prev),
+        hermanoId: s.hermanoId,
+        anio: campana.anio,
+        tramoId,
+        opcion,
+        importe,
+        estado: 'Asignada',
+        fechaSolicitud: hoy(),
+      }
+      return [nueva, ...prev]
+    })
+    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Aceptada' } : x)))
+  }
+
+  function rechazarSolicitud(s: SolicitudPapeleta) {
+    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Rechazada' } : x)))
+  }
+
   function generarImpresion() {
     const lista: ItemImpresion[] = papeletasActivas
       .filter((p) => imprimirEstados[p.estado])
@@ -393,6 +474,8 @@ export default function Papeletas() {
     const anio = campana.anio + 1
     guardarCampana({
       anio,
+      fechaInicioParticiparon: `${anio}-01-15`,
+      fechaInicioNoParticiparon: `${anio}-02-01`,
       fechaLimiteRenovacion: `${anio}-02-28`,
       fechaSalida: null,
     })
@@ -416,6 +499,11 @@ export default function Papeletas() {
           </p>
         </div>
         <div className="dash-head__actions">
+          {solicitudesPendientes.length > 0 && (
+            <button className="btn btn-outline" onClick={() => setSolicitudesOpen(true)}>
+              Solicitudes ({solicitudesPendientes.length})
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => setImprimirOpen(true)}>
             Imprimir papeletas
           </button>
@@ -443,18 +531,38 @@ export default function Papeletas() {
         )}
       </div>
 
+      {/* Convocatoria: avisar a todos los hermanos de la apertura del plazo */}
+      <div className="banner-inline banner-inline--accent" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        {convocatoria && convocatoria.anio === campana.anio ? (
+          <span>
+            📣 Convocatoria enviada el {fmtIso(convocatoria.fecha)} a <b>{convocatoria.total}</b> hermanos. Ya pueden
+            solicitar su papeleta desde su área.
+          </span>
+        ) : (
+          <span>
+            Avisa a los <b>{destinatariosConvocatoria(hermanos).length}</b> hermanos de que pueden solicitar su papeleta
+            de sitio {campana.anio}.
+          </span>
+        )}
+        <button className="btn btn-primary btn-sm" onClick={convocar}>
+          {convocatoria && convocatoria.anio === campana.anio ? 'Reenviar convocatoria' : 'Convocar papeletas'}
+        </button>
+      </div>
+
       {/* Avisos de portada: lo que la secretaría debe mirar de un vistazo */}
-      {(stats.pendientePago > 0 || tramosCasiLlenos.length > 0 || stats.solicitudes > 0 || (abierta && stats.porRenovar > 0)) && (
+      {(stats.pendientePago > 0 || tramosCasiLlenos.length > 0 || solicitudesPendientes.length > 0 || (abierta && stats.porRenovar > 0)) && (
         <div className="avisos-band">
+          {solicitudesPendientes.length > 0 && (
+            <button type="button" className="aviso aviso--info" onClick={() => setSolicitudesOpen(true)} style={{ cursor: 'pointer' }}>
+              🔔 {solicitudesPendientes.length} solicitud{solicitudesPendientes.length === 1 ? '' : 'es'} de papeleta por revisar
+            </button>
+          )}
           {stats.pendientePago > 0 && (
             <span className="aviso aviso--warn">⚠️ {stats.pendientePago} papeleta{stats.pendientePago === 1 ? '' : 's'} pendiente{stats.pendientePago === 1 ? '' : 's'} de pago</span>
           )}
           {tramosCasiLlenos.map((nombre) => (
             <span key={nombre} className="aviso aviso--warn">🟡 {nombre} casi completo</span>
           ))}
-          {stats.solicitudes > 0 && (
-            <span className="aviso aviso--info">🔔 {stats.solicitudes} solicitud{stats.solicitudes === 1 ? '' : 'es'} por asignar</span>
-          )}
           {abierta && stats.porRenovar > 0 && (
             <span className="aviso aviso--neutral">↻ {stats.porRenovar} por renovar</span>
           )}
@@ -751,9 +859,26 @@ export default function Papeletas() {
                 {/* Tiene papeleta este año: mostrar el ticket y sus acciones */}
                 {actual && actual.estado !== 'Renuncia' && (
                   <>
+                    <div className="assign-box__row no-print" style={{ marginBottom: '0.6rem' }}>
+                      <button
+                        type="button"
+                        className={`chip chip--toggle${variantePapeleta === 'movil' ? ' chip--active' : ''}`}
+                        onClick={() => setVariantePapeleta('movil')}
+                      >
+                        📱 Móvil (con QR)
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip chip--toggle${variantePapeleta === 'fisica' ? ' chip--active' : ''}`}
+                        onClick={() => setVariantePapeleta('fisica')}
+                      >
+                        🖨️ Física (sin QR)
+                      </button>
+                    </div>
                     {modelo ? (
                       <PapeletaModeloRender
                         modelo={modelo}
+                        sinQr={variantePapeleta === 'fisica'}
                         datos={{
                           hermano: h,
                           papeleta: actual,
@@ -772,8 +897,19 @@ export default function Papeletas() {
                         puesto={asig?.puesto ?? null}
                         excedeAforo={asig?.estado === 'Excede aforo'}
                         opcion={actual.opcion}
+                        sinQr={variantePapeleta === 'fisica'}
                       />
                     )}
+                    <p className="form-hint no-print">
+                      {variantePapeleta === 'movil'
+                        ? 'Versión de móvil: lleva el QR de verificación. Es la que se envía al hermano por correo (envío real al conectar la base de datos).'
+                        : 'Versión física: sin QR, pensada para imprimir en papel.'}
+                    </p>
+                    <div className="assign-box__row no-print" style={{ marginTop: '0.4rem' }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => window.print()}>
+                        {variantePapeleta === 'movil' ? 'Descargar / enviar (con QR)' : 'Imprimir física (sin QR)'}
+                      </button>
+                    </div>
                     {actual.estado === 'Asignada' && actual.pagoComunicado && (
                       <div className="banner-inline banner-inline--accent" style={{ marginTop: '1rem' }}>
                         {h.nombre.split(' ')[0]} avisó desde su área de que pagó por{' '}
@@ -815,9 +951,6 @@ export default function Papeletas() {
                           Marcar como entregada
                         </button>
                       )}
-                      <button className="btn btn-outline" onClick={() => window.print()}>
-                        Imprimir / Descargar
-                      </button>
                     </div>
                     {(actual.estado === 'Solicitada' || actual.estado === 'Asignada' || actual.estado === 'Pagada') && (
                       <button type="button" className="ticket-cancel" onClick={() => anularPapeleta(actual.id)}>
@@ -853,15 +986,37 @@ export default function Papeletas() {
         subtitle={`Edición ${campana.anio}`}
       >
         <div className="app-form">
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor="fechaIniPart">Inicio · participaron el año pasado</label>
+              <input
+                id="fechaIniPart"
+                type="date"
+                value={campana.fechaInicioParticiparon}
+                onChange={(e) => guardarCampana({ ...campana, fechaInicioParticiparon: e.target.value })}
+              />
+              <p className="form-hint">Desde este día pueden solicitar los que salieron el año anterior (renovar).</p>
+            </div>
+            <div className="form-row">
+              <label htmlFor="fechaIniNuevos">Inicio · no participaron</label>
+              <input
+                id="fechaIniNuevos"
+                type="date"
+                value={campana.fechaInicioNoParticiparon}
+                onChange={(e) => guardarCampana({ ...campana, fechaInicioNoParticiparon: e.target.value })}
+              />
+              <p className="form-hint">Desde este día pueden solicitar el resto de hermanos (los que no salieron).</p>
+            </div>
+          </div>
           <div className="form-row">
-            <label htmlFor="fechaLimite">Fecha límite de renovación</label>
+            <label htmlFor="fechaLimite">Fin del plazo (fecha límite)</label>
             <input
               id="fechaLimite"
               type="date"
               value={campana.fechaLimiteRenovacion}
               onChange={(e) => guardarCampana({ ...campana, fechaLimiteRenovacion: e.target.value })}
             />
-            <p className="form-hint">Pasada esta fecha, quien no haya renovado pierde su sitio del año anterior.</p>
+            <p className="form-hint">Último día del plazo. Pasada esta fecha, quien no haya renovado pierde su sitio.</p>
           </div>
           <div className="form-row">
             <label htmlFor="fechaSalida">Día de la estación de penitencia</label>
@@ -961,6 +1116,38 @@ export default function Papeletas() {
             QR con los datos.
           </p>
         </div>
+      </Drawer>
+
+      {/* Solicitudes de papeleta enviadas por los hermanos desde su área */}
+      <Drawer
+        open={solicitudesOpen}
+        onClose={() => setSolicitudesOpen(false)}
+        title="Solicitudes de papeleta"
+        subtitle={`${solicitudesPendientes.length} pendiente${solicitudesPendientes.length === 1 ? '' : 's'}`}
+      >
+        {solicitudesPendientes.length === 0 ? (
+          <p className="form-hint">No hay solicitudes pendientes. Las que envíen los hermanos desde su área aparecerán aquí.</p>
+        ) : (
+          solicitudesPendientes.map((s) => (
+            <div className="assign-box" key={s.id}>
+              <div className="ficha__row">
+                <b>{s.hermanoNombre}</b>
+                <span className="pill pill--info">Nº {s.hermanoNumero}</span>
+              </div>
+              <dl className="ficha__list">
+                <div><dt>Modalidad</dt><dd>{s.modalidad}</dd></div>
+                {s.preferencia && <div><dt>Preferencia</dt><dd>{s.preferencia}</dd></div>}
+                <div><dt>Tramo solicitado</dt><dd>{s.tramoSolicitado}</dd></div>
+                {s.comentario && <div><dt>Comentario</dt><dd>{s.comentario}</dd></div>}
+                <div><dt>Enviada</dt><dd>{s.fecha}</dd></div>
+              </dl>
+              <div className="assign-box__row">
+                <button className="btn btn-primary btn-sm" onClick={() => aceptarSolicitud(s)}>Aceptar y emitir</button>
+                <button className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => rechazarSolicitud(s)}>Rechazar</button>
+              </div>
+            </div>
+          ))
+        )}
       </Drawer>
 
       {/* Zona de impresión masiva: oculta en pantalla, visible al imprimir con la clase print-masivo */}

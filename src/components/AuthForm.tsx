@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
 import { useAuth, DEMO_EMAIL, DEMO_PASSWORD } from '../context/AuthContext'
 import { getPersonal } from '../lib/personal'
+import { sembrarDemoLlena, sembrarDemoVacia } from '../lib/demo'
 
 type Mode = 'login' | 'signup' | 'reset'
 
@@ -160,6 +161,17 @@ export default function AuthForm({ mode }: { mode: Mode }) {
     }
   }
 
+  /**
+   * Entra en la demo eligiendo el punto de partida: LLENA (datos de ejemplo) o
+   * VACÍA (hermandad sin datos, para crearlo todo). Sembramos localStorage y
+   * entramos como titular; el panel se monta leyendo ya esos datos.
+   */
+  async function elegirDemo(modo: 'llena' | 'vacia') {
+    if (modo === 'llena') sembrarDemoLlena()
+    else sembrarDemoVacia()
+    await entrarComoDemo(DEMO_EMAIL, DEMO_PASSWORD)
+  }
+
   const cuentasDemo = useMemo(
     () => [
       { id: 'titular', nombre: 'Usuario Demo', cargo: 'Titular · acceso completo', email: DEMO_EMAIL, clave: DEMO_PASSWORD },
@@ -226,9 +238,29 @@ export default function AuthForm({ mode }: { mode: Mode }) {
       {!configured && mode === 'login' && (
         <div className="banner banner--info banner--demo" role="status">
           <div>
-            <strong>Modo demostración.</strong> Entra con un clic como cualquiera de estas
-            personas y comprueba cómo cada cargo ve solo lo que le corresponde. El formulario ya
-            viene relleno con el titular.
+            <strong>Modo demostración.</strong> Elige cómo empezar: con datos de ejemplo para
+            ver las funciones ya en marcha, o con una hermandad vacía para crearlo todo desde cero.
+          </div>
+          <div className="demo-modos">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => elegirDemo('llena')}
+              disabled={submitting}
+            >
+              Datos de ejemplo (llena)
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => elegirDemo('vacia')}
+              disabled={submitting}
+            >
+              Empezar de cero (vacía)
+            </button>
+          </div>
+          <div className="demo-accounts__label">
+            O entra como un cargo concreto (con los datos actuales) y comprueba qué ve cada uno:
           </div>
           <div className="demo-accounts">
             {cuentasDemo.map((c) => (
