@@ -1,5 +1,6 @@
-ACTUALIZACIÓN — F1.1: la papeleta entra directa en el cortejo (+ todo lo anterior)
-Aplicar: copia "archivos/" o  git am actualizacion.patch  (probado sobre main).
-Recuerda el Ctrl+Shift+R la primera vez (arreglo de caché).
-Al ACEPTAR una solicitud, la papeleta ya se coloca en un tramo del cuerpo
-pedido y aparece en el Cortejo automáticamente (antes se quedaba suelta).
+ACTUALIZACIÓN — Fase 2 (plantillas distintas) + F1 auto-cortejo afinado
+Aplicar: copia "archivos/" o  git am actualizacion.patch (probado sobre main).
+Recuerda Ctrl+Shift+R la primera vez (caché).
+· Las 3 plantillas (Clásica / Sobria / Moderna) ahora se distinguen a la
+  primera: alineación, tamaños, tipografía, tarjetas y botones muy diferentes.
+· Aceptar solicitud reparte al cirio con más hueco del cuerpo pedido.

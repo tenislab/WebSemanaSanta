@@ -1658,42 +1658,56 @@ h1, h2, h3,
 
 /* ===== Las 3 plantillas cambian LAYOUT, no solo color ===== */
 
-/* CLÁSICA — centrada, señorial, con filete dorado y todo al centro */
-.sitio[data-plantilla='clasica'][data-tema='claro'] { --sitio-bg: #f7f2e9; --sitio-bg2: #fffdf8; }
-.sitio[data-plantilla='clasica'] .sitio__nav { justify-content: center; flex-direction: column; gap: 0.5rem; text-align: center; }
+/* CLÁSICA — señorial: TODO centrado, crema cálido, marco en la portada,
+   versalitas con flor de adorno, tarjetas con filete dorado arriba. */
+.sitio[data-plantilla='clasica'][data-tema='claro'] { --sitio-bg: #f6efe1; --sitio-bg2: #fffdf7; }
+.sitio[data-plantilla='clasica'] .sitio__nav { justify-content: center; flex-direction: column; gap: 0.55rem; text-align: center; border-bottom: 2px solid color-mix(in srgb, var(--sitio-color) 32%, transparent); }
+.sitio[data-plantilla='clasica'] .sitio__menu { justify-content: center; }
 .sitio[data-plantilla='clasica'] .sitio__hero { text-align: center; }
-.sitio[data-plantilla='clasica'] .sitio__seccion { text-align: center; }
-.sitio[data-plantilla='clasica'] .sitio__seccion h2 { text-align: center; }
-.sitio[data-plantilla='clasica'] .sitio__seccion h2::after { margin-left: auto; margin-right: auto; width: 60px; }
+.sitio[data-plantilla='clasica'] .sitio__hero-inner { border: 1px solid rgba(255,255,255,0.55); padding: clamp(1.3rem, 5cqi, 3rem); }
+.sitio[data-plantilla='clasica'] .sitio__hero h1 { font-weight: 600; }
 .sitio[data-plantilla='clasica'] .sitio__lema { font-style: italic; }
-.sitio[data-plantilla='clasica'] .sitio-btn { border-radius: 3px; letter-spacing: 1px; text-transform: uppercase; font-size: 0.78rem; }
+.sitio[data-plantilla='clasica'] .sitio__seccion { text-align: center; }
+.sitio[data-plantilla='clasica'] .sitio__seccion h2 { text-align: center; font-variant: small-caps; letter-spacing: 2px; }
+.sitio[data-plantilla='clasica'] .sitio__seccion h2::before { content: "✦"; display: block; color: var(--sitio-color); font-size: 0.85rem; margin-bottom: 0.35rem; }
+.sitio[data-plantilla='clasica'] .sitio__seccion h2::after { margin-left: auto; margin-right: auto; width: 64px; }
+.sitio[data-plantilla='clasica'] .sitio__culto,
+.sitio[data-plantilla='clasica'] .sitio__noticia { background: var(--sitio-bg2); border: 1px solid color-mix(in srgb, var(--sitio-color) 18%, var(--sitio-linea)); border-top: 3px solid var(--sitio-color); border-radius: 4px; }
+.sitio[data-plantilla='clasica'] .sitio-btn { border-radius: 2px; letter-spacing: 2px; text-transform: uppercase; font-size: 0.76rem; }
 
-/* SOBRIA — minimalista, alineado a la izquierda, mucho aire, sin adornos */
-.sitio[data-plantilla='sobria'] { --sitio-color2: #999; }
-.sitio[data-plantilla='sobria'] .sitio__nav { border-bottom: 1px solid var(--sitio-linea); text-transform: uppercase; letter-spacing: 1px; font-size: 0.72rem; }
-.sitio[data-plantilla='sobria'] .sitio__menu a { font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase; }
+/* SOBRIA — minimalista editorial: alineado a la IZQUIERDA, mucho aire, tipos
+   finos, títulos pequeños en mayúsculas espaciadas, hilos finos, sin sombras. */
+.sitio[data-plantilla='sobria'] { --sitio-color2: #9a9a9a; }
+.sitio[data-plantilla='sobria'] .sitio__nav { border-bottom: 1px solid var(--sitio-linea); text-transform: uppercase; letter-spacing: 2px; font-size: 0.7rem; padding-top: 1.3rem; padding-bottom: 1.3rem; }
+.sitio[data-plantilla='sobria'] .sitio__menu a { font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; }
 .sitio[data-plantilla='sobria'] .sitio__hero { align-items: flex-end; justify-content: flex-start; text-align: left; }
 .sitio[data-plantilla='sobria'] .sitio__hero-inner { max-width: 640px; padding: 0 0.5rem; }
-.sitio[data-plantilla='sobria'] .sitio__hero h1 { font-weight: 400; letter-spacing: -0.5px; }
-.sitio[data-plantilla='sobria'] .sitio__seccion h2 { font-weight: 400; font-size: 1.35rem; letter-spacing: 0.5px; }
+.sitio[data-plantilla='sobria'] .sitio__hero h1 { font-weight: 300; letter-spacing: -0.5px; }
+.sitio[data-plantilla='sobria'] .sitio__lema { font-weight: 300; opacity: 0.85; }
+.sitio[data-plantilla='sobria'] .sitio__main { max-width: 720px; }
+.sitio[data-plantilla='sobria'] .sitio__seccion { margin-bottom: 4rem; }
+.sitio[data-plantilla='sobria'] .sitio__seccion h2 { font-weight: 300; font-size: 1.2rem; letter-spacing: 3px; text-transform: uppercase; color: var(--sitio-muted); }
 .sitio[data-plantilla='sobria'] .sitio__seccion h2::after { display: none; }
-.sitio[data-plantilla='sobria'] .sitio__main { max-width: 760px; }
 .sitio[data-plantilla='sobria'] .sitio__culto,
-.sitio[data-plantilla='sobria'] .sitio__noticia { background: transparent; border-left: 2px solid var(--sitio-color); border-top: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
-.sitio[data-plantilla='sobria'] .sitio-btn { border-radius: 0; background: transparent; color: var(--sitio-color); border: 1px solid var(--sitio-color); }
-.sitio[data-plantilla='sobria'] .sitio-btn--hero { background: var(--sitio-color); color: #fff; }
+.sitio[data-plantilla='sobria'] .sitio__noticia { background: transparent; border: 0; border-top: 1px solid var(--sitio-linea); border-radius: 0; box-shadow: none; padding-left: 0; padding-right: 0; }
+.sitio[data-plantilla='sobria'] .sitio-btn { border-radius: 0; background: transparent; color: var(--sitio-color); border: 1px solid currentColor; letter-spacing: 1px; text-transform: uppercase; font-size: 0.72rem; }
+.sitio[data-plantilla='sobria'] .sitio-btn--hero { background: var(--sitio-color); color: #fff; border-color: var(--sitio-color); }
 
-/* MODERNA — impacto, portada enorme, titulares grandes, tarjetas con sombra */
-.sitio[data-plantilla='moderna'] .sitio__nav { text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
-.sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2rem, 10cqi, 5rem); font-weight: 800; letter-spacing: -1px; line-height: 1.05; }
-.sitio[data-plantilla='moderna'] .sitio__lema { font-size: 1.3rem; }
-.sitio[data-plantilla='moderna'] .sitio__seccion h2 { font-size: 2rem; font-weight: 800; }
-.sitio[data-plantilla='moderna'] .sitio__seccion h2::after { height: 5px; width: 70px; border-radius: 4px; }
+/* MODERNA — impacto: portada ENORME a pantalla, titulares en mayúsculas muy
+   gruesas, tarjetas redondeadas con sombra, botones tipo píldora. */
+.sitio[data-plantilla='moderna'] .sitio__nav { text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; border-bottom: 0; }
+.sitio[data-plantilla='moderna'] .sitio__brand { font-weight: 900; }
+.sitio[data-plantilla='moderna'] .sitio__hero { min-height: clamp(320px, 80cqi, 900px); }
+.sitio[data-plantilla='moderna'] .sitio__hero h1 { font-size: clamp(2.2rem, 12cqi, 6rem); font-weight: 900; letter-spacing: -1.5px; line-height: 1; text-transform: uppercase; }
+.sitio[data-plantilla='moderna'] .sitio__lema { font-size: clamp(1.05rem, 3cqi, 1.5rem); font-weight: 500; }
+.sitio[data-plantilla='moderna'] .sitio__seccion h2 { font-size: clamp(1.6rem, 5cqi, 2.4rem); font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px; }
+.sitio[data-plantilla='moderna'] .sitio__seccion h2::after { height: 6px; width: 80px; border-radius: 4px; }
 .sitio[data-plantilla='moderna'] .sitio__culto,
 .sitio[data-plantilla='moderna'] .sitio__noticia,
-.sitio[data-plantilla='moderna'] .sitio__titular img { box-shadow: 0 10px 26px rgba(0,0,0,0.14); border: none; }
-.sitio[data-plantilla='moderna'] .sitio__culto { border-radius: 16px; }
-.sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 40px; padding: 13px 30px; font-weight: 700; }
+.sitio[data-plantilla='moderna'] .sitio__titular img { box-shadow: 0 14px 34px rgba(0,0,0,0.18); border: none; }
+.sitio[data-plantilla='moderna'] .sitio__culto,
+.sitio[data-plantilla='moderna'] .sitio__noticia { border-radius: 18px; }
+.sitio[data-plantilla='moderna'] .sitio-btn { border-radius: 50px; padding: 15px 34px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
 
 /* Adaptación a anchos estrechos (vista previa y móvil real): mismo diseño,
    pero con menos aire y la navegación que fluye a varias líneas. */

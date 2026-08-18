@@ -387,22 +387,35 @@ export default function Papeletas() {
    * cuerpo pedido: cirio (reparto por número) para nazareno/penitente, o el
    * primer tramo del cuerpo en otro caso. La secretaría puede recolocarlo luego.
    */
-  function tramoParaSolicitud(s: SolicitudPapeleta): Tramo | null {
+  /**
+   * Elige el tramo con el que se emite una solicitud aceptada, para que la
+   * papeleta entre directa en el cortejo. Del cuerpo pedido, prioriza el CIRIO
+   * con más hueco (reparto por número); si no queda cirio con sitio, cualquier
+   * tramo del cuerpo con hueco. `actuales` = papeletas del momento (para no
+   * amontonar ni desbordar). La secretaría puede recolocarlo luego en Cortejo.
+   */
+  function tramoParaSolicitud(s: SolicitudPapeleta, actuales: Papeleta[]): Tramo | null {
     const cuerpo = s.tramoSolicitado && s.tramoSolicitado !== 'Sin preferencia' ? s.tramoSolicitado : null
-    const candidatos = cuerpo ? tramosDeCuerpo(cuerpo, tramos) : tramos
-    if (candidatos.length === 0) return null
-    const prefiereCirio = s.modalidad === 'Nazareno' || s.modalidad === 'Penitente'
-    const cirio = candidatos.find((t) => esAutomatico(t))
-    return (prefiereCirio && cirio ? cirio : cirio ?? candidatos[0]) ?? null
+    const enCuerpo = cuerpo ? tramosDeCuerpo(cuerpo, tramos) : tramos
+    if (enCuerpo.length === 0) return null
+    const ocupados = (tId: string) =>
+      actuales.filter(
+        (p) => p.tramoId === tId && p.anio === campana.anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia',
+      ).length
+    const libres = (t: Tramo) => (t.capacidad ?? 999) - ocupados(t.id)
+    const ciriosConHueco = enCuerpo.filter((t) => esAutomatico(t) && libres(t) > 0).sort((a, b) => libres(b) - libres(a))
+    if (ciriosConHueco.length > 0) return ciriosConHueco[0]
+    const conHueco = enCuerpo.filter((t) => libres(t) > 0)
+    return (conHueco[0] ?? enCuerpo[0]) ?? null
   }
 
   function aceptarSolicitud(s: SolicitudPapeleta) {
-    const tramo = tramoParaSolicitud(s)
-    const tramoId = tramo ? tramo.id : null
-    const importe = tramo ? precioDeTramo(tramo, precioBase) : precioBase
-    // Con tramo → va al cortejo; sin tramo (sin cuerpo posible) → papeleta suelta.
-    const opcion = tramoId ? null : `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
     setPapeletas((prev) => {
+      const tramo = tramoParaSolicitud(s, prev)
+      const tramoId = tramo ? tramo.id : null
+      const importe = tramo ? precioDeTramo(tramo, precioBase) : precioBase
+      // Con tramo → va al cortejo; sin tramo (sin cuerpo posible) → papeleta suelta.
+      const opcion = tramoId ? null : `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
       const actual = prev.find((p) => p.hermanoId === s.hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
         return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId, estado: 'Asignada', importe } : p))
