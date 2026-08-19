@@ -168,23 +168,34 @@ Para papeletas, donativos y lotería: **Redsys** (lo da el propio banco) o
 
 ---
 
-## F17 — La web, terminada *(necesita Supabase + dominio)*
+## F17 — La web, terminada — **hecha** (ver `docs/FASES-WEB.md`, W1–W10)
 
-- Dominio propio funcionando de verdad (DNS y certificado).
-- Formulario de contacto que llegue a secretaría (hoy la web da el correo y el
-  teléfono, pero no hay formulario: enviarlo necesita servidor).
-- Calendario público de cultos enlazado con el módulo de Eventos.
+- Formulario de contacto, solicitud de alta, donativos y lotería: **hechos**.
+  Caen en el buzón de la web, dentro del panel.
+- Calendario público de cultos enlazado con Eventos: **hecho**.
+- Dominio propio: se configura y se comprueba desde el editor; lo que queda es
+  que la hermandad compre el dominio y apunte el DNS
+  (ver [`CONECTAR.md`](CONECTAR.md)).
 
 ---
 
 ## Y de propina, cuando todo lo anterior esté
 
-- Histórico completo en el área del hermano (papeletas y cuotas de años
-  anteriores, descarga de recibos).
-- Memoria anual y exportación a Excel.
-- Verificación en dos pasos (la pantalla ya está; falta Supabase).
-- Repaso a fondo de móvil y accesibilidad.
-- Manual de uso.
+- Histórico completo en el área del hermano: **hecho** (fase H1).
+- Repaso a fondo de móvil y accesibilidad: **hecho** (fase P10). Las 19
+  pantallas comprobadas a 390 px, sin desbordes, con el foco del teclado
+  visible y sin texto ilegible.
+- Memoria anual y exportación a Excel: pendiente.
+- Verificación en dos pasos: la pantalla está; falta Supabase.
+- Manual de uso: pendiente.
+
+## Lo que vino después: las fases P
+
+Cuando F, W y H estuvieron hechas quedaba lo que hace falta para que una
+hermandad **empiece a usar Cabildo de verdad**: importar su censo, que las
+solicitudes lleguen a alguien, la foto del hermano, el alta en condiciones…
+Está todo en [`FASES-PUESTA-EN-MARCHA.md`](FASES-PUESTA-EN-MARCHA.md), y lo que
+queda por conectar (correo, cobros, dominio) en [`CONECTAR.md`](CONECTAR.md).
 
 ---
 

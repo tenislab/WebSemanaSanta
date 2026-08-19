@@ -59,54 +59,21 @@ import { avisosDeContraste } from '../../lib/contraste'
 import { nuevoId } from '../../lib/supabaseSync'
 import SitioContenido, { type FocoPreview } from '../../components/SitioContenido'
 import Drawer from '../../components/Drawer'
+import {
+  explicarEstado, explicarProblema, limpiarDominio, problemaDelDominio, urlDeComprobacion,
+  type EstadoDominio,
+} from '../../lib/dominio'
+import AvisoFalta from '../../components/AvisoFalta'
+import { requisito } from '../../lib/requisitos'
 import { cultosDelCalendario } from '../../lib/cultosDelCalendario'
 import { getCampana } from '../../lib/campana'
 import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml } from '../../lib/seoWeb'
 import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
+import { comprimirImagen, leerArchivo } from '../../lib/imagen'
 import {
   TIPOS_MENSAJE, actualizarMensajeWeb, borrarMensajeWeb, resumenMensaje, sinLeer, useMensajesWeb,
   type MensajeWeb,
 } from '../../lib/mensajesWeb'
-
-/**
- * WebP pesa entre un tercio y la mitad que JPEG a la misma calidad, y lo
- * entienden todos los navegadores desde hace años. Se comprueba una vez: si
- * este navegador no sabe, se sigue con JPEG y no pasa nada.
- */
-let formatoFotos: string | null = null
-function mejorFormato(): string {
-  if (formatoFotos) return formatoFotos
-  try {
-    const c = document.createElement('canvas')
-    c.width = 1
-    c.height = 1
-    formatoFotos = c.toDataURL('image/webp').startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg'
-  } catch {
-    formatoFotos = 'image/jpeg'
-  }
-  return formatoFotos
-}
-
-function comprimirImagen(dataUrl: string, maxLado = 1600, calidad = 0.82): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => {
-      const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(img.width * escala)
-      canvas.height = Math.round(img.height * escala)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return resolve(dataUrl)
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      const salida = canvas.toDataURL(mejorFormato(), calidad)
-      // Si por lo que sea sale más gorda que la original (un PNG plano, una
-      // foto ya diminuta), se queda la original.
-      resolve(salida.length < dataUrl.length ? salida : dataUrl)
-    }
-    img.onerror = () => resolve(dataUrl)
-    img.src = dataUrl
-  })
-}
 
 /**
  * La copia pequeña para la rejilla de la galería. 520 px de lado basta y sobra
@@ -125,12 +92,7 @@ async function leerImagenes(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: stri
   const files = [...(e.target.files ?? [])].filter((f) => f.type.startsWith('image/'))
   e.target.value = ''
   for (const file of files) {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const lector = new FileReader()
-      lector.onload = () => resolve(String(lector.result))
-      lector.onerror = () => reject(new Error('no se pudo leer'))
-      lector.readAsDataURL(file)
-    }).catch(() => null)
+    const dataUrl = await leerArchivo(file)
     if (dataUrl) cb(await comprimirImagen(dataUrl, maxLado))
   }
 }
@@ -138,12 +100,7 @@ async function leerImagenes(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: stri
 /** Las mismas imágenes, pero a partir de archivos sueltos (arrastrar, pegar). */
 async function leerArchivos(files: File[], cb: (dataUrl: string) => void) {
   for (const file of files.filter((f) => f.type.startsWith('image/'))) {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const lector = new FileReader()
-      lector.onload = () => resolve(String(lector.result))
-      lector.onerror = () => reject(new Error('no se pudo leer'))
-      lector.readAsDataURL(file)
-    }).catch(() => null)
+    const dataUrl = await leerArchivo(file)
     if (dataUrl) cb(await comprimirImagen(dataUrl))
   }
 }
@@ -1136,6 +1093,32 @@ function DisenoTab({
   // El dominio propio es un extra del pack «Todo» (capacidad premium).
   const { suscripcion } = useSuscripcion()
   const conDominioPropio = tieneCapacidad(suscripcion, 'premium')
+  const problemaDominio = (web.dominio ?? '').trim() ? problemaDelDominio(web.dominio ?? '') : null
+  const [estadoDominio, setEstadoDominio] = useState<EstadoDominio>('sinProbar')
+
+  /**
+   * Comprueba de verdad si el dominio ya sirve esta web, en vez de fiarse de
+   * que lo escribieron bien. Se pide una ruta que la propia aplicación sirve:
+   * si contesta, está apuntado; si no contesta, o todavía no ha propagado el
+   * DNS o el dominio no existe.
+   */
+  async function comprobarDominio() {
+    const dominio = (web.dominio ?? '').trim()
+    if (!dominio) return
+    setEstadoDominio('comprobando')
+    try {
+      const r = await fetch(urlDeComprobacion(dominio), { cache: 'no-store' })
+      if (!r.ok) { setEstadoDominio('otroSitio'); return }
+      const texto = await r.text()
+      // El robots.txt que servimos nombra nuestro sitemap: si está, es el nuestro.
+      setEstadoDominio(/sitemap/i.test(texto) ? 'apunta' : 'otroSitio')
+    } catch {
+      // Un dominio que no existe, o que existe pero no deja consultarlo desde
+      // otro origen. Las dos cosas se leen igual desde aquí, así que se cuenta
+      // lo único seguro: que no ha contestado.
+      setEstadoDominio('noResponde')
+    }
+  }
   const avisosColor = avisosDeContraste(web.colorPrimario, web.colorSecundario, web.tema)
   // Qué estilo está puesto ahora (null = combinación a medida).
   const puesto = estiloActual(web)
@@ -1198,9 +1181,43 @@ function DisenoTab({
             type="text"
             value={web.dominio ?? ''}
             disabled={!conDominioPropio}
-            onChange={(e) => editar('dominio', e.target.value.trim().toLowerCase())}
+            // Se limpia lo que peguen: la gente copia la barra de direcciones
+            // entera, con https:// y barra final, y eso es lo normal.
+            onChange={(e) => editar('dominio', limpiarDominio(e.target.value))}
             placeholder="hermandaddetriana.es"
+            aria-invalid={!!problemaDominio}
+            aria-describedby={problemaDominio ? 'dominioError' : undefined}
           />
+          {problemaDominio && (
+            <p id="dominioError" className="aviso-falta__error-suelto">{explicarProblema(problemaDominio)}</p>
+          )}
+          {/* Comprobar de verdad que apunta aquí, en vez de fiarse de que lo
+              escribieron bien: es lo único que despeja la duda de «¿ya está?». */}
+          {conDominioPropio && (web.dominio ?? '').trim() !== '' && !problemaDominio && (
+            <div className="dominio-check">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={estadoDominio === 'comprobando'}
+                onClick={comprobarDominio}
+              >
+                {estadoDominio === 'comprobando' ? 'Comprobando…' : 'Comprobar si ya apunta aquí'}
+              </button>
+              {estadoDominio !== 'sinProbar' && estadoDominio !== 'comprobando' && (
+                <p className={estadoDominio === 'apunta' ? 'form-hint form-hint--ok' : 'form-hint'}>
+                  {estadoDominio === 'apunta' ? '✓ ' : ''}
+                  {explicarEstado(estadoDominio, web.dominio ?? '')}
+                </p>
+              )}
+              {/* Esto estaba dentro de dos desplegables cerrados, o sea que no
+                  lo leía nadie, y es LA pega que se lleva todo el mundo. */}
+              <p className="form-hint">
+                <b>Acordaos del www.</b> Media España lo escribe. Añadid los dos en Vercel
+                (<code>{web.dominio}</code> y <code>www.{web.dominio}</code>) y que uno redirija al
+                otro; si no, quien escriba el www no llegará.
+              </p>
+            </div>
+          )}
           <details className="form-hint" style={{ marginTop: '0.5rem' }}>
             <summary>Cómo poner tu dominio propio (p. ej. hermandaddetriana.es)</summary>
             <ol style={{ margin: '0.5rem 0 0 1rem', lineHeight: 1.7 }}>
@@ -1211,8 +1228,12 @@ function DisenoTab({
               <li>En unos minutos tu web se verá en <b>tu dominio</b> en vez de en el enlace largo.</li>
             </ol>
             <p style={{ marginTop: '0.4rem' }}>
-              El enlace real al dominio se activa al conectar la base de datos y el despliegue; por
-              ahora este campo lo guarda para tenerlo listo.
+              Ojo con el <code>www</code>: media España lo escribe. En Vercel añadid los dos
+              (<b>hermandaddetriana.es</b> y <b>www.hermandaddetriana.es</b>) y decidle que uno
+              redirija al otro; si no, quien escriba el <code>www</code> no llegará.
+            </p>
+            <p style={{ marginTop: '0.4rem' }}>
+              El certificado HTTPS lo emite Vercel solo, sin que tengáis que hacer nada.
             </p>
           </details>
         </div>
@@ -1655,11 +1676,12 @@ function DonativosTab({ web, hermandad, editar }: { web: WebPublica; hermandad: 
           <span className="afinar__titulo">Cobrar con tarjeta desde la web</span>
           <span className="afinar__nota">{d.enlacePasarela.trim() ? 'Pasarela conectada' : 'Sin pasarela'}</span>
         </summary>
+        <AvisoFalta requisito={requisito('pasarela', { web })} />
         <p className="form-hint">
-          Cabildo no cobra por ti: el dinero tiene que ir a una cuenta de la hermandad. Si contratáis
-          una pasarela (con vuestro banco, Stripe, PayPal…), pegad aquí el enlace de pago que os den y
-          el botón de la web lleva a ella. Sin pasarela, la web enseña el Bizum y la cuenta, que es
-          como se hace hoy por teléfono pero sin llamar.
+          Si contratáis una pasarela (con vuestro banco, Stripe, PayPal…), pegad aquí el enlace de
+          pago que os den y el botón de la web lleva a ella. Sin pasarela, la web enseña el Bizum y
+          la cuenta, que es como se hace hoy por teléfono pero sin llamar. El aviso de arriba solo lo
+          veis vosotros: en la web pública no sale.
         </p>
         <div className="form-row">
           <label htmlFor="donPasarela">Enlace de pago</label>

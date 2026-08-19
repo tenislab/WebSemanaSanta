@@ -33,8 +33,10 @@ import { CATEGORIAS_ENSER } from '../../data/enseres'
 import { CANALES, SEGMENTOS } from '../../data/comunicados'
 import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
 import { nuevoId } from '../../lib/supabaseSync'
-import { crearCopia, esCopiaValida, restaurarCopia } from '../../lib/backup'
+import { crearCopia, esCopiaValida, restaurarCopia, resumirCopia } from '../../lib/backup'
 import { descargarArchivo } from '../../lib/csv'
+import AvisoFalta from '../../components/AvisoFalta'
+import { contextoActual, requisitos } from '../../lib/requisitos'
 
 const MAX_LOGO_BYTES = 800_000
 
@@ -55,7 +57,7 @@ const CATALOGOS_DEF = [
   { k: 'segmentos', clave: CLAVES_CATALOGOS.segmentosComunicado, titulo: 'Destinatarios de comunicados', porDefecto: SEGMENTOS },
 ] as const
 
-type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos'
+type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos' | 'puesta'
 
 /** Las secciones de los ajustes, agrupadas como el editor de la web. */
 const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; icono: ReactNode }[] }[] = [
@@ -77,6 +79,7 @@ const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; i
   {
     titulo: 'Mantenimiento',
     items: [
+      { id: 'puesta', label: 'Puesta en marcha', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 2v6M12 16v6M2 12h6M16 12h6" /><circle cx="12" cy="12" r="3.2" /></svg> },
       { id: 'datos', label: 'Copias y datos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></svg> },
     ],
   },
@@ -245,8 +248,7 @@ export default function Configuracion() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    if (!window.confirm('Restaurar la copia sustituirá TODOS los datos actuales de la hermandad por los del archivo. ¿Continuar?')) return
-    setCopiaEstado('Restaurando…')
+    setCopiaEstado('Leyendo la copia…')
     try {
       const texto = await file.text()
       const obj = JSON.parse(texto)
@@ -255,6 +257,26 @@ export default function Configuracion() {
         setTimeout(() => setCopiaEstado(null), 4000)
         return
       }
+      // Se pregunta DESPUÉS de leerla, con lo que trae delante: antes se
+      // confirmaba a ciegas, sin saber siquiera de qué día era la copia.
+      const r = resumirCopia(obj)
+      if (r.masNueva) {
+        setCopiaEstado(
+          'Esta copia la hizo una versión de Cabildo más nueva que la que tenéis. Restaurarla podría perder datos: actualizad Cabildo antes.',
+        )
+        setTimeout(() => setCopiaEstado(null), 9000)
+        return
+      }
+      const cuando = r.fecha ? `del ${r.fecha}` : 'sin fecha'
+      const trae = `${r.bloques} bloques de datos${r.archivos > 0 ? ` y ${r.archivos} archivos adjuntos` : ''}`
+      if (!window.confirm(
+        `Vas a restaurar una copia ${cuando}, con ${trae}.\n\n` +
+        'Esto sustituirá TODOS los datos actuales de la hermandad por los del archivo. ¿Continuar?',
+      )) {
+        setCopiaEstado(null)
+        return
+      }
+      setCopiaEstado('Restaurando…')
       await restaurarCopia(obj)
       setCopiaEstado('Copia restaurada. Recargando…')
       setTimeout(() => window.location.reload(), 800)
@@ -760,6 +782,17 @@ export default function Configuracion() {
             + Añadir tramo
           </button>
         </div>
+        {/* Sugerencias para el campo de rol de tramos y opciones. Va una vez
+            para las dos tablas: son los mismos roles. */}
+        <datalist id="rolesSugeridos">
+          {['Costalero', 'Acólito', 'Monaguillo', 'Banda', 'Mantilla', 'Diputado de tramo', 'Nazareno', 'Presidencia']
+            .map((r) => <option key={r} value={r} />)}
+        </datalist>
+        <p className="form-hint">
+          El <b>rol</b> es opcional: si lo pones, a quien saque aquí su papeleta se le asigna solo
+          mientras la tenga, y se le quita si la anula. Sirve para mandar un comunicado solo a los
+          costaleros de este año sin ir marcándolos uno a uno. No da ningún permiso en el panel.
+        </p>
         <p className="form-hint">
           Define los tramos de cada cuerpo, cuántos hermanos caben y <b>cómo se llena cada uno</b>:
           «Por número» es el reparto automático clásico de los cirios (la app coloca a los hermanos
@@ -866,6 +899,16 @@ export default function Configuracion() {
                 onChange={(e) => updateTramo(t.id, 'horaCitacion', e.target.value)}
                 aria-label="Hora de citación del tramo"
               />
+              {/* El rol que da ir en este tramo. Se le pone SOLO al hermano
+                  mientras tenga aquí su papeleta, y se le quita si la anula. */}
+              <input
+                type="text"
+                value={t.etiqueta ?? ''}
+                onChange={(e) => updateTramo(t.id, 'etiqueta', e.target.value)}
+                placeholder="Rol (opcional)"
+                aria-label="Rol que da este tramo"
+                list="rolesSugeridos"
+              />
               <span className="tramo-row__mover">
                 <button
                   type="button"
@@ -954,6 +997,14 @@ export default function Configuracion() {
                 />
                 <span>€</span>
               </div>
+              <input
+                type="text"
+                value={o.etiqueta ?? ''}
+                onChange={(e) => updateOpcion(o.id, 'etiqueta', e.target.value)}
+                placeholder="Rol (opcional)"
+                aria-label="Rol que da esta papeleta"
+                list="rolesSugeridos"
+              />
               <button type="button" className="icon-btn" title="Quitar papeleta" onClick={() => removeOpcion(o.id)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
@@ -1064,6 +1115,8 @@ export default function Configuracion() {
       )}
 
       {seccion === 'ficha' && <CamposPropiosCard />}
+
+      {seccion === 'puesta' && <PuestaEnMarchaCard />}
 
       {seccion === 'datos' && (
         <>
@@ -1219,6 +1272,56 @@ function CamposPropiosCard() {
 
       {/* Nada de un botón «Guardar» que no guarda: se guardan al escribir. */}
       <p className="form-hint">Los cambios se guardan solos.</p>
+    </section>
+  )
+}
+
+/**
+ * Puesta en marcha: un solo sitio que dice qué falta por conectar para que
+ * Cabildo funcione del todo, y quién lo arregla.
+ *
+ * Existe porque lo que falta estaba repartido: la base de datos se veía en un
+ * sitio, el correo en otro, la pasarela en un tercero, y nadie tenía la foto
+ * entera. Al ir a poner la aplicación en marcha, la primera pregunta de una
+ * junta es «¿qué me queda?», y hasta ahora no había dónde mirarlo.
+ */
+function PuestaEnMarchaCard() {
+  const todos = Object.values(requisitos(contextoActual()))
+  const pendientes = todos.filter((r) => !r.listo)
+  const listos = todos.filter((r) => r.listo)
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head">
+        <h2 className="settings-card__title">Puesta en marcha</h2>
+        {pendientes.length > 0 && <span className="pill pill--warn">{pendientes.length} por conectar</span>}
+      </div>
+      <p className="form-hint">
+        Cabildo funciona entero sin nada de esto: se puede llevar el censo, cobrar las cuotas, repartir
+        las papeletas y publicar la web. Lo de aquí abajo es lo que le falta para funcionar <b>del
+        todo</b>, y casi todo lo contrata la hermandad a su nombre, no nosotros.
+      </p>
+
+      {pendientes.length === 0 ? (
+        <p className="form-hint"><b>Está todo conectado.</b> No queda nada pendiente por aquí.</p>
+      ) : (
+        <div className="puesta-lista">
+          {pendientes.map((r) => (
+            <AvisoFalta key={r.id} requisito={r} />
+          ))}
+        </div>
+      )}
+
+      {listos.length > 0 && (
+        <>
+          <h3 className="puesta-hecho__titulo">Ya conectado</h3>
+          <ul className="puesta-hecho">
+            {listos.map((r) => (
+              <li key={r.id}>{r.nombre}</li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   )
 }

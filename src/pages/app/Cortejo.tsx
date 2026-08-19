@@ -499,7 +499,13 @@ export default function Cortejo() {
                   <td className="num">{f.puesto ?? '—'}</td>
                   <td>
                     <div className="row-person">
-                      <span className="row-avatar">{initials(f.hermano.nombre)}</span>
+                      {/* La foto si la hay: el día de la salida se busca por
+                          la cara, no por el número. */}
+                      {f.hermano.fotoDataUrl ? (
+                        <img className="row-avatar row-avatar--foto" src={f.hermano.fotoDataUrl} alt="" />
+                      ) : (
+                        <span className="row-avatar">{initials(f.hermano.nombre)}</span>
+                      )}
                       <span>
                         <span className="row-person__name">{f.hermano.nombre}</span>
                         <span className="row-person__sub">Nº {f.hermano.numero}</span>
@@ -806,9 +812,16 @@ function TramoCard({
 
       <div className="avatar-stack">
         {visibles.map((a) => (
-          <span key={a.papeleta.id} className="row-avatar avatar-stack__item" title={a.hermano.nombre}>
-            {initials(a.hermano.nombre)}
-          </span>
+          a.hermano.fotoDataUrl ? (
+            <img
+              key={a.papeleta.id} className="row-avatar row-avatar--foto avatar-stack__item"
+              src={a.hermano.fotoDataUrl} alt="" title={a.hermano.nombre}
+            />
+          ) : (
+            <span key={a.papeleta.id} className="row-avatar avatar-stack__item" title={a.hermano.nombre}>
+              {initials(a.hermano.nombre)}
+            </span>
+          )
         ))}
         {resto > 0 && <span className="row-avatar avatar-stack__item avatar-stack__more">+{resto}</span>}
         {ocupados === 0 && <span className="table-muted">Sin hermanos asignados</span>}
@@ -882,7 +895,11 @@ function TramoFicha({
               {reparto.map((a) => (
                 <li key={a.papeleta.id}>
                   <span className="row-person">
-                    <span className="row-avatar">{initials(a.hermano.nombre)}</span>
+                    {a.hermano.fotoDataUrl ? (
+                      <img className="row-avatar row-avatar--foto" src={a.hermano.fotoDataUrl} alt="" />
+                    ) : (
+                      <span className="row-avatar">{initials(a.hermano.nombre)}</span>
+                    )}
                     <span>
                       <span className="row-person__name">{a.hermano.nombre}</span>
                       <span className="row-person__sub">

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Logo, { LogoMark } from './Logo'
+import AltaHermandad from './AltaHermandad'
+import { altaPendiente } from '../lib/altaHermandad'
+import { getHermandadSettings, useHermandadSettings } from '../lib/hermandadSettings'
 import ThemeToggle from './ThemeToggle'
 import PaletaComandos, { type DestinoPaleta } from './PaletaComandos'
 import { useAuth } from '../context/AuthContext'
@@ -152,6 +155,14 @@ export default function AppShell() {
   }, [])
   const navigate = useNavigate()
   const location = useLocation()
+  const ajustesHermandad = useHermandadSettings()
+  const [mostrarAlta, setMostrarAlta] = useState(() => false)
+  // Se decide al montar y una sola vez: si se recalculara en cada render, al
+  // guardar el primer dato del asistente dejaría de cumplirse la condición y
+  // el asistente se cerraría solo a mitad.
+  useEffect(() => {
+    if (altaPendiente(getHermandadSettings())) setMostrarAlta(true)
+  }, [])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { suscripcion, activar } = useSuscripcion()
 
@@ -227,6 +238,17 @@ export default function AppShell() {
         nombreHermandad={hermandad}
         onActivar={(pack, periodo) => activar(pack, periodo, fechaHoyLocal())}
         onSalir={handleSignOut}
+      />
+    )
+  }
+
+  // El alta de la hermandad: sale una vez, al entrar por primera vez con la
+  // hermandad recién creada y sin ninguno de los datos que hacen falta.
+  if (mostrarAlta) {
+    return (
+      <AltaHermandad
+        settings={ajustesHermandad}
+        onTerminar={() => setMostrarAlta(false)}
       />
     )
   }

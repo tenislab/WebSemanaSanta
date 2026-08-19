@@ -54,6 +54,23 @@ creada con una versión anterior). Después, `supabase/web-publica.sql` y
 `supabase/mensajes-web.sql`: la web pública y el buzón donde caen los
 formularios de la web (contacto, donativos y lotería).
 
+**¿Vas a lanzarla?** El paso a paso está en
+[`docs/LANZAMIENTO.md`](docs/LANZAMIENTO.md), y antes de desplegar:
+
+```
+npm run prelanzamiento
+```
+
+Comprueba las 23 cosas que solo se notan el día del despliegue (claves
+expuestas, rutas, orden de los SQL, documentos legales obligatorios).
+
+**¿Está para salir al público?** La respuesta honrada, con lo que falta y lo
+que no, en [`docs/ESTA-PARA-SALIR.md`](docs/ESTA-PARA-SALIR.md).
+
+**Todo lo que hay que conectar —base de datos, correo, cobros y dominio— está
+explicado paso a paso en [`docs/CONECTAR.md`](docs/CONECTAR.md)**, y dentro de
+la aplicación en Configuración → Puesta en marcha.
+
 1. Crea un proyecto en [supabase.com](https://supabase.com).
 2. Ve a **Project Settings → API** y copia:
    - **Project URL** → `VITE_SUPABASE_URL`

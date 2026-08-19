@@ -6,6 +6,7 @@ import CamposPropiosForm from '../../components/CamposPropios'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
+import { getOpcionesPapeleta } from '../../lib/opcionesPapeleta'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
@@ -16,6 +17,10 @@ import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
 import { toCsv, descargarArchivo } from '../../lib/csv'
+import ImportarCenso from '../../components/ImportarCenso'
+import FotoHermano from '../../components/FotoHermano'
+import { darDeBajaEnCenso, reactivarEnCenso } from '../../lib/censo'
+import { etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
 import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
 import { useEtiquetas } from '../../lib/etiquetas'
 import { useCamposPropios, valorLegible } from '../../lib/camposPropios'
@@ -104,7 +109,9 @@ export default function Hermanos() {
     // Se limpia la URL: si no, al recargar vuelve a filtrar y desconcierta.
     setParams({}, { replace: true })
   }, [params, setParams])
-  const [filter, setFilter] = useState<'Todos' | EstadoHermano>('Todos')
+  // «Piden la baja» no es un estado del hermano: es que lo ha pedido y sigue
+  // esperando a que la secretaría lo tramite.
+  const [filter, setFilter] = useState<'Todos' | 'Piden la baja' | EstadoHermano>('Todos')
   /** Cumpleaños del mes: las hermandades felicitan, y es un dato que estaba
    *  guardado y no se usaba para nada. */
   const [soloCumples, setSoloCumples] = useState(false)
@@ -128,11 +135,35 @@ export default function Hermanos() {
   function ordenarPor(campo: OrdenCampo) {
     setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: true }))
   }
+  // Los tramos y las opciones, que son de donde salen los roles automáticos.
+  const tramosRoles = useMemo(() => getTramos(), [])
+  const opcionesRoles = useMemo(() => getOpcionesPapeleta(), [])
+  /**
+   * Las etiquetas que salen SOLAS de la papeleta de cada uno (costalero,
+   * acólito, mantilla). Se calculan una vez y se reparten por índice: en un
+   * censo de mil, recalcularlas por fila sería una barbaridad.
+   */
+  const roles = useMemo(() => {
+    const anio = getCampana().anio
+    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+    return indiceRoles(papeletas, tramosRoles, opcionesRoles, anio)
+  }, [tramosRoles, opcionesRoles])
+  const rolesAutomaticos = useMemo(
+    () => etiquetasQueSonAutomaticas(tramosRoles, opcionesRoles),
+    [tramosRoles, opcionesRoles],
+  )
+
+  /** Todo lo que se puede elegir para filtrar: las de la hermandad y las de la papeleta. */
+  const etiquetasParaFiltrar = useMemo(
+    () => [...new Set([...etiquetas, ...rolesAutomaticos])].sort((a, b) => a.localeCompare(b, 'es')),
+    [etiquetas, rolesAutomaticos],
+  )
+
   const [criterios, setCriterios] = useState<CriteriosSegmento>(SIN_SESGO)
   const sesgoActivo = !mismosCriterios(criterios, SIN_SESGO)
   const sesgados = useMemo(
-    () => (sesgoActivo ? filtrarSegmento(hermanos, limpiarCriterios(criterios)) : hermanos),
-    [hermanos, criterios, sesgoActivo],
+    () => (sesgoActivo ? filtrarSegmento(hermanos, limpiarCriterios(criterios), roles) : hermanos),
+    [hermanos, criterios, sesgoActivo, roles],
   )
   const camposDeAlta = camposPropios.filter((c) => c.enAlta && c.nombre.trim())
   // Los campos propios del alta no van en el <form> (no son inputs con name):
@@ -162,6 +193,8 @@ export default function Hermanos() {
   const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(solicitudesRemotas)
   useEffect(() => setSolicitudesState(solicitudesRemotas), [solicitudesRemotas])
   const [solicitudesOpen, setSolicitudesOpen] = useState(false)
+  const [importarOpen, setImportarOpen] = useState(false)
+  const [bajasOpen, setBajasOpen] = useState(false)
   const pendientes = useMemo(() => solicitudes.filter((s) => s.estado === 'Pendiente'), [solicitudes])
 
   function actualizarSolicitudes(next: SolicitudAlta[]) {
@@ -238,13 +271,27 @@ export default function Hermanos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id])
 
+  /**
+   * Quien ha pedido la baja desde su área y sigue esperando. Antes esto solo se
+   * veía abriendo la ficha de ESE hermano y desplegando «Administración», así
+   * que la solicitud llegaba y no se enteraba nadie.
+   */
+  const bajasPedidas = useMemo(
+    () => hermanos.filter((h) => h.bajaSolicitada && h.estado !== 'Baja'),
+    [hermanos],
+  )
+
   const filtered = useMemo(() => {
     // El sesgo va ANTES que los filtros de la barra: los de la barra afinan lo
     // que el sesgo ya ha dejado.
     return sesgados
-      .filter((h) => (filter === 'Todos' ? true : h.estado === filter))
+      .filter((h) =>
+        filter === 'Todos' ? true : filter === 'Piden la baja' ? Boolean(h.bajaSolicitada && h.estado !== 'Baja') : h.estado === filter,
+      )
       .filter((h) => (soloCumples ? cumpleEsteMes(h.fechaNacimiento) : true))
-      .filter((h) => (filtroEtiqueta ? (h.etiquetas ?? []).includes(filtroEtiqueta) : true))
+      // Los roles que salen de la papeleta cuentan igual que los puestos a
+      // mano: si no, filtrar por «Costalero» no encuentra a los costaleros.
+      .filter((h) => (filtroEtiqueta ? etiquetasDe(h, roles.get(h.id) ?? []).includes(filtroEtiqueta) : true))
       .filter((h) => {
         const q = query.trim().toLowerCase()
         if (!q) return true
@@ -259,7 +306,7 @@ export default function Hermanos() {
         if (orden.campo === 'antiguedad') return signo * (a.antiguedad - b.antiguedad)
         return signo * ((a.numero || Infinity) - (b.numero || Infinity))
       })
-  }, [sesgados, query, filter, filtroEtiqueta, orden, soloCumples])
+  }, [sesgados, query, filter, filtroEtiqueta, orden, soloCumples, roles])
 
   const cumplenEsteMes = useMemo(
     () => hermanos.filter((h) => h.estado !== 'Baja' && cumpleEsteMes(h.fechaNacimiento)).length,
@@ -267,6 +314,11 @@ export default function Hermanos() {
   )
 
   /** Añade o quita una etiqueta a un hermano (y refleja el cambio en la ficha abierta). */
+  /** Cambia unos cuantos campos de un hermano. Se guarda al escribir, como el resto. */
+  function aplicarHermano(hermanoId: string, cambios: Partial<Hermano>) {
+    setHermanos((prev) => prev.map((h) => (h.id === hermanoId ? { ...h, ...cambios } : h)))
+  }
+
   function toggleEtiquetaHermano(hermanoId: string, etiqueta: string) {
     setHermanos((prev) =>
       prev.map((h) => {
@@ -301,7 +353,7 @@ export default function Hermanos() {
 
   // El tramo de cada hermano no se guarda: se calcula solo a partir de su
   // número de hermano y del aforo de los tramos configurados (ver Cortejo).
-  const tramos = useMemo(() => getTramos(), [])
+  const tramos = tramosRoles
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
@@ -515,33 +567,43 @@ export default function Hermanos() {
   function darDeBaja(hermanoId: string) {
     const objetivo = hermanos.find((h) => h.id === hermanoId)
     if (!objetivo || objetivo.estado === 'Baja') return
-    setHermanos((prev) => {
-      // Se relee dentro del updater: la lista pudo cambiar (otra pestaña, una
-      // recarga desde la base) entre el clic y este momento.
-      const actual = prev.find((h) => h.id === hermanoId)
-      if (!actual || actual.estado === 'Baja') return prev
-      const numBaja = actual.numero
-      return prev.map((h) => {
-        if (h.id === hermanoId) return { ...h, estado: 'Baja', numero: 0, bajaSolicitada: false }
-        // Solo descienden los que están dentro de la numeración activa
-        // (numero > 0); los de baja ya están fuera y no se tocan.
-        if (h.estado !== 'Baja' && h.numero > 0 && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
-        return h
-      })
-    })
+    // Se recoloca dentro del updater: la lista pudo cambiar (otra pestaña, una
+    // recarga desde la base) entre el clic y este momento.
+    setHermanos((prev) => darDeBajaEnCenso(prev, hermanoId))
     agregarAvisoHermano(hermanoId, 'La secretaría ha tramitado tu baja en la hermandad.')
   }
 
-  /** Reactiva a un hermano de baja: vuelve al censo con el último número disponible. */
-  function reactivar(hermanoId: string) {
+  /**
+   * Retira la solicitud sin dar de baja a nadie. Hace falta: mucha se pide en
+   * caliente por algo que se arregla hablando, y sin esto la marca se quedaba
+   * puesta para siempre y el contador no bajaba nunca.
+   */
+  function descartarBaja(hermanoId: string) {
+    setHermanos((prev) =>
+      prev.map((h) =>
+        h.id === hermanoId ? { ...h, bajaSolicitada: false, bajaSolicitadaEl: undefined, motivoBaja: undefined } : h,
+      ),
+    )
+    agregarAvisoHermano(
+      hermanoId,
+      'Hemos retirado tu solicitud de baja tras hablarlo contigo. Sigues siendo hermano/a con tu número y tu antigüedad.',
+    )
+  }
+
+  /**
+   * Reactiva a un hermano de baja. Hay dos formas, y no da igual cuál:
+   *
+   * - **Al final**: entra con el último número, como uno nuevo. Vale para quien
+   *   se fue hace veinte años y vuelve.
+   * - **Recuperando su antigüedad**: vuelve al puesto que le corresponde por su
+   *   año de entrada, y los que están por debajo bajan uno. Es lo normal en una
+   *   hermandad cuando alguien se reincorpora, y hasta ahora no se podía: se le
+   *   mandaba al final siempre, perdiendo todo su escalafón.
+   */
+  function reactivar(hermanoId: string, recuperarAntiguedad: boolean) {
     const objetivo = hermanos.find((h) => h.id === hermanoId)
     if (!objetivo || objetivo.estado !== 'Baja') return
-    // El número se toma dentro del updater, con la lista más reciente.
-    let siguiente = 0
-    setHermanos((prev) => {
-      siguiente = Math.max(0, ...prev.map((h) => h.numero)) + 1
-      return prev.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo', numero: siguiente } : h))
-    })
+    setHermanos((prev) => reactivarEnCenso(prev, hermanoId, recuperarAntiguedad))
   }
 
   async function descargarDatosRgpd(hermano: Hermano) {
@@ -586,11 +648,21 @@ export default function Hermanos() {
               Solicitudes de alta ({pendientes.length})
             </button>
           )}
+          {bajasPedidas.length > 0 && (
+            <button className="btn btn-outline" onClick={() => setBajasOpen(true)}>
+              Bajas pedidas ({bajasPedidas.length})
+            </button>
+          )}
           {/* Se exporta y se imprime EXACTAMENTE lo que hay en pantalla: si has
               sesgado por «costaleros al día», eso es lo que sale. */}
           <MenuAcciones etiqueta="Exportar">
             <button type="button" onClick={() => exportarCsv()} disabled={filtered.length === 0}>
               Descargar en Excel (CSV) <small>{filtered.length}</small>
+            </button>
+            {/* Importar vive aquí, junto a exportar: es la misma idea (entrar y
+                salir datos) y así se encuentra sin buscarla en Configuración. */}
+            <button type="button" onClick={() => setImportarOpen(true)}>
+              Traer vuestro censo (CSV)
             </button>
             <button type="button" className="no-print" onClick={() => window.print()} disabled={filtered.length === 0}>
               Imprimir el listado <small>{filtered.length}</small>
@@ -645,14 +717,23 @@ export default function Hermanos() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="filters">
-          {(['Todos', 'Activo', 'Nuevo', 'Baja'] as const).map((f) => (
+          {/* El filtro de bajas pedidas solo aparece cuando hay alguna: si no,
+              sería una pestaña siempre vacía. */}
+          {([
+            'Todos', 'Activo', 'Nuevo', 'Baja',
+            ...(bajasPedidas.length > 0 ? (['Piden la baja'] as const) : []),
+          ] as const).map((f) => (
             <button
               key={f}
               className={`chip${filter === f ? ' chip--active' : ''}`}
               onClick={() => setFilter(f)}
               type="button"
             >
-              {f === 'Todos' ? 'Todos' : f === 'Activo' ? 'Activos' : f === 'Nuevo' ? 'Nuevos' : 'Baja'}
+              {f === 'Todos' ? 'Todos'
+                : f === 'Activo' ? 'Activos'
+                : f === 'Nuevo' ? 'Nuevos'
+                : f === 'Baja' ? 'Baja'
+                : `Piden la baja (${bajasPedidas.length})`}
             </button>
           ))}
           {cumplenEsteMes > 0 && (
@@ -674,7 +755,10 @@ export default function Hermanos() {
         >
           {sesgoActivo ? '✓ Sesgado' : 'Sesgar'}
         </button>
-        {etiquetas.length > 0 && (
+        {/* En la lista van las de la hermandad Y las que salen de la papeleta:
+            si no, «Costalero» no aparecería para elegirlo aunque haya
+            trescientos costaleros este año. */}
+        {etiquetasParaFiltrar.length > 0 && (
           <select
             className="search-box"
             style={{ maxWidth: '15rem' }}
@@ -683,8 +767,10 @@ export default function Hermanos() {
             aria-label="Filtrar por etiqueta"
           >
             <option value="">Todas las etiquetas</option>
-            {etiquetas.map((et) => (
-              <option key={et} value={et}>{et}</option>
+            {etiquetasParaFiltrar.map((et) => (
+              <option key={et} value={et}>
+                {et}{rolesAutomaticos.includes(et) && !etiquetas.includes(et) ? ' (por papeleta)' : ''}
+              </option>
             ))}
           </select>
         )}
@@ -692,6 +778,7 @@ export default function Hermanos() {
 
       {sesgando && (
         <EditorSegmento
+          etiquetasExtra={rolesAutomaticos}
           criterios={criterios}
           onChange={setCriterios}
           cuantos={sesgados.length}
@@ -805,6 +892,14 @@ export default function Hermanos() {
                 </td>
                 <td>
                   <span className={`pill ${estadoClass(h.estado)}`}>{h.estado}</span>
+                  {h.bajaSolicitada && h.estado !== 'Baja' && (
+                    <span
+                      className="pill-avisado"
+                      title={`Pidió la baja${h.bajaSolicitadaEl ? ` el ${h.bajaSolicitadaEl}` : ''}`}
+                    >
+                      Pide la baja
+                    </span>
+                  )}
                 </td>
                 <td className="col-opcional">
                   <span className={`pill ${h.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
@@ -871,6 +966,13 @@ export default function Hermanos() {
       </div>
 
       {/* Ficha individual */}
+      <ImportarCenso
+        abierto={importarOpen}
+        onCerrar={() => setImportarOpen(false)}
+        censo={hermanos}
+        onImportar={(censo) => setHermanos(censo)}
+      />
+
       <Drawer
         open={!!selected}
         ancho="ancho"
@@ -884,7 +986,11 @@ export default function Hermanos() {
                 directamente a una lista de campos y no se sabía ni a quién se
                 estaba mirando más allá del título del panel. */}
             <header className="ficha-hero" style={{ '--tono': tonoDe(selected.nombre).fondo, '--tono-tinta': tonoDe(selected.nombre).tinta } as CSSProperties}>
-              <span className="ficha-hero__avatar" aria-hidden="true">{initials(selected.nombre)}</span>
+              {selected.fotoDataUrl ? (
+                <img className="ficha-hero__avatar ficha-hero__avatar--foto" src={selected.fotoDataUrl} alt={`Foto de ${selected.nombre}`} />
+              ) : (
+                <span className="ficha-hero__avatar" aria-hidden="true">{initials(selected.nombre)}</span>
+              )}
               {/* Sin repetir el nombre ni el número: los tiene justo encima, en
                   la cabecera del panel. Aquí va lo que los completa. */}
               <div className="ficha-hero__quien">
@@ -899,7 +1005,7 @@ export default function Hermanos() {
                   <span className={`pill ${selected.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
                     {selected.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
                   </span>
-                  {(selected.etiquetas ?? []).slice(0, 3).map((et) => (
+                  {etiquetasDe(selected, roles.get(selected.id) ?? []).slice(0, 4).map((et) => (
                     <span key={et} className="pill pill--info">{et}</span>
                   ))}
                 </div>
@@ -972,11 +1078,80 @@ export default function Hermanos() {
               </div>
             </div>
             <div className="assign-box">
+              <label>Foto</label>
+              <FotoHermano
+                nombre={selected.nombre}
+                foto={selected.fotoDataUrl}
+                consiente={selected.consienteFoto}
+                onCambiar={(foto, consiente) => aplicarHermano(selected.id, { fotoDataUrl: foto, consienteFoto: consiente })}
+              />
+            </div>
+
+            <div className="assign-box">
+              <label>Datos que suelen hacer falta</label>
+              <p className="form-hint">
+                El expediente pide el bautismo; la talla y las notas de salud se acaban apuntando en
+                un papel aparte que se pierde todos los años.
+              </p>
+              <div className="form-grid-2">
+                <div className="form-row">
+                  <label htmlFor="parroquiaBautismo">Parroquia de bautismo</label>
+                  <input
+                    id="parroquiaBautismo" type="text" value={selected.parroquiaBautismo ?? ''}
+                    onChange={(e) => aplicarHermano(selected.id, { parroquiaBautismo: e.target.value })}
+                    placeholder="Parroquia de Santa Ana"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="fechaBautismo">Fecha de bautismo</label>
+                  <input
+                    id="fechaBautismo" type="date" value={selected.fechaBautismo ?? ''}
+                    onChange={(e) => aplicarHermano(selected.id, { fechaBautismo: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="form-grid-2">
+                <div className="form-row">
+                  <label htmlFor="tallaTunica">Talla de túnica</label>
+                  <input
+                    id="tallaTunica" type="text" value={selected.tallaTunica ?? ''}
+                    onChange={(e) => aplicarHermano(selected.id, { tallaTunica: e.target.value })}
+                    placeholder="M · 1,75 m"
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="notasSalud">Para el día de la salida</label>
+                  <input
+                    id="notasSalud" type="text" value={selected.notasSalud ?? ''}
+                    onChange={(e) => aplicarHermano(selected.id, { notasSalud: e.target.value })}
+                    placeholder="Alergia a…, no puede andar mucho"
+                  />
+                  <p className="form-hint">Son ocho horas de pie: esto no es curiosidad.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="assign-box">
               <label>Etiquetas</label>
               <p className="form-hint">
                 Marca los grupos a los que pertenece. Sirven para mandarle avisos segmentados (p. ej.
                 solo a los costaleros) y para filtrar el censo.
               </p>
+              {/* Las que vienen de su papeleta no se marcan a mano: se ponen
+                  solas mientras la tenga y se van si la anula. Enseñarlas aquí
+                  evita que alguien las busque en la lista y no las encuentre. */}
+              {(roles.get(selected.id) ?? []).length > 0 && (
+                <div className="etiquetas-auto">
+                  <span className="etiquetas-auto__ante">Por su papeleta de este año</span>
+                  <div className="etiquetas-chips">
+                    {(roles.get(selected.id) ?? []).map((et) => (
+                      <span key={et} className="chip chip--auto" title="Se pone sola por el tramo u opción de su papeleta">
+                        {et}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="etiquetas-chips">
                 {etiquetas.map((et) => {
                   const activa = (selected.etiquetas ?? []).includes(et)
@@ -1094,12 +1269,28 @@ export default function Hermanos() {
               ) : (
                 <>
                   <p className="form-hint">
-                    Está de baja: fuera de la numeración activa. Al reactivarlo entra de nuevo en el
-                    censo con el último número disponible.
+                    Está de baja: fuera de la numeración activa. Al reactivarlo hay que decidir qué
+                    pasa con su antigüedad, y no da igual.
                   </p>
-                  <button type="button" className="btn btn-outline btn-sm" onClick={() => reactivar(selected.id)}>
-                    Reactivar hermano
-                  </button>
+                  <div className="assign-box__row">
+                    <button
+                      type="button" className="btn btn-primary btn-sm"
+                      onClick={() => reactivar(selected.id, true)}
+                    >
+                      Recupera su antigüedad ({selected.antiguedad})
+                    </button>
+                    <button
+                      type="button" className="btn btn-outline btn-sm"
+                      onClick={() => reactivar(selected.id, false)}
+                    >
+                      Entra al final del censo
+                    </button>
+                  </div>
+                  <p className="form-hint">
+                    Con <b>recuperar su antigüedad</b> vuelve al puesto que le toca por su año de
+                    entrada y los de abajo descienden uno, que es lo normal cuando alguien se
+                    reincorpora. Con <b>al final</b> entra como uno nuevo.
+                  </p>
                 </>
               )}
             </div>
@@ -1212,6 +1403,58 @@ export default function Hermanos() {
           h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.cuotaAlDia ? 'Al día' : 'Pendiente',
         ])}
       />
+
+      <Drawer
+        open={bajasOpen}
+        onClose={() => setBajasOpen(false)}
+        title="Bajas pedidas"
+        subtitle={`${bajasPedidas.length} esperando`}
+      >
+        <div className="ficha">
+          <p className="form-hint">
+            Lo han pedido desde su área. Hasta que se tramite <b>siguen siendo hermanos de pleno
+            derecho</b>, con su número y su antigüedad.
+          </p>
+          {bajasPedidas.length === 0 ? (
+            <p className="form-hint">No hay bajas pendientes.</p>
+          ) : (
+            bajasPedidas.map((h) => (
+              <div className="assign-box" key={h.id}>
+                <div className="ficha__row">
+                  <span className="pill pill--warn">Pide la baja</span>
+                  {h.bajaSolicitadaEl && <span className="pill pill--off">{h.bajaSolicitadaEl}</span>}
+                </div>
+                <dl className="ficha__list">
+                  <div><dt>Hermano/a</dt><dd>{h.nombre}</dd></div>
+                  <div><dt>Número</dt><dd>{h.numero > 0 ? h.numero : '—'}</dd></div>
+                  <div><dt>Hermano desde</dt><dd>{h.antiguedad}</dd></div>
+                  <div><dt>Cuota</dt><dd>{h.cuotaAlDia ? 'Al día' : 'Pendiente'}</dd></div>
+                  {h.email && <div><dt>Correo</dt><dd><a href={`mailto:${h.email}`}>{h.email}</a></dd></div>}
+                  {h.telefono && <div><dt>Teléfono</dt><dd><a href={`tel:${h.telefono.replace(/\s+/g, '')}`}>{h.telefono}</a></dd></div>}
+                </dl>
+                {/* El motivo es lo único que le permite a la hermandad
+                    reaccionar. Si lo ha escrito, va destacado, no perdido. */}
+                {h.motivoBaja ? (
+                  <p className="baja-motivo">«{h.motivoBaja}»</p>
+                ) : (
+                  <p className="form-hint">No ha dicho por qué.</p>
+                )}
+                <div className="assign-box__row">
+                  <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => darDeBaja(h.id)}>
+                    Tramitar la baja
+                  </button>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => descartarBaja(h.id)}>
+                    Retirar la solicitud
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setBajasOpen(false); setSelectedId(h.id) }}>
+                    Ver su ficha
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Drawer>
 
       <Drawer
         open={solicitudesOpen}

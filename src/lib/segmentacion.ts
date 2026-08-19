@@ -57,8 +57,20 @@ export function edadDe(fechaNacimiento: string | undefined, hoy = new Date()): n
   return e
 }
 
-/** Hermanos que cumplen los criterios. */
-export function filtrarSegmento(hermanos: Hermano[], c: CriteriosSegmento): Hermano[] {
+/**
+ * Hermanos que cumplen los criterios.
+ *
+ * `roles` son las etiquetas que salen solas de la papeleta de cada uno (ver
+ * `rolesPapeleta.ts`). Se pasan de fuera para que esta función siga siendo
+ * pura, pero **hay que pasarlas**: sin ellas, sesgar por «Costalero» no
+ * encuentra a los costaleros de este año, que es justo el caso para el que se
+ * inventaron los roles automáticos.
+ */
+export function filtrarSegmento(
+  hermanos: Hermano[],
+  c: CriteriosSegmento,
+  roles: Map<string, string[]> = new Map(),
+): Hermano[] {
   return hermanos.filter((h) => {
     // Las bajas nunca reciben salvo que se pidan explícitamente.
     if (c.estado !== 'Cualquiera' && (c.estado === 'Todos' ? h.estado === 'Baja' : h.estado !== c.estado)) return false
@@ -70,7 +82,11 @@ export function filtrarSegmento(hermanos: Hermano[], c: CriteriosSegmento): Herm
       if (c.edad === 'Mayores' && e < 18) return false
       if (c.edad === 'Menores' && e >= 18) return false
     }
-    if (c.etiqueta && !(h.etiquetas ?? []).includes(c.etiqueta)) return false
+    if (c.etiqueta) {
+      const suyas = h.etiquetas ?? []
+      const automaticas = roles.get(h.id) ?? []
+      if (!suyas.includes(c.etiqueta) && !automaticas.includes(c.etiqueta)) return false
+    }
     for (const cond of c.campos ?? []) {
       if (!cond.valor) continue
       if ((h.campos?.[cond.campoId] ?? '') !== cond.valor) return false

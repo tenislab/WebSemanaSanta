@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { nuevoId } from '../lib/supabaseSync'
 import { useEtiquetas } from '../lib/etiquetas'
 import { useCamposPropios } from '../lib/camposPropios'
@@ -25,6 +25,7 @@ export default function EditorSegmento({
   /** En el censo no tiene sentido exigir correo; en un envío por email sí. */
   conFiltroEmail = true,
   onLimpiar,
+  etiquetasExtra = [],
 }: {
   criterios: CriteriosSegmento
   onChange: (c: CriteriosSegmento) => void
@@ -33,8 +34,19 @@ export default function EditorSegmento({
   conFiltroEmail?: boolean
   /** Vuelve al estado «sin sesgo». Cada pantalla sabe cuál es el suyo. */
   onLimpiar?: () => void
+  /**
+   * Etiquetas que no están en el catálogo de la hermandad pero por las que se
+   * puede sesgar igual: los roles que salen de la papeleta (costalero,
+   * acólito). Sin esto, «mandar solo a los costaleros de este año» no se podía
+   * elegir aunque hubiera trescientos.
+   */
+  etiquetasExtra?: string[]
 }) {
-  const [etiquetas] = useEtiquetas()
+  const [etiquetasManuales] = useEtiquetas()
+  const etiquetas = useMemo<string[]>(
+    () => [...new Set([...etiquetasManuales, ...etiquetasExtra])].sort((a, b) => a.localeCompare(b, 'es')),
+    [etiquetasManuales, etiquetasExtra],
+  )
   const [campos] = useCamposPropios()
   const [sesgos, setSesgos] = useSesgos()
   const [nombreNuevo, setNombreNuevo] = useState('')
@@ -129,7 +141,11 @@ export default function EditorSegmento({
           <label>Etiqueta</label>
           <select value={criterios.etiqueta} onChange={(e) => editar({ etiqueta: e.target.value })}>
             <option value="">Cualquiera</option>
-            {etiquetas.map((et) => <option key={et} value={et}>{et}</option>)}
+            {etiquetas.map((et) => (
+              <option key={et} value={et}>
+                {et}{etiquetasExtra.includes(et) && !etiquetasManuales.includes(et) ? ' (por papeleta)' : ''}
+              </option>
+            ))}
           </select>
         </div>
       </div>

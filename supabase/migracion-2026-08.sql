@@ -62,3 +62,32 @@ alter table cuotas add column if not exists pago_comunicado jsonb;
 -- =============================================================================
 -- La tabla y sus permisos están en `mensajes-web.sql`, que hay que ejecutar
 -- aparte porque también hace falta al crear la base desde cero.
+
+-- =============================================================================
+-- P2 · Que las bajas se vean
+-- =============================================================================
+-- Cuándo pidió la baja y por qué, si quiso decirlo. Sin la fecha, la secretaría
+-- no sabe cuánto lleva esperando; sin el motivo, no puede reaccionar.
+alter table hermanos add column if not exists baja_solicitada_el text;
+alter table hermanos add column if not exists motivo_baja text;
+
+-- =============================================================================
+-- P3 · La ficha del hermano completa
+-- =============================================================================
+-- La foto va con su consentimiento aparte: es un dato personal de los que hay
+-- que poder demostrar que se consintieron.
+alter table hermanos add column if not exists foto_data_url text;
+alter table hermanos add column if not exists consiente_foto boolean not null default false;
+alter table hermanos add column if not exists parroquia_bautismo text;
+alter table hermanos add column if not exists fecha_bautismo text;
+alter table hermanos add column if not exists talla_tunica text;
+alter table hermanos add column if not exists notas_salud text;
+
+-- =============================================================================
+-- P6 · Roles automáticos según la papeleta
+-- =============================================================================
+-- Qué rol da cada tramo u opción a quien saca allí su papeleta («Costalero»,
+-- «Acólito», «Mantilla»). La etiqueta NO se guarda en el hermano: se deriva de
+-- sus papeletas del año, así que no puede quedar descuadrada.
+alter table tramos add column if not exists etiqueta text;
+alter table opciones_papeleta add column if not exists etiqueta text;

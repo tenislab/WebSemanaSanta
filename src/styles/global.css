@@ -5071,3 +5071,321 @@ html:has(.sitio) { scroll-behavior: smooth; }
 .sitio-trampa {
   position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;
 }
+
+/* ---------------------------------------------------------------------------
+   P0 · «Esto falta por configurar»
+   Un solo formato de aviso para todo lo que no funciona porque falta
+   contratarlo o conectarlo. Rojo, en el sitio donde se nota, y sin ocultar el
+   botón: quien lo ve tiene que poder saber qué falta y quién lo arregla.
+   --------------------------------------------------------------------------- */
+.aviso-falta {
+  border: 1px solid var(--err-fg);
+  /* Barra roja a la izquierda además del fondo: sobre el tema oscuro el fondo
+     solo se distingue poco de una tarjeta normal. */
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--err-bg);
+  color: var(--err-fg);
+  padding: 0.9rem 1.1rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
+  font-size: 0.88rem; line-height: 1.55;
+}
+.aviso-falta__titulo {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-weight: 800; font-size: 0.95rem;
+}
+/* El punto no lleva texto alternativo: la palabra «falta» ya está en el
+   titular, y un lector de pantalla no gana nada leyendo «círculo rojo». */
+.aviso-falta__marca {
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto;
+}
+.aviso-falta__porque,
+.aviso-falta__detalle p { opacity: 0.92; }
+/* El arreglo es la parte que desatasca: va destacada, no perdida al final. */
+.aviso-falta__arreglo { font-weight: 600; }
+.aviso-falta__detalle summary {
+  cursor: pointer; font-weight: 600; font-size: 0.82rem;
+  text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.85;
+}
+.aviso-falta__detalle summary::marker { color: currentColor; }
+.aviso-falta__enlace {
+  align-self: flex-start; color: inherit; font-weight: 700; font-size: 0.85rem;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.aviso-falta--compacto { padding: 0.7rem 0.85rem; font-size: 0.84rem; gap: 0.3rem; }
+.aviso-falta--compacto .aviso-falta__titulo { font-size: 0.88rem; }
+
+/* Dentro de la web pública hereda sus variables, que son otras: si no, un
+   aviso del editor se colaba en la vista previa con los colores del panel. */
+.sitio .aviso-falta {
+  border-color: var(--sitio-error); background: color-mix(in srgb, var(--sitio-error) 12%, var(--sitio-bg));
+  color: var(--sitio-error); border-radius: calc(var(--sitio-radio) * 0.5);
+}
+
+/* Puesta en marcha: la lista de lo que falta por conectar. */
+.puesta-lista { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 0.4rem; }
+.puesta-hecho__titulo {
+  margin-top: 1.2rem; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700;
+}
+.puesta-hecho { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+.puesta-hecho li {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: var(--ok-bg); color: var(--ok-fg);
+  border-radius: 999px; padding: 0.22rem 0.7rem; font-size: 0.78rem; font-weight: 600;
+}
+/* La marca además del color: quien no distingue el verde ve igualmente el visto. */
+.puesta-hecho li::before { content: '✓'; font-weight: 800; }
+
+/* ---------------------------------------------------------------------------
+   P1 · Traer el censo que ya tienen
+   --------------------------------------------------------------------------- */
+.importar-suelta {
+  border: 2px dashed var(--line-strong); border-radius: var(--radius-sm);
+  padding: 1.6rem 1.2rem; text-align: center; background: var(--bg-sunken);
+  display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
+  margin: 0.8rem 0 1.1rem;
+}
+/* El input de archivo se sustituye por su etiqueta, que sí se puede estilar.
+   No se usa `display:none`: así el campo sigue siendo alcanzable por teclado
+   y los lectores de pantalla lo anuncian. */
+.importar-suelta input[type='file'] {
+  position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;
+}
+.importar-suelta input[type='file']:focus-visible + label {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+.importar-suelta label { cursor: pointer; }
+
+.importar-campos { display: flex; flex-direction: column; gap: 0.9rem; }
+.importar-obligatorio { color: var(--err-fg); font-weight: 700; }
+/* El ejemplo sacado de la propia hoja: es lo que de verdad delata un
+   emparejado mal hecho, más que el nombre de la columna. */
+.importar-ejemplo {
+  font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.importar-resumen {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.8rem; margin-bottom: 1.2rem;
+}
+.importar-cifra {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg-raised); padding: 0.9rem 1rem; text-align: center;
+  display: flex; flex-direction: column; gap: 0.15rem;
+}
+.importar-cifra strong {
+  font-size: 1.7rem; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.importar-cifra span { font-size: 0.76rem; color: var(--text-muted); }
+.importar-cifra--ok { border-color: var(--ok-fg); }
+.importar-cifra--ok strong { color: var(--ok-fg); }
+.importar-cifra--mal { border-color: var(--err-fg); }
+.importar-cifra--mal strong { color: var(--err-fg); }
+
+.importar-tabla__titulo { margin: 1.4rem 0 0.6rem; font-size: 0.95rem; font-weight: 800; }
+.importar-problema { display: block; font-size: 0.76rem; color: var(--err-fg); margin-top: 0.25rem; }
+.aviso-falta__error-suelto { color: var(--err-fg); font-weight: 600; font-size: 0.85rem; }
+/* El «descargar las filas con problemas» es un botón, pero se lee como el
+   enlace del aviso: mismo sitio, misma pinta. */
+button.aviso-falta__enlace { background: none; border: none; cursor: pointer; font: inherit; padding: 0; }
+
+@media (max-width: 620px) {
+  .importar-resumen { grid-template-columns: 1fr; }
+  .importar-cifra { flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 0.6rem; text-align: left; }
+  .importar-cifra strong { font-size: 1.3rem; }
+}
+
+/* P2 · El motivo de la baja: es lo único que le permite a la hermandad
+   reaccionar, así que va destacado y no perdido entre los datos. */
+.baja-motivo {
+  border-left: 3px solid var(--gold); padding: 0.5rem 0 0.5rem 0.8rem;
+  margin: 0.6rem 0; font-style: italic; color: var(--text); font-size: 0.92rem;
+}
+
+/* ---------------------------------------------------------------------------
+   P3 · La foto del hermano
+   --------------------------------------------------------------------------- */
+.foto-hermano { display: flex; gap: 1.1rem; align-items: flex-start; flex-wrap: wrap; }
+.foto-hermano__marco {
+  flex: 0 0 auto; border-radius: 50%; overflow: hidden;
+  background: var(--bg-sunken); border: 2px solid var(--line-strong);
+  display: grid; place-items: center;
+}
+.foto-hermano__marco img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto-hermano__iniciales {
+  font-weight: 800; font-size: 1.5rem; color: var(--text-muted); letter-spacing: 0.02em;
+}
+.foto-hermano__acciones { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.foto-hermano__botones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+/* Igual que en la importación: el campo no se oculta con `display:none` para
+   que siga siendo alcanzable por teclado y lo anuncien los lectores. */
+.foto-hermano__input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.foto-hermano__input:focus-visible + .foto-hermano__botones label {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+.foto-hermano__botones label { cursor: pointer; }
+
+/* La foto sustituye a las iniciales en la cabecera de la ficha. */
+.ficha-hero__avatar--foto { object-fit: cover; padding: 0; }
+
+/* La foto en el carné: por encima del nombre, como en cualquier carné. */
+.carne__foto {
+  width: 72px; height: 72px; border-radius: 50%; object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.55); margin: 0 auto 0.5rem; display: block;
+}
+.carne--grande .carne__foto { width: 120px; height: 120px; }
+
+/* Un avatar que es una foto: mismo hueco, sin las iniciales centradas. */
+.row-avatar--foto { object-fit: cover; padding: 0; display: block; }
+
+/* ---------------------------------------------------------------------------
+   P5 · La papeleta en la pantalla
+   Antes se pintaba aquí el documento de imprimir a tamaño real: en un móvil
+   había que ampliarlo con dos dedos para leer en qué tramo vas, que es justo
+   lo único que se mira el día antes de la salida.
+   --------------------------------------------------------------------------- */
+.pap-tarjeta {
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--bg-raised); padding: 1.2rem 1.3rem;
+  display: flex; flex-direction: column; gap: 0.8rem;
+}
+.pap-tarjeta__cabeza { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.pap-tarjeta__ante {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); font-weight: 700;
+}
+/* Lo más grande de la tarjeta: es a lo que se entra. */
+.pap-tarjeta__sitio {
+  font-size: clamp(1.35rem, 5vw, 1.9rem); line-height: 1.15; font-weight: 800;
+  color: var(--gold); text-wrap: balance; margin: 0;
+}
+.pap-tarjeta__datos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 0.9rem; margin: 0;
+}
+.pap-tarjeta__datos dt {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 700;
+}
+.pap-tarjeta__datos dd {
+  margin: 0.15rem 0 0; font-size: 1.05rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pap-tarjeta__aviso {
+  background: var(--warn-bg); color: var(--warn-fg); border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem; font-size: 0.85rem;
+}
+.pap-tarjeta__qr {
+  display: flex; align-items: center; gap: 0.9rem;
+  border-top: 1px solid var(--line); padding-top: 0.9rem;
+}
+.pap-tarjeta__qr span { font-size: 0.8rem; color: var(--text-muted); }
+
+/* El documento entero: existe, pero solo al imprimir. */
+.solo-impresion { display: none; }
+@media print {
+  .solo-impresion { display: revert; }
+}
+/* El día de la salida es texto, no una cifra: no se tabula ni se aprieta. */
+.pap-tarjeta__dia { font-variant-numeric: normal; font-size: 0.95rem; }
+
+/* P6 · Etiquetas que se ponen solas por la papeleta: no se pinchan, así que no
+   parecen botones. */
+.etiquetas-auto { margin: 0.7rem 0; }
+.etiquetas-auto__ante {
+  display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 700; margin-bottom: 0.35rem;
+}
+.chip--auto { cursor: default; border-style: dashed; opacity: 0.9; }
+.chip--auto::before { content: '⚙ '; font-size: 0.85em; }
+
+/* ---------------------------------------------------------------------------
+   P4 · El alta de la hermandad, en pasos
+   Al registrarse solo se piden cuatro cosas —doce campos antes del botón de
+   «crear cuenta» espantan a cualquiera—. Todo lo demás se pide aquí, en
+   pasos cortos y todos saltables.
+   --------------------------------------------------------------------------- */
+.alta-fondo {
+  position: fixed; inset: 0; z-index: 200; overflow-y: auto;
+  background: var(--bg); display: flex; align-items: flex-start; justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem) 1rem;
+}
+.alta {
+  width: min(46rem, 100%); background: var(--bg-raised);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: clamp(1.2rem, 4vw, 2.2rem);
+  display: flex; flex-direction: column; gap: 1.4rem;
+}
+.alta__head h1 { font-size: clamp(1.4rem, 5vw, 2rem); margin: 0.2rem 0 1rem; text-wrap: balance; }
+.alta__pasos {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem;
+  font-size: 0.8rem; color: var(--text-muted); margin: 0;
+}
+.alta__pasos li { display: flex; align-items: center; gap: 0.45rem; }
+.alta__pasos span {
+  width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--line-strong); font-size: 0.72rem; font-weight: 700; flex: 0 0 auto;
+}
+.alta__paso--ahora { color: var(--text); font-weight: 700; }
+.alta__paso--ahora span { background: var(--gold); border-color: var(--gold); color: #1a1207; }
+/* El paso hecho lleva visto Y color: solo con el color no se entera quien no
+   distingue el dorado. */
+.alta__paso--hecho span { border-color: var(--ok-fg); color: var(--ok-fg); }
+.alta__paso--hecho span::after { content: '✓'; }
+.alta__paso--hecho span { font-size: 0; }
+.alta__paso--hecho span::after { font-size: 0.8rem; }
+
+.alta__cuerpo { display: flex; flex-direction: column; gap: 1rem; }
+.alta__pregunta { font-size: 1.2rem; margin: 0; }
+.alta__final { display: flex; flex-wrap: wrap; gap: 0.7rem; margin: 0.4rem 0; }
+.alta__escudo { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+.alta__escudo img {
+  width: 64px; height: 64px; object-fit: contain;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.3rem; background: var(--bg-sunken);
+}
+.alta__escudo input[type='file'] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.alta__escudo input[type='file']:focus-visible + label { outline: 2px solid var(--gold); outline-offset: 2px; }
+.alta__escudo label { cursor: pointer; }
+
+.alta__pie {
+  display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+  border-top: 1px solid var(--line); padding-top: 1.1rem;
+}
+/* «Dejarlo para luego» se va a la derecha: es la salida, no una acción del paso. */
+.alta__salir { margin-left: auto; }
+@media (max-width: 620px) {
+  .alta__salir { margin-left: 0; width: 100%; }
+}
+
+/* P9 · La comprobación del dominio. */
+.dominio-check { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; align-items: flex-start; }
+.form-hint--ok { color: var(--ok-fg); font-weight: 600; }
+
+/* ---------------------------------------------------------------------------
+   P10 · Repaso
+   En el móvil se ocultan las columnas de la tabla y sus datos se doblan bajo el
+   nombre, en `.row-person__sub`. O sea que ahí deja de ser una línea secundaria
+   y pasa a ser el ÚNICO sitio donde se ve el número, la cuota y el tramo: a
+   0,76rem (11,5 px) eso se lee con esfuerzo.
+   --------------------------------------------------------------------------- */
+@media (max-width: 620px) {
+  .row-person__sub { font-size: 0.8rem; line-height: 1.45; }
+  .row-person__sub.solo-movil { color: var(--text); }
+}
+
+/* En el móvil, un suelo de 12 px para el texto que se LEE. Las versalitas y
+   las iniciales de un avatar se quedan como están: una etiqueta de tres
+   palabras en mayúsculas y separada se lee de sobra a 11 px, y unas iniciales
+   dentro de un círculo son un icono, no un texto. */
+@media (max-width: 620px) {
+  .pill { font-size: 0.76rem; }
+  .app-side__brand small { font-size: 0.76rem; }
+  /* Lleva `!important` en su regla, así que aquí hace falta igualarlo. Es una
+     línea monoespaciada y larga (DNI y contraseña): a 0,68rem se leía con lupa. */
+  .demo-account__cred { font-size: 0.76rem !important; }
+  .agenda-mini__day { font-size: 0.75rem; width: 3.8rem; }
+  .estilo-card small,
+  .cms-rail__item small { font-size: 0.76rem; }
+}

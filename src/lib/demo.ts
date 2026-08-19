@@ -44,10 +44,38 @@ function limpiarTodo() {
     .forEach((k) => localStorage.removeItem(k))
 }
 
+/**
+ * Los datos de la hermandad en la demostración «llena». Hacen falta porque esa
+ * demo enseña una hermandad **que ya funciona**: sin CIF ni cuenta, los recibos
+ * salen sin justificante y al hermano no se le puede decir dónde pagar, y lo
+ * que se está enseñando es justamente que eso funciona.
+ */
+const HERMANDAD_DEMO = {
+  nombreLegal: 'Real e Ilustre Hermandad de Nuestro Padre Jesús',
+  cif: 'G41000000',
+  direccion: 'C/ Pureza, 53',
+  codigoPostal: '41010',
+  ciudad: 'Sevilla',
+  provincia: 'Sevilla',
+  telefono: '954 000 000',
+  email: 'secretaria@hermandad.example',
+  iban: 'ES47 2100 0813 6102 0012 3456',
+  bizumTelefono: '655 123 456',
+  identificadorAcreedor: 'ES23000G41000000',
+  logoDataUrl: null,
+  colorPrimario: '#6A1A23',
+  colorSecundario: '#C5A059',
+  textoPieDocumentos: '',
+}
+
 /** Deja el navegador con los datos de ejemplo completos (censo, papeletas, cuotas…). */
 export function sembrarDemoLlena() {
   limpiarTodo()
   localStorage.setItem(CLAVE_MODO, 'llena')
+  localStorage.setItem('cabildo-hermandad-settings', JSON.stringify(HERMANDAD_DEMO))
+  // Esta demo enseña una hermandad que YA está en marcha: el asistente de alta
+  // taparía el panel para pedirle datos que se supone que puso hace años.
+  localStorage.setItem('cabildo-alta-hermandad-hecha', 'si')
 }
 
 /** Deja una hermandad vacía: sin hermanos, papeletas ni registros (config por defecto). */
@@ -55,6 +83,8 @@ export function sembrarDemoVacia() {
   limpiarTodo()
   CLAVES_COLECCIONES.forEach((k) => localStorage.setItem(k, '[]'))
   localStorage.setItem(CLAVE_MODO, 'vacia')
+  // Aquí el asistente SÍ sale: es exactamente el caso para el que se hizo,
+  // una hermandad que empieza de cero.
 }
 
 /**

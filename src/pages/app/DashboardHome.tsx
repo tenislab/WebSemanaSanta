@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import { HERMANOS_INICIALES } from '../../data/hermanos'
 import { CUOTAS_INICIALES, esAvisado } from '../../data/cuotas'
 import { getMensajesWeb, sinLeer } from '../../lib/mensajesWeb'
+import { contextoActual, requisitosPendientes } from '../../lib/requisitos'
+import { getSolicitudes } from '../../lib/solicitudes'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { DOCUMENTOS_INICIALES } from '../../data/documentos'
@@ -151,6 +153,27 @@ export default function DashboardHome() {
         to: '/app/cuotas',
         modulo: 'cuotas',
       })
+    // Todo lo que una PERSONA pide y espera va antes que cualquier número.
+    // Las solicitudes de alta solo se veían en un botón dentro de Hermanos:
+    // quien no entrase ahí no se enteraba de que había gente esperando.
+    const altasPedidas = getSolicitudes().filter((s) => s.estado === 'Pendiente').length
+    if (altasPedidas > 0)
+      alertas.push({
+        text: `${altasPedidas} ${altasPedidas === 1 ? 'persona quiere hacerse hermano' : 'personas quieren hacerse hermanas'}`,
+        level: 'warn',
+        to: '/app/hermanos',
+        modulo: 'hermanos',
+      })
+    // Una baja pedida es una PERSONA esperando respuesta: va antes que
+    // cualquier número.
+    const bajasPedidas = hermanos.filter((h) => h.bajaSolicitada && h.estado !== 'Baja').length
+    if (bajasPedidas > 0)
+      alertas.push({
+        text: `${bajasPedidas} ${bajasPedidas === 1 ? 'hermano ha pedido la baja' : 'hermanos han pedido la baja'}`,
+        level: 'warn',
+        to: '/app/hermanos',
+        modulo: 'hermanos',
+      })
     if (cuotasPendientes > 0)
       alertas.push({ text: `${cuotasPendientes} cuotas siguen pendientes de cobro`, level: 'warn', to: '/app/cuotas', modulo: 'cuotas' })
     if (porRenovar > 0 && ventanaAbierta(campana))
@@ -159,6 +182,17 @@ export default function DashboardHome() {
       alertas.push({ text: `${contratosPorVencer} contratos vencidos o a punto de vencer`, level: 'warn', to: '/app/archivo', modulo: 'archivo' })
     if (porConciliar > 0)
       alertas.push({ text: `${porConciliar} movimientos de tesorería por conciliar`, level: 'warn', to: '/app/tesoreria', modulo: 'tesoreria' })
+    // Lo que falta por conectar va AL FINAL: no es una tarea del día a día, es
+    // algo que se hace una vez. Arriba estorbaría todos los días a quien ya
+    // sabe que le falta y está esperando a contratarlo.
+    const porConectar = requisitosPendientes(contextoActual()).length
+    if (porConectar > 0)
+      alertas.push({
+        text: `${porConectar} ${porConectar === 1 ? 'cosa' : 'cosas'} por conectar para que Cabildo funcione del todo`,
+        level: 'warn',
+        to: '/app/configuracion',
+        modulo: 'configuracion',
+      })
 
     return { stats, actividad, alertas }
   }, [])

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { TIPOS_AVISO, quiereAviso, type AvisoHermano, type PreferenciasAvisos, type TipoAviso } from '../lib/avisosHermano'
+import AvisoFalta from './AvisoFalta'
+import { requisito } from '../lib/requisitos'
 
 const ICONO: Record<string, string> = Object.fromEntries(TIPOS_AVISO.map((t) => [t.id, t.icono]))
 
@@ -119,6 +121,10 @@ export default function BuzonHermano({
             Esto vale para tu buzón, y es lo que la hermandad respetará cuando envíe correos. Lo que
             apagues no se borra: si vuelves a encenderlo, aparece otra vez.
           </p>
+          {/* Lo honrado: aquí se está eligiendo qué correos recibir, y ahora
+              mismo no sale ninguno. Decirlo evita que alguien se quede
+              esperando un aviso que no va a llegar a su bandeja. */}
+          <AvisoFalta compacto requisito={requisito('correo')} />
         </div>
       </details>
     </section>

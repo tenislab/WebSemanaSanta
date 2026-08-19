@@ -38,6 +38,13 @@ export interface Tramo {
    * enseña y el hermano tiene que preguntar, que es lo que pasaba hasta ahora.
    */
   horaCitacion?: string
+  /**
+   * Qué rol da este tramo al que va en él: «Costalero», «Acólito», «Banda».
+   * La etiqueta se le pone SOLA al hermano mientras tenga aquí su papeleta de
+   * este año, y desaparece si la anula o renuncia. Vacío = este tramo no da
+   * ningún rol (los tramos de cirio normales, que son casi todos).
+   */
+  etiqueta?: string
 }
 
 const STORAGE_KEY = 'cabildo-tramos'

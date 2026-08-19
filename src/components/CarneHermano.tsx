@@ -60,6 +60,11 @@ export default function CarneHermano({
         {logo ? <img src={logo} alt="" className="carne__escudo" /> : <span className="carne__escudo carne__escudo--sin" aria-hidden="true">✝</span>}
         <span className="carne__hermandad">{hermandadNombre}</span>
       </div>
+      {/* La foto, si la ha puesto. Es lo que convierte el carné en algo que
+          sirve para identificar a alguien y no solo para leerle el número. */}
+      {hermano.fotoDataUrl && (
+        <img className="carne__foto" src={hermano.fotoDataUrl} alt={`Foto de ${hermano.nombre}`} />
+      )}
       <p className="carne__nombre">{hermano.nombre}</p>
       <div className="carne__datos">
         <div>

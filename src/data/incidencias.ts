@@ -11,7 +11,6 @@ export interface Incidencia {
   descripcion: string
   hora: string
   registradoPor: string
-  hermanoSustitutoId?: string | null
   resuelta: boolean
 }
 

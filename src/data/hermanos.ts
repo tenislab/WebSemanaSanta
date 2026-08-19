@@ -20,8 +20,39 @@ export interface Hermano {
   authUserId: string | null
   /** Etiquetas del hermano (costalero, acólito, banda…), para segmentar avisos y listados. */
   etiquetas?: string[]
+  /**
+   * Su foto, ya recortada en cuadrado. Sale en su ficha, en su carné y —lo que
+   * de verdad importa— en el listado del cortejo: el diputado de tramo busca
+   * caras, no números.
+   */
+  fotoDataUrl?: string | null
+  /**
+   * Ha dado permiso para que la hermandad guarde y use su foto. Va aparte del
+   * resto de datos a propósito: una foto es un dato personal de los que hay que
+   * poder demostrar que se consintieron.
+   */
+  consienteFoto?: boolean
+  /** Parroquia donde fue bautizado/a y fecha. Hace falta para el expediente. */
+  parroquiaBautismo?: string
+  fechaBautismo?: string
+  /** Talla de túnica, que secretaría acaba apuntando en un papel aparte. */
+  tallaTunica?: string
+  /**
+   * Lo que hay que saber el día de la salida: una alergia, que no puede andar
+   * mucho, que se marea. No es curiosidad: son ocho horas de pie.
+   */
+  notasSalud?: string
   /** El hermano ha pedido la baja desde su área y la secretaría aún no la ha tramitado. */
   bajaSolicitada?: boolean
+  /** Cuándo la pidió. Sin la fecha, la secretaría no sabe cuánto lleva esperando. */
+  bajaSolicitadaEl?: string
+  /**
+   * Por qué se va, si ha querido decirlo. Es opcional a propósito: obligar a
+   * justificarse para poder darse de baja está feo. Pero cuando lo dicen, es
+   * lo único que le permite a la hermandad reaccionar (una cuota que no puede
+   * pagar se resuelve hablando; enterarse un año después, no).
+   */
+  motivoBaja?: string
   /** Fecha de nacimiento (ISO yyyy-mm-dd), para segmentar por edad (mayores/menores). Opcional. */
   fechaNacimiento?: string
   /**

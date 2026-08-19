@@ -86,7 +86,7 @@ export async function crearCopia(): Promise<CopiaSeguridad> {
   )
   return {
     app: 'cabildo',
-    version: 1,
+    version: VERSION_COPIA,
     exportadoEl: new Date().toISOString(),
     datos: leerDatosLocales(),
     archivos: archivosB64,
@@ -94,6 +94,39 @@ export async function crearCopia(): Promise<CopiaSeguridad> {
 }
 
 /** Valida que un JSON tenga forma de copia de Cabildo. */
+export const VERSION_COPIA = 1
+
+/**
+ * Lo que se le enseña a la hermandad ANTES de dejarle sustituir todos sus
+ * datos: de cuándo es la copia, cuánto trae y si la hizo una versión más nueva
+ * de Cabildo.
+ *
+ * Hasta ahora la copia guardaba su versión y su fecha y **nadie las leía**: se
+ * confirmaba a ciegas, antes siquiera de abrir el archivo, y una copia de hace
+ * dos años se restauraba igual que la de ayer sin que nadie se enterara.
+ */
+export interface ResumenCopia {
+  fecha: string | null
+  /** Cuántas claves de datos trae (hermanos, cuotas, papeletas…). */
+  bloques: number
+  archivos: number
+  /** La hizo una versión de Cabildo posterior a esta. */
+  masNueva: boolean
+}
+
+export function resumirCopia(copia: CopiaSeguridad): ResumenCopia {
+  const iso = copia.exportadoEl
+  const d = iso ? new Date(iso) : null
+  return {
+    fecha: d && !Number.isNaN(d.getTime())
+      ? d.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
+      : null,
+    bloques: Object.keys(copia.datos ?? {}).length,
+    archivos: (copia.archivos ?? []).length,
+    masNueva: typeof copia.version === 'number' && copia.version > VERSION_COPIA,
+  }
+}
+
 export function esCopiaValida(obj: unknown): obj is CopiaSeguridad {
   return (
     typeof obj === 'object' &&

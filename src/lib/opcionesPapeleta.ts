@@ -14,6 +14,11 @@ export interface OpcionPapeleta {
   id: string
   nombre: string
   importe: number
+  /**
+   * Qué rol da esta opción a quien la saca («Mantilla» → etiqueta Mantilla).
+   * Se pone sola mientras tenga la papeleta y desaparece al anularla.
+   */
+  etiqueta?: string
 }
 
 const STORAGE_KEY = 'cabildo-papeletas-opciones'
@@ -29,7 +34,12 @@ export function getOpcionesPapeleta(): OpcionPapeleta[] {
 }
 
 function rowToOpcion(r: Record<string, unknown>): OpcionPapeleta {
-  return { id: r.id as string, nombre: r.nombre as string, importe: Number(r.importe) }
+  return {
+    id: r.id as string,
+    nombre: r.nombre as string,
+    importe: Number(r.importe),
+    etiqueta: (r.etiqueta as string | null) ?? undefined,
+  }
 }
 
 /** Como `getOpcionesPapeleta`, pero con Supabase conectado trae la tabla real en cuanto llega. */
@@ -60,7 +70,7 @@ export async function saveOpcionesPapeleta(opciones: OpcionPapeleta[]) {
   if (isSupabaseConfigured) {
     await reemplazarTablaCompleta(
       'opciones_papeleta',
-      opciones.map((o, orden) => ({ id: o.id, nombre: o.nombre, importe: o.importe, orden })),
+      opciones.map((o, orden) => ({ id: o.id, nombre: o.nombre, importe: o.importe, etiqueta: o.etiqueta ?? null, orden })),
     )
   }
 }

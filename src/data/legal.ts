@@ -88,6 +88,7 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
         lista: [
           'Datos de la cuenta de gestión: nombre, correo electrónico, contraseña y datos de la hermandad.',
           'Datos de los hermanos, introducidos por la hermandad: identificativos (nombre, DNI/NIE), de contacto (correo, teléfono, dirección), económicos (cuotas, IBAN) y de participación (papeletas, cortejo).',
+          'Datos de categoría especial: la pertenencia a una hermandad revela convicciones religiosas, por lo que el censo y todo lo asociado a él son datos del artículo 9 del RGPD. También lo son, cuando la hermandad los anota, los datos de salud del día de la salida (alergias, movilidad). Se tratan con las garantías reforzadas que se describen más abajo.',
           'Datos de navegación estrictamente necesarios para que la plataforma funcione.',
         ],
       },
@@ -96,6 +97,8 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
         parrafos: [
           'Los datos se tratan para prestar el servicio de gestión de la hermandad: mantener el censo, emitir y cobrar cuotas, gestionar papeletas y cortejo, llevar la tesorería y enviar comunicaciones.',
           'La base jurídica es la ejecución del contrato de servicio y, respecto a los hermanos, la relación entre la hermandad y sus miembros y el interés legítimo o el consentimiento, según el caso. Las comunicaciones no esenciales se basan en el consentimiento del interesado.',
+          'Para los datos de categoría especial, la base es el artículo 9.2.d del RGPD: son tratados por una entidad sin ánimo de lucro con finalidad religiosa, en el marco de sus actividades legítimas, se refieren únicamente a sus miembros o a personas con contacto regular con ella, y NO se ceden a terceros fuera de la entidad sin el consentimiento de la persona. Los datos de salud del día de la salida se tratan con el consentimiento explícito de quien los aporta, y solo para su seguridad durante la estación de penitencia.',
+          'La fotografía del hermano se trata únicamente con su consentimiento explícito, que se pide aparte del resto de datos y se puede retirar en cualquier momento desde su área personal; al retirarlo, la fotografía se borra.',
         ],
       },
       {
@@ -122,7 +125,9 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
       {
         titulo: '7. Seguridad',
         parrafos: [
-          'Se aplican medidas técnicas y organizativas razonables para proteger los datos. Aun así, ningún sistema es totalmente infalible; ante cualquier incidencia de seguridad se actuará conforme a la normativa vigente.',
+          'Se aplican medidas técnicas y organizativas razonables para proteger los datos: acceso con contraseña y verificación en dos pasos para las cuentas de gestión, permisos por cargo (cada persona de la junta ve solo los módulos que le corresponden), restricción de acceso a nivel de base de datos, cifrado en tránsito y registro de accesos del proveedor de infraestructura.',
+          'Por tratarse de datos de categoría especial, cada hermano solo puede acceder a su propia ficha, y las cuentas de gestión se limitan a las personas de la junta que lo necesiten para su cargo.',
+          'Aun así, ningún sistema es totalmente infalible; ante cualquier incidencia de seguridad se actuará conforme a la normativa vigente, notificándola a la autoridad de control y a las personas afectadas cuando proceda.',
         ],
       },
     ],

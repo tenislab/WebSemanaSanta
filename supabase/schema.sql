@@ -59,7 +59,18 @@ create table if not exists hermanos (
   auth_user_id uuid unique references auth.users(id) on delete set null,
   etiquetas text[] not null default '{}',
   fecha_nacimiento date,
+  -- Foto del hermano (P3), con su consentimiento aparte: es un dato personal
+  -- de los que hay que poder demostrar que se consintieron.
+  foto_data_url text,
+  consiente_foto boolean not null default false,
+  parroquia_bautismo text,
+  fecha_bautismo text,
+  talla_tunica text,
+  notas_salud text,
   baja_solicitada boolean not null default false,
+  -- Cuándo la pidió y por qué, si quiso decirlo (P2).
+  baja_solicitada_el text,
+  motivo_baja text,
   created_at timestamptz not null default now()
 );
 create unique index if not exists hermanos_numero_activo_uniq on hermanos (numero) where numero > 0;
@@ -75,6 +86,8 @@ create table if not exists tramos (
   tipo text,
   reparto text check (reparto in ('numero', 'solicitud')),
   precio numeric(10, 2),
+  -- Qué rol da este tramo a quien va en él (P6): «Costalero», «Acólito»…
+  etiqueta text,
   orden int not null default 0
 );
 
@@ -179,7 +192,6 @@ create table if not exists incidencias (
   descripcion text not null default '',
   hora text not null default '',
   registrado_por text not null default '',
-  hermano_sustituto_id uuid references hermanos(id) on delete set null,
   resuelta boolean not null default false
 );
 
@@ -316,6 +328,8 @@ create table if not exists opciones_papeleta (
   id uuid primary key default gen_random_uuid(),
   nombre text not null,
   importe numeric(10, 2) not null default 0,
+  -- Qué rol da esta opción a quien la saca (P6).
+  etiqueta text,
   orden int not null default 0
 );
 

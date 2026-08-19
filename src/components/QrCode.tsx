@@ -9,9 +9,12 @@ interface QrCodeProps {
 
 /**
  * Código QR real y escaneable (librería `qrcode`, generado en el navegador,
- * sin llamadas de red). Codifica los datos de la papeleta como texto plano:
- * cualquier lector de QR los mostrará. La verificación automática por URL
- * (abrir la papeleta directamente al escanear) llegará con la base de datos.
+ * sin llamadas de red).
+ *
+ * Lo que codifica es una URL a la página de verificación con los datos dentro
+ * del propio enlace (ver `lib/verificacion.ts`): al escanearlo con cualquier
+ * móvil se abre una tarjeta con el sitio o el carné, sin necesidad de base de
+ * datos ni de tener el censo en ese teléfono, y sin cobertura.
  */
 export default function QrCode({ value, size = 96 }: QrCodeProps) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)

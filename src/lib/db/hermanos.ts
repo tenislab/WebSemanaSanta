@@ -18,7 +18,15 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
     auth_user_id: h.authUserId,
     etiquetas: h.etiquetas ?? [],
     fecha_nacimiento: h.fechaNacimiento ?? null,
+    foto_data_url: h.fotoDataUrl ?? null,
+    consiente_foto: h.consienteFoto ?? false,
+    parroquia_bautismo: h.parroquiaBautismo ?? null,
+    fecha_bautismo: h.fechaBautismo ?? null,
+    talla_tunica: h.tallaTunica ?? null,
+    notas_salud: h.notasSalud ?? null,
     baja_solicitada: h.bajaSolicitada ?? false,
+    baja_solicitada_el: h.bajaSolicitadaEl ?? null,
+    motivo_baja: h.motivoBaja ?? null,
   }
 }
 
@@ -39,6 +47,14 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     authUserId: (r.auth_user_id as string | null) ?? null,
     etiquetas: (r.etiquetas as string[] | null) ?? [],
     fechaNacimiento: (r.fecha_nacimiento as string | null) ?? undefined,
+    fotoDataUrl: (r.foto_data_url as string | null) ?? null,
+    consienteFoto: Boolean(r.consiente_foto),
+    parroquiaBautismo: (r.parroquia_bautismo as string | null) ?? undefined,
+    fechaBautismo: (r.fecha_bautismo as string | null) ?? undefined,
+    tallaTunica: (r.talla_tunica as string | null) ?? undefined,
+    notasSalud: (r.notas_salud as string | null) ?? undefined,
     bajaSolicitada: Boolean(r.baja_solicitada),
+    bajaSolicitadaEl: (r.baja_solicitada_el as string | null) ?? undefined,
+    motivoBaja: (r.motivo_baja as string | null) ?? undefined,
   }
 }

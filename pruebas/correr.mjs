@@ -37,6 +37,23 @@ export async function cargar(ruta) {
   return import(destino)
 }
 
+/**
+ * Un `localStorage` de mentira. Varias funciones puras lo consultan de pasada
+ * («¿se saltó ya el asistente de alta?»), y en Node no existe. Con esto se
+ * pueden probar sin tener que partirlas en dos solo por eso.
+ */
+if (typeof globalThis.localStorage === 'undefined') {
+  const datos = new Map()
+  globalThis.localStorage = {
+    getItem: (k) => (datos.has(k) ? datos.get(k) : null),
+    setItem: (k, v) => datos.set(k, String(v)),
+    removeItem: (k) => datos.delete(k),
+    clear: () => datos.clear(),
+    key: (i) => [...datos.keys()][i] ?? null,
+    get length() { return datos.size },
+  }
+}
+
 let total = 0
 let fallos = 0
 

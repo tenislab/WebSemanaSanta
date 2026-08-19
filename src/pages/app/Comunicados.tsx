@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
+import AvisoFalta from '../../components/AvisoFalta'
+import { requisito } from '../../lib/requisitos'
 import EditorSegmento from '../../components/EditorSegmento'
 import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
 import {
@@ -14,6 +16,11 @@ import {
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { PAPELETAS_INICIALES } from '../../data/papeletas'
+import { getCampana } from '../../lib/campana'
+import { getTramos } from '../../lib/tramos'
+import { getOpcionesPapeleta } from '../../lib/opcionesPapeleta'
+import { etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
 import { useEtiquetas } from '../../lib/etiquetas'
@@ -74,7 +81,11 @@ export default function Comunicados() {
   function hermanosDeDestinatario(destinatarios: string): Hermano[] {
     if (!destinatarios.startsWith(PREFIJO_ETIQUETA)) return []
     const etiqueta = destinatarios.slice(PREFIJO_ETIQUETA.length)
-    return hermanos.filter((h) => (h.etiquetas ?? []).includes(etiqueta) && h.estado !== 'Baja')
+    // Cuentan igual las puestas a mano y las que salen de la papeleta: si no,
+    // mandar «a los costaleros» no llegaría a los costaleros de este año.
+    return hermanos.filter(
+      (h) => h.estado !== 'Baja' && etiquetasDe(h, rolesPorHermano.get(h.id) ?? []).includes(etiqueta),
+    )
   }
   /**
    * A quién le llega de verdad al buzón. Por etiqueta, los que la tengan; y
@@ -100,7 +111,29 @@ export default function Comunicados() {
   const [estadoNuevo, setEstadoNuevo] = useState<EstadoComunicado>('Borrador')
   const [segmentarAvanzado, setSegmentarAvanzado] = useState(false)
   const [criterios, setCriterios] = useState<CriteriosSegmento>(CRITERIOS_POR_DEFECTO)
-  const segmentoHermanos = useMemo(() => filtrarSegmento(hermanos, criterios), [hermanos, criterios])
+  /**
+   * Los roles que salen de la papeleta (costalero, acólito, mantilla). Sin
+   esto, «mandar solo a los costaleros de este año» —que es el caso para el que
+   se inventaron— no encontraría a nadie.
+   */
+  const rolesPorHermano = useMemo(() => {
+    const anio = getCampana().anio
+    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+    return indiceRoles(papeletas, getTramos(), getOpcionesPapeleta(), anio)
+  }, [])
+  const rolesDisponibles = useMemo(
+    () => etiquetasQueSonAutomaticas(getTramos(), getOpcionesPapeleta()),
+    [],
+  )
+  /** Todo por lo que se puede mandar: el catálogo de la hermandad y los roles de la papeleta. */
+  const etiquetasParaEnviar = useMemo(
+    () => [...new Set([...etiquetas, ...rolesDisponibles])].sort((a, b) => a.localeCompare(b, 'es')),
+    [etiquetas, rolesDisponibles],
+  )
+  const segmentoHermanos = useMemo(
+    () => filtrarSegmento(hermanos, criterios, rolesPorHermano),
+    [hermanos, criterios, rolesPorHermano],
+  )
 
   const [conectando, setConectando] = useState<RedSocial | null>(null)
   const [usuarioInput, setUsuarioInput] = useState('')
@@ -447,9 +480,7 @@ export default function Comunicados() {
                           <span className="etiqueta-pill">+{receptores.length - 12} más</span>
                         )}
                       </div>
-                      <span className="table-subtle">
-                        El envío real de correo se activará al conectar el proveedor de email.
-                      </span>
+                      <AvisoFalta compacto requisito={requisito('correo')} />
                     </dd>
                   </div>
                 )
@@ -546,10 +577,12 @@ export default function Comunicados() {
                 {segmentos.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
-                {etiquetas.length > 0 && (
+                {etiquetasParaEnviar.length > 0 && (
                   <optgroup label="Por etiqueta (solo esos hermanos)">
-                    {etiquetas.map((et) => (
-                      <option key={et} value={`${PREFIJO_ETIQUETA}${et}`}>{et}</option>
+                    {etiquetasParaEnviar.map((et) => (
+                      <option key={et} value={`${PREFIJO_ETIQUETA}${et}`}>
+                        {et}{rolesDisponibles.includes(et) && !etiquetas.includes(et) ? ' (por papeleta)' : ''}
+                      </option>
                     ))}
                   </optgroup>
                 )}
@@ -567,6 +600,7 @@ export default function Comunicados() {
           </label>
           {segmentarAvanzado && (
             <EditorSegmento
+              etiquetasExtra={rolesDisponibles}
               criterios={criterios}
               onChange={setCriterios}
               cuantos={segmentoHermanos.length}

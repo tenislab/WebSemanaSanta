@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import EscudoHermandad from '../components/EscudoHermandad'
 import PapeletaTicket from '../components/PapeletaTicket'
+import PapeletaTarjeta from '../components/PapeletaTarjeta'
 import PapeletaModeloRender from '../components/PapeletaModeloRender'
 import AsistenciaTramo from '../components/AsistenciaTramo'
 import HistorialHermano from '../components/HistorialHermano'
@@ -50,6 +51,10 @@ import { formatCurrency, formatDate } from '../lib/format'
 import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
 import { descargarArchivo } from '../lib/csv'
 import { estiloTema, inicialesHermandad } from '../lib/color'
+import AvisoFalta from '../components/AvisoFalta'
+import Drawer from '../components/Drawer'
+import FotoHermano from '../components/FotoHermano'
+import { requisito, requisitoActual } from '../lib/requisitos'
 import {
   ID_HERMANDAD_PRINCIPAL,
   HERMANDADES_MUESTRA,
@@ -209,6 +214,8 @@ export default function HermanoPortal() {
 
   const [datosGuardados, setDatosGuardados] = useState(false)
   const [bajaMuestraSolicitada, setBajaMuestraSolicitada] = useState(false)
+  const [bajaOpen, setBajaOpen] = useState(false)
+  const [motivoBaja, setMotivoBaja] = useState('')
   const [solicitudesAlta, setSolicitudesAlta] = useState<SolicitudAlta[]>(() => getSolicitudes())
   // Cuando la secretaría aprueba (o rechaza) un alta desde el panel, aquí se ve
   // al momento: sin esto, el hermano seguía viendo «alta pendiente» al lado de
@@ -807,16 +814,29 @@ export default function HermanoPortal() {
     }
   }
 
-  function solicitarBaja() {
+  /**
+   * Pedir la baja. Antes era un `window.confirm` del navegador: feo, imposible
+   * de leer en un móvil y sin sitio para explicarse. Ahora es un panel como el
+   * resto de la aplicación, y de paso se le puede preguntar por qué se va —sin
+   * obligarle, que exigir justificarse para darse de baja está feo.
+   */
+  function confirmarBaja(motivo: string) {
     if (deBaja) return
-    if (!window.confirm('¿Seguro que quieres solicitar la baja como hermano/a? La secretaría tramitará tu solicitud.')) return
     if (esPrincipal && hermanoPrincipal) {
       // Es una SOLICITUD: no se da de baja solo. Queda marcada para que la
-      // secretaría la tramite desde el censo (Hermanos › ficha › Dar de baja).
-      setHermanos((prev) => prev.map((h) => (h.id === hermanoPrincipal.id ? { ...h, bajaSolicitada: true } : h)))
+      // secretaría la tramite desde el censo.
+      setHermanos((prev) =>
+        prev.map((h) =>
+          h.id === hermanoPrincipal.id
+            ? { ...h, bajaSolicitada: true, bajaSolicitadaEl: hoy(), motivoBaja: motivo.trim() || undefined }
+            : h,
+        ),
+      )
     } else {
       setBajaMuestraSolicitada(true)
     }
+    setBajaOpen(false)
+    setMotivoBaja('')
   }
 
   /** ¿Ya está pedida la baja? (guardada en el censo, o marcada en una hermandad de muestra). */
@@ -1504,29 +1524,43 @@ export default function HermanoPortal() {
                         </>
                       )}
                     </p>
-                    {modeloPapeleta ? (
-                      <PapeletaModeloRender
-                        modelo={modeloPapeleta}
-                        datos={{
-                          hermano: hermanoPrincipal,
-                          papeleta: renovacion.papeletaActual,
-                          tramoEtiqueta: asignacion?.tramo ? etiquetaTramo(asignacion.tramo) : null,
-                          puesto: asignacion?.puesto ?? null,
-                          hermandadNombre: hermandadPrincipal.nombreLegal || nombrePrincipal,
-                          fechaSalida: campana.fechaSalida,
-                        }}
-                      />
-                    ) : (
-                      <PapeletaTicket
-                        papeleta={renovacion.papeletaActual}
-                        hermano={hermanoPrincipal}
-                        hermandad={hermandadPrincipal}
-                        tramo={asignacion?.tramo}
-                        puesto={asignacion?.puesto ?? null}
-                        excedeAforo={asignacion?.estado === 'Excede aforo'}
-                        opcion={renovacion.papeletaActual.opcion}
-                      />
-                    )}
+                    {/* En pantalla, la tarjeta: los cuatro datos que se
+                        consultan de verdad, legibles sin ampliar. */}
+                    <PapeletaTarjeta
+                      papeleta={renovacion.papeletaActual}
+                      hermano={hermanoPrincipal}
+                      hermandadNombre={hermandadPrincipal.nombreLegal || nombrePrincipal}
+                      tramoEtiqueta={asignacion?.tramo ? etiquetaTramo(asignacion.tramo) : null}
+                      puesto={asignacion?.puesto ?? null}
+                      fechaSalida={campana.fechaSalida ?? undefined}
+                      excedeAforo={asignacion?.estado === 'Excede aforo'}
+                    />
+                    {/* Y el documento entero, solo al imprimir. */}
+                    <div className="solo-impresion">
+                      {modeloPapeleta ? (
+                        <PapeletaModeloRender
+                          modelo={modeloPapeleta}
+                          datos={{
+                            hermano: hermanoPrincipal,
+                            papeleta: renovacion.papeletaActual,
+                            tramoEtiqueta: asignacion?.tramo ? etiquetaTramo(asignacion.tramo) : null,
+                            puesto: asignacion?.puesto ?? null,
+                            hermandadNombre: hermandadPrincipal.nombreLegal || nombrePrincipal,
+                            fechaSalida: campana.fechaSalida,
+                          }}
+                        />
+                      ) : (
+                        <PapeletaTicket
+                          papeleta={renovacion.papeletaActual}
+                          hermano={hermanoPrincipal}
+                          hermandad={hermandadPrincipal}
+                          tramo={asignacion?.tramo}
+                          puesto={asignacion?.puesto ?? null}
+                          excedeAforo={asignacion?.estado === 'Excede aforo'}
+                          opcion={renovacion.papeletaActual.opcion}
+                        />
+                      )}
+                    </div>
                     {/* Solo se cobra cuando la papeleta está ASIGNADA: una simple
                         solicitud aún no tiene sitio ni importe firme. */}
                     {renovacion.papeletaActual.estado === 'Asignada' && (
@@ -1589,6 +1623,34 @@ export default function HermanoPortal() {
         )}
 
         {/* Mis datos */}
+        <section className="portal__section">
+          <h2>Mi foto</h2>
+          <p className="form-hint">
+            Sale en tu carné y en el listado del cortejo. El día de la salida, el diputado de tramo
+            busca caras, no números.
+          </p>
+          {esPrincipal && hermanoPrincipal ? (
+            <FotoHermano
+              nombre={hermanoPrincipal.nombre}
+              foto={hermanoPrincipal.fotoDataUrl}
+              consiente={hermanoPrincipal.consienteFoto}
+              tamano={110}
+              onCambiar={(foto, consiente) =>
+                setHermanos((prev) =>
+                  prev.map((h) =>
+                    h.id === hermanoPrincipal.id ? { ...h, fotoDataUrl: foto, consienteFoto: consiente } : h,
+                  ),
+                )
+              }
+            />
+          ) : (
+            <p className="form-hint">
+              En la hermandad de muestra la foto no se guarda: entra con tu cuenta para poder
+              ponerla.
+            </p>
+          )}
+        </section>
+
         <section className="portal__section">
           <h2>Mis datos de contacto</h2>
           <form className="app-form" onSubmit={guardarDatos}>
@@ -1655,11 +1717,45 @@ export default function HermanoPortal() {
           )}
           <div className="assign-box__row">
             <button className="btn btn-outline" onClick={descargarMisDatos}>Descargar mis datos</button>
-            <button className="btn btn-ghost rgpd-borrar" onClick={solicitarBaja} disabled={bajaPedida}>
+            <button className="btn btn-ghost rgpd-borrar" onClick={() => setBajaOpen(true)} disabled={bajaPedida}>
               {bajaPedida ? 'Baja solicitada' : 'Solicitar la baja'}
             </button>
           </div>
         </section>
+
+        <Drawer
+          open={bajaOpen}
+          onClose={() => { setBajaOpen(false); setMotivoBaja('') }}
+          title="Solicitar la baja"
+          subtitle={nombreHermandadActiva}
+          footer={
+            <>
+              <button className="btn btn-ghost rgpd-borrar" onClick={() => confirmarBaja(motivoBaja)}>
+                Sí, solicitar la baja
+              </button>
+              <button className="btn btn-primary" onClick={() => { setBajaOpen(false); setMotivoBaja('') }}>
+                Seguir siendo hermano/a
+              </button>
+            </>
+          }
+        >
+          <p className="form-hint">
+            La baja no es automática: la tramita la secretaría de {nombreHermandadActiva}. Hasta
+            entonces sigues siendo hermano/a de pleno derecho, con tu número y tu antigüedad.
+          </p>
+          <div className="form-row">
+            <label htmlFor="motivoBaja">¿Quieres decirnos por qué? (opcional)</label>
+            <textarea
+              id="motivoBaja" rows={4} value={motivoBaja}
+              onChange={(e) => setMotivoBaja(e.target.value)}
+              placeholder="Me mudo fuera, no puedo con la cuota, no puedo salir…"
+            />
+            <p className="form-hint">
+              No hace falta contestar para darte de baja. Pero si es algo que la hermandad pueda
+              resolver —la cuota, los horarios—, decirlo es la única forma de que lo sepan.
+            </p>
+          </div>
+        </Drawer>
 
         {(contactoActivo.telefono || contactoActivo.email) && (
           <p className="portal__contact">
@@ -1715,12 +1811,7 @@ function PagoPapeleta({
   }
 
   if (!bizum && !iban) {
-    return (
-      <p className="form-hint">
-        {nombreHermandad} aún no ha publicado sus datos de cobro. Pregunta en secretaría cómo pagar tu papeleta
-        ({formatCurrency(papeleta.importe)}).
-      </p>
-    )
+    return <AvisoFalta compacto requisito={requisito('datosCobro', { hermandad: { iban, bizumTelefono: bizum } })} />
   }
 
   return (
@@ -1750,7 +1841,7 @@ function PagoPapeleta({
           </div>
         )}
       </div>
-      <p className="form-hint">El pago con tarjeta desde esta misma página llegará con la pasarela de pago online.</p>
+      <AvisoFalta compacto requisito={requisitoActual('pasarela')} />
     </div>
   )
 }

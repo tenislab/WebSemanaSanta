@@ -9,6 +9,8 @@ import { etiquetaTramo, type Tramo } from '../lib/tramos'
 import { formatCurrency } from '../lib/format'
 import { aniosDeHermandad, porAnio, salidasDe } from '../lib/hermanoFicha'
 import type { Cuota } from '../data/cuotas'
+import AvisoFalta from './AvisoFalta'
+import { requisito, requisitoActual } from '../lib/requisitos'
 import type { MetodoPago, Papeleta } from '../data/papeletas'
 import type { Hermano } from '../data/hermanos'
 import type { HermandadSettings } from '../lib/hermandadSettings'
@@ -250,10 +252,7 @@ export default function HistorialHermano({
               )}
             </div>
           ) : !hermandad.bizumTelefono && !hermandad.iban ? (
-            <p className="form-hint">
-              La hermandad todavía no ha publicado sus datos de cobro. Pregunta en secretaría cómo
-              pagar este recibo.
-            </p>
+            <AvisoFalta compacto requisito={requisito('datosCobro', { hermandad })} />
           ) : (
             <div className="pago-box">
               <b>{formatCurrency(pagando.importe)}</b>
@@ -289,9 +288,7 @@ export default function HistorialHermano({
                   </div>
                 )}
               </div>
-              <p className="form-hint">
-                Pagar con tarjeta desde aquí llegará cuando la hermandad conecte una pasarela.
-              </p>
+              <AvisoFalta compacto requisito={requisitoActual('pasarela')} />
             </div>
           )
         )}
