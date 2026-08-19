@@ -71,24 +71,71 @@ La aplicación lo avisa en la propia pantalla de importación.
 ## 2. El correo
 
 Hoy los avisos llegan al buzón que cada hermano tiene dentro de su área, pero
-**no sale ningún correo electrónico**.
+**no sale ningún correo electrónico** hasta que se contrate un proveedor.
 
-1. **Contratar un proveedor de envío**: Resend, SendGrid o Amazon SES. Para el
-   volumen de una hermandad, todos tienen plan gratuito o de unos euros al mes.
-2. **Verificar el dominio de la hermandad** ante el proveedor. Le darán unos
-   registros DNS —**SPF**, **DKIM** y **DMARC**— que hay que añadir en el panel
-   del registrador donde compraron el dominio. **Esto no es opcional**: sin la
-   verificación, los correos van a la carpeta de spam o se rechazan
-   directamente.
-3. **La clave del proveedor no puede vivir en el navegador.** Cualquiera la
-   sacaría del código y mandaría correo en nombre de la hermandad. Va en una
-   función de servidor (Edge Function de Supabase), y la aplicación le pide a
-   esa función que envíe.
+**El envío ya está montado**: la función de servidor, la pantalla de
+configuración y el correo de prueba. Lo que falta es la cuenta del proveedor.
 
-Se configura en el mismo sitio que el dominio, porque los registros van en el
-mismo panel del registrador: tiene sentido hacer las dos cosas de una vez.
+### Para empezar a probar hoy (15 minutos, gratis, sin dominio)
 
-Mientras no esté, el buzón sigue funcionando y el aviso rojo lo dice.
+1. Crear cuenta en **[Resend](https://resend.com)**. El plan gratuito da 3.000
+   correos al mes y 100 al día: de sobra para una hermandad.
+2. Copiar la clave de API (`re_…`).
+3. Instalar la herramienta de Supabase y guardar la clave **como secreto**, que
+   es lo que la mantiene fuera del navegador:
+
+   ```
+   npm i -g supabase
+   supabase login
+   supabase link --project-ref TU-REF
+   supabase secrets set RESEND_API_KEY=re_xxx
+   supabase functions deploy enviar-correo
+   ```
+
+4. En Cabildo: **Configuración → Correo**, encender el envío y darle a
+   **«Enviar prueba»**.
+
+> **Sin dominio propio, Resend solo deja escribir a la dirección con la que te
+> registraste**, usando `onboarding@resend.dev` como remitente. Es justo lo que
+> hace falta para comprobar que todo el circuito funciona antes de meterse con
+> el dominio.
+
+### Para escribir de verdad a los hermanos
+
+Hace falta **verificar el dominio de la hermandad** en Resend. Te dará tres
+registros DNS que hay que poner donde compraron el dominio:
+
+| Registro | Para qué |
+|---|---|
+| **SPF** | Dice qué servidores pueden enviar en nombre del dominio |
+| **DKIM** | Firma cada correo, para que el destinatario compruebe que no está falsificado |
+| **DMARC** | Dice qué hacer con los que no pasen las dos anteriores |
+
+**Esto no es opcional.** Sin verificar, los correos van a spam o se rechazan
+directamente, y una hermandad que manda una convocatoria de cabildo a spam es
+peor que una que no la manda.
+
+Después, cambiar el remitente:
+
+```
+supabase secrets set CORREO_REMITENTE="Hdad. de la Vera-Cruz <avisos@hermandad.es>"
+supabase functions deploy enviar-correo
+```
+
+### Cómo está montado, y por qué así
+
+- **La clave vive en el servidor, nunca en el navegador.** Permite escribir en
+  nombre de la hermandad: si estuviera en el código del navegador, cualquiera la
+  sacaría en diez segundos y podría suplantarla ante sus mil hermanos.
+- **Solo la junta puede mandar.** La función comprueba quién llama contra
+  Supabase; una cuenta de hermano no puede usarla.
+- **Los hermanos van en copia oculta.** Mandar el comunicado con las mil
+  direcciones a la vista sería filtrar el censo entero, y en una hermandad eso
+  son datos de categoría especial.
+- **Se respeta lo que cada hermano haya apagado** en su área. Que la hermandad
+  encienda el correo no le quita a nadie su decisión.
+- **Si el correo falla, el comunicado se publica igual** y llega al buzón. Se
+  dice qué ha pasado, en vez de callarlo o de perder el comunicado.
 
 ---
 

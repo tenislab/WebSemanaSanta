@@ -100,6 +100,12 @@ Esta es la parte que se salta todo el mundo y la que puede costar dinero.
 Los tres son opcionales para arrancar y los contrata la hermandad a su nombre.
 Están explicados paso a paso en [`CONECTAR.md`](CONECTAR.md).
 
+**El correo se puede probar hoy mismo, gratis y sin dominio**: cuenta en Resend,
+`supabase secrets set RESEND_API_KEY=…`, `supabase functions deploy
+enviar-correo`, y el botón de prueba en Configuración → Correo. Sin dominio solo
+escribe a tu propia dirección, que es justo lo que hace falta para comprobar que
+funciona.
+
 Mientras no estén, la aplicación **lo dice en rojo** en cada sitio donde se
 nota, y sigue funcionando: los avisos van al buzón interno y se cobra por Bizum
 con confirmación de la tesorería.

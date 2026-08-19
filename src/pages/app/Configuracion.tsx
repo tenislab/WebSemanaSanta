@@ -36,7 +36,10 @@ import { nuevoId } from '../../lib/supabaseSync'
 import { crearCopia, esCopiaValida, restaurarCopia, resumirCopia } from '../../lib/backup'
 import { descargarArchivo } from '../../lib/csv'
 import AvisoFalta from '../../components/AvisoFalta'
-import { contextoActual, requisitos } from '../../lib/requisitos'
+import { contextoActual, requisito, requisitos } from '../../lib/requisitos'
+import {
+  correoDePrueba, correoDisponible, enviarCorreo, useAjustesCorreo, type AjustesCorreo,
+} from '../../lib/correo'
 
 const MAX_LOGO_BYTES = 800_000
 
@@ -57,7 +60,7 @@ const CATALOGOS_DEF = [
   { k: 'segmentos', clave: CLAVES_CATALOGOS.segmentosComunicado, titulo: 'Destinatarios de comunicados', porDefecto: SEGMENTOS },
 ] as const
 
-type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos' | 'puesta'
+type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos' | 'puesta' | 'correo'
 
 /** Las secciones de los ajustes, agrupadas como el editor de la web. */
 const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; icono: ReactNode }[] }[] = [
@@ -79,6 +82,7 @@ const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; i
   {
     titulo: 'Mantenimiento',
     items: [
+      { id: 'correo', label: 'Correo', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> },
       { id: 'puesta', label: 'Puesta en marcha', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 2v6M12 16v6M2 12h6M16 12h6" /><circle cx="12" cy="12" r="3.2" /></svg> },
       { id: 'datos', label: 'Copias y datos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></svg> },
     ],
@@ -1116,6 +1120,8 @@ export default function Configuracion() {
 
       {seccion === 'ficha' && <CamposPropiosCard />}
 
+      {seccion === 'correo' && <CorreoCard />}
+
       {seccion === 'puesta' && <PuestaEnMarchaCard />}
 
       {seccion === 'datos' && (
@@ -1322,6 +1328,149 @@ function PuestaEnMarchaCard() {
           </ul>
         </>
       )}
+    </section>
+  )
+}
+
+/**
+ * El envío de correo: encenderlo, decir quién firma y —lo primero de todo—
+ * mandarse una prueba a uno mismo. Sin el botón de prueba, que algo falla se
+ * descubre el día que se manda la convocatoria de cabildo a mil personas.
+ */
+function CorreoCard() {
+  const { user } = useAuth()
+  const hermandad = useHermandadSettings()
+  const [ajustes, setAjustes] = useAjustesCorreo()
+  const [destinoPrueba, setDestinoPrueba] = useState(user?.email ?? '')
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState<{ ok: boolean; texto: string } | null>(null)
+  const set = (c: Partial<AjustesCorreo>) => setAjustes({ ...ajustes, ...c })
+
+  async function probar() {
+    setEnviando(true)
+    setResultado(null)
+    const { asunto, texto, html } = correoDePrueba(hermandad.nombreLegal)
+    const r = await enviarCorreo({ para: [destinoPrueba], asunto, texto, html })
+    setEnviando(false)
+    setResultado(
+      r.ok
+        ? { ok: true, texto: `Enviado a ${destinoPrueba}. Míralo, y mira también la carpeta de spam: si ha caído ahí, falta verificar el dominio.` }
+        : { ok: false, texto: r.error ?? 'No se pudo enviar.' },
+    )
+  }
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head">
+        <h2 className="settings-card__title">Correo</h2>
+        {correoDisponible(ajustes) && <span className="pill pill--ok">Activo</span>}
+      </div>
+      <p className="form-hint">
+        Sin esto, los avisos llegan al buzón que cada hermano tiene dentro de su área: si no entra,
+        no se entera. Con el correo conectado, además le llega a su bandeja.
+      </p>
+
+      <AvisoFalta requisito={requisito('correo')} />
+
+      <details className="afinar">
+        <summary>
+          <span className="afinar__titulo">Cómo se conecta</span>
+          <span className="afinar__nota">Una vez, unos 20 minutos</span>
+        </summary>
+        <ol className="cfg-pasos">
+          <li>Crear una cuenta en <b>Resend</b> (resend.com). El plan gratuito da 3.000 correos al mes, de sobra para una hermandad.</li>
+          <li>Copiar la clave de API que dan al registrarse.</li>
+          <li>
+            Guardarla como secreto de la función, desde el ordenador de quien administre Cabildo:
+            <code className="cfg-codigo">supabase secrets set RESEND_API_KEY=re_xxx</code>
+            <code className="cfg-codigo">supabase functions deploy enviar-correo</code>
+          </li>
+          <li>
+            <b>Para probar hoy mismo</b> no hace falta dominio: Resend deja usar{' '}
+            <code>onboarding@resend.dev</code> como remitente, pero solo escribe a la dirección con
+            la que te registraste. Vale para comprobar que el circuito funciona.
+          </li>
+          <li>
+            <b>Para escribir a los hermanos</b> hay que verificar el dominio de la hermandad en
+            Resend y añadir los registros <b>SPF</b>, <b>DKIM</b> y <b>DMARC</b> donde se compró el
+            dominio. Sin eso, los correos van a spam o se rechazan.
+          </li>
+        </ol>
+      </details>
+
+      <label className="checkbox">
+        <input type="checkbox" checked={ajustes.activo} onChange={(e) => set({ activo: e.target.checked })} />
+        <span>
+          Mandar los avisos también por correo
+          <small className="portal__pref-explica">
+            Se puede apagar en cualquier momento sin perder la configuración. El buzón del hermano
+            sigue funcionando igual.
+          </small>
+        </span>
+      </label>
+
+      <div className="form-row">
+        <label htmlFor="correoResponder">A dónde contestan los hermanos</label>
+        <input
+          id="correoResponder" type="email" value={ajustes.responderA}
+          onChange={(e) => set({ responderA: e.target.value })}
+          placeholder={hermandad.email || 'secretaria@hermandad.es'}
+        />
+        <p className="form-hint">
+          Cuando le den a «responder», la respuesta irá aquí. Vacío = a la dirección desde la que se
+          envía, que puede no leer nadie.
+        </p>
+      </div>
+
+      <div className="form-row">
+        <label>Qué sale por correo</label>
+        <p className="form-hint">
+          Además de al buzón. Lo que cada hermano haya apagado en su área se respeta siempre: esto
+          es el máximo, no una imposición.
+        </p>
+        {([
+          ['comunicados', 'Comunicados de la hermandad'],
+          ['cuotas', 'Cuotas: emisión y confirmación de pago'],
+          ['papeletas', 'Papeletas de sitio'],
+          ['ficha', 'Cambios en sus datos'],
+        ] as const).map(([id, texto]) => (
+          <label className="checkbox" key={id}>
+            <input
+              type="checkbox"
+              checked={ajustes.avisaDe[id]}
+              onChange={(e) => set({ avisaDe: { ...ajustes.avisaDe, [id]: e.target.checked } })}
+            />
+            <span>{texto}</span>
+          </label>
+        ))}
+      </div>
+
+      <div className="form-row">
+        <label htmlFor="correoPrueba">Mandarme un correo de prueba</label>
+        <div className="assign-box__row">
+          <input
+            id="correoPrueba" type="email" value={destinoPrueba}
+            onChange={(e) => setDestinoPrueba(e.target.value)}
+            placeholder="tu@correo.es"
+          />
+          <button
+            type="button" className="btn btn-primary btn-sm"
+            disabled={enviando || !destinoPrueba.trim()}
+            onClick={probar}
+          >
+            {enviando ? 'Enviando…' : 'Enviar prueba'}
+          </button>
+        </div>
+        <p className="form-hint">
+          Hazlo <b>antes</b> de mandar nada a los hermanos. Es la única forma de saber que funciona
+          sin descubrirlo con mil personas delante.
+        </p>
+        {resultado && (
+          <p className={resultado.ok ? 'form-hint form-hint--ok' : 'aviso-falta__error-suelto'}>
+            {resultado.ok ? '✓ ' : ''}{resultado.texto}
+          </p>
+        )}
+      </div>
     </section>
   )
 }

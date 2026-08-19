@@ -1,7 +1,7 @@
 /** P0: el registro de lo que falta por configurar. */
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/requisitos.ts')
-  const vacio = { supabaseListo: false, hermandad: null, web: null }
+  const vacio = { supabaseListo: false, correoListo: false, hermandad: null, web: null }
 
   // --- Cada requisito trae las tres piezas que hacen falta ---
   // Un aviso que solo dice «no configurado» deja a la junta igual de perdida:
@@ -38,15 +38,17 @@ export default async function ({ cargar, caso }) {
   caso('sin dominio, falta', false, m.requisito('dominio', { web: { dominio: '' } }).listo)
   caso('con dominio, está', true, m.requisito('dominio', { web: { dominio: 'hdadtriana.es' } }).listo)
 
-  // --- El correo no puede darse por hecho ---
-  // No hay proveedor conectado, así que nunca sale listo: si alguna vez lo
-  // hace sin haberlo montado, es que alguien lo puso a mano.
-  caso('el correo nunca está listo todavía', false, m.requisito('correo', vacio).listo)
+  // --- El correo ---
+  // Ya está montado el envío; lo que falta es contratarlo y encenderlo.
+  caso('sin contratar, el correo no está listo', false, m.requisito('correo', vacio).listo)
+  caso('conectado y encendido, sí', true, m.requisito('correo', { ...vacio, correoListo: true }).listo)
+  caso('y dice dónde se configura', true, /Configuración/.test(m.requisito('correo', vacio).enlace.texto))
 
   // --- Pendientes ---
   caso('sin nada configurado, faltan los cinco', 5, m.requisitosPendientes(vacio).length)
   const casi = {
     supabaseListo: true,
+    correoListo: false,
     hermandad: { iban: 'ES47', bizumTelefono: '' },
     web: { dominio: 'x.es', donativos: { enlacePasarela: 'https://p.example' } },
   }

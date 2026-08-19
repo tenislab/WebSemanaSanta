@@ -31,7 +31,13 @@ import {
   type CriteriosSegmento,
 } from '../../lib/segmentacion'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
-import { agregarAvisoAVarios } from '../../lib/avisosHermano'
+import { agregarAvisoAVarios, getPreferenciasAvisos, quiereAviso } from '../../lib/avisosHermano'
+import { correoDisponible, enviarCorreo, getAjustesCorreo } from '../../lib/correo'
+
+/** Para meter texto de la hermandad dentro del HTML del correo sin romperlo. */
+function escaparHtml(t: string): string {
+  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -186,19 +192,47 @@ export default function Comunicados() {
     setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: false, usuario: null } : c)))
   }
 
-  function enviarAhora(c: Comunicado) {
+  async function enviarAhora(c: Comunicado) {
     const hoy = new Date().toISOString().slice(0, 10)
-    // Si va dirigido a una etiqueta, el alcance es el nº de hermanos con esa
-    // etiqueta (envío de email simulado por ahora).
     const destinatariosHermanos = hermanosDeDestinatario(c.destinatarios)
     const alcance = destinatariosHermanos.length > 0 ? destinatariosHermanos.length : c.alcance
     const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance }
     setComunicados((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)))
     setSelected(actualizado)
-    // Y al buzón de cada hermano en su área. Hasta ahora un comunicado se
-    // «enviaba» y el hermano no se enteraba por ningún sitio.
-    agregarAvisoAVarios(hermanosAAvisar(c.destinatarios).map((h) => h.id), c.cuerpo, 'comunicado', c.titulo)
+
+    // Al buzón de cada hermano en su área, SIEMPRE. Es lo que no depende de que
+    // haya proveedor de correo contratado.
+    const reciben = hermanosAAvisar(c.destinatarios)
+    agregarAvisoAVarios(reciben.map((h) => h.id), c.cuerpo, 'comunicado', c.titulo)
+
+    // Y por correo, si la hermandad lo tiene conectado y encendido para los
+    // comunicados. Se respeta lo que cada hermano haya apagado en su área: que
+    // la hermandad active el correo no le quita a nadie su decisión.
+    const ajustes = getAjustesCorreo()
+    if (!correoDisponible(ajustes) || !ajustes.avisaDe.comunicados) return
+    const direcciones = reciben
+      .filter((h) => quiereAviso(getPreferenciasAvisos(h.id), 'comunicado'))
+      .map((h) => h.email)
+      .filter((e) => e && e.includes('@'))
+    if (direcciones.length === 0) return
+    setEnvioCorreo({ estado: 'enviando' })
+    const r = await enviarCorreo({
+      para: direcciones,
+      asunto: c.titulo,
+      texto: c.cuerpo,
+      html: `<div style="font-family:system-ui,sans-serif;line-height:1.6;max-width:34rem">` +
+        `<h2 style="margin:0 0 0.6rem">${escaparHtml(c.titulo)}</h2>` +
+        `<div>${escaparHtml(c.cuerpo).replace(/\n/g, '<br>')}</div></div>`,
+    })
+    setEnvioCorreo(
+      r.ok
+        ? { estado: 'hecho', texto: `Enviado por correo a ${r.enviados} hermanos.` }
+        : { estado: 'error', texto: r.error ?? 'No se pudo mandar el correo.' },
+    )
   }
+
+  /** El estado del último envío por correo, para no dejarlo en silencio. */
+  const [envioCorreo, setEnvioCorreo] = useState<{ estado: 'enviando' | 'hecho' | 'error'; texto?: string } | null>(null)
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -516,9 +550,31 @@ export default function Comunicados() {
             </dl>
             {selected.estado !== 'Enviado' && (
               <div className="assign-box__row">
-                <button type="button" className="btn btn-primary" onClick={() => enviarAhora(selected)}>
-                  Enviar ahora
+                <button
+                  type="button" className="btn btn-primary"
+                  disabled={envioCorreo?.estado === 'enviando'}
+                  onClick={() => enviarAhora(selected)}
+                >
+                  {envioCorreo?.estado === 'enviando' ? 'Enviando…' : 'Enviar ahora'}
                 </button>
+              </div>
+            )}
+            {/* Qué ha pasado con el correo. El buzón del hermano se llena
+                siempre; el correo puede fallar, y callarlo sería peor. */}
+            {envioCorreo?.estado === 'hecho' && (
+              <p className="form-hint form-hint--ok">✓ {envioCorreo.texto}</p>
+            )}
+            {envioCorreo?.estado === 'error' && (
+              <div className="aviso-falta" role="note">
+                <p className="aviso-falta__titulo">
+                  <span className="aviso-falta__marca" aria-hidden="true" />
+                  El comunicado se ha publicado, pero no ha salido por correo
+                </p>
+                <p className="aviso-falta__porque">{envioCorreo.texto}</p>
+                <p className="aviso-falta__arreglo">
+                  A los hermanos les ha llegado igualmente al buzón de su área. Revisa
+                  Configuración → Correo.
+                </p>
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from './supabase'
 import { getHermandadSettings, type HermandadSettings } from './hermandadSettings'
 import { getWebPublica, type WebPublica } from './webPublica'
+import { correoDisponible } from './correo'
 
 /**
  * Lo que hace falta CONFIGURAR para que ciertas cosas funcionen de verdad:
@@ -40,6 +41,7 @@ export interface ContextoRequisitos {
   web?: Pick<WebPublica, 'dominio' | 'donativos'> | null
   /** Se pasa de fuera para poder probarlo sin depender del entorno. */
   supabaseListo?: boolean
+  correoListo?: boolean
 }
 
 /**
@@ -50,6 +52,9 @@ export interface ContextoRequisitos {
  */
 export function requisitos(ctx: ContextoRequisitos = {}): Record<IdRequisito, Requisito> {
   const supabaseListo = ctx.supabaseListo ?? isSupabaseConfigured
+  // El correo está listo cuando hay base de datos (donde vive la función) Y la
+  // hermandad lo ha encendido tras configurar el proveedor.
+  const correoListo = ctx.correoListo ?? (supabaseListo && correoDisponible())
   const iban = (ctx.hermandad?.iban ?? '').trim()
   const bizum = (ctx.hermandad?.bizumTelefono ?? '').trim()
   const pasarela = (ctx.web?.donativos?.enlacePasarela ?? '').trim()
@@ -71,10 +76,11 @@ export function requisitos(ctx: ContextoRequisitos = {}): Record<IdRequisito, Re
       nombre: 'Envío de correo',
       queNoVa: 'Los avisos no salen por correo',
       porQue:
-        'Los avisos llegan al buzón que cada hermano tiene dentro de su área, pero no se manda ningún correo electrónico. Hace falta contratar un proveedor de envío y verificar el dominio de la hermandad; sin esa verificación, los correos acabarían en la carpeta de spam.',
+        'Los avisos llegan al buzón que cada hermano tiene dentro de su área, pero no se manda ningún correo electrónico. El envío está montado; falta contratar un proveedor y verificar el dominio de la hermandad, porque sin esa verificación los correos acabarían en la carpeta de spam.',
       comoSeArregla:
-        'Lo contrata la hermandad (Resend, SendGrid o Amazon SES) y se configura una vez. Mientras tanto, el hermano ve sus avisos al entrar en su área.',
-      listo: false,
+        'Se hace una vez desde Configuración → Correo: crear cuenta en Resend, guardar la clave como secreto de la función y encenderlo. Hay un correo de prueba para comprobarlo antes de escribir a nadie.',
+      enlace: { a: '/app/configuracion', texto: 'Ir a Configuración → Correo' },
+      listo: correoListo,
     },
     pasarela: {
       id: 'pasarela',

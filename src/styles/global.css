@@ -5389,3 +5389,24 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
   .estilo-card small,
   .cms-rail__item small { font-size: 0.76rem; }
 }
+
+/* ---------------------------------------------------------------------------
+   P7 · Cómo se conecta el correo
+   --------------------------------------------------------------------------- */
+.cfg-pasos {
+  margin: 0.6rem 0 0 1.1rem; display: flex; flex-direction: column; gap: 0.6rem;
+  font-size: 0.88rem; line-height: 1.6; color: var(--text-muted);
+}
+.cfg-pasos b { color: var(--text); }
+.cfg-pasos code {
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: 4px;
+  padding: 0.05rem 0.4rem; font-size: 0.85em; overflow-wrap: anywhere;
+}
+/* Una orden que hay que copiar tal cual: en su propia línea y seleccionable
+   entera, que es lo que se hace con ella. */
+.cfg-codigo {
+  display: block; margin-top: 0.4rem; padding: 0.5rem 0.7rem;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem;
+  color: var(--text); user-select: all; overflow-x: auto; white-space: pre;
+}
