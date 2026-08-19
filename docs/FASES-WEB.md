@@ -55,8 +55,10 @@ Supabase y el despliegue. Mientras tanto, todo lo demás sí se puede hacer.
 
 ## Fases
 
-Las W1–W8 se pueden hacer **hoy**, sin depender de nadie. Las W9 y W10
-necesitan servidor.
+Las W1–W8 se pueden hacer **hoy**, sin depender de nadie. La W9 necesita
+servidor. La W10 funciona ya en local y con Supabase; lo único que depende de
+un tercero es cobrar con tarjeta, que exige que la hermandad contrate su
+propia pasarela.
 
 | Fase | Qué entra | ¿Necesita servidor? | Estado |
 |------|-----------|---------------------|--------|
@@ -69,7 +71,7 @@ necesitan servidor.
 | **W7** | Accesibilidad e idioma | No | Hecha |
 | **W8** | El editor, a la altura | No | Hecha |
 | **W9** | Que se comparta y se encuentre | **Sí** | Hecha (falta encenderla) |
-| **W10** | Formularios, donativos y dominio | **Sí** | Pendiente |
+| **W10** | Formularios, donativos y dominio | Parte | Hecha (la pasarela, no) |
 
 ---
 
@@ -199,8 +201,8 @@ de treinta fotos son varios megas que viajan en cada carga.
   móvil con mala cobertura», con el añadido de que pasados los 4 MB el
   navegador puede no dejar guardarla.
 
-Queda para W10 pasar las fotos a un almacén de verdad cuando haya Supabase:
-hoy viven dentro del propio contenido.
+Sigue pendiente (no entró en W10) pasar las fotos a un almacén de verdad
+cuando haya Supabase: hoy viven dentro del propio contenido.
 
 ## W7 — Accesibilidad e idioma
 
@@ -279,20 +281,79 @@ La fase de más impacto y la única que no se puede cerrar desde el navegador.
 - `supabase/web-publica.sql` crea la tabla desde la que lo lee, y la aplicación
   ya sube ahí la web en cada guardado (primero al navegador, siempre).
 
-Queda de verdad para W10: mientras las fotos vivan dentro del contenido como
-`data:`, la tarjeta al compartir sale sin imagen. Ningún rastreador descarga un
+Sigue pendiente, y no entró en W10: mientras las fotos vivan dentro del
+contenido como `data:`, la tarjeta al compartir sale sin imagen. Ningún rastreador descarga un
 `data:`, y el código ya lo tiene en cuenta: si la imagen no es una URL, no se
 promete.
 
-## W10 — Formularios, donativos y dominio *(necesita Supabase + banco)*
+## W10 — Formularios, donativos y dominio *(hecha, salvo la pasarela)*
 
-- **Formulario de contacto** que llegue a secretaría de verdad (hoy la web da
-  el teléfono y el correo, pero no hay formulario porque enviarlo necesita
-  servidor).
-- **Solicitud de alta** desde la web, que entra en el módulo de solicitudes.
-- **Donativos y lotería** con pasarela.
-- **Papeleta de sitio** desde la web para el hermano.
-- Dominio propio con su certificado.
+Hasta aquí la web **contaba** cosas. Con W10 también **escucha**: quien la
+visita puede escribir a la hermandad, pedir el alta, avisar de un donativo o
+reservar lotería sin llamar por teléfono ni pasarse por la casa de hermandad en
+horario de secretaría.
+
+### Lo que entró
+
+- **Formulario de contacto** en la sección de Contacto. Valida campo a campo
+  antes de mandar nada, y deja un acuse por escrito diciendo qué pasa después.
+- **Solicitud de alta desde la propia web**, en «Hazte hermano». Entra por el
+  mismo sitio que las del área del hermano: **Hermanos → Solicitudes de alta**.
+  Quien la manda elige ya su contraseña, así que el día que secretaría la
+  aprueba puede entrar en su área sin más trámite.
+- **Donativos**: entradilla, explicación, causas a las que destinarlo, importes
+  sugeridos, y el Bizum y la cuenta de la hermandad con el concepto ya escrito.
+  Quien dona puede avisar desde la web y la tesorería lo cuadra con el ingreso.
+- **Lotería**: número, sorteo, lo que juega, el donativo, dónde se recoge, y
+  reserva de participaciones con tope por persona.
+- **Aviso de papeletas** en la portada mientras la ventana de reparto esté
+  abierta, con los días que quedan y el enlace al área del hermano. Se quita
+  solo al cerrarse: un aviso caducado no lo lee nadie.
+- **Buzón de la web** en el panel (Web pública → Buzón de la web): lo que llega
+  por los formularios, con filtros de «sin leer» y «por atender». El Inicio
+  avisa de los mensajes nuevos.
+- **Dominio propio**: se configura en Estilo y secciones → «Usar un dominio
+  propio», con las instrucciones de DNS. El sitemap, el `robots.txt` y las
+  etiquetas de compartir usan ese dominio en cuanto se pone (ver W9).
+
+### Contra el spam, sin depender de nadie
+
+Un formulario público sin defensa se llena de basura en semanas. Sin captcha ni
+servicios de terceros hay dos señales que cazan casi todo el spam automático:
+un **campo trampa** que no ve ninguna persona y que los robots rellenan porque
+leen el HTML, y el **tiempo** (nadie rellena un formulario en un segundo).
+Cuando salta, el formulario dice «enviado» igual y no guarda nada: si se le
+enseña el error, el robot reintenta hasta acertar.
+
+El umbral de tiempo se dejó bajo (1,2 s) a propósito: tirar el mensaje de una
+persona de verdad es mucho peor que colarse un spam.
+
+### Lo que NO entró, y por qué
+
+**Cobrar con tarjeta desde la web.** Cabildo no puede cobrar por la hermandad:
+el dinero tiene que ir a una cuenta suya, y eso exige contratar una pasarela
+(con su banco, Stripe, PayPal…) a su nombre, con su CIF y su contrato. Lo que
+sí hay es el hueco: en Donativos → «Cobrar con tarjeta desde la web» se pega el
+enlace de pago que les den y el botón de la web lleva a él. Sin pasarela, la
+web enseña el Bizum y la cuenta, que es como se hace hoy por teléfono pero sin
+llamar.
+
+Lo mismo pasa con **pagar la cuota o la papeleta con tarjeta** desde el área
+del hermano (ver H3): hasta que haya pasarela, el hermano paga por Bizum o
+transferencia y avisa, y la tesorería lo confirma en un clic.
+
+**Las fotos en un almacén de verdad.** Siguen viviendo dentro del contenido
+como `data:`, así que la tarjeta al compartir sale sin imagen (W6 y W9). Se
+sabía que quedaba pendiente y sigue pendiente: es lo primero de la lista
+después de esto.
+
+### Para encenderlo con Supabase
+
+Ejecutar `supabase/mensajes-web.sql` en el editor SQL. Crea la tabla del buzón
+con los permisos que hacen falta: **cualquiera puede dejar algo** (es un
+formulario público, quien lo usa no ha iniciado sesión) pero **solo el personal
+lo lee**. Sin esa tabla, los formularios no mienten: dicen que no se ha podido
+enviar en vez de dar un «enviado» que no ha llegado a ninguna parte.
 
 ---
 
@@ -306,5 +367,8 @@ promete.
    cargue rápido y la pueda usar todo el mundo.
 4. **W8** cuando el contenido ya sea grande: las herramientas del editor hacen
    falta cuando hay mucho que editar.
-5. **W9 y W10** el día que se conecte Supabase. W9 es la más importante de
-   todas en impacto, y es la que no depende de nosotros.
+5. **W9** el día que se conecte Supabase: es la más importante de todas en
+   impacto, y es la que no depende de nosotros.
+6. **W10** ya está: los formularios funcionan en cuanto se ejecute
+   `supabase/mensajes-web.sql`. Cobrar con tarjeta espera a que la hermandad
+   contrate una pasarela a su nombre.

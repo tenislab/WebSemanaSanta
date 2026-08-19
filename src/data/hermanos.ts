@@ -25,6 +25,13 @@ export interface Hermano {
   /** Fecha de nacimiento (ISO yyyy-mm-dd), para segmentar por edad (mayores/menores). Opcional. */
   fechaNacimiento?: string
   /**
+   * Quién lo lleva: el id del hermano que gestiona su papeleta y sus cuotas
+   * desde su propia cuenta. Es lo normal con los menores, que no tienen ni
+   * correo ni forma de entrar solos, y hasta ahora obligaba a los padres a
+   * pasar por secretaría para todo.
+   */
+  tutorId?: string
+  /**
    * Campos a medida de la hermandad (talla de túnica, nº de llave…),
    * indexados por el id del campo. Ver `lib/camposPropios.ts`. El valor va
    * siempre como texto: si mañana cambia el tipo del campo, lo escrito no se

@@ -191,6 +191,10 @@ export default function Hermanos() {
       dni: sol.dni,
       claveAcceso: sol.clavePropuesta,
       authUserId: null,
+      // Si la pidió un hermano para un hijo suyo, el menor queda a su cargo y
+      // podrá gestionarle la papeleta desde su propia cuenta.
+      ...(sol.tutorId ? { tutorId: sol.tutorId } : {}),
+      ...(sol.fechaNacimiento ? { fechaNacimiento: sol.fechaNacimiento } : {}),
     }
     nuevo.authUserId = await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
     // La comprobación de DNI se repite AQUÍ, ya con la lista más reciente: entre
@@ -1230,6 +1234,17 @@ export default function Hermanos() {
                   <div><dt>DNI / NIE</dt><dd>{sol.dni}</dd></div>
                   <div><dt>Correo</dt><dd>{sol.email}</dd></div>
                   <div><dt>Teléfono</dt><dd>{sol.telefono || 'Sin datos'}</dd></div>
+                  {sol.fechaNacimiento && (
+                    <div><dt>Fecha de nacimiento</dt><dd>{sol.fechaNacimiento}</dd></div>
+                  )}
+                  {/* La pidió un hermano para un hijo suyo: al aprobarla, el
+                      menor queda a su cargo. */}
+                  {sol.tutorId && (
+                    <div>
+                      <dt>A cargo de</dt>
+                      <dd>{hermanos.find((h) => h.id === sol.tutorId)?.nombre ?? 'un hermano dado de baja'}</dd>
+                    </div>
+                  )}
                 </dl>
                 <div className="assign-box__row">
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSolicitud(sol)}>

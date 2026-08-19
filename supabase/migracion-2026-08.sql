@@ -48,3 +48,17 @@ create policy "eventos_staff_all" on eventos for all to authenticated
   with check (not auth_es_hermano() and modulo_permitido('eventos'));
 drop policy if exists "eventos_hermano_select" on eventos;
 create policy "eventos_hermano_select" on eventos for select to authenticated using (true);
+
+-- =============================================================================
+-- H3 · El hermano avisa de que ya ha pagado
+-- =============================================================================
+-- Cuando el hermano paga un recibo por Bizum o transferencia desde su área,
+-- deja constancia aquí (método y fecha). La tesorería lo confirma al ver el
+-- ingreso, y entonces el aviso se limpia junto con el cambio a «Pagada».
+alter table cuotas add column if not exists pago_comunicado jsonb;
+
+-- =============================================================================
+-- W10 · Lo que la web pública recibe
+-- =============================================================================
+-- La tabla y sus permisos están en `mensajes-web.sql`, que hay que ejecutar
+-- aparte porque también hace falta al crear la base desde cero.

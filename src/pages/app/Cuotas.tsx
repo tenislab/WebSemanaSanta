@@ -20,7 +20,9 @@ import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import {
   CUOTAS_INICIALES,
   METODOS_COBRO,
+  esAvisado,
   metodoDeCuota,
+  metodoEnFrase,
   type ConceptoCuota,
   type Cuota,
   type EstadoCuota,
@@ -30,6 +32,7 @@ import { getConceptosCuota } from '../../lib/conceptosCuota'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
+import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
@@ -104,7 +107,9 @@ export default function Cuotas() {
     rowToCuota,
   )
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<'Todas' | EstadoCuota>('Todas')
+  // «Avisados» no es un estado del recibo: es el hermano que ha dicho desde su
+  // área que ya ha pagado por Bizum o transferencia y espera confirmación.
+  const [filter, setFilter] = useState<'Todas' | 'Avisados' | EstadoCuota>('Todas')
   const [selected, setSelected] = useState<Cuota | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
@@ -158,9 +163,19 @@ export default function Cuotas() {
     return (id: string) => map.get(id)
   }, [hermanos])
 
+  // Recibos que el hermano dice tener pagados y a la tesorería aún le constan
+  // sin cobrar: son los que hay que confirmar contra el extracto del banco.
+  const avisados = useMemo(() => cuotas.filter(esAvisado), [cuotas])
+
   const filtered = useMemo(() => {
     return cuotas
-      .filter((c) => (filter === 'Todas' ? true : c.estado === filter))
+      .filter((c) =>
+        filter === 'Todas'
+          ? true
+          : filter === 'Avisados'
+            ? esAvisado(c)
+            : c.estado === filter,
+      )
       .filter((c) => {
         const q = query.trim().toLowerCase()
         if (!q) return true
@@ -192,9 +207,22 @@ export default function Cuotas() {
 
   function marcarPagada(id: string) {
     setCuotas((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, estado: 'Pagada', fechaPago: hoy() } : c)),
+      prev.map((c) => (c.id === id ? { ...c, estado: 'Pagada', fechaPago: hoy(), pagoComunicado: null } : c)),
     )
-    setSelected((prev) => (prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy() } : prev))
+    setSelected((prev) =>
+      prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy(), pagoComunicado: null } : prev,
+    )
+    // Al hermano le llega a su buzón: se ahorra la llamada de «¿os ha
+    // entrado ya mi cuota?», que es la más repetida de secretaría.
+    const c = cuotas.find((x) => x.id === id)
+    if (c) {
+      agregarAvisoHermano(
+        c.hermanoId,
+        `Tu recibo de ${c.concepto} (${formatCurrency(c.importe)}) queda pagado. Gracias.`,
+        'cuota',
+        'Cuota pagada',
+      )
+    }
   }
 
   const miCorreo = (user?.email ?? '').toLowerCase()
@@ -455,6 +483,22 @@ export default function Cuotas() {
         </div>
       </div>
 
+      {avisados.length > 0 && (
+        <div className="banner-inline banner-inline--accent">
+          <span>
+            <b>
+              {avisados.length === 1 ? 'Un hermano avisa' : `${avisados.length} hermanos avisan`} de que ya{' '}
+              {avisados.length === 1 ? 'ha' : 'han'} pagado.
+            </b>{' '}
+            {avisados.length === 1 ? 'Ha pagado' : 'Han pagado'} por Bizum o transferencia desde su área.
+            Compruébalo en el banco y {avisados.length === 1 ? 'dalo' : 'dalos'} por cobrado{avisados.length === 1 ? '' : 's'}.
+          </span>
+          <button className="btn btn-primary btn-sm" onClick={() => setFilter('Avisados')}>
+            {avisados.length === 1 ? 'Ver ese recibo' : `Ver esos ${avisados.length} recibos`}
+          </button>
+        </div>
+      )}
+
       {hayNuevoEjercicio && (
         <div className="banner-inline banner-inline--accent cuotas-nuevo-ejercicio">
           <span>
@@ -499,7 +543,16 @@ export default function Cuotas() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="filters">
-          {(['Todas', 'Pagada', 'Pendiente', 'En mora', 'Devuelta'] as const).map((f) => (
+          {/* El filtro de avisados solo aparece cuando hay alguno: si no, sería
+              una pestaña siempre vacía. */}
+          {([
+            'Todas',
+            ...(avisados.length > 0 ? (['Avisados'] as const) : []),
+            'Pagada',
+            'Pendiente',
+            'En mora',
+            'Devuelta',
+          ] as const).map((f) => (
             <button
               key={f}
               className={`chip${filter === f ? ' chip--active' : ''}`}
@@ -508,6 +561,8 @@ export default function Cuotas() {
             >
               {f === 'Todas'
                 ? 'Todas'
+                : f === 'Avisados'
+                  ? `Avisan que han pagado (${avisados.length})`
                 : f === 'Pagada'
                   ? 'Pagadas'
                   : f === 'Pendiente'
@@ -559,6 +614,11 @@ export default function Cuotas() {
                   <td className="col-opcional">{c.concepto}</td>
                   <td>
                     <span className={`pill ${estadoClass(c.estado)}`}>{c.estado}</span>
+                    {esAvisado(c) && (
+                      <span className="pill-avisado" title={`El hermano avisó el ${c.pagoComunicado?.fecha} de que ha pagado por ${c.pagoComunicado?.metodo}`}>
+                        Dice que ha pagado
+                      </span>
+                    )}
                   </td>
                   <td className="num">{formatCurrency(c.importe)}</td>
                   <td className="col-opcional">
@@ -625,7 +685,9 @@ export default function Cuotas() {
                   imprimirlo: manda ella y el resto pasa a segundo plano. */}
               {sinCobrar && (
                 <button className="btn btn-primary" onClick={() => marcarPagada(selected.id)}>
-                  Marcar como pagada
+                  {selected.pagoComunicado
+                    ? `Confirmar el pago por ${metodoEnFrase(selected.pagoComunicado.metodo)}`
+                    : 'Marcar como pagada'}
                 </button>
               )}
               {/* Un recibo devuelto no es un callejón sin salida: se puede volver
@@ -670,6 +732,14 @@ export default function Cuotas() {
           })()
         }
       >
+        {selected && esAvisado(selected) && selected.pagoComunicado && (
+          <div className="banner-inline banner-inline--accent" style={{ marginBottom: '1rem' }}>
+            <span>
+              El hermano avisó el <b>{selected.pagoComunicado.fecha}</b> de que ha pagado este recibo por{' '}
+              <b>{metodoEnFrase(selected.pagoComunicado.metodo)}</b>. Compruébalo en el banco antes de confirmarlo.
+            </span>
+          </div>
+        )}
         {selected && selected.moraPropuestaPor && selected.estado === 'Pendiente' && (
           <div className="banner-inline banner-inline--warn" style={{ marginBottom: '1rem' }}>
             Mora <b>propuesta</b> por {selected.moraPropuestaNombre ?? selected.moraPropuestaPor}. Falta que otro cargo

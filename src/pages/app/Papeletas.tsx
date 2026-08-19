@@ -40,6 +40,7 @@ import {
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
+import { agregarAvisoHermano } from '../../lib/avisosHermano'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -262,6 +263,7 @@ export default function Papeletas() {
       }
       return [nueva, ...prev]
     })
+    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null)
   }
 
   /** El hermano renuncia a salir este año: pierde su sitio, que queda libre. */
@@ -315,6 +317,7 @@ export default function Papeletas() {
       }
       return [nueva, ...prev]
     })
+    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null)
     setPendingCuerpo('')
   }
 
@@ -342,7 +345,24 @@ export default function Papeletas() {
       }
       return [nueva, ...prev]
     })
+    avisarDeSitio(hermanoId, null, opcion.nombre)
     setPendingCuerpo('')
+  }
+
+  /**
+   * Le dice al hermano que ya tiene sitio. Es lo que espera desde que manda la
+   * solicitud, y hasta ahora se enteraba al entrar en su área por su cuenta.
+   */
+  function avisarDeSitio(hermanoId: string, tramo: string | null, opcion: string | null) {
+    const que = tramo ?? opcion
+    agregarAvisoHermano(
+      hermanoId,
+      que
+        ? `Ya tienes sitio para la estación de penitencia de ${campana.anio}: ${que}.`
+        : `Ya tienes papeleta para la estación de penitencia de ${campana.anio}.`,
+      'papeleta',
+      'Tu papeleta de sitio',
+    )
   }
 
   function actualizarPapeleta(id: string, cambios: Partial<Papeleta>) {

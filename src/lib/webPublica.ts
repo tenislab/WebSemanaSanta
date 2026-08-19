@@ -27,6 +27,8 @@ export type TipoSeccion =
   | 'actualidad'
   | 'paginas'
   | 'boletines'
+  | 'donativos'
+  | 'loteria'
   | 'contacto'
 export type TipoRed = 'Instagram' | 'Facebook' | 'X' | 'YouTube' | 'TikTok' | 'Web'
 
@@ -52,6 +54,55 @@ export interface HazteHermano {
   textoBoton: string
   /** El botón lleva al área del hermano (donde se pide el alta) o al contacto. */
   alAreaDelHermano: boolean
+}
+
+/**
+ * Donativos. Sin pasarela contratada, lo que se puede hacer de verdad es
+ * enseñar el Bizum y la cuenta con el concepto ya escrito, y que quien dona
+ * avise. Si la hermandad contrata una pasarela (un enlace de pago de Stripe,
+ * PayPal o su propio banco), se pega aquí y el botón lleva directo a ella.
+ */
+export interface DonativosWeb {
+  entradilla: string
+  texto: string
+  /** A qué se puede destinar («Bolsa de caridad», «Restauración del palio»). */
+  causas: string[]
+  /** Importes sugeridos, para no dejar la casilla en blanco. */
+  importes: number[]
+  /** Bizum y cuenta propios de donativos; vacíos = los de la hermandad. */
+  bizum: string
+  iban: string
+  /** Qué poner en el concepto del ingreso. */
+  concepto: string
+  /** Enlace a la pasarela de pago que haya contratado la hermandad. Vacío = solo datos de cobro. */
+  enlacePasarela: string
+  /** Texto del botón de la pasarela. */
+  textoPasarela: string
+  /** Deja avisar del donativo desde la web (llega al buzón de la hermandad). */
+  avisoDonativo: boolean
+}
+
+/**
+ * La lotería de Navidad, que en casi todas las hermandades se vende a mano en
+ * la casa de hermandad y en horario de secretaría. Desde la web se puede al
+ * menos reservar: la hermandad aparta las participaciones y avisa.
+ */
+export interface LoteriaWeb {
+  /** Del sorteo que sea: «Navidad 2026», «El Niño». */
+  sorteo: string
+  numero: string
+  texto: string
+  /** Lo que se juega por participación. */
+  juega: number
+  /** Lo que cuesta la participación (lo jugado más el donativo). */
+  precio: number
+  /** A dónde va el donativo de cada participación. */
+  destinoDonativo: string
+  dondeRecoger: string
+  /** Se pueden reservar desde la web. Al cerrarse, la sección sigue informando. */
+  reservaAbierta: boolean
+  /** Cuántas participaciones como máximo por reserva. 0 = sin tope. */
+  maxPorPersona: number
 }
 
 /** Una parada del itinerario, con su hora de paso. */
@@ -202,6 +253,8 @@ export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string; publico: stri
   actualidad: { nombre: 'Actualidad (noticias)', publico: 'Actualidad' },
   paginas: { nombre: 'Páginas y textos', publico: 'La Hermandad' },
   boletines: { nombre: 'Boletines', publico: 'Boletines' },
+  donativos: { nombre: 'Donativos y colaboración', publico: 'Colabora' },
+  loteria: { nombre: 'Lotería', publico: 'Lotería' },
   contacto: { nombre: 'Contacto', publico: 'Contacto' },
 }
 
@@ -728,6 +781,25 @@ export interface WebPublica {
   estacion: EstacionPenitencia
   /** Los cargos de la junta de gobierno. */
   junta: MiembroJunta[]
+  /** Donativos y colaboración económica. */
+  donativos: DonativosWeb
+  /** La lotería del sorteo que toque. */
+  loteria: LoteriaWeb
+
+  /** Formulario de contacto en la sección de Contacto. */
+  formularioContacto: boolean
+  /**
+   * Lo que se le dice a quien escribe sobre sus datos. Es lo que exige el
+   * RGPD y lo que hay que aceptar para poder enviar el formulario.
+   */
+  textoProteccionDatos: string
+  /** El botón de «Hazte hermano» abre el formulario de alta en la propia web. */
+  altaDesdeWeb: boolean
+  /**
+   * Aviso en la portada de que está abierto el reparto de papeletas de sitio,
+   * con enlace al área del hermano. Solo sale mientras la ventana esté abierta.
+   */
+  avisoPapeletas: boolean
 
   // Contacto
   email: string
@@ -871,6 +943,10 @@ export const SECCIONES_POR_DEFECTO: SeccionConfig[] = [
   { tipo: 'actualidad', visible: true },
   { tipo: 'paginas', visible: true },
   { tipo: 'boletines', visible: false },
+  // Donativos y lotería salen apagados: son cosas que hay que rellenar con
+  // datos de cobro reales antes de enseñarlas a nadie.
+  { tipo: 'donativos', visible: false },
+  { tipo: 'loteria', visible: false },
   { tipo: 'contacto', visible: true },
 ]
 
@@ -956,6 +1032,37 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
     dia: '', anio: '', horaSalida: '', horaEntrada: '', salidaDesde: '', nota: '', itinerario: [],
   },
   junta: [],
+  // Los donativos y la lotería se publican vacíos a propósito: llevan datos de
+  // cobro y números de sorteo que solo puede poner la hermandad, y una web con
+  // un IBAN de ejemplo es peor que una web sin donativos.
+  donativos: {
+    entradilla: '',
+    texto: '',
+    causas: [],
+    importes: [10, 20, 50],
+    bizum: '',
+    iban: '',
+    concepto: 'Donativo',
+    enlacePasarela: '',
+    textoPasarela: 'Donar ahora',
+    avisoDonativo: true,
+  },
+  loteria: {
+    sorteo: '',
+    numero: '',
+    texto: '',
+    juega: 0,
+    precio: 0,
+    destinoDonativo: '',
+    dondeRecoger: '',
+    reservaAbierta: true,
+    maxPorPersona: 20,
+  },
+  formularioContacto: true,
+  textoProteccionDatos:
+    'Tus datos se usan solo para contestarte y no se ceden a nadie. Puedes pedir que los borremos escribiendo a la hermandad.',
+  altaDesdeWeb: true,
+  avisoPapeletas: true,
   noticias: [
     { id: 'not-1', titulo: 'Convocatoria de Cabildo General', fecha: '2026-02-02', resumen: 'Por orden del Hermano Mayor se convoca a todos los hermanos al Cabildo General.', fotoDataUrl: null, publicada: true },
   ],
@@ -1143,6 +1250,8 @@ export function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
     seo: { ...SEO_INICIAL, ...(guardado.seo ?? {}) },
     // Objetos nuevos: lo guardado por una versión anterior no los trae.
     sangre: { ...WEB_PUBLICA_INICIAL.sangre, ...(guardado.sangre ?? {}) },
+    donativos: { ...WEB_PUBLICA_INICIAL.donativos, ...(guardado.donativos ?? {}) },
+    loteria: { ...WEB_PUBLICA_INICIAL.loteria, ...(guardado.loteria ?? {}) },
     resumenOtroIdioma: { ...WEB_PUBLICA_INICIAL.resumenOtroIdioma, ...(guardado.resumenOtroIdioma ?? {}) },
     cifras: guardado.cifras ?? [],
     // Se leen como parciales a propósito: lo guardado por una versión anterior

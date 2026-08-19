@@ -32,6 +32,12 @@ export interface Tramo {
   reparto?: ModoReparto
   /** Precio de la papeleta de este tramo; si falta, se usa el precio general de la hermandad. */
   precio?: number | null
+  /**
+   * A qué hora se cita este tramo el día de la salida. Cada tramo entra a una
+   * hora distinta, y es LA pregunta del hermano la semana antes. Vacío = no se
+   * enseña y el hermano tiene que preguntar, que es lo que pasaba hasta ahora.
+   */
+  horaCitacion?: string
 }
 
 const STORAGE_KEY = 'cabildo-tramos'

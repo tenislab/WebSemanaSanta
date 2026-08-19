@@ -1,3 +1,4 @@
+import type { MetodoPago } from './papeletas'
 /**
  * Estados de una cuota. «En mora» NO salta solo al vencer la fecha: lo pone a
  * mano el tesorero o el secretario cuando decide reclamar el impago.
@@ -32,11 +33,35 @@ export interface Cuota {
   moraPropuestaPor?: string
   /** Nombre visible de quien propuso la mora. */
   moraPropuestaNombre?: string
+  /**
+   * El hermano ha avisado desde su área de que ya ha pagado (Bizum o
+   * transferencia). La tesorería lo confirma al ver el ingreso: hasta
+   * entonces el recibo sigue pendiente, pero deja de ser una incógnita.
+   */
+  pagoComunicado?: { metodo: MetodoPago; fecha: string } | null
 }
 
 /** Método de cobro de una cuota, tolerando datos antiguos que solo tienen `domiciliada`. */
 export function metodoDeCuota(c: Cuota): MetodoCobro {
   return c.metodoCobro ?? (c.domiciliada ? 'Domiciliación' : 'Transferencia')
+}
+
+/**
+ * El hermano ha avisado desde su área de que ya ha pagado (Bizum o
+ * transferencia) y a la tesorería el recibo aún le consta sin cobrar. En
+ * cuanto se da por pagado deja de estar «avisado»: ya está resuelto.
+ */
+export function esAvisado(c: Cuota): boolean {
+  return !!c.pagoComunicado && c.estado !== 'Pagada'
+}
+
+/**
+ * El método de pago escrito dentro de una frase. «Bizum» es una marca y va con
+ * mayúscula siempre; «transferencia» es una palabra corriente y en mitad de una
+ * frase iría en minúscula.
+ */
+export function metodoEnFrase(metodo: string): string {
+  return metodo === 'Bizum' ? 'Bizum' : metodo.toLowerCase()
 }
 
 export const CONCEPTOS: ConceptoCuota[] = ['Cuota anual', 'Cuota trimestral', 'Cuota extraordinaria']

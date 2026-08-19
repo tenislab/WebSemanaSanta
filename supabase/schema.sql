@@ -104,7 +104,10 @@ create table if not exists cuotas (
   fecha_pago text,
   -- Ejercicio (año) al que pertenece la cuota; si falta, se deduce del año de
   -- la fecha de emisión.
-  ejercicio int
+  ejercicio int,
+  -- El hermano ha avisado desde su área de que ya lo ha pagado (por dónde y
+  -- cuándo). La tesorería lo confirma al ver el ingreso.
+  pago_comunicado jsonb
 );
 create index if not exists cuotas_hermano_id_idx on cuotas(hermano_id);
 
@@ -113,6 +116,7 @@ create index if not exists cuotas_hermano_id_idx on cuotas(hermano_id);
 alter table cuotas add column if not exists metodo_cobro text;
 alter table cuotas add column if not exists mora_propuesta_por text;
 alter table cuotas add column if not exists mora_propuesta_nombre text;
+alter table cuotas add column if not exists pago_comunicado jsonb;
 do $$
 begin
   alter table cuotas drop constraint if exists cuotas_estado_check;

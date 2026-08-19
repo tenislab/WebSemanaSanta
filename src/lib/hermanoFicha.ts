@@ -82,3 +82,34 @@ export function cumpleEsteMes(iso: string | undefined, hoy = new Date()): boolea
 export function mesEnCurso(hoy = new Date()): string {
   return MESES_LARGOS[hoy.getMonth()]
 }
+
+/* ---------------------------------------------------------------------------
+   H1 · Su vida en la hermandad: agrupar el histórico por años.
+   --------------------------------------------------------------------------- */
+
+/**
+ * Estados en los que el hermano tiene sitio de verdad en el cortejo. No basta
+ * con «no anulada»: una solicitud pendiente todavía no es un sitio, y una
+ * renuncia es justo lo contrario. Y tampoco vale exigir tramo: hay hermandades
+ * que reparten por opciones, sin tramos.
+ */
+export const ESTADOS_CON_SITIO = new Set(['Asignada', 'Pagada', 'Entregada'])
+
+/** Cuántas estaciones de penitencia ha hecho de verdad. */
+export function salidasDe(papeletas: { estado: string }[]): number {
+  return papeletas.filter((p) => ESTADOS_CON_SITIO.has(p.estado)).length
+}
+
+/**
+ * Agrupa por año, del más reciente al más antiguo. `anio(x)` puede devolver
+ * null (una cuota sin ejercicio ni fecha de emisión): esas van juntas al 0, y
+ * se pintan como «Sin ejercicio» en vez de desaparecer.
+ */
+export function porAnio<T>(lista: T[], anio: (x: T) => number | null): [number, T[]][] {
+  const mapa = new Map<number, T[]>()
+  lista.forEach((x) => {
+    const a = anio(x) ?? 0
+    mapa.set(a, [...(mapa.get(a) ?? []), x])
+  })
+  return [...mapa.entries()].sort((a, b) => b[0] - a[0])
+}

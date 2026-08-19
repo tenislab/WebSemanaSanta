@@ -16,6 +16,7 @@ export function cuotaToRow(c: Cuota): Record<string, unknown> {
     fecha_pago: c.fechaPago ?? null,
     mora_propuesta_por: c.moraPropuestaPor ?? null,
     mora_propuesta_nombre: c.moraPropuestaNombre ?? null,
+    pago_comunicado: c.pagoComunicado ?? null,
   }
 }
 
@@ -35,5 +36,6 @@ export function rowToCuota(r: Record<string, unknown>): Cuota {
     fechaPago: (r.fecha_pago as string | null) ?? undefined,
     moraPropuestaPor: (r.mora_propuesta_por as string | null) ?? undefined,
     moraPropuestaNombre: (r.mora_propuesta_nombre as string | null) ?? undefined,
+    pagoComunicado: (r.pago_comunicado as Cuota['pagoComunicado']) ?? null,
   }
 }

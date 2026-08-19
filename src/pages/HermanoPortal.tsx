@@ -5,6 +5,11 @@ import EscudoHermandad from '../components/EscudoHermandad'
 import PapeletaTicket from '../components/PapeletaTicket'
 import PapeletaModeloRender from '../components/PapeletaModeloRender'
 import AsistenciaTramo from '../components/AsistenciaTramo'
+import HistorialHermano from '../components/HistorialHermano'
+import MiSitioCortejo from '../components/MiSitioCortejo'
+import BuzonHermano from '../components/BuzonHermano'
+import CarneHermano from '../components/CarneHermano'
+import MiFamilia from '../components/MiFamilia'
 import { getModeloPapeleta } from '../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
@@ -24,7 +29,7 @@ import {
   MODALIDADES,
   type ModalidadPapeleta,
 } from '../lib/solicitudesPapeleta'
-import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido, useEscuchaOtrasPestanas } from '../lib/persistencia'
 import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
 import { useAvisosHermano } from '../lib/avisosHermano'
 import { useAjustesCuotas } from '../lib/ajustesCuotas'
@@ -54,7 +59,7 @@ import {
   type HermanoDirectorio,
   type IconoHermandad,
 } from '../lib/hermandades'
-import { crearSolicitudPrincipal, claveSolicitudesMuestra, type SolicitudAlta } from '../lib/solicitudes'
+import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
@@ -94,12 +99,6 @@ const MENSAJE_BAJA =
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function claseCuota(estado: Cuota['estado']) {
-  if (estado === 'Pagada') return 'pill--ok'
-  if (estado === 'Pendiente') return 'pill--warn'
-  return 'pill--err'
 }
 
 function normaliza(texto: string) {
@@ -162,7 +161,7 @@ export default function HermanoPortal() {
     papeletaToRow,
     rowToPapeleta,
   )
-  const [cuotas] = useSupabaseTable<Cuota>(
+  const [cuotas, setCuotas] = useSupabaseTable<Cuota>(
     'cuotas',
     CLAVES_DATOS.cuotas,
     CUOTAS_INICIALES,
@@ -210,6 +209,11 @@ export default function HermanoPortal() {
 
   const [datosGuardados, setDatosGuardados] = useState(false)
   const [bajaMuestraSolicitada, setBajaMuestraSolicitada] = useState(false)
+  const [solicitudesAlta, setSolicitudesAlta] = useState<SolicitudAlta[]>(() => getSolicitudes())
+  // Cuando la secretaría aprueba (o rechaza) un alta desde el panel, aquí se ve
+  // al momento: sin esto, el hermano seguía viendo «alta pendiente» al lado de
+  // su hijo ya dado de alta.
+  useEscuchaOtrasPestanas(CLAVE_SOLICITUDES, () => setSolicitudesAlta(getSolicitudes()))
   const [consent, setConsent] = useState<boolean>(() => localStorage.getItem(CONSENT_KEY) === 'si')
   const [claveError, setClaveError] = useState<string | null>(null)
   const [claveGuardada, setClaveGuardada] = useState(false)
@@ -271,8 +275,15 @@ export default function HermanoPortal() {
     : ajustesCuotas.bloquearPapeletaConDeuda && miDeuda > 0
       ? `Tienes ${formatCurrency(miDeuda)} en cuotas pendientes. La hermandad pide estar al corriente para sacar papeleta de sitio: ponte al día y vuelve por aquí.`
       : null
-  const { avisos: avisosSecretaria, sinLeer: avisosSinLeer, marcarLeidos: marcarAvisosLeidos } =
-    useAvisosHermano(hermanoActivo?.id ?? null)
+  const {
+    avisos: avisosSecretaria,
+    sinLeer: avisosSinLeer,
+    marcarLeidos: marcarAvisosLeidos,
+    marcarLeido: marcarAvisoLeido,
+    borrar: borrarAviso,
+    preferencias: preferenciasAvisos,
+    cambiarPreferencia: cambiarPreferenciaAviso,
+  } = useAvisosHermano(hermanoActivo?.id ?? null)
   const nombreHermandadActiva = esPrincipal ? nombrePrincipal : hermandadMuestra?.nombre ?? 'tu hermandad'
   const colorActivo = esPrincipal ? hermandadPrincipal.colorPrimario : hermandadMuestra?.color ?? '#caa24a'
   const contactoActivo = esPrincipal
@@ -595,14 +606,23 @@ export default function HermanoPortal() {
     () => (hermanoPrincipal ? renovacionDeHermano(hermanoPrincipal.id, papeletas, campana) : null),
     [hermanoPrincipal, papeletas, campana],
   )
-  const asignacion = useMemo(() => {
-    const activas = papeletas.filter((p) => p.anio === campana.anio)
-    return renovacion?.papeletaActual
-      ? mapAsignaciones(repartoCompleto(tramos, activas, (id) => hermanos.find((h) => h.id === id), new Set())).get(
-          renovacion.papeletaActual.id,
-        )
-      : undefined
-  }, [papeletas, campana.anio, tramos, hermanos, renovacion])
+  /**
+   * El reparto entero de la campaña. Hace falta completo y no solo la línea de
+   * este hermano: para decirle quién va delante y detrás hay que tener el tramo.
+   */
+  const repartoActual = useMemo(
+    () => repartoCompleto(tramos, papeletas.filter((p) => p.anio === campana.anio), (id) => hermanos.find((h) => h.id === id), new Set()),
+    [papeletas, campana.anio, tramos, hermanos],
+  )
+  const asignacion = useMemo(
+    () => (renovacion?.papeletaActual ? mapAsignaciones(repartoActual).get(renovacion.papeletaActual.id) : undefined),
+    [repartoActual, renovacion],
+  )
+  /** Los compañeros de su tramo, para el «delante de ti / detrás de ti». */
+  const miTramo = useMemo(
+    () => (asignacion?.tramo ? repartoPorTramo(repartoActual).get(asignacion.tramo.id) ?? [] : []),
+    [repartoActual, asignacion],
+  )
 
   // Diputado de tramo: si el hermano tiene esa etiqueta y sitio asignado, puede
   // gestionar la asistencia de los hermanos de SU tramo desde su propia área.
@@ -717,6 +737,19 @@ export default function HermanoPortal() {
     setSolTramo('')
   }
 
+  /**
+   * El hermano avisa de que ya ha pagado un recibo. No se da por pagado: eso
+   * lo hace la tesorería al ver el ingreso. Pero deja de ser una incógnita, y
+   * el hermano deja de llamar para preguntar si ha llegado.
+   */
+  function anularAvisoPago(cuotaId: string) {
+    setCuotas((prev) => prev.map((c) => (c.id === cuotaId ? { ...c, pagoComunicado: null } : c)))
+  }
+
+  function comunicarPagoCuota(cuotaId: string, metodo: MetodoPago) {
+    setCuotas((prev) => prev.map((c) => (c.id === cuotaId ? { ...c, pagoComunicado: { metodo, fecha: hoy() } } : c)))
+  }
+
   /** El hermano avisa de que ya ha pagado su papeleta por Bizum o transferencia; la secretaría lo confirma. */
   function comunicarPago(metodo: MetodoPago) {
     const p = renovacion?.papeletaActual
@@ -792,6 +825,48 @@ export default function HermanoPortal() {
   const misCuotas = useMemo(
     () => (hermanoPrincipal ? cuotas.filter((c) => c.hermanoId === hermanoPrincipal.id) : []),
     [cuotas, hermanoPrincipal],
+  )
+  /** Los hermanos que este hermano lleva: sus hijos menores, normalmente. */
+  const aCargo = useMemo(
+    () => (hermanoPrincipal ? hermanos.filter((h) => h.tutorId === hermanoPrincipal.id) : []),
+    [hermanos, hermanoPrincipal],
+  )
+  /** Altas de familia que ya ha pedido y siguen sin tramitar. */
+  const solicitudesFamilia = useMemo(
+    () =>
+      hermanoPrincipal
+        ? solicitudesAlta.filter((s) => s.tutorId === hermanoPrincipal.id && s.estado === 'Pendiente')
+        : [],
+    [solicitudesAlta, hermanoPrincipal],
+  )
+
+  /**
+   * Pide a secretaría el alta de un hijo. No se da de alta a nadie desde aquí:
+   * queda en el mismo buzón de solicitudes que ya revisa la hermandad, con la
+   * marca de quién lo pide para que al aprobarla quede a su cargo.
+   */
+  function solicitarAltaFamilia(datos: { nombre: string; dni: string; fechaNacimiento: string }) {
+    if (!hermanoPrincipal) return
+    const nueva: SolicitudAlta = {
+      id: nuevoId(),
+      nombre: datos.nombre,
+      dni: datos.dni,
+      // Del menor no se pide correo ni contraseña: entra su tutor por él.
+      email: hermanoPrincipal.email,
+      telefono: hermanoPrincipal.telefono,
+      clavePropuesta: '',
+      fecha: hoy(),
+      estado: 'Pendiente',
+      tutorId: hermanoPrincipal.id,
+      fechaNacimiento: datos.fechaNacimiento || undefined,
+    }
+    crearSolicitudPrincipal(nueva).then(() => setSolicitudesAlta(getSolicitudes()))
+  }
+
+  /** Todas sus papeletas, de cualquier año: el histórico, no solo la de ahora. */
+  const misPapeletas = useMemo(
+    () => (hermanoPrincipal ? papeletas.filter((p) => p.hermanoId === hermanoPrincipal.id) : []),
+    [papeletas, hermanoPrincipal],
   )
 
   // ===================== Pantalla de identificación =====================
@@ -1115,32 +1190,15 @@ export default function HermanoPortal() {
         )}
 
         {/* Avisos de la secretaría: cambios que la hermandad ha hecho en tus datos */}
-        {avisosSecretaria.length > 0 && (
-          <section className="portal__section">
-            <div className="portal__avisos-head">
-              <h2>
-                Avisos de la secretaría
-                {avisosSinLeer > 0 && <span className="portal__avisos-badge">{avisosSinLeer}</span>}
-              </h2>
-              {avisosSinLeer > 0 && (
-                <button className="btn btn-ghost btn-sm" onClick={marcarAvisosLeidos}>
-                  Marcar como leídos
-                </button>
-              )}
-            </div>
-            <ul className="portal__avisos">
-              {avisosSecretaria.map((a) => (
-                <li key={a.id} className={`portal__aviso${a.leido ? '' : ' portal__aviso--nuevo'}`}>
-                  <span className="portal__aviso-icono" aria-hidden="true">✉️</span>
-                  <div>
-                    <p>{a.texto}</p>
-                    <small>{a.fecha}</small>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <BuzonHermano
+          avisos={avisosSecretaria}
+          sinLeer={avisosSinLeer}
+          marcarLeidos={marcarAvisosLeidos}
+          marcarLeido={marcarAvisoLeido}
+          borrar={borrarAviso}
+          preferencias={preferenciasAvisos}
+          cambiarPreferencia={cambiarPreferenciaAviso}
+        />
 
         {/* Calendario de la hermandad: lo que viene, con las repeticiones ya
             desplegadas. El hermano ve los actos abiertos, no los cabildos
@@ -1278,6 +1336,16 @@ export default function HermanoPortal() {
                   </span>
                   {asignacion?.tramo && <span className="pill pill--info">{etiquetaTramo(asignacion.tramo)}</span>}
                 </div>
+
+                {/* Dónde va exactamente: puesto, citación y con quién. */}
+                {asignacion?.tramo && (
+                  <MiSitioCortejo
+                    asignacion={asignacion}
+                    compañeros={miTramo}
+                    donde={hermandadPrincipal.direccion}
+                    salida={campana.fechaSalida ? formatDate(new Date(`${campana.fechaSalida}T00:00:00`)) : null}
+                  />
+                )}
 
                 {bloqueoPapeleta && (
                   <div className="banner-inline banner-inline--warn">
@@ -1484,40 +1552,40 @@ export default function HermanoPortal() {
           </section>
         )}
 
-        {/* Mis cuotas — solo si la hermandad tiene el módulo activo */}
-        {esPrincipal && (
-          <section className="portal__section" id="mis-cuotas">
-            <h2>Mis cuotas</h2>
-            {misCuotas.length === 0 ? (
-              <p className="form-hint">No tienes recibos registrados.</p>
-            ) : (
-              <div className="table-card">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Nº</th>
-                      <th>Concepto</th>
-                      <th>Importe</th>
-                      <th>Estado</th>
-                      <th>Cobro</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {misCuotas.map((c) => (
-                      <tr key={c.id}>
-                        <td className="num">{c.numero}</td>
-                        <td>{c.concepto}</td>
-                        <td className="num">{formatCurrency(c.importe)}</td>
-                        <td><span className={`pill ${claseCuota(c.estado)}`}>{c.estado}</span></td>
-                        <td className="num">{c.fechaCobro}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <p className="form-hint">El pago online de cuotas y papeletas llegará con la pasarela de pago.</p>
-          </section>
+        {/* Su familia: los menores que lleva él. */}
+        {esPrincipal && hermanoPrincipal && (
+          <MiFamilia
+            aCargo={aCargo}
+            papeletas={papeletas}
+            cuotas={cuotas}
+            tramos={tramos}
+            anioCampana={campana.anio}
+            solicitudesPendientes={solicitudesFamilia}
+            onSolicitarAlta={solicitarAltaFamilia}
+            bloqueado={deBaja ? 'Tu ficha figura de baja: no se pueden pedir altas nuevas.' : null}
+          />
+        )}
+
+        {/* Su carné digital, con QR: para secretaría y para el día de la salida. */}
+        {esPrincipal && hermanoPrincipal && (
+          <CarneHermano
+            hermano={hermanoPrincipal}
+            hermandadNombre={nombreHermandadActiva}
+            logo={hermandadPrincipal.logoDataUrl}
+          />
+        )}
+
+        {/* Su histórico: papeletas y cuotas de todos los años, con sus recibos. */}
+        {esPrincipal && hermanoPrincipal && (
+          <HistorialHermano
+            hermano={hermanoPrincipal}
+            cuotas={misCuotas}
+            papeletas={misPapeletas}
+            tramos={tramos}
+            hermandad={hermandadPrincipal}
+            onPagar={deBaja ? undefined : comunicarPagoCuota}
+              onAnularAviso={deBaja ? undefined : anularAvisoPago}
+          />
         )}
 
         {/* Mis datos */}

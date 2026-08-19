@@ -79,3 +79,71 @@ export function decodificarVerificacion(param: string | null): DatosVerificacion
   }
   return null
 }
+
+
+/* ---------------------------------------------------------------------------
+   H6 · El carné digital
+   --------------------------------------------------------------------------- */
+
+/**
+ * Los datos del carné, con la misma mecánica que la papeleta: viajan dentro del
+ * propio enlace, así que al escanearlo se abre una tarjeta con quién es, sin
+ * base de datos ni censo en ese teléfono.
+ *
+ * `k: 'c'` distingue un carné de una papeleta: las papeletas de antes no
+ * llevan esa marca, así que un QR impreso el año pasado sigue valiendo.
+ */
+export interface DatosCarne {
+  k: 'c'
+  /** Nombre del hermano. */
+  h: string
+  /** Número de hermano. */
+  nh: number
+  /** Nombre de la hermandad. */
+  hd: string
+  /** Año de antigüedad. */
+  d: number
+  /** Estado (Activo, Nuevo…). */
+  e: string
+}
+
+export function datosCarneDe(
+  hermano: Pick<Hermano, 'nombre' | 'numero' | 'antiguedad' | 'estado'>,
+  hermandadNombre: string,
+): DatosCarne {
+  return {
+    k: 'c',
+    h: hermano.nombre,
+    nh: hermano.numero,
+    hd: hermandadNombre || 'Tu hermandad',
+    d: hermano.antiguedad,
+    e: hermano.estado,
+  }
+}
+
+export function urlCarne(datos: DatosCarne): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return `${origin}/verificar?d=${b64Encode(JSON.stringify(datos))}`
+}
+
+/**
+ * Lee el parámetro `d` y dice qué es: un carné, una papeleta, o nada legible.
+ * Un solo punto de entrada para la página de verificación.
+ */
+export function decodificarQr(
+  param: string | null,
+): { tipo: 'carne'; datos: DatosCarne } | { tipo: 'papeleta'; datos: DatosVerificacion } | null {
+  if (!param) return null
+  try {
+    const o = JSON.parse(b64Decode(param)) as Partial<DatosCarne & DatosVerificacion>
+    if (o.k === 'c' && typeof o.h === 'string' && typeof o.nh === 'number') {
+      return { tipo: 'carne', datos: o as DatosCarne }
+    }
+    if (typeof o.n === 'number' && typeof o.h === 'string') {
+      return { tipo: 'papeleta', datos: o as DatosVerificacion }
+    }
+  } catch {
+    // parámetro corrupto o de otro formato
+  }
+  return null
+}

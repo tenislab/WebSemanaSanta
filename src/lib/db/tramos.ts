@@ -9,6 +9,7 @@ export function tramoToRow(t: Tramo, orden: number): Record<string, unknown> {
     tipo: t.tipo ?? null,
     reparto: t.reparto ?? null,
     precio: t.precio ?? null,
+    hora_citacion: t.horaCitacion ?? null,
     orden,
   }
 }
@@ -22,5 +23,6 @@ export function rowToTramo(r: Record<string, unknown>): Tramo {
     tipo: (r.tipo as string | null) ?? undefined,
     reparto: (r.reparto as Tramo['reparto']) ?? undefined,
     precio: (r.precio as number | null) ?? null,
+    horaCitacion: (r.hora_citacion as string | null) ?? undefined,
   }
 }

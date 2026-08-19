@@ -4,7 +4,8 @@ import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, dias
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
-import { getCampana } from '../lib/campana'
+import { FormularioAlta, FormularioContacto, FormularioDonativo, FormularioLoteria } from './FormulariosWeb'
+import { diasHasta as diasHastaFecha, getCampana, ventanaAbierta } from '../lib/campana'
 
 /**
  * Deja el foco dentro de una caja mientras esté abierta (el menú de móvil, el
@@ -216,6 +217,14 @@ export default function SitioContenido({
     if (tipo === 'actualidad') return web.noticias.some((n) => n.publicada)
     if (tipo === 'paginas') return web.paginas.filter((p) => p.enMenu !== false).length > 0
     if (tipo === 'boletines') return web.boletines.length > 0
+    if (tipo === 'donativos') {
+      const d = web.donativos
+      // Sin una vía de pago no hay donativo que valga: una sección que solo
+      // dice «colabora» y no dice cómo, no sirve para nada.
+      return Boolean((d.bizum.trim() || d.iban.trim() || d.enlacePasarela.trim())
+        && (d.entradilla.trim() || d.texto.trim() || d.causas.length > 0))
+    }
+    if (tipo === 'loteria') return Boolean(web.loteria.numero.trim() || web.loteria.sorteo.trim())
     if (tipo === 'contacto')
       return Boolean(
         web.direccion || hermandad.direccion || web.telefono || hermandad.telefono
@@ -913,9 +922,31 @@ function BloquesPortada({
   const cifras = web.cifras.filter((c) => c.numero.trim() || c.texto.trim())
   const hayCuenta = web.cuentaAtras && dias !== null && dias >= 0
   const hayProximo = web.proximoCulto && Boolean(proximo)
-  if (!hayCuenta && !hayProximo && cifras.length === 0) return null
+  // El reparto de papeletas es LO que la gente busca en la web esas semanas.
+  // Sale solo mientras la ventana está abierta, con los días que quedan: un
+  // aviso que sigue puesto en mayo no lo lee nadie el año siguiente.
+  const campana = getCampana()
+  const abierta = web.avisoPapeletas && ventanaAbierta(campana)
+  const diasPapeleta = abierta ? diasHastaFecha(campana.fechaLimiteRenovacion) : -1
+  if (!hayCuenta && !hayProximo && cifras.length === 0 && !abierta) return null
   return (
     <div className="sitio__portada">
+      {abierta && (
+        <div className="sitio__papeletas">
+          <span className="sitio__papeletas-ante">Papeleta de sitio</span>
+          <h3>El reparto está abierto</h3>
+          <p>
+            {diasPapeleta === 0
+              ? 'Hoy es el último día para sacarla.'
+              : diasPapeleta === 1
+                ? 'Queda un día para sacarla.'
+                : `Quedan ${diasPapeleta} días para sacarla.`}
+          </p>
+          <BotonEntrar interactivo={interactivo} clase="sitio-btn sitio-btn--sm">
+            Sacar mi papeleta
+          </BotonEntrar>
+        </div>
+      )}
       {hayCuenta && (
         <div className="sitio__cuenta">
           <span className="sitio__cuenta-num">{dias}</span>
@@ -1039,6 +1070,9 @@ function Seccion({
   hermandad: HermandadSettings
 }) {
   const titulo = (t: string) => nombre?.trim() || t
+  // El formulario de alta arranca plegado: quien viene a leer qué hace falta
+  // para hacerse hermano no quiere encontrarse un formulario largo de golpe.
+  const [altaAbierta, setAltaAbierta] = useState(false)
   // Se aplican a todas las secciones por igual: la marca para poder saltar a
   // ella desde el editor y el resaltado de «estás editando esto».
   const props = {
@@ -1113,11 +1147,34 @@ function Seccion({
         </div>
         {h.textoBoton.trim() && (
           <p className="sitio__cta">
-            {h.alAreaDelHermano ? (
+            {/* Pedir el alta sin salir de la web es lo que más convierte: quien
+                se va al área del hermano a buscar dónde apuntarse, no vuelve. */}
+            {web.altaDesdeWeb ? (
+              <button
+                type="button"
+                className="sitio-btn"
+                aria-expanded={altaAbierta}
+                onClick={() => setAltaAbierta((v) => !v)}
+              >
+                {h.textoBoton}
+              </button>
+            ) : h.alAreaDelHermano ? (
               <BotonEntrar interactivo={interactivo} clase="sitio-btn">{h.textoBoton}</BotonEntrar>
             ) : (
               <a href={interactivo ? '#contacto' : undefined} className="sitio-btn">{h.textoBoton}</a>
             )}
+          </p>
+        )}
+        {web.altaDesdeWeb && altaAbierta && (
+          <FormularioAlta
+            interactivo={interactivo}
+            textoProteccionDatos={web.textoProteccionDatos}
+            onCerrar={() => setAltaAbierta(false)}
+          />
+        )}
+        {web.altaDesdeWeb && (
+          <p className="sitio__hazte-yasoy">
+            ¿Ya eres hermano/a? <BotonEntrar interactivo={interactivo} clase="sitio-enlace">Entra en tu área</BotonEntrar>
           </p>
         )}
       </section>
@@ -1306,12 +1363,112 @@ function Seccion({
       </section>
     )
   }
+  if (tipo === 'donativos') {
+    const d = web.donativos
+    const bizum = d.bizum.trim() || hermandad.bizumTelefono
+    const iban = d.iban.trim() || hermandad.iban
+    const pasarela = urlSegura(d.enlacePasarela)
+    if (!bizum && !iban && !pasarela) return null
+    if (!d.entradilla.trim() && !d.texto.trim() && d.causas.length === 0) return null
+    return (
+      <section id="donativos" {...props}>
+        <h2>{titulo(SECCIONES_INFO.donativos.publico)}</h2>
+        {d.entradilla.trim() && <p className="sitio__entradilla">{d.entradilla}</p>}
+        {d.texto.trim() && <p className="sitio__parrafo">{d.texto}</p>}
+        {d.causas.length > 0 && (
+          <ul className="sitio__causas">
+            {d.causas.map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        )}
+        {/* Si hay pasarela contratada, manda ella: es el único camino en el que
+            el visitante paga sin salir de la web. */}
+        {pasarela && (
+          <p className="sitio__cta">
+            <a
+              href={interactivo ? pasarela : undefined}
+              {...(interactivo ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              className="sitio-btn"
+            >
+              {d.textoPasarela.trim() || 'Donar ahora'}
+            </a>
+          </p>
+        )}
+        <div className="sitio__cobros">
+          {bizum && (
+            <div className="sitio__cobro">
+              <span className="sitio__cobro-titulo">Bizum</span>
+              <span className="sitio__cobro-dato">{bizum}</span>
+            </div>
+          )}
+          {iban && (
+            <div className="sitio__cobro">
+              <span className="sitio__cobro-titulo">Transferencia</span>
+              <span className="sitio__cobro-dato">{iban}</span>
+            </div>
+          )}
+          {d.concepto.trim() && (
+            <div className="sitio__cobro">
+              <span className="sitio__cobro-titulo">En el concepto</span>
+              <span className="sitio__cobro-dato">{d.concepto}</span>
+            </div>
+          )}
+        </div>
+        {d.avisoDonativo && (
+          <FormularioDonativo
+            interactivo={interactivo}
+            textoProteccionDatos={web.textoProteccionDatos}
+            importes={d.importes}
+            causas={d.causas}
+          />
+        )}
+      </section>
+    )
+  }
+  if (tipo === 'loteria') {
+    const l = web.loteria
+    if (!l.numero.trim() && !l.sorteo.trim()) return null
+    const datos = [
+      l.juega > 0 && { k: 'Juega', v: `${l.juega} €` },
+      l.precio > 0 && { k: 'Donativo incluido', v: `${l.precio} €` },
+      l.destinoDonativo.trim() && { k: 'El donativo va a', v: l.destinoDonativo },
+      l.dondeRecoger.trim() && { k: 'Se recoge en', v: l.dondeRecoger },
+    ].filter(Boolean) as { k: string; v: string }[]
+    return (
+      <section id="loteria" {...props}>
+        <h2>{titulo(SECCIONES_INFO.loteria.publico)}</h2>
+        {l.sorteo.trim() && <p className="sitio__entradilla">{l.sorteo}</p>}
+        {l.numero.trim() && (
+          <p className="sitio__loteria-numero" aria-label={`Número ${l.numero}`}>{l.numero}</p>
+        )}
+        {l.texto.trim() && <p className="sitio__parrafo">{l.texto}</p>}
+        {datos.length > 0 && (
+          <dl className="sitio__estacion-datos">
+            {datos.map((x) => <div key={x.k}><dt>{x.k}</dt><dd>{x.v}</dd></div>)}
+          </dl>
+        )}
+        {l.reservaAbierta ? (
+          <FormularioLoteria
+            interactivo={interactivo}
+            textoProteccionDatos={web.textoProteccionDatos}
+            maximo={l.maxPorPersona}
+            precio={l.precio}
+            dondeRecoger={l.dondeRecoger}
+          />
+        ) : (
+          <p className="sitio__parrafo sitio__loteria-cerrada">
+            La reserva por internet está cerrada. Puedes preguntar en la casa de hermandad.
+          </p>
+        )}
+      </section>
+    )
+  }
   if (tipo === 'contacto') {
     const dir = web.direccion || hermandad.direccion
     const tel = web.telefono || hermandad.telefono
     const email = web.email || hermandad.email
-    // Sin ningún dato de contacto, la sección no se pinta (nada de títulos vacíos).
-    if (!dir && !tel && !email && !web.mapaUrl && web.horarios.length === 0) return null
+    // Sin ningún dato de contacto la sección no se pinta… salvo que haya
+    // formulario: entonces sigue habiendo por dónde escribir a la hermandad.
+    if (!dir && !tel && !email && !web.mapaUrl && web.horarios.length === 0 && !web.formularioContacto) return null
     const mapa = web.mapaIncrustado ? urlMapaIncrustado(web.mapaUrl, dir) : null
     const enlaceMapa = urlSegura(web.mapaUrl)
     return (
@@ -1363,6 +1520,9 @@ function Seccion({
             </div>
           )}
         </div>
+        {web.formularioContacto && (
+          <FormularioContacto interactivo={interactivo} textoProteccionDatos={web.textoProteccionDatos} />
+        )}
       </section>
     )
   }

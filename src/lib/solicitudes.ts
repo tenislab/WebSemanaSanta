@@ -21,9 +21,18 @@ export interface SolicitudAlta {
   clavePropuesta: string
   fecha: string
   estado: EstadoSolicitud
+  /**
+   * Si la manda un hermano para un hijo menor, el id del que lo pide: al
+   * aprobarla, el menor queda a su cargo y podrá gestionarle la papeleta
+   * desde su propia cuenta.
+   */
+  tutorId?: string
+  /** Fecha de nacimiento del menor, para que secretaría vea que lo es. */
+  fechaNacimiento?: string
 }
 
-const STORAGE_KEY = 'cabildo-solicitudes'
+/** Se exporta para que el área del hermano pueda escuchar sus cambios. */
+export const STORAGE_KEY = 'cabildo-solicitudes'
 
 function solicitudToRow(s: SolicitudAlta): Record<string, unknown> {
   return {
@@ -35,6 +44,8 @@ function solicitudToRow(s: SolicitudAlta): Record<string, unknown> {
     clave_propuesta: s.clavePropuesta,
     fecha: s.fecha,
     estado: s.estado,
+    tutor_id: s.tutorId ?? null,
+    fecha_nacimiento: s.fechaNacimiento ?? null,
   }
 }
 
@@ -48,6 +59,8 @@ function rowToSolicitud(r: Record<string, unknown>): SolicitudAlta {
     clavePropuesta: r.clave_propuesta as string,
     fecha: r.fecha as string,
     estado: r.estado as EstadoSolicitud,
+    tutorId: (r.tutor_id as string | null) ?? undefined,
+    fechaNacimiento: (r.fecha_nacimiento as string | null) ?? undefined,
   }
 }
 

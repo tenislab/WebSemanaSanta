@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { HERMANOS_INICIALES } from '../../data/hermanos'
-import { CUOTAS_INICIALES } from '../../data/cuotas'
+import { CUOTAS_INICIALES, esAvisado } from '../../data/cuotas'
+import { getMensajesWeb, sinLeer } from '../../lib/mensajesWeb'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { DOCUMENTOS_INICIALES } from '../../data/documentos'
@@ -130,6 +131,26 @@ export default function DashboardHome() {
       (d) => d.categoria === 'Contrato' && d.vigenciaHasta && diasHasta(d.vigenciaHasta) <= 60,
     ).length
     const alertas: { text: string; level: 'warn' | 'ok'; to: string; modulo: string }[] = []
+    // Lo que llega por la web: si nadie mira el buzón, la web recoge mensajes
+    // que no lee nadie y es peor que no tener formulario.
+    const nuevosWeb = sinLeer(getMensajesWeb())
+    if (nuevosWeb > 0)
+      alertas.push({
+        text: `${nuevosWeb} ${nuevosWeb === 1 ? 'mensaje nuevo' : 'mensajes nuevos'} desde la web`,
+        level: 'warn',
+        to: '/app/web',
+        modulo: 'web',
+      })
+    // Primero lo que se resuelve en un clic: hermanos que ya han pagado por su
+    // cuenta y solo esperan a que tesorería lo dé por bueno.
+    const avisanPago = cuotas.filter(esAvisado).length
+    if (avisanPago > 0)
+      alertas.push({
+        text: `${avisanPago} ${avisanPago === 1 ? 'hermano avisa' : 'hermanos avisan'} de que ya ${avisanPago === 1 ? 'ha' : 'han'} pagado: confírmalo`,
+        level: 'warn',
+        to: '/app/cuotas',
+        modulo: 'cuotas',
+      })
     if (cuotasPendientes > 0)
       alertas.push({ text: `${cuotasPendientes} cuotas siguen pendientes de cobro`, level: 'warn', to: '/app/cuotas', modulo: 'cuotas' })
     if (porRenovar > 0 && ventanaAbierta(campana))

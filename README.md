@@ -50,7 +50,9 @@ Léelo antes de ejecutarlo: al final explica que hay que dar de alta al titular
 a mano.
 
 `supabase/schema.sql` (base nueva) o `supabase/migracion-2026-08.sql` (base ya
-creada con una versión anterior).
+creada con una versión anterior). Después, `supabase/web-publica.sql` y
+`supabase/mensajes-web.sql`: la web pública y el buzón donde caen los
+formularios de la web (contacto, donativos y lotería).
 
 1. Crea un proyecto en [supabase.com](https://supabase.com).
 2. Ve a **Project Settings → API** y copia:

@@ -1282,7 +1282,7 @@ h1, h2, h3,
 .tramos-card { max-width: 880px; margin-top: 1.1rem; }
 .tramos-editor { display: flex; flex-direction: column; gap: 0.5rem; }
 .tramo-row {
-  display: grid; grid-template-columns: 1fr 100px 110px 122px 64px 76px 60px 34px; gap: 0.55rem; align-items: center;
+  display: grid; grid-template-columns: 1fr 100px 110px 122px 64px 76px 104px 60px 34px; gap: 0.55rem; align-items: center;
 }
 .tramos-precio-base { max-width: 300px; margin-bottom: 1.1rem; }
 .tramo-row--head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
@@ -2692,7 +2692,10 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 
 .eventos-cal__head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.9rem; }
 .eventos-cal__head h2 { font-size: 1.05rem; font-weight: 600; text-transform: capitalize; }
-.eventos-cal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.25rem; }
+/* `minmax(0, 1fr)` y no `1fr`: con el mínimo automático, el contenido de una
+   celda ensancha la columna y el calendario se salía de la pantalla en un
+   móvil (siete columnas de 49 px en 353 px de ancho). */
+.eventos-cal__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; }
 .eventos-cal__dow {
   text-align: center; font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-muted); padding-bottom: 0.3rem;
@@ -3164,6 +3167,9 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   display: flex; flex-direction: column; gap: 0.6rem;
 }
 .pago-box--ok { border-color: var(--gold); }
+/* El «me he equivocado» no puede ocupar el ancho de la caja como si fuera la
+   acción principal: es una rectificación, va discreta y al ras de la izquierda. */
+.pago-box--ok .btn { align-self: flex-start; }
 .pago-box code { background: var(--bg-raised); border: 1px solid var(--line); border-radius: 4px; padding: 0.05rem 0.4rem; }
 .pago-metodos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
 .pago-metodo {
@@ -4689,4 +4695,379 @@ html:has(.sitio) { scroll-behavior: smooth; }
   font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
   background: #8a6d1f; color: #fff; padding: 0.1rem 0.45rem; border-radius: 999px;
   z-index: 2;
+}
+
+/* ============ H1 · Mi vida en la hermandad ============ */
+
+/* Las cifras de siempre: años, salidas y lo aportado. */
+.vida-cifras {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem; margin-bottom: 1.4rem;
+}
+.vida-cifras > div {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 0.8rem 1rem; background: var(--bg-sunken);
+}
+.vida-cifras strong {
+  display: block; font-size: 1.5rem; line-height: 1.1; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.vida-cifras span { font-size: 0.78rem; color: var(--text-muted); }
+.vida-cifras__debe strong { color: var(--warn-fg, #8a6d1f); }
+
+.vida-h3 { font-size: 0.95rem; margin: 1.4rem 0 0.6rem; color: var(--text); }
+
+/* Papeletas: una línea por año, con lo que se sacó ese año. */
+.vida-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.vida-lista li { display: flex; align-items: flex-start; gap: 0.8rem; }
+.vida-lista__anio {
+  flex: none; width: 3.4rem; font-variant-numeric: tabular-nums; font-weight: 700;
+  color: var(--text-muted); padding-top: 0.35rem;
+}
+.vida-lista__que { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.vida-chip {
+  display: inline-flex; align-items: center; gap: 0.45rem; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--bg-raised);
+  padding: 0.3rem 0.8rem 0.3rem 0.4rem; font: inherit; font-size: 0.86rem; color: var(--text);
+}
+.vida-chip:hover { border-color: var(--gold, var(--accent)); }
+.vida-chip b { font-variant-numeric: tabular-nums; }
+
+/* Cuotas: un desplegable por ejercicio. */
+.vida-anio + .vida-anio { margin-top: 0.4rem; }
+.vida-anio__cabeza {
+  display: flex; align-items: center; gap: 0.8rem; width: 100%;
+  padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg-raised); cursor: pointer; font: inherit; color: var(--text); text-align: left;
+}
+.vida-anio__cabeza:hover { border-color: var(--gold, var(--accent)); }
+.vida-anio__titulo { font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+.vida-anio__resumen {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  font-size: 0.84rem; color: var(--text-muted);
+}
+.vida-anio__flecha { flex: none; color: var(--text-muted); }
+.vida-recibos { list-style: none; margin: 0.4rem 0 0; padding: 0 0 0 0.8rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.vida-recibos li {
+  display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
+  padding: 0.4rem 0.6rem; border-left: 2px solid var(--line);
+}
+.vida-recibos__concepto { flex: 1 1 12rem; display: flex; flex-direction: column; font-size: 0.9rem; }
+.vida-recibos__concepto small { color: var(--text-muted); font-size: 0.76rem; }
+.vida-recibos__importe { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+@media (max-width: 560px) {
+  .vida-lista li { flex-direction: column; gap: 0.3rem; }
+  .vida-lista__anio { padding-top: 0; }
+}
+
+/* ============ H2 · Mi sitio en el cortejo ============ */
+
+.misitio {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 1rem 1.1rem; margin: 0.9rem 0; background: var(--bg-sunken);
+}
+.misitio__cabeza { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
+.misitio__tramo { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+.misitio__salida { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.7rem; }
+.misitio__salida b { color: var(--text); }
+.misitio__datos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.8rem; margin-bottom: 0.9rem;
+}
+.misitio__datos > div { display: flex; flex-direction: column; gap: 0.1rem; }
+.misitio__eti { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 700; }
+.misitio__datos strong { font-size: 1.4rem; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; }
+/* El cuerpo es una palabra, no un número: no necesita el mismo tamaño. */
+.misitio__cuerpo { font-size: 1rem !important; }
+.misitio__datos small { font-size: 0.76rem; color: var(--text-muted); }
+
+.misitio__vecinos { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.misitio__vecinos li {
+  display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
+  padding: 0.5rem 0.7rem; border-radius: var(--radius-sm); background: var(--bg-raised);
+  border: 1px solid var(--line);
+}
+.misitio__vecinos span {
+  flex: none; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 700; min-width: 6.5rem;
+}
+.misitio__vecinos b { font-weight: 600; color: var(--text); }
+.misitio__vecinos small { color: var(--text-muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.misitio__vecinos--vacio b { color: var(--text-muted); font-style: italic; font-weight: 400; }
+
+/* ============ H4 · El buzón del hermano ============ */
+
+.portal__aviso-titulo { display: block; font-weight: 700; color: var(--text); margin-bottom: 0.1rem; }
+.portal__aviso-acciones { margin-left: auto; display: flex; gap: 0.25rem; flex: none; align-self: flex-start; }
+.portal__pref-explica { display: block; color: var(--text-muted); font-size: 0.78rem; }
+
+/* ============ H6 · El carné digital ============ */
+
+.carne {
+  max-width: 25rem; margin: 0 0 1rem; padding: 1.2rem 1.3rem 1rem;
+  border-radius: 16px; position: relative; overflow: hidden;
+  color: #f6efe4;
+  /* El burdeos de la hermandad, con su acento: el carné se reconoce de lejos. */
+  background:
+    radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--accent) 55%, #1a1013) 0%, #1a1013 70%);
+  border: 1px solid color-mix(in srgb, var(--gold, #c5a059) 40%, transparent);
+  box-shadow: 0 16px 40px -22px rgba(0, 0, 0, 0.8);
+}
+.carne__cabeza { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; }
+.carne__escudo { width: 34px; height: 34px; object-fit: contain; flex: none; }
+.carne__escudo--sin {
+  width: 34px; height: 34px; display: grid; place-items: center; flex: none;
+  border-radius: 50%; background: rgba(255,255,255,0.12); font-size: 1rem;
+}
+.carne__hermandad {
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--gold, #c5a059); font-weight: 700; line-height: 1.2;
+}
+.carne__nombre { font-size: 1.3rem; line-height: 1.2; font-weight: 700; margin-bottom: 0.9rem; }
+.carne__datos { display: flex; gap: 1.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.carne__datos span {
+  display: block; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: rgba(246,239,228,0.6);
+}
+.carne__datos b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.carne__qr { display: flex; align-items: center; gap: 0.9rem; }
+.carne__qr span { font-size: 0.72rem; color: rgba(246,239,228,0.66); }
+.carne__qr .qr-preview { background: #fff; padding: 5px; border: 0; }
+.carne__estado { position: absolute; top: 1.1rem; right: 1.1rem; }
+
+/* A pantalla completa, para el día de la salida: nada alrededor y el QR grande. */
+.carne-pleno {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
+  padding: 1.2rem; background: #0d0709;
+}
+.carne--grande { max-width: 30rem; width: 100%; margin: 0; padding: 1.8rem; }
+.carne--grande .carne__nombre { font-size: 1.7rem; }
+.carne--grande .carne__qr { flex-direction: column; align-items: flex-start; }
+.carne-pleno__cerrar {
+  position: absolute; top: 1rem; right: 1rem; width: 44px; height: 44px;
+  border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.1); color: #fff; font-size: 1.1rem; cursor: pointer;
+}
+.carne-pleno__cerrar:hover { background: rgba(255,255,255,0.2); }
+
+/* En papel, tinta sobre blanco: el navegador no imprime fondos, y un carné
+   con letra clara sobre un degradado que no sale es una hoja en blanco. */
+@media print {
+  .carne {
+    break-inside: avoid;
+    background: #fff !important;
+    color: #1a1013 !important;
+    border: 1px solid #1a1013 !important;
+    box-shadow: none !important;
+  }
+  .carne__hermandad { color: #6a1a23 !important; }
+  .carne__datos span, .carne__qr span { color: #555 !important; }
+}
+
+/* ============ H5 · Mi familia ============ */
+
+.familia-ficha {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem; margin-bottom: 0.7rem; background: var(--bg-sunken);
+}
+.familia-ficha--espera { border-style: dashed; }
+.familia-ficha__cabeza { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.familia-ficha__nombre { font-weight: 700; color: var(--text); }
+.familia-ficha__datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; margin: 0 0 0.5rem; }
+.familia-ficha__datos dt {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted); font-weight: 700;
+}
+.familia-ficha__datos dd { margin: 0.1rem 0 0; font-size: 0.92rem; color: var(--text); }
+
+/* ---------------------------------------------------------------------------
+   H3 · El hermano avisa de que ya ha pagado
+   La marca va bajo el estado (no al lado): en la fila de la tabla el estado ya
+   es una píldora, y dos píldoras seguidas se leen como si fueran el mismo dato.
+   --------------------------------------------------------------------------- */
+.pill-avisado {
+  display: block; margin-top: 0.28rem;
+  font-size: 0.68rem; font-weight: 700; line-height: 1.2;
+  color: var(--accent); letter-spacing: 0.01em;
+}
+.pill-avisado::before { content: '↑ '; }
+
+/* ---------------------------------------------------------------------------
+   W10 · La web recibe: formularios, donativos, lotería y papeleta
+   Todo hereda las variables `--sitio-*`, así que se adapta solo al color, la
+   tipografía y el tema que la hermandad haya elegido para su web.
+   --------------------------------------------------------------------------- */
+
+/* Aviso de papeletas en la portada: mismo lenguaje que la cuenta atrás y el
+   próximo culto, pero con el color de acento porque es lo único de la portada
+   sobre lo que hay que ACTUAR y tiene fecha de caducidad. */
+.sitio__papeletas {
+  border: 1px solid var(--sitio-color2); border-radius: var(--sitio-radio);
+  padding: 1.2rem 1.4rem; background: color-mix(in srgb, var(--sitio-color2) 12%, var(--sitio-bg));
+  display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; justify-content: center;
+}
+.sitio__papeletas-ante {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--sitio-color2-texto); font-weight: 700;
+}
+.sitio__papeletas h3 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: 1.15rem; text-wrap: balance;
+}
+.sitio__papeletas p { font-size: 0.9rem; color: var(--sitio-muted); }
+.sitio__papeletas .sitio-btn { margin-top: 0.5rem; }
+
+/* ---- Donativos ---- */
+.sitio__causas {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem;
+  justify-content: center; margin: 0 0 1.4rem;
+}
+.sitio__causas li {
+  border: 1px solid var(--sitio-linea); border-radius: 999px;
+  padding: 0.3rem 0.9rem; font-size: 0.85rem; background: var(--sitio-bg2);
+}
+/* Bizum, cuenta y concepto: los datos que hay que copiar. Van monoespaciados y
+   seleccionables, que es lo que se hace con ellos. */
+.sitio__cobros {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.9rem; margin: 0 auto 1.8rem; max-width: var(--sitio-ancho); text-align: left;
+}
+.sitio__cobro {
+  border: 1px solid var(--sitio-linea); border-radius: var(--sitio-radio);
+  padding: 0.9rem 1.1rem; background: var(--sitio-bg2);
+  display: flex; flex-direction: column; gap: 0.3rem; min-width: 0;
+}
+.sitio__cobro-titulo {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--sitio-color2-texto); font-weight: 700;
+}
+.sitio__cobro-dato {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92rem;
+  /* El IBAN es largo: se parte donde haga falta en vez de estirar la tarjeta. */
+  overflow-wrap: anywhere; user-select: all;
+}
+
+/* ---- Lotería ---- */
+.sitio__loteria-numero {
+  font-family: var(--sitio-fuente-titulos); font-size: clamp(2.6rem, 12cqi, 5rem);
+  line-height: 1; color: var(--sitio-color-texto); letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums; margin-bottom: 1.2rem;
+}
+.sitio__loteria-cerrada { color: var(--sitio-muted); font-style: italic; }
+
+/* ---- Formularios ---- */
+.sitio-form {
+  border: 1px solid var(--sitio-linea); border-radius: var(--sitio-radio);
+  padding: 1.4rem 1.5rem; background: var(--sitio-bg2);
+  max-width: 46rem; margin: 1.8rem auto 0; text-align: left;
+  display: flex; flex-direction: column; gap: 0.9rem;
+}
+.sitio-form h3 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto); font-size: 1.15rem;
+}
+.sitio-form__lead { font-size: 0.9rem; color: var(--sitio-muted); margin-top: -0.5rem; }
+.sitio-form__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.9rem; }
+.sitio-form__botones { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.sitio-form__previa { color: var(--sitio-muted); font-size: 0.78rem; font-style: italic; }
+.sitio-form .sitio-btn { align-self: flex-start; }
+
+.sitio-campo { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.sitio-campo label { font-size: 0.78rem; font-weight: 700; color: var(--sitio-fg); }
+.sitio-campo input,
+.sitio-campo select,
+.sitio-campo textarea {
+  width: 100%; padding: 0.55rem 0.7rem; font: inherit; font-size: 0.92rem;
+  border: 1px solid var(--sitio-linea); border-radius: calc(var(--sitio-radio) * 0.5);
+  background: var(--sitio-bg); color: var(--sitio-fg);
+}
+.sitio-campo textarea { resize: vertical; min-height: 5rem; }
+.sitio-campo input:focus-visible,
+.sitio-campo select:focus-visible,
+.sitio-campo textarea:focus-visible {
+  outline: 2px solid var(--sitio-color2); outline-offset: 1px;
+}
+/* El campo con error se marca con borde Y con texto: solo con el color no se
+   entera quien no distingue el rojo.
+   El rojo se declara como variable porque sobre el tema oscuro de la web
+   (#16110f) un #b3261e se queda en 3,4:1 y no se lee: ahí sube a un rojo
+   claro que sí pasa. */
+.sitio { --sitio-error: #b3261e; }
+.sitio[data-tema='oscuro'] { --sitio-error: #ff8a80; }
+.sitio-campo [aria-invalid='true'] { border-color: var(--sitio-error); }
+.sitio-campo__error { color: var(--sitio-error); font-size: 0.78rem; font-weight: 600; }
+.sitio-campo__ayuda { color: var(--sitio-muted); font-size: 0.78rem; }
+
+.sitio-consent label { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.82rem; color: var(--sitio-muted); }
+.sitio-consent input { margin-top: 0.15rem; flex: 0 0 auto; width: 1rem; height: 1rem; }
+
+/* Importes sugeridos del donativo: ocupan la fila entera bajo la rejilla. */
+.sitio-form__sugeridos { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sitio-chip {
+  border: 1px solid var(--sitio-linea); background: var(--sitio-bg); color: var(--sitio-fg);
+  border-radius: 999px; padding: 0.3rem 0.9rem; font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.sitio-chip:hover { border-color: var(--sitio-color2); }
+
+.sitio-acuse {
+  border: 1px solid var(--sitio-color2); border-radius: var(--sitio-radio);
+  background: color-mix(in srgb, var(--sitio-color2) 12%, var(--sitio-bg));
+  padding: 1.2rem 1.4rem; max-width: 46rem; margin: 1.8rem auto 0; text-align: left;
+}
+.sitio-acuse b { font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto); font-size: 1.05rem; }
+.sitio-acuse p { margin-top: 0.4rem; font-size: 0.92rem; }
+
+.sitio-btn--fantasma { background: transparent; color: var(--sitio-fg); border: 1px solid var(--sitio-linea); }
+.sitio-enlace {
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--sitio-color-texto); text-decoration: underline;
+}
+.sitio__hazte-yasoy { font-size: 0.9rem; color: var(--sitio-muted); margin-top: 1.2rem; }
+
+/* En el móvil la rejilla se hace una columna sola y el formulario respira menos. */
+@media (max-width: 620px) {
+  .sitio-form { padding: 1.1rem 1.1rem; }
+  .sitio-form__grid { grid-template-columns: 1fr; }
+}
+
+/* ---- Buzón de la web (panel) ---- */
+.buzonweb { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.9rem; }
+.buzonweb__fila {
+  width: 100%; display: flex; align-items: center; gap: 0.8rem; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-raised);
+  padding: 0.7rem 0.9rem; font: inherit; color: var(--text); cursor: pointer;
+}
+.buzonweb__fila:hover { border-color: var(--line-strong); }
+/* Lo no leído se marca con una barra de color a la izquierda Y con el nombre en
+   negrita: solo con el color no se entera quien no lo distingue. */
+.buzonweb__nuevo .buzonweb__fila { border-left: 3px solid var(--gold); }
+.buzonweb__nuevo .buzonweb__quien { font-weight: 800; }
+.buzonweb__ic { font-size: 1.1rem; flex: 0 0 auto; }
+.buzonweb__texto { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1 1 auto; }
+.buzonweb__quien { font-weight: 700; font-size: 0.92rem; }
+.buzonweb__resumen {
+  font-size: 0.82rem; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.buzonweb__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 0.2rem; flex: 0 0 auto; }
+.buzonweb__fecha { font-size: 0.76rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.buzonweb__pendiente {
+  font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--warn-fg); background: var(--warn-bg); border-radius: 999px; padding: 0.1rem 0.5rem;
+}
+.buzonweb__asunto { margin: 1.1rem 0 0.4rem; font-size: 0.95rem; font-weight: 800; }
+.buzonweb__cuerpo { white-space: pre-wrap; font-size: 0.94rem; line-height: 1.6; }
+
+@media (max-width: 620px) {
+  /* En el móvil la fecha y el aviso pasan bajo el resumen: en tres columnas el
+     nombre se quedaba en dos letras. */
+  .buzonweb__fila { flex-wrap: wrap; }
+  .buzonweb__meta { flex-direction: row; align-items: center; gap: 0.5rem; width: 100%; justify-content: flex-start; }
+}
+
+/* El campo trampa contra el spam. No se puede usar `display: none`: muchos
+   robots se saltan justo lo que está oculto así. Se saca de la pantalla, que
+   para ellos sigue siendo un campo normal y para las personas no existe. */
+.sitio-trampa {
+  position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;
 }

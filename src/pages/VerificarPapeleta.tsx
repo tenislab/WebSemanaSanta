@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import Logo from '../components/Logo'
-import { decodificarVerificacion } from '../lib/verificacion'
+import { decodificarQr } from '../lib/verificacion'
 
 /**
  * Página pública a la que apunta el QR de la papeleta. Los datos vienen
@@ -10,7 +10,9 @@ import { decodificarVerificacion } from '../lib/verificacion'
  */
 export default function VerificarPapeleta() {
   const [params] = useSearchParams()
-  const datos = decodificarVerificacion(params.get('d'))
+  const leido = decodificarQr(params.get('d'))
+  const datos = leido?.tipo === 'papeleta' ? leido.datos : null
+  const carne = leido?.tipo === 'carne' ? leido.datos : null
 
   return (
     <div className="verificar">
@@ -22,7 +24,34 @@ export default function VerificarPapeleta() {
       </header>
 
       <main className="verificar__main">
-        {datos ? (
+        {carne ? (
+          <article className="verificar__card">
+            <p className="eyebrow eyebrow--gold">Carné de hermano/a</p>
+            <div className="verificar__sello" aria-hidden="true">✓</div>
+            <h1>{carne.h}</h1>
+            <p className="verificar__sub">Hermano/a nº {carne.nh}</p>
+
+            <dl className="verificar__list">
+              <div>
+                <dt>Hermandad</dt>
+                <dd>{carne.hd}</dd>
+              </div>
+              <div>
+                <dt>Hermano/a desde</dt>
+                <dd>{carne.d}</dd>
+              </div>
+              <div>
+                <dt>Estado</dt>
+                <dd>{carne.e}</dd>
+              </div>
+            </dl>
+
+            <p className="verificar__nota">
+              Datos leídos del propio código. La comprobación contra el censo de la hermandad
+              estará disponible al conectar la base de datos.
+            </p>
+          </article>
+        ) : datos ? (
           <article className="verificar__card">
             <p className="eyebrow eyebrow--gold">Papeleta de sitio · {datos.a}</p>
             <div className="verificar__sello" aria-hidden="true">✓</div>

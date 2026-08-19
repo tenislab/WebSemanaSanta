@@ -8,6 +8,8 @@ import {
   IDIOMAS,
   PLANTILLAS,
   SECCIONES_INFO,
+  type DonativosWeb,
+  type LoteriaWeb,
   PALETAS,
   PAREJAS_TIPOGRAFICAS,
   cambiosDeEstilo,
@@ -56,10 +58,15 @@ import { useSuscripcion, tieneCapacidad } from '../../lib/suscripcion'
 import { avisosDeContraste } from '../../lib/contraste'
 import { nuevoId } from '../../lib/supabaseSync'
 import SitioContenido, { type FocoPreview } from '../../components/SitioContenido'
+import Drawer from '../../components/Drawer'
 import { cultosDelCalendario } from '../../lib/cultosDelCalendario'
 import { getCampana } from '../../lib/campana'
 import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml } from '../../lib/seoWeb'
 import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
+import {
+  TIPOS_MENSAJE, actualizarMensajeWeb, borrarMensajeWeb, resumenMensaje, sinLeer, useMensajesWeb,
+  type MensajeWeb,
+} from '../../lib/mensajesWeb'
 
 /**
  * WebP pesa entre un tercio y la mitad que JPEG a la misma calidad, y lo
@@ -217,7 +224,7 @@ const ALTURAS: { id: AlturaHero; label: string }[] = [
   { id: 'completa', label: 'Pantalla completa' },
 ]
 
-type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta'
+type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta' | 'donativos' | 'loteria' | 'buzon'
 
 /**
  * A qué sección de la web corresponde cada pestaña del editor: la vista previa
@@ -235,6 +242,8 @@ const SECCION_DE_PESTANA: Partial<Record<Pestana, FocoPreview>> = {
   hazte: 'hazte',
   estacion: 'estacion',
   junta: 'junta',
+  donativos: 'donativos',
+  loteria: 'loteria',
 }
 /**
  * El orden importa: primero lo que da forma a TODA la web (diseño, cabecera y
@@ -281,6 +290,9 @@ const PALABRAS_PESTANA: Partial<Record<Pestana, string>> = {
   boletines: 'revista pdf descargas',
   contacto: 'direccion telefono correo mapa secretaria horario',
   compartir: 'seo google whatsapp titulo descripcion imagen enlace',
+  donativos: 'donativo colabora bizum iban cuenta caridad limosna pasarela tarjeta',
+  loteria: 'loteria navidad numero participaciones sorteo reserva',
+  buzon: 'mensajes formulario contacto recibidos buzon correo',
 }
 
 const GRUPOS_PESTANAS: { titulo: string; items: { id: Pestana; label: string; icono: ReactNode }[] }[] = [
@@ -305,12 +317,15 @@ const GRUPOS_PESTANAS: { titulo: string; items: { id: Pestana; label: string; ic
       { id: 'cultos', label: 'Cultos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3v18M8 7h8" /></svg> },
       { id: 'paginas', label: 'Páginas y textos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4M9 12h6M9 16h4" /></svg> },
       { id: 'boletines', label: 'Boletines', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> },
+      { id: 'donativos', label: 'Donativos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20Z" /></svg> },
+      { id: 'loteria', label: 'Lotería', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4Z" /><path d="M12 7v10" strokeDasharray="2 2" /></svg> },
     ],
   },
   {
     titulo: 'Datos',
     items: [
       { id: 'contacto', label: 'Contacto y mapa', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg> },
+      { id: 'buzon', label: 'Buzón de la web', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 6h16v12H4z" /><path d="m4 7 8 6 8-6" /></svg> },
       { id: 'compartir', label: 'Al compartir', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="m8.2 10.8 7.6-4.3M8.2 13.2l7.6 4.3" /></svg> },
     ],
   },
@@ -500,6 +515,8 @@ export default function WebPublica() {
     if (web.junta.length === 0) s.add('junta')
     if (contenidoVacio(web.historia)) s.add('historia')
     if (web.boletines.length === 0) s.add('boletines')
+    if (!web.donativos.bizum.trim() && !web.donativos.iban.trim() && !web.donativos.enlacePasarela.trim()) s.add('donativos')
+    if (!web.loteria.numero.trim()) s.add('loteria')
     if (!(web.direccion || hermandad.direccion) && !(web.telefono || hermandad.telefono)) s.add('contacto')
     if (!web.seo.descripcion.trim()) s.add('compartir')
     if (!web.pie.textoLegal.trim()) s.add('marco')
@@ -715,6 +732,9 @@ export default function WebPublica() {
           {pestana === 'cultos' && <CultosTab web={web} editar={editar} delCalendario={cultosCalendario} />}
           {pestana === 'paginas' && <PaginasTab web={web} editar={editar} paginaSel={paginaSel} setPaginaSel={setPaginaSel} />}
           {pestana === 'boletines' && <BoletinesTab web={web} editar={editar} actualizar={actualizar} />}
+          {pestana === 'donativos' && <DonativosTab web={web} hermandad={hermandad} editar={editar} />}
+          {pestana === 'loteria' && <LoteriaTab web={web} editar={editar} />}
+          {pestana === 'buzon' && <BuzonWebTab />}
           {pestana === 'contacto' && <ContactoTab web={web} hermandad={hermandad} editar={editar} />}
           {pestana === 'compartir' && <CompartirTab web={web} hermandad={hermandad} editar={editar} enlace={enlace} />}
         </div>
@@ -1517,12 +1537,390 @@ function HazteTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
         />
       </div>
       <label className="checkbox">
-        <input type="checkbox" checked={h.alAreaDelHermano} onChange={(e) => set({ alAreaDelHermano: e.target.checked })} />
+        <input
+          type="checkbox" checked={web.altaDesdeWeb}
+          onChange={(e) => editar('altaDesdeWeb', e.target.checked)}
+        />
         <span>
-          El botón lleva al área del hermano, donde se pide el alta.
-          {!h.alAreaDelHermano && ' Ahora lleva a la sección de contacto.'}
+          El botón abre el formulario de alta <b>en la propia web</b>. La solicitud llega a
+          Hermanos → Solicitudes de alta, igual que las del área del hermano.
         </span>
       </label>
+      {!web.altaDesdeWeb && (
+        <label className="checkbox">
+          <input type="checkbox" checked={h.alAreaDelHermano} onChange={(e) => set({ alAreaDelHermano: e.target.checked })} />
+          <span>
+            El botón lleva al área del hermano, donde se pide el alta.
+            {!h.alAreaDelHermano && ' Ahora lleva a la sección de contacto.'}
+          </span>
+        </label>
+      )}
+    </section>
+  )
+}
+
+/* -------------------------------- Donativos -------------------------------- */
+function DonativosTab({ web, hermandad, editar }: { web: WebPublica; hermandad: HermandadSettings; editar: EditarFn }) {
+  const d = web.donativos
+  function set(c: Partial<DonativosWeb>) { editar('donativos', { ...d, ...c }) }
+  const bizumEfectivo = d.bizum.trim() || hermandad.bizumTelefono
+  const ibanEfectivo = d.iban.trim() || hermandad.iban
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head"><h2 className="settings-card__title">Donativos y colaboración</h2></div>
+      <p className="form-hint">
+        Quien entra en la web y quiere ayudar tiene que poder hacerlo en ese momento. Con el Bizum y
+        la cuenta a la vista, y el concepto ya escrito, la tesorería sabe de quién es cada ingreso.
+      </p>
+      {!bizumEfectivo && !ibanEfectivo && !d.enlacePasarela.trim() && (
+        <div className="banner-inline banner-inline--warn">
+          Sin Bizum, cuenta ni pasarela, esta sección no se publica: no habría por dónde donar.
+        </div>
+      )}
+      <div className="form-row">
+        <label htmlFor="donEntradilla">Frase de entrada</label>
+        <input
+          id="donEntradilla" type="text" value={d.entradilla}
+          onChange={(e) => set({ entradilla: e.target.value })}
+          placeholder="Tu ayuda sostiene la caridad de esta casa."
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="donTexto">Explicación</label>
+        <textarea
+          id="donTexto" rows={4} value={d.texto}
+          onChange={(e) => set({ texto: e.target.value })}
+          placeholder="Cuenta a qué se dedica lo que se recauda. Lo concreto convence: «con 20 € se cubre una semana de la bolsa de caridad»."
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="donCausas">A qué se puede destinar</label>
+        <textarea
+          id="donCausas" rows={4} value={d.causas.join('\n')}
+          onChange={(e) => set({ causas: lineas(e.target.value) })}
+          placeholder={'Bolsa de caridad\nRestauración del palio\nObras de la casa de hermandad'}
+        />
+        <p className="form-hint">Una por línea. Quien done podrá elegir a cuál va lo suyo.</p>
+      </div>
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="donBizum">Bizum para donativos</label>
+          <input
+            id="donBizum" type="text" value={d.bizum}
+            onChange={(e) => set({ bizum: e.target.value })}
+            placeholder={hermandad.bizumTelefono || 'Teléfono del Bizum'}
+          />
+          <p className="form-hint">
+            {hermandad.bizumTelefono && !d.bizum.trim()
+              ? `Vacío = se usa el de la hermandad (${hermandad.bizumTelefono}).`
+              : 'Vacío = se usa el de la hermandad, si lo hay en Configuración.'}
+          </p>
+        </div>
+        <div className="form-row">
+          <label htmlFor="donIban">Cuenta para donativos</label>
+          <input
+            id="donIban" type="text" value={d.iban}
+            onChange={(e) => set({ iban: e.target.value })}
+            placeholder={hermandad.iban || 'ES00 0000 0000 0000 0000 0000'}
+          />
+          <p className="form-hint">Vacío = la cuenta de la hermandad.</p>
+        </div>
+      </div>
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="donConcepto">Qué poner en el concepto</label>
+          <input
+            id="donConcepto" type="text" value={d.concepto}
+            onChange={(e) => set({ concepto: e.target.value })}
+            placeholder="Donativo + tu nombre"
+          />
+        </div>
+        <div className="form-row">
+          <label htmlFor="donImportes">Importes sugeridos</label>
+          <input
+            id="donImportes" type="text" value={d.importes.join(', ')}
+            onChange={(e) => set({
+              importes: e.target.value
+                .split(/[,\s]+/)
+                .map((x) => Number(x.replace(',', '.')))
+                .filter((n) => Number.isFinite(n) && n > 0),
+            })}
+            placeholder="10, 20, 50"
+          />
+          <p className="form-hint">Separados por comas. Salen como botones para no dejar la casilla en blanco.</p>
+        </div>
+      </div>
+      <details className="afinar">
+        <summary>
+          <span className="afinar__titulo">Cobrar con tarjeta desde la web</span>
+          <span className="afinar__nota">{d.enlacePasarela.trim() ? 'Pasarela conectada' : 'Sin pasarela'}</span>
+        </summary>
+        <p className="form-hint">
+          Cabildo no cobra por ti: el dinero tiene que ir a una cuenta de la hermandad. Si contratáis
+          una pasarela (con vuestro banco, Stripe, PayPal…), pegad aquí el enlace de pago que os den y
+          el botón de la web lleva a ella. Sin pasarela, la web enseña el Bizum y la cuenta, que es
+          como se hace hoy por teléfono pero sin llamar.
+        </p>
+        <div className="form-row">
+          <label htmlFor="donPasarela">Enlace de pago</label>
+          <input
+            id="donPasarela" type="url" value={d.enlacePasarela}
+            onChange={(e) => set({ enlacePasarela: e.target.value.trim() })}
+            placeholder="https://…"
+          />
+        </div>
+        <div className="form-row">
+          <label htmlFor="donPasarelaTxt">Texto del botón</label>
+          <input
+            id="donPasarelaTxt" type="text" value={d.textoPasarela}
+            onChange={(e) => set({ textoPasarela: e.target.value })}
+            placeholder="Donar ahora"
+          />
+        </div>
+      </details>
+      <label className="checkbox">
+        <input type="checkbox" checked={d.avisoDonativo} onChange={(e) => set({ avisoDonativo: e.target.checked })} />
+        <span>
+          Dejar avisar del donativo desde la web. Llega al <b>buzón de la web</b> con el importe y a
+          qué lo destina, y la tesorería lo cuadra con el ingreso.
+        </span>
+      </label>
+    </section>
+  )
+}
+
+/* --------------------------------- Lotería --------------------------------- */
+function LoteriaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+  const l = web.loteria
+  function set(c: Partial<LoteriaWeb>) { editar('loteria', { ...l, ...c }) }
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head"><h2 className="settings-card__title">Lotería</h2></div>
+      <p className="form-hint">
+        La lotería se vende en la casa de hermandad y en horario de secretaría, que es cuando media
+        hermandad trabaja. Desde la web al menos se reserva: vosotros apartáis las participaciones y
+        avisáis para recogerlas.
+      </p>
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="lotSorteo">Sorteo</label>
+          <input
+            id="lotSorteo" type="text" value={l.sorteo}
+            onChange={(e) => set({ sorteo: e.target.value })}
+            placeholder="Navidad 2026"
+          />
+        </div>
+        <div className="form-row">
+          <label htmlFor="lotNumero">Número</label>
+          <input
+            id="lotNumero" type="text" value={l.numero}
+            onChange={(e) => set({ numero: e.target.value })}
+            placeholder="24.681"
+          />
+          <p className="form-hint">Sin número ni sorteo, la sección no se publica.</p>
+        </div>
+      </div>
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="lotJuega">Juega (€ por participación)</label>
+          <input
+            id="lotJuega" type="number" min="0" step="0.5" value={l.juega || ''}
+            onChange={(e) => set({ juega: Number(e.target.value) || 0 })}
+            placeholder="4"
+          />
+        </div>
+        <div className="form-row">
+          <label htmlFor="lotPrecio">Precio de la participación (€)</label>
+          <input
+            id="lotPrecio" type="number" min="0" step="0.5" value={l.precio || ''}
+            onChange={(e) => set({ precio: Number(e.target.value) || 0 })}
+            placeholder="5"
+          />
+          <p className="form-hint">
+            {l.precio > l.juega && l.juega > 0
+              ? `Donativo de ${(l.precio - l.juega).toFixed(2)} € por participación.`
+              : 'Lo jugado más el donativo de la hermandad.'}
+          </p>
+        </div>
+      </div>
+      <div className="form-row">
+        <label htmlFor="lotTexto">Explicación</label>
+        <textarea
+          id="lotTexto" rows={3} value={l.texto}
+          onChange={(e) => set({ texto: e.target.value })}
+          placeholder="Como cada año, la hermandad juega su número. Lo que se recauda va a…"
+        />
+      </div>
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="lotDestino">El donativo va a</label>
+          <input
+            id="lotDestino" type="text" value={l.destinoDonativo}
+            onChange={(e) => set({ destinoDonativo: e.target.value })}
+            placeholder="La bolsa de caridad"
+          />
+        </div>
+        <div className="form-row">
+          <label htmlFor="lotDonde">Dónde se recoge</label>
+          <input
+            id="lotDonde" type="text" value={l.dondeRecoger}
+            onChange={(e) => set({ dondeRecoger: e.target.value })}
+            placeholder="La casa de hermandad, martes y jueves de 20:00 a 21:30"
+          />
+        </div>
+      </div>
+      <div className="form-row">
+        <label htmlFor="lotMax">Máximo por persona</label>
+        <input
+          id="lotMax" type="number" min="0" step="1" value={l.maxPorPersona || ''}
+          onChange={(e) => set({ maxPorPersona: Number(e.target.value) || 0 })}
+          placeholder="20"
+        />
+        <p className="form-hint">0 = sin tope.</p>
+      </div>
+      <label className="checkbox">
+        <input type="checkbox" checked={l.reservaAbierta} onChange={(e) => set({ reservaAbierta: e.target.checked })} />
+        <span>
+          Se puede reservar desde la web. Al cerrarla, la sección sigue contando el número y dónde
+          comprarla, pero sin formulario.
+        </span>
+      </label>
+    </section>
+  )
+}
+
+/* ----------------------------- Buzón de la web ----------------------------- */
+/**
+ * Lo que llega desde la web pública: mensajes, avisos de donativo y reservas de
+ * lotería. Vive en el editor de la web porque es lo que la web recibe, y
+ * porque quien la monta es quien tiene que ver si funciona.
+ */
+function BuzonWebTab() {
+  const [mensajes, guardar] = useMensajesWeb()
+  const [filtro, setFiltro] = useState<'todos' | 'sinleer' | 'pendientes'>('todos')
+  const [abierto, setAbierto] = useState<MensajeWeb | null>(null)
+
+  const lista = mensajes.filter((m) =>
+    filtro === 'sinleer' ? !m.leido : filtro === 'pendientes' ? !m.atendido : true,
+  )
+
+  async function cambiar(id: string, c: Partial<MensajeWeb>) {
+    guardar(mensajes.map((m) => (m.id === id ? { ...m, ...c } : m)))
+    setAbierto((prev) => (prev && prev.id === id ? { ...prev, ...c } : prev))
+    await actualizarMensajeWeb(id, c)
+  }
+
+  async function borrar(id: string) {
+    guardar(mensajes.filter((m) => m.id !== id))
+    setAbierto((prev) => (prev && prev.id === id ? null : prev))
+    await borrarMensajeWeb(id)
+  }
+
+  function abrir(m: MensajeWeb) {
+    setAbierto(m)
+    // Se marca leído al abrirlo, no al recibirlo: la marca del raíl tiene que
+    // significar «no lo ha visto nadie».
+    if (!m.leido) cambiar(m.id, { leido: true })
+  }
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head">
+        <h2 className="settings-card__title">Buzón de la web</h2>
+        {sinLeer(mensajes) > 0 && <span className="pill pill--warn">{sinLeer(mensajes)} sin leer</span>}
+      </div>
+      <p className="form-hint">
+        Lo que llega desde la web: mensajes del formulario de contacto, avisos de donativo y reservas
+        de lotería. Las solicitudes de alta no salen aquí: van a <b>Hermanos → Solicitudes de alta</b>,
+        con el resto.
+      </p>
+      {mensajes.length === 0 ? (
+        <p className="form-hint">
+          Todavía no ha llegado nada. Se llena solo en cuanto alguien use un formulario de la web.
+        </p>
+      ) : (
+        <>
+          <div className="filters">
+            {([
+              ['todos', `Todo (${mensajes.length})`],
+              ['sinleer', `Sin leer (${sinLeer(mensajes)})`],
+              ['pendientes', `Por atender (${mensajes.filter((m) => !m.atendido).length})`],
+            ] as const).map(([id, txt]) => (
+              <button
+                key={id} type="button"
+                className={`chip${filtro === id ? ' chip--active' : ''}`}
+                onClick={() => setFiltro(id)}
+              >
+                {txt}
+              </button>
+            ))}
+          </div>
+          <ul className="buzonweb">
+            {lista.map((m) => (
+              <li key={m.id} className={m.leido ? undefined : 'buzonweb__nuevo'}>
+                <button type="button" className="buzonweb__fila" onClick={() => abrir(m)}>
+                  <span className="buzonweb__ic" aria-hidden="true">{TIPOS_MENSAJE[m.tipo].icono}</span>
+                  <span className="buzonweb__texto">
+                    <span className="buzonweb__quien">{m.nombre}</span>
+                    <span className="buzonweb__resumen">{resumenMensaje(m)}</span>
+                  </span>
+                  <span className="buzonweb__meta">
+                    <span className="buzonweb__fecha">{m.fecha}</span>
+                    {!m.atendido && <span className="buzonweb__pendiente">Por atender</span>}
+                  </span>
+                </button>
+              </li>
+            ))}
+            {lista.length === 0 && <li className="form-hint">Nada con ese filtro.</li>}
+          </ul>
+        </>
+      )}
+
+      <Drawer
+        open={!!abierto}
+        onClose={() => setAbierto(null)}
+        title={abierto ? TIPOS_MENSAJE[abierto.tipo].nombre : ''}
+        subtitle={abierto ? `${abierto.nombre} · ${abierto.fecha}` : undefined}
+        footer={
+          abierto && (
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={() => cambiar(abierto.id, { atendido: !abierto.atendido })}
+              >
+                {abierto.atendido ? 'Marcar como pendiente' : 'Dar por atendido'}
+              </button>
+              <a className="btn btn-outline" href={`mailto:${abierto.email}?subject=${encodeURIComponent(abierto.asunto || 'Tu mensaje')}`}>
+                Contestar por correo
+              </a>
+              <button className="btn btn-ghost rgpd-borrar" onClick={() => borrar(abierto.id)}>
+                Borrar
+              </button>
+            </>
+          )
+        }
+      >
+        {abierto && (
+          <>
+            <dl className="familia-ficha__datos">
+              <div><dt>Correo</dt><dd><a href={`mailto:${abierto.email}`}>{abierto.email}</a></dd></div>
+              {abierto.telefono && <div><dt>Teléfono</dt><dd><a href={`tel:${abierto.telefono.replace(/\s+/g, '')}`}>{abierto.telefono}</a></dd></div>}
+              {abierto.importe != null && <div><dt>Importe</dt><dd>{abierto.importe} €</dd></div>}
+              {abierto.causa && <div><dt>Lo destina a</dt><dd>{abierto.causa}</dd></div>}
+              {abierto.metodo && <div><dt>Por</dt><dd>{abierto.metodo}</dd></div>}
+              {abierto.participaciones != null && (
+                <div><dt>Participaciones</dt><dd>{abierto.participaciones}</dd></div>
+              )}
+            </dl>
+            {abierto.mensaje.trim() && (
+              <>
+                <h3 className="buzonweb__asunto">{abierto.asunto || 'Mensaje'}</h3>
+                <p className="buzonweb__cuerpo">{abierto.mensaje}</p>
+              </>
+            )}
+          </>
+        )}
+      </Drawer>
     </section>
   )
 }

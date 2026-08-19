@@ -24,6 +24,7 @@ import {
   type CriteriosSegmento,
 } from '../../lib/segmentacion'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
+import { agregarAvisoAVarios } from '../../lib/avisosHermano'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -75,6 +76,18 @@ export default function Comunicados() {
     const etiqueta = destinatarios.slice(PREFIJO_ETIQUETA.length)
     return hermanos.filter((h) => (h.etiquetas ?? []).includes(etiqueta) && h.estado !== 'Baja')
   }
+  /**
+   * A quién le llega de verdad al buzón. Por etiqueta, los que la tengan; y
+   * «Todos los hermanos», al censo activo entero. Un segmento que no sepamos
+   * resolver no avisa a nadie, en vez de avisar a todos por si acaso.
+   */
+  function hermanosAAvisar(destinatarios: string): Hermano[] {
+    const porEtiqueta = hermanosDeDestinatario(destinatarios)
+    if (porEtiqueta.length > 0) return porEtiqueta
+    if (/todos/i.test(destinatarios)) return hermanos.filter((h) => h.estado !== 'Baja')
+    return []
+  }
+
   const [query, setQuery] = useState('')
   const [filtroCanal, setFiltroCanal] = useState<'Todos' | Canal>('Todos')
   const [selected, setSelected] = useState<Comunicado | null>(null)
@@ -149,6 +162,9 @@ export default function Comunicados() {
     const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance }
     setComunicados((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)))
     setSelected(actualizado)
+    // Y al buzón de cada hermano en su área. Hasta ahora un comunicado se
+    // «enviaba» y el hermano no se enteraba por ningún sitio.
+    agregarAvisoAVarios(hermanosAAvisar(c.destinatarios).map((h) => h.id), c.cuerpo, 'comunicado', c.titulo)
   }
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
@@ -193,6 +209,9 @@ export default function Comunicados() {
       alcance,
     }))
     setComunicados((prev) => [...nuevos, ...prev])
+    if (estado === 'Enviado') {
+      agregarAvisoAVarios(hermanosAAvisar(destinatarios).map((h) => h.id), cuerpo, 'comunicado', titulo)
+    }
     setJustAddedId(nuevos[0].id)
     setFormOpen(false)
     setFiltroCanal('Todos')

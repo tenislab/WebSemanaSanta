@@ -810,6 +810,7 @@ export default function Configuracion() {
             <span>Reparto</span>
             <span>Aforo</span>
             <span>Precio €</span>
+            <span>Citación</span>
             <span></span>
             <span></span>
           </div>
@@ -856,6 +857,14 @@ export default function Configuracion() {
                 placeholder={String(precioBase)}
                 onChange={(e) => updateTramo(t.id, 'precio', e.target.value === '' ? null : Number(e.target.value) || 0)}
                 aria-label="Precio de la papeleta del tramo"
+              />
+              {/* A qué hora se cita ESTE tramo el día de la salida: cada uno
+                  entra a una hora, y es la pregunta de la semana antes. */}
+              <input
+                type="time"
+                value={t.horaCitacion ?? ''}
+                onChange={(e) => updateTramo(t.id, 'horaCitacion', e.target.value)}
+                aria-label="Hora de citación del tramo"
               />
               <span className="tramo-row__mover">
                 <button
