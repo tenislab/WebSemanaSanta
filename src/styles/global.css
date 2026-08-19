@@ -2257,11 +2257,8 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .sitio__seccion h2::after { content: ''; display: block; width: 48px; height: 3px; background: var(--sitio-color2); margin-top: 0.4rem; }
 .sitio__texto { line-height: 1.75; white-space: pre-wrap; }
 
-.sitio__titulares { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; }
-.sitio__titular { text-align: center; }
-.sitio__titular img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: var(--sitio-radio); margin-bottom: 0.6rem; }
-.sitio__titular h3 { font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto); margin-bottom: 0.25rem; }
-.sitio__titular p { color: var(--sitio-muted); font-size: 0.92rem; }
+/* Los titulares se pintan a lo ancho, con la foto alternando de lado: ver el
+   bloque «W4 · Titulares y patrimonio con foto» al final de este archivo. */
 
 .sitio__cultos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
 .sitio__culto { border: 1px solid var(--sitio-linea); border-radius: var(--sitio-radio); padding: 1rem 1.2rem; background: var(--sitio-bg2); }
@@ -4272,4 +4269,127 @@ html:has(.sitio) { scroll-behavior: smooth; }
   justify-content: space-between;
   align-items: center;
   text-align: left;
+}
+
+/* ============ W4 · Titulares y patrimonio con foto ============ */
+
+/* Cada titular ocupa el ancho: foto grande a un lado y su texto al otro,
+   cambiando de lado en cada uno. Antes eran tarjetas centradas en una rejilla,
+   tres líneas de texto por titular, y es la sección con más devoción detrás. */
+.sitio__titulares { display: grid; gap: calc(2.8rem * var(--sitio-aire)); }
+.sitio__titular {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  gap: clamp(1.1rem, 4cqi, 2.6rem);
+  align-items: center;
+}
+/* Sin foto no hay dos columnas que repartir. */
+.sitio__titular:not(:has(.sitio__titular-foto)) { grid-template-columns: minmax(0, 1fr); }
+/* Con la foto a la derecha hay que cambiar TAMBIÉN el reparto de columnas: si
+   no, la foto se queda con la columna ancha y el texto con la estrecha, y las
+   filas pares salían con el texto apretado y la foto más grande. */
+.sitio__titular--vuelto { grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr); }
+.sitio__titular--vuelto .sitio__titular-foto { order: 2; }
+
+.sitio__titular-foto { margin: 0; min-width: 0; }
+.sitio__titular-foto img {
+  display: block; width: 100%; aspect-ratio: 3/4; object-fit: cover;
+  border-radius: var(--sitio-radio);
+}
+.sitio__titular-foto figcaption {
+  font-size: 0.75rem; font-style: italic; color: var(--sitio-muted);
+  margin-top: 0.4rem; text-align: left;
+}
+
+.sitio__titular-texto { min-width: 0; }
+/* El texto, a la izquierda en todas las plantillas: un párrafo largo centrado
+   no hay quien lo lea. Hace falta este peso para ganarle a
+   `.sitio[data-plantilla='clasica'] .sitio__seccion { text-align: center }`. */
+.sitio[data-plantilla] .sitio__seccion .sitio__titular-texto { text-align: left; }
+.sitio__titular-texto h3 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: clamp(1.25rem, 3.4cqi, 1.75rem); line-height: 1.2; margin-bottom: 0.15rem;
+  text-wrap: balance;
+}
+.sitio__titular-texto .sitio__entradilla { margin-bottom: 0.7rem; }
+.sitio__titular-texto .sitio__texto { font-size: 0.96rem; }
+/* En «revista» el texto va a dos columnas; en esta caja estrecha, a una. */
+.sitio[data-plantilla='revista'] .sitio__titular-texto .sitio__texto {
+  column-count: 1; text-align: left;
+}
+
+/* ---- Marca de agua y créditos de las fotos ---- */
+.sitio__conmarca { display: block; position: relative; }
+.sitio__marca-agua {
+  position: absolute; right: 0.55rem; bottom: 0.5rem; max-width: calc(100% - 1.1rem);
+  font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: rgba(255,255,255,0.92); text-shadow: 0 1px 3px rgba(0,0,0,0.75);
+  /* Un velo detrás: sobre una foto clara el texto blanco desaparecía. */
+  background: rgba(0,0,0,0.32); padding: 0.12rem 0.4rem; border-radius: 3px;
+  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* En el visor la foto va centrada: la caja de la marca tiene que encogerse
+   hasta la imagen, o la marca se iría al borde de la pantalla. */
+.sitio__visor-figura .sitio__conmarca { display: inline-block; max-width: 100%; }
+.sitio__credito { display: block; font-size: 0.75rem; font-style: italic; opacity: 0.78; }
+.sitio__derechos {
+  margin-top: 1.5rem; padding-top: 0.6rem; font-size: 0.76rem;
+  color: var(--sitio-muted); border-top: 1px solid var(--sitio-linea);
+}
+
+/* ---- Ficha propia de un titular (/w/slug/t/…) ---- */
+.sitio__ficha { max-width: 48rem; margin: 0 auto; text-align: left; }
+.sitio__ficha-cabeza {
+  display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  gap: clamp(1.1rem, 4cqi, 2.4rem); align-items: end; margin-bottom: 1.8rem;
+}
+.sitio__ficha-cabeza:not(:has(.sitio__ficha-foto)) { grid-template-columns: minmax(0, 1fr); }
+.sitio__ficha-foto { margin: 0; min-width: 0; }
+.sitio__ficha-foto img {
+  display: block; width: 100%; aspect-ratio: 3/4; object-fit: cover;
+  border-radius: var(--sitio-radio);
+}
+.sitio__ficha-foto figcaption {
+  font-size: 0.75rem; font-style: italic; color: var(--sitio-muted); margin-top: 0.4rem;
+}
+.sitio__ficha-titulo { min-width: 0; }
+.sitio__ficha h1 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: clamp(1.7rem, 6cqi, 2.6rem); line-height: 1.1; margin-bottom: 0.2rem;
+  text-wrap: balance;
+}
+.sitio__ficha h2 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: 1.2rem; margin-bottom: 0.35rem;
+}
+.sitio__ficha .sitio__parrafo + .sitio__parrafo { margin-top: 1.4rem; }
+.sitio__ficha-fotos { margin-top: 2rem; }
+
+/* Los demás titulares, al pie de la ficha: se entra por uno y se acaba
+   viéndolos todos, que es de lo que se trata. */
+.sitio__otros {
+  max-width: 48rem; margin: 2.6rem auto 0;
+  border-top: 1px solid var(--sitio-linea); padding-top: 1.2rem;
+}
+.sitio__otros h2 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: 0.92rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.8rem;
+}
+.sitio__otros ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.7rem; }
+.sitio__otros a {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.4rem 0.95rem 0.4rem 0.4rem; border: 1px solid var(--sitio-linea);
+  border-radius: 999px; color: var(--sitio-color-texto); text-decoration: none; font-size: 0.9rem;
+}
+.sitio__otros a:hover { border-color: var(--sitio-color); }
+.sitio__otros img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+
+@container sitio (max-width: 700px) {
+  /* En el móvil no caben dos columnas: la foto arriba y el texto debajo, y el
+     alternado deja de tener sentido. */
+  .sitio__titular,
+  .sitio__titular--vuelto,
+  .sitio__ficha-cabeza { grid-template-columns: minmax(0, 1fr); }
+  .sitio__titular--vuelto .sitio__titular-foto { order: 0; }
+  .sitio__titular-foto img, .sitio__ficha-foto img { aspect-ratio: 4/3; }
 }

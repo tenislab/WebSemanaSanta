@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, nombreSeccion, noticiasPublicadas, slugNoticia, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type Noticia, type TipoSeccion, type WebPublica } from '../lib/webPublica'
+import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, marcaDeAgua, nombreSeccion, noticiasPublicadas, slugNoticia, slugTitular, titularConFicha, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type Noticia, type TipoSeccion, type Titular, type WebPublica } from '../lib/webPublica'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
@@ -454,7 +454,19 @@ export function PieSitio({
  * único de fotos sin contexto: con doce salidas seguidas no había forma de
  * saber qué era cada cosa.
  */
-function Galeria({ albumes, interactivo }: { albumes: AlbumGaleria[]; interactivo: boolean }) {
+export function Galeria({
+  albumes,
+  interactivo,
+  marca,
+  aviso,
+}: {
+  albumes: AlbumGaleria[]
+  interactivo: boolean
+  /** Texto de la marca de agua; vacío = sin marca. */
+  marca: string
+  /** Aviso de derechos bajo la galería. */
+  aviso: string
+}) {
   // Todas las fotos en una sola lista para poder pasar de una a la siguiente
   // aunque estén en álbumes distintos.
   const todas = albumes.flatMap((a) => a.fotos.map((f) => ({ ...f, album: a.titulo })))
@@ -502,19 +514,25 @@ function Galeria({ albumes, interactivo }: { albumes: AlbumGaleria[]; interactiv
                 <figure className="sitio__foto" key={f.id}>
                   {interactivo ? (
                     <button type="button" className="sitio__foto-boton" onClick={() => setAbierta(i)}>
-                      <img src={f.fotoDataUrl} alt={f.pie || a.titulo} loading="lazy" />
+                      <FotoConMarca src={f.fotoDataUrl} alt={f.pie || a.titulo} marca={marca} />
                       <span className="sitio__foto-lupa" aria-hidden="true">⤢</span>
                     </button>
                   ) : (
-                    <img src={f.fotoDataUrl} alt={f.pie || a.titulo} loading="lazy" />
+                    <FotoConMarca src={f.fotoDataUrl} alt={f.pie || a.titulo} marca={marca} />
                   )}
-                  {f.pie && <figcaption>{f.pie}</figcaption>}
+                  {(f.pie.trim() || f.autor?.trim()) && (
+                    <figcaption>
+                      {f.pie}
+                      {f.autor?.trim() && <span className="sitio__credito">Foto: {f.autor}</span>}
+                    </figcaption>
+                  )}
                 </figure>
               )
             })}
           </div>
         </div>
       ))}
+      <AvisoFotos texto={aviso} />
 
       {foto && (
         <div className="sitio__visor" role="dialog" aria-modal="true" aria-label="Foto ampliada">
@@ -532,9 +550,11 @@ function Galeria({ albumes, interactivo }: { albumes: AlbumGaleria[]; interactiv
             </button>
           )}
           <figure className="sitio__visor-figura">
-            <img src={foto.fotoDataUrl} alt={foto.pie || foto.album} />
+            {/* La marca va sobre todo aquí: es la foto grande, la que se guarda. */}
+            <FotoConMarca src={foto.fotoDataUrl} alt={foto.pie || foto.album} marca={marca} />
             <figcaption>
               {foto.pie || foto.album}
+              {foto.autor?.trim() && <span className="sitio__credito">Foto: {foto.autor}</span>}
               {todas.length > 1 && <span className="sitio__visor-n">{(abierta ?? 0) + 1} / {todas.length}</span>}
             </figcaption>
           </figure>
@@ -581,6 +601,93 @@ function Redes({ web, interactivo }: { web: WebPublica; interactivo: boolean }) 
  * Una noticia en el listado. Con enlace propio: es lo que se pega en redes, y
  * hasta ahora la única forma de compartir una noticia era mandar la web entera.
  */
+/**
+ * Un titular a lo ancho: foto grande a un lado y su texto al otro, alternando
+ * el lado en cada uno. Antes eran tres líneas centradas en una rejilla de
+ * tarjetas, y es la sección con más devoción detrás de toda la web.
+ */
+export function BloqueTitular({
+  titular: t,
+  vuelto,
+  slugWeb,
+  marca,
+  interactivo,
+}: {
+  titular: Titular
+  /** La foto a la derecha en vez de a la izquierda. */
+  vuelto?: boolean
+  slugWeb: string
+  /** Texto de la marca de agua; vacío = sin marca. */
+  marca: string
+  interactivo: boolean
+}) {
+  const parrafos = (t.parrafos ?? []).filter((p) => p.texto.trim() || p.subtitulo.trim())
+  const conFicha = titularConFicha(t)
+  const enlace = `/w/${slugWeb}/t/${slugTitular(t)}`
+  // En la portada se asoma el arranque de su historia; el resto vive en la
+  // ficha, para que la sección no se convierta en un muro de texto.
+  const asomo = parrafos.find((p) => p.texto.trim())?.texto ?? ''
+  return (
+    <article className={`sitio__titular${vuelto ? ' sitio__titular--vuelto' : ''}`}>
+      {t.fotoDataUrl && (
+        <figure className="sitio__titular-foto">
+          <FotoConMarca src={t.fotoDataUrl} alt={t.alt?.trim() || t.nombre} marca={marca} />
+          {t.credito?.trim() && <figcaption>Foto: {t.credito}</figcaption>}
+        </figure>
+      )}
+      <div className="sitio__titular-texto">
+        <h3>{t.nombre}</h3>
+        {t.autoria?.trim() && <p className="sitio__autoria">{t.autoria}</p>}
+        {t.descripcion.trim() && <p className="sitio__entradilla">{t.descripcion}</p>}
+        {asomo && <p className="sitio__texto">{recorta(asomo, 300)}</p>}
+        {conFicha && (
+          <a className="sitio__seguir" href={interactivo ? enlace : undefined}>
+            Conoce su historia →
+          </a>
+        )}
+      </div>
+    </article>
+  )
+}
+
+/**
+ * Una foto con la marca de agua encima, si la hermandad la ha pedido. Va en un
+ * `span` y no en un `div` porque también se usa dentro de botones.
+ */
+export function FotoConMarca({
+  src,
+  alt,
+  marca,
+  clase,
+}: {
+  src: string
+  alt: string
+  marca: string
+  clase?: string
+}) {
+  return (
+    <span className="sitio__conmarca">
+      <img src={src} alt={alt} loading="lazy" className={clase} />
+      {marca && <span className="sitio__marca-agua" aria-hidden="true">{marca}</span>}
+    </span>
+  )
+}
+
+/** El aviso de derechos bajo las fotos, si la hermandad lo ha escrito. */
+export function AvisoFotos({ texto }: { texto: string }) {
+  if (!texto.trim()) return null
+  return <p className="sitio__derechos">{texto}</p>
+}
+
+/** Corta por la última palabra entera antes del límite, sin partir a medias. */
+function recorta(texto: string, max: number): string {
+  const limpio = texto.trim()
+  if (limpio.length <= max) return limpio
+  const corte = limpio.slice(0, max)
+  const espacio = corte.lastIndexOf(' ')
+  return `${(espacio > max * 0.6 ? corte.slice(0, espacio) : corte).replace(/[.,;:\s]+$/, '')}…`
+}
+
 export function TarjetaNoticia({
   noticia: n,
   interactivo,
@@ -685,23 +792,20 @@ function Seccion({
       <section id="titulares" {...props}>
         <h2>{titulo(SECCIONES_INFO.titulares.publico)}</h2>
         <div className="sitio__titulares">
-          {web.titulares.map((t) => (
-            <article key={t.id} className="sitio__titular">
-              {t.fotoDataUrl && <img src={t.fotoDataUrl} alt={t.nombre} />}
-              <h3>{t.nombre}</h3>
-              {t.autoria?.trim() && <p className="sitio__autoria">{t.autoria}</p>}
-              {t.descripcion && <p>{t.descripcion}</p>}
-              {(t.parrafos ?? [])
-                .filter((p) => p.texto.trim() || p.subtitulo.trim())
-                .map((p) => (
-                  <div className="sitio__parrafo" key={p.id}>
-                    {p.subtitulo.trim() && <h4>{p.subtitulo}</h4>}
-                    {p.texto.trim() && <p className="sitio__texto">{p.texto}</p>}
-                  </div>
-                ))}
-            </article>
+          {web.titulares.map((t, i) => (
+            <BloqueTitular
+              key={t.id}
+              titular={t}
+              // Alternos: la foto salta de un lado al otro en cada titular,
+              // que es lo que rompe la columna centrada de siempre.
+              vuelto={i % 2 === 1}
+              slugWeb={web.slug}
+              marca={marcaDeAgua(web, hermandad.nombreLegal ?? '')}
+              interactivo={interactivo}
+            />
           ))}
         </div>
+        <AvisoFotos texto={web.avisoFotos} />
       </section>
     )
   }
@@ -831,7 +935,12 @@ function Seccion({
     return (
       <section id="galeria" {...props}>
         <h2>{titulo(SECCIONES_INFO.galeria.publico)}</h2>
-        <Galeria albumes={albumes} interactivo={interactivo} />
+        <Galeria
+          albumes={albumes}
+          interactivo={interactivo}
+          marca={marcaDeAgua(web, hermandad.nombreLegal ?? '')}
+          aviso={web.avisoFotos}
+        />
       </section>
     )
   }

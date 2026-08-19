@@ -58,18 +58,18 @@ Supabase y el despliegue. Mientras tanto, todo lo demás sí se puede hacer.
 Las W1–W8 se pueden hacer **hoy**, sin depender de nadie. Las W9 y W10
 necesitan servidor.
 
-| Fase | Qué entra | ¿Necesita servidor? |
-|------|-----------|---------------------|
-| **W1** | Navegación de una web de verdad | No |
-| **W2** | Las secciones que faltan | No |
-| **W3** | Noticias con cuerpo y enlace propio | No |
-| **W4** | Titulares y patrimonio con foto | No |
-| **W5** | Diseño editorial: romper el centrado | No |
-| **W6** | Imágenes y peso de la página | No |
-| **W7** | Accesibilidad e idioma | No |
-| **W8** | El editor, a la altura | No |
-| **W9** | Que se comparta y se encuentre | **Sí** |
-| **W10** | Formularios, donativos y dominio | **Sí** |
+| Fase | Qué entra | ¿Necesita servidor? | Estado |
+|------|-----------|---------------------|--------|
+| **W1** | Navegación de una web de verdad | No | Hecha |
+| **W2** | Las secciones que faltan | No | Hecha |
+| **W3** | Noticias con cuerpo y enlace propio | No | Hecha |
+| **W4** | Titulares y patrimonio con foto | No | Hecha |
+| **W5** | Diseño editorial: romper el centrado | No | Pendiente |
+| **W6** | Imágenes y peso de la página | No | Pendiente |
+| **W7** | Accesibilidad e idioma | No | Pendiente |
+| **W8** | El editor, a la altura | No | Pendiente |
+| **W9** | Que se comparta y se encuentre | **Sí** | Pendiente |
+| **W10** | Formularios, donativos y dominio | **Sí** | Pendiente |
 
 ---
 
@@ -128,10 +128,24 @@ El modelo **ya guarda foto y texto largo de cada titular**, pero la web los
 pinta como tres líneas de texto centrado. Es la sección con más devoción
 detrás y la que peor sale.
 
-- Titular a pantalla ancha: foto grande, nombre, autoría y su historia.
-- Ficha propia por titular, con su enlace.
-- Las fotos de la galería y de los titulares, con pie de foto y autor.
-- Marca de agua o aviso de derechos si la hermandad lo pide.
+**Hecho:**
+
+- Titular a lo ancho: foto grande a un lado y su texto al otro, **alternando el
+  lado** en cada uno. En la portada se asoma el arranque de su historia; lo
+  demás vive en su ficha.
+- **Ficha propia** por titular (`/w/slug/t/…`), con su foto, su historia
+  entera, sus fotos y los demás titulares al pie. Comparte su propio título,
+  su descripción y su imagen al pegar el enlace.
+- **Crédito de la fotografía** y **texto alternativo** por titular, y **autor**
+  en cada foto de la galería (también en el visor a pantalla completa).
+- **Marca de agua** con el nombre de la hermandad y **aviso de derechos** bajo
+  las fotos, los dos opcionales, en «Titulares → Derechos de las fotos».
+- En el editor: reordenar titulares, más fotos por titular, enlace propio
+  editable con aviso si dos quedan repetidos, y aviso si ningún titular tiene
+  foto.
+
+Queda para W6 el peso de estas fotos (hoy van como *data URL*), y para W7 el
+texto alternativo de las fotos sueltas de la ficha.
 
 ## W5 — Diseño editorial: romper el centrado
 

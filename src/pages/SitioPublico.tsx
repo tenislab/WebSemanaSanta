@@ -3,16 +3,19 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   PAREJAS_TIPOGRAFICAS,
   getWebPublica,
+  marcaDeAgua,
   noticiasPublicadas,
   slugNoticia,
+  slugTitular,
   type Noticia,
+  type Titular,
   type WebPublica,
 } from '../lib/webPublica'
 import { useHermandadSettings, type HermandadSettings } from '../lib/hermandadSettings'
 import { getSuscripcion, tieneCapacidad } from '../lib/suscripcion'
 import { haySesionAbierta } from '../lib/sesion'
 import { LogoMark } from '../components/Logo'
-import SitioContenido, { PieSitio, TarjetaNoticia } from '../components/SitioContenido'
+import SitioContenido, { AvisoFotos, FotoConMarca, Galeria, PieSitio, TarjetaNoticia } from '../components/SitioContenido'
 import { cultosDelCalendario } from '../lib/cultosDelCalendario'
 
 /**
@@ -21,7 +24,7 @@ import { cultosDelCalendario } from '../lib/cultosDelCalendario'
  * SitioContenido, compartido con la vista previa.
  */
 export default function SitioPublico() {
-  const { slug, noticia: slugNot } = useParams()
+  const { slug, noticia: slugNot, titular: slugTit } = useParams()
   const [params] = useSearchParams()
   // La vista previa solo vale desde el panel (misma pestaña/origen): se exige
   // sesión abierta. Si no, cualquiera podía ver con ?preview=1 una web sin
@@ -73,8 +76,41 @@ export default function SitioPublico() {
     }
     return (
       <>
-        <MetaWeb web={web} hermandad={hermandad} noticia={n} />
+        <MetaWeb
+          web={web}
+          hermandad={hermandad}
+          pieza={{ titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl }}
+        />
         <PaginaNoticia web={web} hermandad={hermandad} noticia={n} />
+      </>
+    )
+  }
+
+  // La ficha de un titular, con su enlace propio.
+  if (slugTit) {
+    const t = web.titulares.find((x) => slugTitular(x) === slugTit)
+    if (!t) {
+      return (
+        <div className="sitio-noweb">
+          <LogoMark size={40} />
+          <h1>Esa ficha ya no está</h1>
+          <p>Puede que se haya quitado de la web.</p>
+          <Link to={`/w/${web.slug}`} className="sitio-btn">Ir a la web</Link>
+        </div>
+      )
+    }
+    return (
+      <>
+        <MetaWeb
+          web={web}
+          hermandad={hermandad}
+          pieza={{
+            titulo: t.nombre,
+            descripcion: t.descripcion.trim() || t.autoria.trim(),
+            imagen: t.fotoDataUrl,
+          }}
+        />
+        <PaginaTitular web={web} hermandad={hermandad} titular={t} />
       </>
     )
   }
@@ -180,6 +216,84 @@ function PaginaNoticia({
   )
 }
 
+/**
+ * La ficha de un titular: su foto grande, su autoría, su historia entera y las
+ * fotos que la hermandad haya subido de él. En la portada solo se asoma; aquí
+ * está todo, y este es el enlace que se pega en redes.
+ */
+function PaginaTitular({
+  web,
+  hermandad,
+  titular: t,
+}: {
+  web: WebPublica
+  hermandad: HermandadSettings
+  titular: Titular
+}) {
+  const marca = marcaDeAgua(web, hermandad.nombreLegal ?? '')
+  const parrafos = (t.parrafos ?? []).filter((p) => p.texto.trim() || p.subtitulo.trim())
+  const fotos = t.fotos ?? []
+  const otros = web.titulares.filter((x) => x.id !== t.id)
+  return (
+    <MarcoSuelto web={web} hermandad={hermandad}>
+      <article className="sitio__ficha">
+        <header className="sitio__ficha-cabeza">
+          {t.fotoDataUrl && (
+            <figure className="sitio__ficha-foto">
+              <FotoConMarca src={t.fotoDataUrl} alt={t.alt?.trim() || t.nombre} marca={marca} />
+              {t.credito?.trim() && <figcaption>Foto: {t.credito}</figcaption>}
+            </figure>
+          )}
+          <div className="sitio__ficha-titulo">
+            <h1>{t.nombre}</h1>
+            {t.autoria.trim() && <p className="sitio__autoria">{t.autoria}</p>}
+            {t.descripcion.trim() && <p className="sitio__entradilla">{t.descripcion}</p>}
+          </div>
+        </header>
+
+        {parrafos.map((p) => (
+          <div className="sitio__parrafo" key={p.id}>
+            {p.subtitulo.trim() && <h2>{p.subtitulo}</h2>}
+            {p.texto.trim() && <p className="sitio__texto">{p.texto}</p>}
+          </div>
+        ))}
+
+        {fotos.length > 0 && (
+          <div className="sitio__ficha-fotos">
+            {/* La misma galería que la sección: se abren a pantalla completa y
+                se pasa de una a otra con las flechas. El aviso de derechos lo
+                pone la ficha una sola vez, más abajo. */}
+            <Galeria
+              albumes={[{ id: 'ficha', titulo: '', descripcion: '', fecha: '', fotos: fotos.map((f, i) => ({ id: `ficha-${i}`, fotoDataUrl: f, pie: '' })) }]}
+              interactivo
+              marca={marca}
+              aviso=""
+            />
+          </div>
+        )}
+
+        <AvisoFotos texto={web.avisoFotos} />
+      </article>
+
+      {otros.length > 0 && (
+        <nav className="sitio__otros" aria-label="Los demás titulares">
+          <h2>Los demás titulares</h2>
+          <ul>
+            {otros.map((o) => (
+              <li key={o.id}>
+                <Link to={`/w/${web.slug}/t/${slugTitular(o)}`}>
+                  {o.fotoDataUrl && <img src={o.fotoDataUrl} alt="" loading="lazy" />}
+                  <span>{o.nombre}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+    </MarcoSuelto>
+  )
+}
+
 function ListadoNoticias({ web, hermandad }: { web: WebPublica; hermandad: HermandadSettings }) {
   const noticias = noticiasPublicadas(web.noticias)
   return (
@@ -211,25 +325,34 @@ function fechaLegible(iso: string): string {
 function MetaWeb({
   web,
   hermandad,
-  noticia,
+  pieza,
 }: {
   web: WebPublica
   hermandad: HermandadSettings
-  /** En la página de una noticia mandan SU titular y SU foto. */
-  noticia?: Noticia
+  /**
+   * En una página suelta (una noticia, la ficha de un titular) mandan SU
+   * título, SU descripción y SU foto: es lo que se pega en WhatsApp.
+   */
+  pieza?: { titulo: string; descripcion: string; imagen: string | null }
 }) {
+  // Se sacan los campos sueltos a propósito: `pieza` es un objeto nuevo en cada
+  // render, y como dependencia del efecto lo dispararía una y otra vez.
+  const hayPieza = Boolean(pieza)
+  const piezaTitulo = pieza?.titulo ?? ''
+  const piezaDescripcion = pieza?.descripcion ?? ''
+  const piezaImagen = pieza?.imagen ?? null
   useEffect(() => {
     const anterior = document.title
     // Mismo orden de respaldo que el render del sitio, para que la pestaña y
     // la tarjeta al compartir digan lo mismo que la web.
     const nombreWeb = web.seo.titulo.trim() || web.titulo || hermandad.nombreLegal || 'Nuestra Hermandad'
-    // En la página de una noticia manda la noticia: es lo que se comparte.
-    const titulo = noticia ? `${noticia.titulo} · ${nombreWeb}` : nombreWeb
-    const descripcion = noticia
-      ? noticia.resumen.trim() || web.seo.descripcion.trim()
+    // En una página suelta manda la pieza: es lo que se comparte.
+    const titulo = hayPieza ? `${piezaTitulo} · ${nombreWeb}` : nombreWeb
+    const descripcion = hayPieza
+      ? piezaDescripcion.trim() || web.seo.descripcion.trim()
       : web.seo.descripcion.trim() || web.lema || ''
     const imagen =
-      noticia?.fotoDataUrl
+      piezaImagen
       ?? web.seo.imagenDataUrl
       ?? web.heroFotos[0]
       ?? web.logoDataUrl
@@ -268,7 +391,7 @@ function MetaWeb({
       puestas.forEach((el) => el.remove())
       restaurar.forEach(({ el, antes }) => el.setAttribute('content', antes))
     }
-  }, [web, hermandad, noticia])
+  }, [web, hermandad, hayPieza, piezaTitulo, piezaDescripcion, piezaImagen])
 
   return null
 }

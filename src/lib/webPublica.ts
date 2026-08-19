@@ -221,12 +221,38 @@ export interface Titular {
   autoria: string
   /** Texto largo: historia de la imagen, restauraciones, devoción… */
   parrafos: ParrafoPagina[]
+  /**
+   * Parte final del enlace de su ficha (…/w/slug/t/<slug>). Se calcula del
+   * nombre; se guarda para que el enlace no cambie si luego se retoca.
+   */
+  slug?: string
+  /** Quién hizo la FOTOGRAFÍA. Distinto de `autoria`, que es quien talló la imagen. */
+  credito?: string
+  /** Qué se ve en la foto, para quien no puede verla. Vacío = el nombre. */
+  alt?: string
+  /** Más fotos para su ficha: detalles, la restauración, la salida… */
+  fotos?: string[]
+}
+
+/** El enlace propio de la ficha de un titular, ya resuelto. */
+export function slugTitular(t: Titular): string {
+  return t.slug?.trim() || aSlug(t.nombre) || t.id
+}
+
+/** ¿Hay ficha que abrir, o el titular es solo nombre y foto? */
+export function titularConFicha(t: Titular): boolean {
+  return (
+    (t.parrafos ?? []).some((p) => p.texto.trim() || p.subtitulo.trim())
+    || (t.fotos ?? []).length > 0
+  )
 }
 
 export interface FotoGaleria {
   id: string
   fotoDataUrl: string
   pie: string
+  /** Quién la hizo. Se publica como «Foto: …» bajo el pie. */
+  autor?: string
 }
 
 /**
@@ -292,6 +318,15 @@ export function noticiasPublicadas(noticias: Noticia[]): Noticia[] {
       if (Boolean(a.destacada) !== Boolean(b.destacada)) return a.destacada ? -1 : 1
       return (b.fecha || '').localeCompare(a.fecha || '')
     })
+}
+
+/**
+ * El texto de la marca de agua sobre las fotos, si la hermandad la ha pedido.
+ * Vacío = no se pinta nada.
+ */
+export function marcaDeAgua(web: WebPublica, nombreHermandad: string): string {
+  if (!web.marcaAgua) return ''
+  return web.titulo.trim() || nombreHermandad.trim()
 }
 
 /** Párrafo de una página de texto (con subtítulo opcional). */
@@ -583,6 +618,13 @@ export interface WebPublica {
   /** Enseña el mapa incrustado en la sección de contacto (además del enlace). */
   mapaIncrustado: boolean
   /**
+   * Aviso de derechos bajo las fotos de titulares y galería. Vacío = no se
+   * enseña. Muchas hermandades lo piden porque sus fotos acaban circulando.
+   */
+  avisoFotos: string
+  /** Marca de agua discreta con el nombre de la hermandad sobre las fotos. */
+  marcaAgua: boolean
+  /**
    * La sección de Cultos saca también los próximos eventos del calendario
    * (módulo de Eventos), sin tener que copiarlos a mano cada vez.
    */
@@ -716,6 +758,8 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   cabecera: CABECERA_INICIAL,
   pie: PIE_INICIAL,
   mapaIncrustado: true,
+  avisoFotos: '',
+  marcaAgua: false,
   cultosDelCalendario: true,
   pareja: 'canonica',
   redondeo: 'suave',
@@ -824,7 +868,7 @@ function aContenidoRico(valor: unknown): ContenidoRico {
 }
 
 /** Mezcla lo guardado con los valores por defecto, para que los datos antiguos no pierdan campos nuevos. */
-function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
+export function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
   if (!guardado) return WEB_PUBLICA_INICIAL
   // Compatibilidad: si venía con una sola foto de portada (modelo anterior),
   // se pasa al array de fotos.
@@ -873,6 +917,10 @@ function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
       descripcion: t.descripcion ?? '',
       autoria: t.autoria ?? '',
       parrafos: t.parrafos ?? [],
+      slug: t.slug ?? '',
+      credito: t.credito ?? '',
+      alt: t.alt ?? '',
+      fotos: t.fotos ?? [],
     })),
     cultos: (guardado.cultos ?? WEB_PUBLICA_INICIAL.cultos).map((c: Partial<CultoWeb>) => ({
       id: c.id ?? 'culto',

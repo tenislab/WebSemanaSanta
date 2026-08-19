@@ -39,6 +39,8 @@ export default function App() {
       {/* Una noticia con su enlace propio, y el listado completo. */}
       <Route path="/w/:slug/n/:noticia" element={<SitioPublico />} />
       <Route path="/w/:slug/noticias" element={<SitioPublico />} />
+      {/* La ficha de un titular, con su enlace propio. */}
+      <Route path="/w/:slug/t/:titular" element={<SitioPublico />} />
       <Route path="/legal/:slug" element={<PaginaLegal />} />
       <Route path="/verificar" element={<VerificarPapeleta />} />
 
