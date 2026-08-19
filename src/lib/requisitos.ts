@@ -2,6 +2,7 @@ import { isSupabaseConfigured } from './supabase'
 import { getHermandadSettings, type HermandadSettings } from './hermandadSettings'
 import { getWebPublica, type WebPublica } from './webPublica'
 import { correoDisponible } from './correo'
+import { huecosLegalesSinRellenar } from '../data/legal'
 
 /**
  * Lo que hace falta CONFIGURAR para que ciertas cosas funcionen de verdad:
@@ -17,7 +18,7 @@ import { correoDisponible } from './correo'
  * y no una sola: **qué no va**, **por qué** y **quién lo arregla y dónde**. Un
  * aviso que solo dice «no configurado» deja a la junta igual de perdida.
  */
-export type IdRequisito = 'supabase' | 'correo' | 'pasarela' | 'datosCobro' | 'dominio'
+export type IdRequisito = 'supabase' | 'correo' | 'pasarela' | 'datosCobro' | 'dominio' | 'legal'
 
 export interface Requisito {
   id: IdRequisito
@@ -42,6 +43,8 @@ export interface ContextoRequisitos {
   /** Se pasa de fuera para poder probarlo sin depender del entorno. */
   supabaseListo?: boolean
   correoListo?: boolean
+  /** Cuántos huecos «[RAZÓN SOCIAL]» quedan en las páginas legales. */
+  huecosLegales?: number
 }
 
 /**
@@ -55,6 +58,7 @@ export function requisitos(ctx: ContextoRequisitos = {}): Record<IdRequisito, Re
   // El correo está listo cuando hay base de datos (donde vive la función) Y la
   // hermandad lo ha encendido tras configurar el proveedor.
   const correoListo = ctx.correoListo ?? (supabaseListo && correoDisponible())
+  const huecos = ctx.huecosLegales ?? huecosLegalesSinRellenar().length
   const iban = (ctx.hermandad?.iban ?? '').trim()
   const bizum = (ctx.hermandad?.bizumTelefono ?? '').trim()
   const pasarela = (ctx.web?.donativos?.enlacePasarela ?? '').trim()
@@ -102,6 +106,16 @@ export function requisitos(ctx: ContextoRequisitos = {}): Record<IdRequisito, Re
       comoSeArregla: 'Se ponen en Configuración → Datos de la hermandad.',
       enlace: { a: '/app/configuracion', texto: 'Ir a Configuración' },
       listo: iban !== '' || bizum !== '',
+    },
+    legal: {
+      id: 'legal',
+      nombre: 'Páginas legales',
+      queNoVa: `Las páginas legales tienen ${huecos} ${huecos === 1 ? 'hueco' : 'huecos'} sin rellenar`,
+      porQue:
+        'El aviso legal y la política de privacidad son páginas PÚBLICAS, y siguen teniendo dentro los corchetes de ejemplo ([RAZÓN SOCIAL], [NIF O CIF]…). Cualquiera que entre los ve, y un aviso legal que no identifica a su titular no cumple lo que la ley pide.',
+      comoSeArregla:
+        'Se rellenan en el archivo src/data/legal.ts, buscando los corchetes. Y antes de dárselas a ninguna hermandad, que las revise un abogado de protección de datos junto con el contrato de encargo.',
+      listo: huecos === 0,
     },
     dominio: {
       id: 'dominio',

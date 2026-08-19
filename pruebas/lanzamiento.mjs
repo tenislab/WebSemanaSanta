@@ -27,11 +27,32 @@ comprobar(
   !existsSync('.git') || !readFileSync('.gitignore', 'utf8').split('\n').every((l) => l.trim() !== '.env'),
   'Añade «.env» al .gitignore. Si ya se subió, rota las claves en Supabase.',
 )
+/**
+ * Una clave de servicio DE VERDAD, no la palabra suelta: los comentarios que
+ * avisan de «no pongas aquí la service_role» decían la palabra y hacían saltar
+ * la comprobación, que es justo lo contrario de lo que se quiere.
+ *
+ * Un token de Supabase es un JWT en tres partes; el `role` va en la segunda,
+ * codificada en base64. Se decodifica y se mira ahí.
+ */
+function tieneClaveDeServicio(texto) {
+  for (const jwt of texto.match(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g) ?? []) {
+    try {
+      const carga = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString())
+      if (carga.role && carga.role !== 'anon') return true
+    } catch {
+      // Un token que no se puede leer no es una clave nuestra.
+    }
+  }
+  return false
+}
+
+const fuentes = readdirSync('src', { recursive: true })
+  .filter((f) => /\.(ts|tsx)$/.test(String(f)))
+  .map((f) => leer(`src/${f}`))
 comprobar(
   'No hay ninguna clave de servicio en el código',
-  !/service_role/i.test(env) && !readdirSync('src', { recursive: true })
-    .filter((f) => /\.(ts|tsx)$/.test(String(f)))
-    .some((f) => /service_role/i.test(leer(`src/${f}`))),
+  !tieneClaveDeServicio(env) && !fuentes.some(tieneClaveDeServicio),
   'La clave service_role NUNCA va en el navegador: da acceso total saltándose las políticas.',
 )
 

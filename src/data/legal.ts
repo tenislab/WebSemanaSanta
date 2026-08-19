@@ -229,3 +229,31 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
 export function getDocumentoLegal(slug: string): DocumentoLegal | undefined {
   return DOCUMENTOS_LEGALES.find((d) => d.slug === slug)
 }
+
+/**
+ * Los huecos sin rellenar de los documentos legales: «[RAZÓN SOCIAL]»,
+ * «[NIF O CIF]»… Están puestos a propósito para que cada cual ponga sus datos,
+ * pero las páginas legales son PÚBLICAS: si se publican con los corchetes
+ * dentro, cualquiera los ve, y además un aviso legal sin identificar al titular
+ * no cumple lo que la ley pide.
+ *
+ * Se detectan solos para poder avisar en el panel antes de publicar.
+ */
+export function huecosLegalesSinRellenar(): { documento: string; hueco: string }[] {
+  const salida: { documento: string; hueco: string }[] = []
+  const vistos = new Set<string>()
+  for (const doc of DOCUMENTOS_LEGALES) {
+    for (const sec of doc.secciones) {
+      const textos = [...(sec.parrafos ?? []), ...(sec.lista ?? [])]
+      for (const t of textos) {
+        for (const m of t.matchAll(/\[[A-ZÁÉÍÓÚÑ][^\]]*\]/g)) {
+          const clave = `${doc.slug}|${m[0]}`
+          if (vistos.has(clave)) continue
+          vistos.add(clave)
+          salida.push({ documento: doc.titulo, hueco: m[0] })
+        }
+      }
+    }
+  }
+  return salida
+}

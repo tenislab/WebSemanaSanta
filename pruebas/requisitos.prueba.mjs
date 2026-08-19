@@ -1,13 +1,15 @@
 /** P0: el registro de lo que falta por configurar. */
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/requisitos.ts')
-  const vacio = { supabaseListo: false, correoListo: false, hermandad: null, web: null }
+  // `huecosLegales` se pasa a mano: si no, la prueba dependería de cuántos
+  // corchetes queden hoy en los documentos legales.
+  const vacio = { supabaseListo: false, correoListo: false, huecosLegales: 3, hermandad: null, web: null }
 
   // --- Cada requisito trae las tres piezas que hacen falta ---
   // Un aviso que solo dice «no configurado» deja a la junta igual de perdida:
   // hace falta qué no va, por qué, y quién lo arregla.
   const todos = Object.values(m.requisitos(vacio))
-  caso('hay cinco requisitos', 5, todos.length)
+  caso('hay seis requisitos', 6, todos.length)
   caso('todos dicen qué no va', true, todos.every((r) => r.queNoVa.length > 5))
   caso('todos explican por qué', true, todos.every((r) => r.porQue.length > 20))
   caso('todos dicen quién lo arregla', true, todos.every((r) => r.comoSeArregla.length > 20))
@@ -45,10 +47,18 @@ export default async function ({ cargar, caso }) {
   caso('y dice dónde se configura', true, /Configuración/.test(m.requisito('correo', vacio).enlace.texto))
 
   // --- Pendientes ---
-  caso('sin nada configurado, faltan los cinco', 5, m.requisitosPendientes(vacio).length)
+  // --- Las páginas legales ---
+  // Son públicas: publicarlas con «[RAZÓN SOCIAL]» dentro lo ve cualquiera.
+  caso('con huecos, la parte legal no está lista', false, m.requisito('legal', vacio).listo)
+  caso('y dice cuántos son', true, /3 huecos/.test(m.requisito('legal', vacio).queNoVa))
+  caso('sin huecos, lista', true, m.requisito('legal', { ...vacio, huecosLegales: 0 }).listo)
+  caso('con uno solo, en singular', true, /1 hueco sin/.test(m.requisito('legal', { ...vacio, huecosLegales: 1 }).queNoVa))
+
+  caso('sin nada configurado, faltan los seis', 6, m.requisitosPendientes(vacio).length)
   const casi = {
     supabaseListo: true,
     correoListo: false,
+    huecosLegales: 0,
     hermandad: { iban: 'ES47', bizumTelefono: '' },
     web: { dominio: 'x.es', donativos: { enlacePasarela: 'https://p.example' } },
   }
