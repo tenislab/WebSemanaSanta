@@ -331,12 +331,12 @@ export default function Comunicados() {
         <table>
           <thead>
             <tr>
-              <th>Nº</th>
+              <th className="col-opcional">Nº</th>
               <th>Comunicado</th>
-              <th>Destinatarios</th>
+              <th className="col-opcional">Destinatarios</th>
               <th>Estado</th>
-              <th>Fecha</th>
-              <th></th>
+              <th className="col-opcional">Fecha</th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
@@ -347,7 +347,7 @@ export default function Comunicados() {
                 onClick={() => setSelected(c)}
                 style={{ cursor: 'pointer' }}
               >
-                <td className="num">{c.numero}</td>
+                <td className="num col-opcional">{c.numero}</td>
                 <td>
                   <span className="row-person__name">{c.titulo}</span>
                   <br />
@@ -355,13 +355,17 @@ export default function Comunicados() {
                     {c.canal}
                     {c.redes && c.redes.length > 0 ? ` · ${c.redes.join(', ')}` : ''}
                   </span>
+                  {/* En el móvil se ocultan destinatarios y fecha. */}
+                  <span className="row-person__sub solo-movil">
+                    {c.destinatarios} · {fmt(c.fechaEnvio ?? c.fechaProgramada ?? c.fechaCreacion)}
+                  </span>
                 </td>
-                <td>{c.destinatarios}</td>
+                <td className="col-opcional">{c.destinatarios}</td>
                 <td>
                   <span className={`pill ${claseEstado(c.estado)}`}>{c.estado}</span>
                 </td>
-                <td className="num">{fmt(c.fechaEnvio ?? c.fechaProgramada ?? c.fechaCreacion)}</td>
-                <td>
+                <td className="num col-opcional">{fmt(c.fechaEnvio ?? c.fechaProgramada ?? c.fechaCreacion)}</td>
+                <td className="col-opcional">
                   <button className="icon-btn" title="Ver comunicado" onClick={(e) => { e.stopPropagation(); setSelected(c) }}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                       <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />

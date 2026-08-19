@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { guardarConAviso, leerPersistido } from './persistencia'
+import { isSupabaseConfigured, supabase } from './supabase'
 
 /**
  * Web pública de la hermandad, creada y personalizada desde la propia app.
@@ -77,6 +78,11 @@ export interface EstacionPenitencia {
   /** Nota corta: recomendaciones, dónde verla mejor, qué llevar. */
   nota: string
   itinerario: ParadaItinerario[]
+  /**
+   * La fecha de verdad (AAAA-MM-DD), para la cuenta atrás de la portada. `dia`
+   * es texto libre («Viernes Santo») y no se puede contar hacia atrás con él.
+   */
+  fechaSalida?: string
 }
 
 /** Un cargo de la junta de gobierno. */
@@ -209,6 +215,12 @@ export interface SeccionConfig {
   visible: boolean
   /** Título a medida para esta sección («Cultos y actos» → «Nuestros cultos»). Vacío = el de fábrica. */
   nombre?: string
+  /**
+   * En borrador: se ve en la vista previa del panel, con su marca, pero NO en
+   * la web. Sirve para ir escribiendo una sección sin tener que ocultarla
+   * entera y sin publicar a medias.
+   */
+  borrador?: boolean
 }
 
 export interface Titular {
@@ -231,7 +243,7 @@ export interface Titular {
   /** Qué se ve en la foto, para quien no puede verla. Vacío = el nombre. */
   alt?: string
   /** Más fotos para su ficha: detalles, la restauración, la salida… */
-  fotos?: string[]
+  fotos?: FotoWeb[]
 }
 
 /** El enlace propio de la ficha de un titular, ya resuelto. */
@@ -253,6 +265,35 @@ export interface FotoGaleria {
   pie: string
   /** Quién la hizo. Se publica como «Foto: …» bajo el pie. */
   autor?: string
+  /**
+   * Copia pequeña para la rejilla. La grande solo se descarga al abrir la foto
+   * a pantalla completa. Con treinta fotos de una salida son varios megas que
+   * ya no viajan en cada visita. Las de antes no la traen: se usa la grande.
+   */
+  miniDataUrl?: string
+}
+
+/**
+ * Lo que ocupa la web guardada, en bytes. Las fotos van dentro del propio
+ * contenido (data URL), así que esto ES lo que se descarga cada visita.
+ */
+export function pesoWeb(web: WebPublica): number {
+  return new TextEncoder().encode(JSON.stringify(web)).length
+}
+
+/**
+ * El peso, contado en cristiano, y si hay que preocuparse.
+ *
+ * La referencia son 400 kB/s, que es lo que da un móvil con mala cobertura en
+ * la puerta de la iglesia el Viernes Santo. Y el navegador solo guarda unos
+ * 5 MB: pasado de ahí, la web ni siquiera se puede guardar.
+ */
+export function avisoDePeso(bytes: number): { peso: string; segundos: number; nivel: 'ok' | 'aviso' | 'malo' } {
+  const mb = bytes / (1024 * 1024)
+  const peso = mb >= 1 ? `${mb.toFixed(1).replace('.', ',')} MB` : `${Math.round(bytes / 1024)} kB`
+  const segundos = Math.round(bytes / 400_000)
+  const nivel = bytes > 4 * 1024 * 1024 ? 'malo' : bytes > 1.5 * 1024 * 1024 ? 'aviso' : 'ok'
+  return { peso, segundos, nivel }
 }
 
 /**
@@ -278,6 +319,26 @@ export interface CultoWeb {
   fecha: string
   lugar: string
   fotoDataUrl: string | null
+  /**
+   * La fecha de verdad (AAAA-MM-DD), cuando el culto viene del calendario.
+   * Con `fecha` a mano no se puede saber cuál es el próximo.
+   */
+  fechaIso?: string
+}
+
+/**
+ * Días que faltan para una fecha (AAAA-MM-DD), contando en hora local. Devuelve
+ * null si no hay fecha o no se entiende, y negativo si ya pasó.
+ *
+ * Se comparan los DÍAS, no los milisegundos: a las once de la noche de la
+ * víspera tienen que salir «1 día», no «0».
+ */
+export function diasHasta(iso: string | undefined, hoy = new Date()): number | null {
+  if (!iso?.trim()) return null
+  const destino = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(destino.getTime())) return null
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  return Math.round((destino.getTime() - desde.getTime()) / 86400000)
 }
 
 /** Noticia de la sección Actualidad. */
@@ -288,6 +349,8 @@ export interface Noticia {
   /** Entradilla: lo que se lee en la tarjeta del listado. */
   resumen: string
   fotoDataUrl: string | null
+  /** Qué se ve en la foto, para quien no puede verla. Vacío = decorativa. */
+  altFoto?: string
   publicada: boolean
   /**
    * El cuerpo de la noticia, con el mismo editor de párrafos que la Historia.
@@ -321,6 +384,30 @@ export function noticiasPublicadas(noticias: Noticia[]): Noticia[] {
 }
 
 /**
+ * Fotos publicadas sin decir qué se ve en ellas. Quien navega con un lector de
+ * pantalla se encuentra un hueco mudo; y una foto sin describir tampoco dice
+ * nada cuando falla la conexión y no llega a cargar.
+ *
+ * No entran las decorativas a propósito: una foto de adorno con el texto al
+ * lado se marca vacía y es lo correcto. Lo que se cuenta aquí es lo que SÍ
+ * lleva información: titulares, fotos de galería y fotos de noticia.
+ */
+export function fotosSinDescribir(web: WebPublica): { donde: string; que: string }[] {
+  const faltan: { donde: string; que: string }[] = []
+  web.titulares.forEach((t) => {
+    if (t.fotoDataUrl && !t.alt?.trim()) faltan.push({ donde: 'Titulares', que: t.nombre || 'un titular' })
+  })
+  web.albumes.forEach((a) => {
+    const sinPie = a.fotos.filter((f) => !f.pie.trim()).length
+    if (sinPie > 0) faltan.push({ donde: 'Galería', que: `${sinPie} en «${a.titulo || 'un álbum'}»` })
+  })
+  web.noticias.forEach((n) => {
+    if (n.fotoDataUrl && !n.altFoto?.trim()) faltan.push({ donde: 'Actualidad', que: n.titulo || 'una noticia' })
+  })
+  return faltan
+}
+
+/**
  * El texto de la marca de agua sobre las fotos, si la hermandad la ha pedido.
  * Vacío = no se pinta nada.
  */
@@ -334,6 +421,11 @@ export interface ParrafoPagina {
   id: string
   subtitulo: string
   texto: string
+  /**
+   * Se publica como cita destacada, grande y sangrada, en vez de como un
+   * párrafo más. Es lo que rompe un texto largo y le da respiro.
+   */
+  destacado?: boolean
 }
 
 /**
@@ -341,10 +433,29 @@ export interface ParrafoPagina {
  * fotos. Es lo que usan la Historia y las páginas, para que en la web no haya
  * secciones que sean solo un pegote de texto plano.
  */
+/**
+ * Una foto de una sección, con lo que se ve en ella para quien no puede verla.
+ * Antes era solo la imagen: el texto alternativo iba vacío en toda la web.
+ */
+export interface FotoWeb {
+  url: string
+  /** Qué se ve. Vacío = decorativa (el lector de pantalla la salta). */
+  alt: string
+}
+
+/** Lo guardado por versiones anteriores era una lista de imágenes a secas. */
+export function aFotosWeb(guardado: unknown): FotoWeb[] {
+  if (!Array.isArray(guardado)) return []
+  return guardado
+    .map((f) => (typeof f === 'string' ? { url: f, alt: '' } : (f as FotoWeb)))
+    .filter((f) => f && typeof f.url === 'string' && f.url.length > 0)
+    .map((f) => ({ url: f.url, alt: f.alt ?? '' }))
+}
+
 export interface ContenidoRico {
   entradilla: string
   parrafos: ParrafoPagina[]
-  fotos: string[]
+  fotos: FotoWeb[]
 }
 
 export const CONTENIDO_RICO_VACIO: ContenidoRico = { entradilla: '', parrafos: [], fotos: [] }
@@ -355,6 +466,25 @@ export function contenidoVacio(c: ContenidoRico | undefined): boolean {
   return !c.entradilla.trim() && c.fotos.length === 0 && !c.parrafos.some((p) => p.texto.trim() || p.subtitulo.trim())
 }
 
+/**
+ * Una cifra de la hermandad para la portada: «1.240 hermanos», «desde 1595»,
+ * «3 pasos». Son las tres o cuatro cosas que cuenta cualquier hermandad de sí
+ * misma, y en la web no había forma de decirlas.
+ */
+export interface CifraWeb {
+  id: string
+  numero: string
+  texto: string
+}
+
+/** Foto a sangre: parte la página en dos, de borde a borde, con una frase encima. */
+export interface FotoSangre {
+  fotoDataUrl: string | null
+  texto: string
+  /** Detrás de qué sección se coloca. Vacío = detrás de la primera. */
+  despuesDe: TipoSeccion | ''
+}
+
 /** Página de la sección «Páginas y textos» (Titulares, Historia, Junta…). */
 export interface PaginaWeb {
   id: string
@@ -363,7 +493,7 @@ export interface PaginaWeb {
   titulo: string
   entradilla: string
   parrafos: ParrafoPagina[]
-  fotos: string[]
+  fotos: FotoWeb[]
   /** Si aparece en el menú de la web (y se publica). Por defecto sí. */
   enMenu?: boolean
 }
@@ -474,6 +604,8 @@ export interface EstiloWeb {
   tema: TemaWeb
   redondeo: 'recto' | 'suave' | 'redondo'
   densidad: 'compacta' | 'normal' | 'amplia'
+  /** Letra capital al empezar cada sección. Solo el estilo «Boletín» la trae. */
+  letraCapital?: boolean
 }
 
 export const ESTILOS: EstiloWeb[] = [
@@ -491,6 +623,7 @@ export const ESTILOS: EstiloWeb[] = [
     id: 'boletin', nombre: 'Boletín',
     descripcion: 'Como la revista impresa de la hermandad, con columnas y capitulares.',
     plantilla: 'revista', paleta: 'sepia', pareja: 'clasica-legible', tema: 'claro', redondeo: 'recto', densidad: 'normal',
+    letraCapital: true,
   },
   {
     id: 'cartel', nombre: 'Cartel',
@@ -530,6 +663,7 @@ export function cambiosDeEstilo(estilo: EstiloWeb): Partial<WebPublica> {
     tema: estilo.tema,
     redondeo: estilo.redondeo,
     densidad: estilo.densidad,
+    letraCapital: estilo.letraCapital ?? false,
   }
 }
 
@@ -544,6 +678,7 @@ export function estiloActual(web: WebPublica): EstiloWeb | null {
       && c.tema === web.tema
       && c.redondeo === web.redondeo
       && c.densidad === web.densidad
+      && c.letraCapital === web.letraCapital
   }) ?? null
 }
 
@@ -624,6 +759,35 @@ export interface WebPublica {
   avisoFotos: string
   /** Marca de agua discreta con el nombre de la hermandad sobre las fotos. */
   marcaAgua: boolean
+
+  /**
+   * En qué lengua está escrita la web. Va en el `lang` de la página: sin él,
+   * un lector de pantalla lee el castellano con voz inglesa y no hay quien lo
+   * entienda.
+   */
+  idioma: string
+  /**
+   * Un resumen en otra lengua bajo la portada, marcado con SU idioma. Muchas
+   * hermandades quieren al menos unas líneas en inglés por el turismo, y
+   * traducir la web entera no es realista.
+   */
+  resumenOtroIdioma: { idioma: string; titulo: string; texto: string }
+
+  // ---- Diseño editorial: lo que rompe el «todo centrado, uno detrás de otro» ----
+  /** Franjas de fondo alternas por sección: se separan sin necesidad de líneas. */
+  fondosAlternos: boolean
+  /** Letra capital al arrancar cada sección larga, como en el boletín impreso. */
+  letraCapital: boolean
+  /** Las secciones entran suavemente al bajar. Respeta «reducir movimiento». */
+  animaciones: boolean
+  /** Foto a sangre que parte la página en dos. */
+  sangre: FotoSangre
+  /** Las cifras de la hermandad, para la portada. */
+  cifras: CifraWeb[]
+  /** Cuenta atrás a la estación de penitencia, en la portada. */
+  cuentaAtras: boolean
+  /** El próximo culto, destacado en la portada. */
+  proximoCulto: boolean
   /**
    * La sección de Cultos saca también los próximos eventos del calendario
    * (módulo de Eventos), sin tener que copiarlos a mano cada vez.
@@ -632,6 +796,66 @@ export interface WebPublica {
 
   // Pie
   textoPie: string
+}
+
+/** Lenguas que se ofrecen. Las cuatro de España más el inglés del turista. */
+export const IDIOMAS: { id: string; nombre: string }[] = [
+  { id: 'es', nombre: 'Castellano' },
+  { id: 'ca', nombre: 'Català' },
+  { id: 'gl', nombre: 'Galego' },
+  { id: 'eu', nombre: 'Euskara' },
+  { id: 'va', nombre: 'Valencià' },
+  { id: 'en', nombre: 'English' },
+  { id: 'fr', nombre: 'Français' },
+  { id: 'de', nombre: 'Deutsch' },
+  { id: 'it', nombre: 'Italiano' },
+]
+
+/**
+ * Guiones de ejemplo para empezar a escribir. La hermandad que se queda
+ * mirando la caja vacía no escribe nada; con un guion delante, corrige. Todo
+ * lo que hay aquí está pensado para ser reescrito, no para publicarse tal cual.
+ */
+export const GUION_HISTORIA: ContenidoRico = {
+  entradilla: 'Siglos de devoción en el mismo barrio.',
+  parrafos: [
+    { id: 'g-h1', subtitulo: 'Fundación', texto: 'Escribe aquí cuándo y por quién se fundó la hermandad, en qué parroquia o convento, y qué se sabe de aquellos primeros años. Si hay una fecha documentada, dila: es lo primero que busca quien entra.' },
+    { id: 'g-h2', subtitulo: 'Los siglos difíciles', texto: 'La desamortización, las guerras, los años en que no se salió. Contar lo que costó llegar hasta hoy es lo que hace que una historia se lea.' },
+    { id: 'g-h3', subtitulo: 'La reorganización', texto: 'Cuándo se recuperó la hermandad, quién tiró de ella y qué se hizo primero: las imágenes, la casa de hermandad, el paso, los enseres.' },
+    { id: 'g-h4', subtitulo: 'Hoy', texto: 'Cuántos hermanos sois, qué cultos organizáis durante el año, qué labor de caridad hacéis y qué día salís en estación de penitencia.' },
+  ],
+  fotos: [],
+}
+
+export const GUION_ESTACION: EstacionPenitencia = {
+  dia: 'Viernes Santo',
+  anio: String(new Date().getFullYear() + 1),
+  horaSalida: '17:30',
+  horaEntrada: '01:15',
+  salidaDesde: 'Parroquia de …',
+  nota: 'Se recomienda llegar con media hora de antelación. El mejor sitio para verla es … Los hermanos de luz deben estar en la casa de hermandad a las …',
+  itinerario: [
+    { id: 'g-i1', lugar: 'Plaza de la Parroquia', hora: '17:30', destacada: true },
+    { id: 'g-i2', lugar: 'Calle Mayor', hora: '17:50', destacada: false },
+    { id: 'g-i3', lugar: 'Plaza del Ayuntamiento', hora: '18:40', destacada: true },
+    { id: 'g-i4', lugar: 'Calle de la Cruz', hora: '19:30', destacada: false },
+    { id: 'g-i5', lugar: 'Catedral (entrada)', hora: '20:15', destacada: true },
+    { id: 'g-i6', lugar: 'Regreso por Calle Ancha', hora: '22:00', destacada: false },
+    { id: 'g-i7', lugar: 'Parroquia (entrada)', hora: '01:15', destacada: true },
+  ],
+  fechaSalida: '',
+}
+
+export const GUION_PAGINA_CARIDAD = {
+  icono: '🤲',
+  antetitulo: 'Nuestra labor',
+  titulo: 'Bolsa de caridad',
+  entradilla: 'Lo que la hermandad hace durante todo el año, no solo el día de la salida.',
+  parrafos: [
+    { id: 'g-c1', subtitulo: 'A quién ayudamos', texto: 'Explica a qué familias, con qué entidades del barrio colaboráis y desde cuándo.' },
+    { id: 'g-c2', subtitulo: 'Cómo colaborar', texto: 'Cómo puede ayudar un hermano o un vecino: aportación mensual, entrega de alimentos, voluntariado, y a quién dirigirse.' },
+  ],
+  fotos: [],
 }
 
 export const CLAVE_WEB_PUBLICA = 'cabildo-web-publica'
@@ -760,6 +984,15 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   mapaIncrustado: true,
   avisoFotos: '',
   marcaAgua: false,
+  idioma: 'es',
+  resumenOtroIdioma: { idioma: 'en', titulo: '', texto: '' },
+  fondosAlternos: true,
+  letraCapital: false,
+  animaciones: true,
+  sangre: { fotoDataUrl: null, texto: '', despuesDe: '' },
+  cifras: [],
+  cuentaAtras: true,
+  proximoCulto: true,
   cultosDelCalendario: true,
   pareja: 'canonica',
   redondeo: 'suave',
@@ -861,7 +1094,7 @@ function aContenidoRico(valor: unknown): ContenidoRico {
     return {
       entradilla: c.entradilla ?? '',
       parrafos: Array.isArray(c.parrafos) ? c.parrafos : [],
-      fotos: Array.isArray(c.fotos) ? c.fotos : [],
+      fotos: aFotosWeb(c.fotos),
     }
   }
   return { ...WEB_PUBLICA_INICIAL.historia }
@@ -908,6 +1141,10 @@ export function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
     cabecera: { ...CABECERA_INICIAL, ...(guardado.cabecera ?? {}) },
     pie: { ...PIE_INICIAL, ...(guardado.pie ?? {}) },
     seo: { ...SEO_INICIAL, ...(guardado.seo ?? {}) },
+    // Objetos nuevos: lo guardado por una versión anterior no los trae.
+    sangre: { ...WEB_PUBLICA_INICIAL.sangre, ...(guardado.sangre ?? {}) },
+    resumenOtroIdioma: { ...WEB_PUBLICA_INICIAL.resumenOtroIdioma, ...(guardado.resumenOtroIdioma ?? {}) },
+    cifras: guardado.cifras ?? [],
     // Se leen como parciales a propósito: lo guardado por una versión anterior
     // NO trae los campos nuevos, aunque el tipo diga que sí.
     titulares: (guardado.titulares ?? WEB_PUBLICA_INICIAL.titulares).map((t: Partial<Titular>) => ({
@@ -920,7 +1157,7 @@ export function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
       slug: t.slug ?? '',
       credito: t.credito ?? '',
       alt: t.alt ?? '',
-      fotos: t.fotos ?? [],
+      fotos: aFotosWeb(t.fotos),
     })),
     cultos: (guardado.cultos ?? WEB_PUBLICA_INICIAL.cultos).map((c: Partial<CultoWeb>) => ({
       id: c.id ?? 'culto',
@@ -952,8 +1189,42 @@ export function getWebPublica(): WebPublica {
   return conDefectos(leerPersistido<Partial<WebPublica>>(CLAVE_WEB_PUBLICA, WEB_PUBLICA_INICIAL))
 }
 
+/**
+ * Guarda la web. SIEMPRE en el navegador primero: es lo que se ve al recargar
+ * y no puede depender de que la red vaya. Después, si hay base de datos, se
+ * sube también, que es de donde la lee la función que sirve el HTML con los
+ * datos de la hermandad (ver `api/w.ts`). Si la subida falla, no pasa nada:
+ * lo guardado en el navegador sigue ahí y se reintenta al siguiente cambio.
+ */
 export function saveWebPublica(web: WebPublica) {
   guardarConAviso(CLAVE_WEB_PUBLICA, web)
+  subirWebAlServidor(web)
+}
+
+/**
+ * Sube la web a Supabase para que la pueda leer un servidor. Se traga los
+ * errores a propósito: esto es un extra, no el guardado de verdad.
+ */
+let avisadoDeSubida = false
+export async function subirWebAlServidor(web: WebPublica): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return false
+  try {
+    const { error } = await supabase
+      .from('web_publica')
+      .upsert({ id: 1, slug: web.slug, publicada: web.publicada, datos: web }, { onConflict: 'id' })
+    if (error) throw new Error(error.message)
+    avisadoDeSubida = false
+    return true
+  } catch (e) {
+    // Se avisa UNA vez. Con la base de datos en pausa (o sin la tabla, que hace
+    // falta `supabase/web-publica.sql`) esto falla en cada tecla que se
+    // escriba, y la consola se llenaba del mismo error mil veces.
+    if (!avisadoDeSubida) {
+      avisadoDeSubida = true
+      console.warn('La web se ha guardado en este navegador, pero no se ha podido subir:', e)
+    }
+    return false
+  }
 }
 
 /** Hook con la web pública y un setter que persiste. */

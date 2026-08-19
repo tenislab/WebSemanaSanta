@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { leerPersistido } from './persistencia'
+import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { isSupabaseConfigured } from './supabase'
 import { fetchPermisosPorCargoRemoto, guardarPermisosPorCargoRemoto } from './db/permisos'
 import { CARGOS, type Cargo } from '../data/documentos'
@@ -87,6 +87,10 @@ export function usePermisosPorCargo(): Record<Cargo, string[]> {
     setPermisos(getPermisosPorCargo())
     // Se relee de localStorage (ya actualizado por usePermisosSincronizados) cada vez que llega una versión nueva.
   }, [version])
+  // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
+  // la vez) se refleja aquí sin recargar.
+  useEscuchaOtrasPestanas(STORAGE_KEY, () => setPermisos(getPermisosPorCargo()))
+
   return permisos
 }
 

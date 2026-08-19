@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
-import { leerPersistido } from './persistencia'
+import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { modoDemoActivo } from './demo'
 
 /**
@@ -105,6 +105,19 @@ export function useSupabaseTable<T extends { id: string }>(
     // Solo al montar/cambio de sesión: cada página monta este hook una vez por colección.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabla])
+
+  // Lo que escriba otra pestaña (el panel mientras el hermano tiene su área
+  // abierta, o al revés) entra aquí sin recargar. Se usa `setItemsState` y no
+  // `setItems` a propósito: la otra pestaña ya lo mandó a Supabase.
+  useEscuchaOtrasPestanas(claveLocal, (crudo) => {
+    setItemsState((actual) => {
+      try {
+        return JSON.stringify(actual) === crudo ? actual : (JSON.parse(crudo) as T[])
+      } catch {
+        return actual
+      }
+    })
+  })
 
   function setItems(actualizador: Actualizador<T>) {
     setItemsState((prev) => {

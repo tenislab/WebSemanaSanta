@@ -481,11 +481,14 @@ export default function Cortejo() {
           <table>
             <thead>
               <tr>
+                {/* En el móvil se dejan puesto, hermano, estado y las acciones:
+                    el día de salida el diputado de tramo lleva el teléfono y
+                    necesita marcar presente sin abrir nada. */}
                 <th>Puesto</th>
                 <th>Hermano</th>
-                {cuerposPresentes.length > 1 && <th>Cuerpo</th>}
-                <th>Tramo</th>
-                <th>Papeleta</th>
+                {cuerposPresentes.length > 1 && <th className="col-opcional">Cuerpo</th>}
+                <th className="col-opcional">Tramo</th>
+                <th className="col-opcional">Papeleta</th>
                 <th>Estado</th>
                 <th></th>
               </tr>
@@ -500,12 +503,15 @@ export default function Cortejo() {
                       <span>
                         <span className="row-person__name">{f.hermano.nombre}</span>
                         <span className="row-person__sub">Nº {f.hermano.numero}</span>
+                        <span className="row-person__sub solo-movil">
+                          {f.tramo ? etiquetaTramo(f.tramo) : 'Sin asignar'} · papeleta {String(f.papeleta.numero).padStart(4, '0')}
+                        </span>
                       </span>
                     </div>
                   </td>
-                  {cuerposPresentes.length > 1 && <td>{f.tramo?.cuerpo ?? '—'}</td>}
-                  <td>{f.tramo ? etiquetaTramo(f.tramo) : <span className="table-muted">Sin asignar</span>}</td>
-                  <td className="num">{String(f.papeleta.numero).padStart(4, '0')}</td>
+                  {cuerposPresentes.length > 1 && <td className="col-opcional">{f.tramo?.cuerpo ?? '—'}</td>}
+                  <td className="col-opcional">{f.tramo ? etiquetaTramo(f.tramo) : <span className="table-muted">Sin asignar</span>}</td>
+                  <td className="num col-opcional">{String(f.papeleta.numero).padStart(4, '0')}</td>
                   <td>
                     <span className={`pill ${estadoPillClass(f.estado)}`}>{f.estado}</span>
                   </td>

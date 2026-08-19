@@ -1230,7 +1230,20 @@ h1, h2, h3,
 .drawer__close svg { width: 15px; height: 15px; }
 .drawer__close:hover { color: var(--text); border-color: var(--gold); }
 .drawer__body { flex: 1; overflow-y: auto; padding: 1.4rem; }
-.drawer__foot { display: flex; justify-content: flex-end; gap: 0.7rem; padding: 1.1rem 1.4rem; border-top: 1px solid var(--line); }
+/* Los botones no encogen su texto (`.btn` lleva `white-space: nowrap`), así que
+   con tres o más se salían del panel por la izquierda, por encima del velo: en
+   un recibo pendiente «Marcar como pagada» empezaba 130 px fuera, y en el móvil
+   se quedaba en coordenada negativa, sin forma de pulsarlo. */
+.drawer__foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+  gap: 0.6rem; padding: 1.1rem 1.4rem; border-top: 1px solid var(--line);
+}
+/* Con tres o más acciones no caben en una fila de 440 px, y envolviéndolas
+   quedaba una escalera de botones de tres anchos distintos. Se apilan a lo
+   ancho, con la principal abajo: se lee de un vistazo y se pulsa mejor. */
+.drawer__foot:has(> :nth-child(3)) {
+  flex-direction: column; align-items: stretch; justify-content: flex-start;
+}
 
 .ficha__row { display: flex; gap: 0.5rem; margin-bottom: 1.3rem; }
 .ficha__list { display: flex; flex-direction: column; gap: 0.9rem; margin: 0; }
@@ -2074,7 +2087,9 @@ input[aria-invalid='true'], textarea[aria-invalid='true'] { border-color: var(--
 
 /* Editor de la web: secciones (orden/visibilidad) y galería */
 .secciones-lista { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-.seccion-item { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; }
+.seccion-item { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.4rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; }
+.seccion-item__nom { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; flex: 0 0 auto; }
+.seccion-item__estado { font-size: 0.82rem; padding: 0.3rem 0.45rem; flex: 0 0 auto; width: auto; }
 .seccion-item__orden { display: flex; gap: 0.2rem; }
 .galeria-editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.8rem; }
 .galeria-editor__item { display: flex; flex-direction: column; gap: 0.35rem; position: relative; }
@@ -3281,6 +3296,10 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .search-box { max-width: none; }
   .drawer { max-width: 100%; }
+  /* En columna: cada acción a lo ancho, y la principal abajo (donde llega el
+     pulgar). Apilarlas es lo único que cabe con tres o cuatro botones. */
+  .drawer__foot { flex-direction: column; align-items: stretch; }
+  .drawer__foot > * { width: 100%; }
 
   .form-grid-2 { grid-template-columns: 1fr; }
   .logo-uploader { flex-direction: column; }
@@ -3348,13 +3367,19 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
 }
 .sitio[data-plantilla='revista'] .sitio__seccion h2::after { display: none; }
 .sitio[data-plantilla='revista'] .sitio__entradilla { font-size: 1.08rem; font-style: italic; text-align: center; }
-/* Capitular en el primer párrafo de cada sección. */
-.sitio[data-plantilla='revista'] .sitio__parrafo:first-of-type .sitio__texto::first-letter {
+/* Capitular en el primer párrafo de cada sección. Ahora los párrafos van
+   dentro de `.sitio__bloque`, así que se apunta al primer bloque; y se ofrece
+   también como interruptor propio (`.sitio--capital`) para cualquier estilo. */
+.sitio[data-plantilla='revista'] .sitio__editorial > .sitio__bloque:first-child .sitio__texto::first-letter,
+.sitio--capital .sitio__editorial > .sitio__bloque:first-child .sitio__texto::first-letter {
   float: left; font-size: 3.1em; line-height: 0.82; padding: 0.06em 0.12em 0 0;
   color: var(--sitio-color-texto); font-weight: 600;
 }
 @container sitio (min-width: 760px) {
   .sitio[data-plantilla='revista'] .sitio__texto { column-count: 2; column-gap: 2.2rem; text-align: justify; hyphens: auto; }
+  /* Salvo cuando el párrafo comparte fila con una foto: en media página, dos
+     columnas de texto son dos hilos de cinco palabras. */
+  .sitio[data-plantilla='revista'] .sitio__bloque--confoto .sitio__texto { column-count: 1; text-align: left; }
 }
 .sitio[data-plantilla='revista'] .sitio__culto,
 .sitio[data-plantilla='revista'] .sitio__noticia {
@@ -4255,6 +4280,9 @@ html:has(.sitio) { scroll-behavior: smooth; }
 }
 .sitio__noticia-foto {
   width: 100%;
+  /* Con la caja reservada, la página no da un salto cuando la foto acaba de
+     cargar y el lector pierde la línea por la que iba. */
+  aspect-ratio: 16 / 9;
   max-height: 26rem;
   object-fit: cover;
   border-radius: var(--sitio-radio);
@@ -4392,4 +4420,273 @@ html:has(.sitio) { scroll-behavior: smooth; }
   .sitio__ficha-cabeza { grid-template-columns: minmax(0, 1fr); }
   .sitio__titular--vuelto .sitio__titular-foto { order: 0; }
   .sitio__titular-foto img, .sitio__ficha-foto img { aspect-ratio: 4/3; }
+}
+
+/* ============ Tablas en el móvil ============
+   Las tablas de la app tienen seis o siete columnas: en un teléfono solo caben
+   tres, y el resto se quedaba fuera, alcanzable solo arrastrando la tabla de
+   lado (y sin que se notara que había más). Las columnas de apoyo se marcan
+   con `col-opcional`, y su dato se dobla bajo el nombre con `solo-movil`. */
+.solo-movil { display: none; }
+@media (max-width: 620px) {
+  .col-opcional { display: none; }
+  .solo-movil { display: block; }
+  /* Sin las columnas de apoyo la tabla ya no necesita sus 720 px de ancho
+     mínimo, y cabe entera en la pantalla sin arrastrarla de lado. Solo se
+     relaja en las tablas adaptadas: en las demás, apretar siete columnas en
+     350 px sería peor que el scroll. */
+  .table-card table:has(.col-opcional) { min-width: 0; }
+  /* Y con menos aire a los lados: en 350 px cada milímetro cuenta. */
+  .table-card table:has(.col-opcional) thead th,
+  .table-card table:has(.col-opcional) tbody td { padding-left: 0.6rem; padding-right: 0.6rem; }
+  /* El avatar cede sus milímetros al nombre: en 350 px, que el nombre quepa en
+     una línea vale más que la inicial de colores. */
+  .table-card table:has(.col-opcional) .row-avatar { width: 24px; height: 24px; font-size: 0.62rem; }
+  .table-card table:has(.col-opcional) .row-person { gap: 0.45rem; }
+  .solo-movil { font-size: 0.72rem; }
+  /* La casilla de marcar no necesita el mismo aire que una columna de texto. */
+  .table-card table:has(.col-opcional) .col-marca { padding-left: 0.5rem; padding-right: 0.15rem; }
+  /* La cabecera es una etiqueta en versalitas: encogerla no cuesta legibilidad
+     y son los milímetros que faltaban para que el censo cupiera entero. */
+  .table-card table:has(.col-opcional) thead th { font-size: 0.62rem; }
+}
+
+/* Aviso de baja en el área del hermano: va antes del saludo, a lo ancho. */
+.portal__baja { margin-bottom: 1.2rem; }
+
+/* =========================================================================
+   W5 · Diseño editorial: romper el centrado
+   ========================================================================= */
+
+/* ---- Franjas de fondo alternas ----
+   Separan una sección de la siguiente sin una sola línea. La franja es un
+   pseudo-elemento tan ancho como el contenedor `sitio` (100cqw), no como la
+   ventana: así no desborda en la vista previa del panel, que es más estrecha.
+   El contenido se levanta con `position: relative` en vez de mandar la franja
+   a un z-index negativo, que la dejaría detrás del fondo de `.sitio`. */
+.sitio--franjas .sitio__main > section:nth-of-type(even) { position: relative; }
+.sitio--franjas .sitio__main > section:nth-of-type(even)::before {
+  content: '';
+  position: absolute;
+  top: calc(-1.4rem * var(--sitio-aire));
+  bottom: calc(-1.4rem * var(--sitio-aire));
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100cqw;
+  background: var(--sitio-bg2);
+  z-index: 0;
+}
+.sitio--franjas .sitio__main > section:nth-of-type(even) > * { position: relative; z-index: 1; }
+
+/* ---- Bloques alternos: foto a un lado, texto al otro ---- */
+.sitio__editorial { display: grid; gap: calc(2rem * var(--sitio-aire)); }
+.sitio__bloque--confoto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(1.1rem, 4cqi, 2.4rem);
+  align-items: center;
+}
+/* La foto cambia de lado, y con ella el reparto de columnas. */
+.sitio__bloque--confoto.sitio__bloque--vuelto .sitio__bloque-foto { order: 2; }
+.sitio__bloque-foto { margin: 0; min-width: 0; }
+.sitio__bloque-foto img {
+  display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover;
+  border-radius: var(--sitio-radio);
+}
+.sitio__bloque-texto { min-width: 0; }
+/* A la izquierda en todas las plantillas: un párrafo largo centrado, y encima
+   partido en dos columnas, no hay quien lo lea. Este peso hace falta para
+   ganarle a `.sitio[data-plantilla='clasica'] .sitio__seccion`. */
+.sitio[data-plantilla] .sitio__seccion .sitio__bloque--confoto .sitio__bloque-texto { text-align: left; }
+.sitio__bloque-texto h3 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: 1.15rem; margin-bottom: 0.35rem; text-wrap: balance;
+}
+
+/* ---- Cita destacada ---- */
+.sitio__cita {
+  margin: 0; padding: 0.2rem 0 0.2rem clamp(0.9rem, 3cqi, 1.6rem);
+  border-left: 3px solid var(--sitio-color2);
+  text-align: left;
+}
+.sitio__cita p {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: clamp(1.15rem, 3cqi, 1.5rem); line-height: 1.4;
+  color: var(--sitio-color-texto); font-style: italic; margin: 0;
+  text-wrap: balance; white-space: pre-wrap;
+}
+.sitio__cita cite {
+  display: block; margin-top: 0.5rem; font-style: normal;
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--sitio-muted);
+}
+
+/* ---- Foto a sangre: de borde a borde ---- */
+.sitio__sangre {
+  position: relative;
+  width: 100cqw;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: calc(2.4rem * var(--sitio-aire)) 0;
+}
+.sitio__sangre img {
+  display: block; width: 100%; height: clamp(180px, 42cqi, 460px); object-fit: cover;
+}
+.sitio__sangre-texto {
+  position: absolute; inset: auto 0 0 0;
+  margin: 0; padding: clamp(1rem, 4cqi, 2.4rem);
+  font-family: var(--sitio-fuente-titulos);
+  font-size: clamp(1.1rem, 3.4cqi, 2rem); line-height: 1.25; text-wrap: balance;
+  color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+  background: linear-gradient(to top, rgba(0,0,0,0.62), transparent);
+}
+
+/* ---- Bloques de portada: cuenta atrás, próximo culto y cifras ---- */
+.sitio__portada {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem; margin-bottom: calc(2.4rem * var(--sitio-aire));
+}
+.sitio__cuenta, .sitio__proximo {
+  border: 1px solid var(--sitio-linea); border-radius: var(--sitio-radio);
+  padding: 1.2rem 1.4rem; background: var(--sitio-bg2); text-align: left;
+}
+.sitio__cuenta { display: flex; flex-direction: column; gap: 0.1rem; justify-content: center; }
+.sitio__cuenta-num {
+  font-family: var(--sitio-fuente-titulos); font-size: clamp(2.4rem, 9cqi, 4rem);
+  line-height: 1; color: var(--sitio-color-texto); font-variant-numeric: tabular-nums;
+}
+.sitio__cuenta-txt { font-size: 0.95rem; color: var(--sitio-fg); }
+.sitio__cuenta-pie { font-size: 0.8rem; color: var(--sitio-muted); margin-top: 0.35rem; }
+.sitio__proximo-ante {
+  display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--sitio-color2-texto); font-weight: 700; margin-bottom: 0.3rem;
+}
+.sitio__proximo h3 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: 1.15rem; margin-bottom: 0.2rem; text-wrap: balance;
+}
+.sitio__proximo-cuando { font-weight: 600; margin-bottom: 0.1rem; }
+.sitio__proximo-donde { color: var(--sitio-muted); font-size: 0.9rem; }
+.sitio__cifras {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 0.9rem; align-content: center; padding: 1.2rem 0;
+}
+.sitio__cifras > div { text-align: center; }
+.sitio__cifras strong {
+  display: block; font-family: var(--sitio-fuente-titulos);
+  font-size: clamp(1.5rem, 5cqi, 2.2rem); line-height: 1.1; color: var(--sitio-color-texto);
+  font-variant-numeric: tabular-nums;
+}
+.sitio__cifras span {
+  display: block; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--sitio-muted); margin-top: 0.2rem;
+}
+
+/* ---- Entrada suave al bajar ----
+   La clase la pone el propio componente solo cuando toca (web de verdad,
+   animaciones activadas y sin «reducir movimiento»), así que aquí no hace
+   falta repetir la comprobación: si no se pone la clase, no hay animación. */
+/* Se usa `translate` y no `transform`: la foto a sangre ya se centra con
+   `transform: translateX(-50%)`, y una segunda regla de `transform` se la
+   comía dejándola media pantalla desplazada. `translate` es una propiedad
+   aparte y se compone con la otra. */
+.sitio__entra { opacity: 0; translate: 0 14px; transition: opacity 0.5s ease, translate 0.5s ease; }
+.sitio__entra--visto { opacity: 1; translate: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sitio__entra { opacity: 1; translate: none; transition: none; }
+}
+
+@container sitio (max-width: 700px) {
+  /* En el móvil no caben dos columnas: la foto arriba y el texto debajo. */
+  .sitio__bloque--confoto,
+  .sitio__bloque--confoto.sitio__bloque--vuelto { grid-template-columns: minmax(0, 1fr); }
+  .sitio__bloque--confoto.sitio__bloque--vuelto .sitio__bloque-foto { order: 0; }
+  .sitio__portada { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Botón redondo en estado «activo» (p. ej. el párrafo marcado como cita). */
+.icon-btn--on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ============ W7 · Accesibilidad e idioma ============ */
+
+/* Unas líneas en otra lengua bajo la portada, para el visitante de fuera. */
+.sitio__otroidioma {
+  border-left: 3px solid var(--sitio-color2);
+  padding: 0.1rem 0 0.1rem 1.1rem;
+  margin-bottom: calc(2.2rem * var(--sitio-aire));
+  text-align: left;
+}
+.sitio__otroidioma h2 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto);
+  font-size: 1.05rem; margin-bottom: 0.3rem;
+}
+/* Con el mismo peso que `.sitio[data-plantilla='clasica'] .sitio__seccion h2`,
+   que lo centraría y le pondría la florecita y el subrayado. */
+.sitio[data-plantilla] .sitio__otroidioma h2 { text-align: left; }
+.sitio[data-plantilla] .sitio__otroidioma h2::before,
+.sitio[data-plantilla] .sitio__otroidioma h2::after { display: none; }
+.sitio__otroidioma p { color: var(--sitio-muted); line-height: 1.7; white-space: pre-wrap; }
+
+@container sitio (max-width: 700px) {
+  /* Objetivos cómodos para el dedo en el menú de móvil: 44 px de alto es lo
+     que recomiendan Apple y Google, y lo que hace que no se falle el enlace. */
+  .sitio__menu a,
+  .sitio__menu-grupo-btn,
+  .sitio__menu-sub a { min-height: 44px; display: flex; align-items: center; }
+  .sitio__visor-cerrar, .sitio__visor-flecha { min-width: 44px; min-height: 44px; }
+}
+
+/* ============ W8 · El editor a la altura ============ */
+
+/* Las dos previas de «Al compartir», una al lado de la otra. */
+.compartir-previas { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.2rem; align-items: start; }
+.compartir-previa__eti {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); font-weight: 700; margin-bottom: 0.4rem;
+}
+/* Un resultado de Google, con sus proporciones y sus colores. */
+.google-previa {
+  max-width: 420px; padding: 0.9rem 1rem; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--bg-raised);
+  font-family: Arial, system-ui, sans-serif;
+}
+.google-previa__marca { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+.google-previa__favicon {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-size: 0.8rem; font-weight: 700;
+  background: var(--accent); color: var(--accent-ink, #fff);
+}
+.google-previa__marca b { display: block; font-size: 0.82rem; line-height: 1.2; }
+.google-previa__marca small { font-size: 0.74rem; color: var(--text-muted); }
+/* El azul de Google en claro y el que usa en oscuro: es lo que se reconoce. */
+.google-previa__titulo { font-size: 1.05rem; line-height: 1.3; color: #1a0dab; margin-bottom: 0.2rem; }
+.google-previa__desc { font-size: 0.82rem; line-height: 1.5; color: var(--text-muted); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .google-previa__titulo { color: #8ab4f8; }
+}
+:root[data-theme='dark'] .google-previa__titulo { color: #8ab4f8; }
+
+/* Buscador del raíl del editor. */
+.cms-rail__buscar { margin: 0 0 0.5rem; }
+.cms-rail__buscar input { width: 100%; font-size: 0.86rem; padding: 0.45rem 0.6rem; }
+.cms-rail__vacio { font-size: 0.8rem; color: var(--text-muted); padding: 0.4rem 0.2rem; }
+
+/* Sección en borrador: se ve en la vista previa, no en la web. */
+.cms-borrador {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
+  font-weight: 700; color: var(--warn-fg, #8a6d1f);
+  background: color-mix(in srgb, var(--warn-fg, #8a6d1f) 14%, transparent);
+  padding: 0.05rem 0.35rem; border-radius: 999px;
+}
+.sitio__seccion--borrador { position: relative; }
+.sitio__seccion--borrador::after {
+  content: 'Borrador';
+  position: absolute; top: 0; right: 0;
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+  background: #8a6d1f; color: #fff; padding: 0.1rem 0.45rem; border-radius: 999px;
+  z-index: 2;
 }

@@ -7,6 +7,7 @@ import {
   noticiasPublicadas,
   slugNoticia,
   slugTitular,
+  type CultoWeb,
   type Noticia,
   type Titular,
   type WebPublica,
@@ -15,8 +16,15 @@ import { useHermandadSettings, type HermandadSettings } from '../lib/hermandadSe
 import { getSuscripcion, tieneCapacidad } from '../lib/suscripcion'
 import { haySesionAbierta } from '../lib/sesion'
 import { LogoMark } from '../components/Logo'
-import SitioContenido, { AvisoFotos, FotoConMarca, Galeria, PieSitio, TarjetaNoticia } from '../components/SitioContenido'
+import SitioContenido, { AvisoFotos, FotoConMarca, Galeria, Parrafos, PieSitio, TarjetaNoticia } from '../components/SitioContenido'
 import { cultosDelCalendario } from '../lib/cultosDelCalendario'
+import {
+  baseDeLaWeb,
+  datosEstructurados,
+  descripcionWeb,
+  tituloWeb,
+  urlAbsoluta,
+} from '../lib/seoWeb'
 
 /**
  * Web pública de la hermandad (/w/:slug). Con ?preview=1 se muestra aunque no
@@ -79,7 +87,8 @@ export default function SitioPublico() {
         <MetaWeb
           web={web}
           hermandad={hermandad}
-          pieza={{ titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl }}
+          cultos={cultosCalendario}
+          pieza={{ titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl, ruta: `/n/${slugNoticia(n)}` }}
         />
         <PaginaNoticia web={web} hermandad={hermandad} noticia={n} />
       </>
@@ -104,10 +113,12 @@ export default function SitioPublico() {
         <MetaWeb
           web={web}
           hermandad={hermandad}
+          cultos={cultosCalendario}
           pieza={{
             titulo: t.nombre,
             descripcion: t.descripcion.trim() || t.autoria.trim(),
             imagen: t.fotoDataUrl,
+            ruta: `/t/${slugTitular(t)}`,
           }}
         />
         <PaginaTitular web={web} hermandad={hermandad} titular={t} />
@@ -119,7 +130,7 @@ export default function SitioPublico() {
   if (window.location.pathname.endsWith('/noticias')) {
     return (
       <>
-        <MetaWeb web={web} hermandad={hermandad} />
+        <MetaWeb web={web} hermandad={hermandad} cultos={cultosCalendario} pieza={{ titulo: 'Actualidad', descripcion: '', imagen: null, ruta: '/noticias' }} />
         <ListadoNoticias web={web} hermandad={hermandad} />
       </>
     )
@@ -127,7 +138,7 @@ export default function SitioPublico() {
 
   return (
     <>
-      <MetaWeb web={web} hermandad={hermandad} />
+      <MetaWeb web={web} hermandad={hermandad} cultos={cultosCalendario} />
       <SitioContenido web={web} hermandad={hermandad} cultosDelCalendario={cultosCalendario} />
     </>
   )
@@ -151,7 +162,7 @@ function MarcoSuelto({
           «Clásica» apila la marca sobre el menú, y aquí no hay menú. */}
       <header className="sitio__nav sitio__nav--suelta">
         <Link to={`/w/${web.slug}`} className="sitio__brand">
-          {logo ? <img src={logo} alt="" className="sitio__logo" /> : <LogoMark size={30} />}
+          {logo ? <img src={logo} alt="" className="sitio__logo" decoding="async" /> : <LogoMark size={30} />}
           <span className="sitio__brand-texto"><span>{titulo}</span></span>
         </Link>
         <Link to={`/w/${web.slug}`} className="sitio-btn sitio-btn--sm">Volver a la web</Link>
@@ -173,6 +184,7 @@ function SitioMarco({ web, children }: { web: WebPublica; children: React.ReactN
   return (
     <div
       className="sitio"
+      lang={web.idioma || 'es'}
       data-plantilla={web.plantilla}
       data-tema={web.tema}
       style={{
@@ -204,13 +216,10 @@ function PaginaNoticia({
         <p className="sitio__noticia-fecha">{fechaLegible(noticia.fecha)}</p>
         <h1>{noticia.titulo}</h1>
         {noticia.resumen && <p className="sitio__entradilla">{noticia.resumen}</p>}
-        {noticia.fotoDataUrl && <img src={noticia.fotoDataUrl} alt="" className="sitio__noticia-foto" />}
-        {(noticia.parrafos ?? []).map((p) => (
-          <div key={p.id}>
-            {p.subtitulo && <h2>{p.subtitulo}</h2>}
-            <p className="sitio__texto">{p.texto}</p>
-          </div>
-        ))}
+        {noticia.fotoDataUrl && (
+          <img src={noticia.fotoDataUrl} alt={noticia.altFoto ?? ''} className="sitio__noticia-foto" decoding="async" />
+        )}
+        <Parrafos parrafos={noticia.parrafos ?? []} />
       </article>
     </MarcoSuelto>
   )
@@ -251,12 +260,7 @@ function PaginaTitular({
           </div>
         </header>
 
-        {parrafos.map((p) => (
-          <div className="sitio__parrafo" key={p.id}>
-            {p.subtitulo.trim() && <h2>{p.subtitulo}</h2>}
-            {p.texto.trim() && <p className="sitio__texto">{p.texto}</p>}
-          </div>
-        ))}
+        <Parrafos parrafos={parrafos} />
 
         {fotos.length > 0 && (
           <div className="sitio__ficha-fotos">
@@ -264,7 +268,7 @@ function PaginaTitular({
                 se pasa de una a otra con las flechas. El aviso de derechos lo
                 pone la ficha una sola vez, más abajo. */}
             <Galeria
-              albumes={[{ id: 'ficha', titulo: '', descripcion: '', fecha: '', fotos: fotos.map((f, i) => ({ id: `ficha-${i}`, fotoDataUrl: f, pie: '' })) }]}
+              albumes={[{ id: 'ficha', titulo: '', descripcion: '', fecha: '', fotos: fotos.map((f, i) => ({ id: `ficha-${i}`, fotoDataUrl: f.url, pie: f.alt })) }]}
               interactivo
               marca={marca}
               aviso=""
@@ -282,7 +286,7 @@ function PaginaTitular({
             {otros.map((o) => (
               <li key={o.id}>
                 <Link to={`/w/${web.slug}/t/${slugTitular(o)}`}>
-                  {o.fotoDataUrl && <img src={o.fotoDataUrl} alt="" loading="lazy" />}
+                  {o.fotoDataUrl && <img src={o.fotoDataUrl} alt="" loading="lazy" decoding="async" />}
                   <span>{o.nombre}</span>
                 </Link>
               </li>
@@ -325,15 +329,18 @@ function fechaLegible(iso: string): string {
 function MetaWeb({
   web,
   hermandad,
+  cultos,
   pieza,
 }: {
   web: WebPublica
   hermandad: HermandadSettings
+  /** Los próximos cultos, para los datos estructurados de Google. */
+  cultos: CultoWeb[]
   /**
    * En una página suelta (una noticia, la ficha de un titular) mandan SU
    * título, SU descripción y SU foto: es lo que se pega en WhatsApp.
    */
-  pieza?: { titulo: string; descripcion: string; imagen: string | null }
+  pieza?: { titulo: string; descripcion: string; imagen: string | null; ruta: string }
 }) {
   // Se sacan los campos sueltos a propósito: `pieza` es un objeto nuevo en cada
   // render, y como dependencia del efecto lo dispararía una y otra vez.
@@ -341,16 +348,14 @@ function MetaWeb({
   const piezaTitulo = pieza?.titulo ?? ''
   const piezaDescripcion = pieza?.descripcion ?? ''
   const piezaImagen = pieza?.imagen ?? null
+  const piezaRuta = pieza?.ruta ?? '/'
   useEffect(() => {
     const anterior = document.title
-    // Mismo orden de respaldo que el render del sitio, para que la pestaña y
-    // la tarjeta al compartir digan lo mismo que la web.
-    const nombreWeb = web.seo.titulo.trim() || web.titulo || hermandad.nombreLegal || 'Nuestra Hermandad'
+    const base = baseDeLaWeb(web, window.location.origin)
+    const nombreWeb = tituloWeb(web, hermandad)
     // En una página suelta manda la pieza: es lo que se comparte.
     const titulo = hayPieza ? `${piezaTitulo} · ${nombreWeb}` : nombreWeb
-    const descripcion = hayPieza
-      ? piezaDescripcion.trim() || web.seo.descripcion.trim()
-      : web.seo.descripcion.trim() || web.lema || ''
+    const descripcion = hayPieza ? piezaDescripcion.trim() || descripcionWeb(web) : descripcionWeb(web)
     const imagen =
       piezaImagen
       ?? web.seo.imagenDataUrl
@@ -358,18 +363,19 @@ function MetaWeb({
       ?? web.logoDataUrl
       ?? hermandad.logoDataUrl
       ?? ''
+    const url = urlAbsoluta(base, piezaRuta)
     document.title = titulo
 
-    const puestas: HTMLMetaElement[] = []
+    const puestas: Element[] = []
     // Las que ya existen (las de la aplicación, en index.html) se REEMPLAZAN y
     // se restauran al salir: si solo se añadieran, seguiría mandando la
     // descripción genérica de Cabildo y no la de la hermandad.
-    const restaurar: { el: HTMLMetaElement; antes: string }[] = []
+    const restaurar: { el: Element; attr: string; antes: string | null }[] = []
     function meta(clave: 'name' | 'property', valor: string, contenido: string) {
       if (!contenido) return
-      const existente = document.head.querySelector<HTMLMetaElement>(`meta[${clave}="${valor}"]`)
+      const existente = document.head.querySelector(`meta[${clave}="${valor}"]`)
       if (existente) {
-        restaurar.push({ el: existente, antes: existente.getAttribute('content') ?? '' })
+        restaurar.push({ el: existente, attr: 'content', antes: existente.getAttribute('content') })
         existente.setAttribute('content', contenido)
         return
       }
@@ -379,19 +385,59 @@ function MetaWeb({
       document.head.appendChild(el)
       puestas.push(el)
     }
+    /** Un <link> (canonical, icono) que se pone o se cambia y se deja como estaba. */
+    function enlace(rel: string, href: string, tipo?: string) {
+      if (!href) return
+      const existente = document.head.querySelector(`link[rel="${rel}"]`)
+      if (existente) {
+        restaurar.push({ el: existente, attr: 'href', antes: existente.getAttribute('href') })
+        existente.setAttribute('href', href)
+        return
+      }
+      const el = document.createElement('link')
+      el.setAttribute('rel', rel)
+      el.setAttribute('href', href)
+      if (tipo) el.setAttribute('type', tipo)
+      document.head.appendChild(el)
+      puestas.push(el)
+    }
+
     meta('name', 'description', descripcion)
     meta('property', 'og:title', titulo)
     meta('property', 'og:description', descripcion)
     meta('property', 'og:type', 'website')
+    meta('property', 'og:url', url)
     meta('property', 'og:image', imagen)
+    meta('property', 'og:site_name', nombreWeb)
     meta('name', 'twitter:card', imagen ? 'summary_large_image' : 'summary')
+    // El color de la barra del navegador en el móvil: con el de la hermandad,
+    // la web deja de parecer prestada.
+    meta('name', 'theme-color', web.colorPrimario)
+    // Cuál es la dirección buena de esta página. Con dominio propio configurado
+    // apunta al dominio, no al enlace largo, para que Google no cuente dos.
+    enlace('canonical', url)
+    // El escudo de la hermandad en la pestaña, en vez del de Cabildo.
+    const escudo = web.logoDataUrl ?? hermandad.logoDataUrl
+    if (escudo) enlace('icon', escudo)
+
+    // Datos estructurados: la hermandad, su sede y cada culto con su fecha.
+    // Google sí ejecuta JavaScript al indexar, así que esto le llega; WhatsApp
+    // no, y por eso hace falta además la función de servidor (ver docs/SEO.md).
+    const ld = document.createElement('script')
+    ld.type = 'application/ld+json'
+    ld.textContent = JSON.stringify(datosEstructurados(web, hermandad, cultos, base))
+    document.head.appendChild(ld)
+    puestas.push(ld)
 
     return () => {
       document.title = anterior
       puestas.forEach((el) => el.remove())
-      restaurar.forEach(({ el, antes }) => el.setAttribute('content', antes))
+      restaurar.forEach(({ el, attr, antes }) => {
+        if (antes === null) el.removeAttribute(attr)
+        else el.setAttribute(attr, antes)
+      })
     }
-  }, [web, hermandad, hayPieza, piezaTitulo, piezaDescripcion, piezaImagen])
+  }, [web, hermandad, cultos, hayPieza, piezaTitulo, piezaDescripcion, piezaImagen, piezaRuta])
 
   return null
 }

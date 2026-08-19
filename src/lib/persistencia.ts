@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Claves de localStorage de cada colección de datos. Centralizadas aquí para
@@ -55,6 +55,33 @@ export function guardarConAviso(clave: string, valor: unknown): boolean {
 }
 
 /**
+ * Se entera de que OTRA pestaña ha tocado esta clave.
+ *
+ * Hasta ahora cada colección se leía una sola vez, al montar el componente.
+ * Con el panel de la hermandad en una pestaña y el área del hermano en otra
+ * —que es como se prueba y como se trabaja de verdad— lo que se hacía en una
+ * no aparecía en la otra hasta recargar: el tesorero marcaba una cuota pagada
+ * y el hermano seguía viéndola pendiente.
+ *
+ * El navegador dispara `storage` solo en las DEMÁS pestañas, nunca en la que
+ * escribe, así que no hay ida y vuelta posible.
+ */
+export function useEscuchaOtrasPestanas(clave: string, alCambiar: (crudo: string) => void) {
+  const cb = useRef(alCambiar)
+  cb.current = alCambiar
+  useEffect(() => {
+    function alStorage(e: StorageEvent) {
+      // `newValue` nulo = la clave se ha borrado (restablecer datos de
+      // ejemplo). No se vacía la pantalla a ciegas: esa pestaña recarga sola.
+      if (e.key !== clave || e.storageArea !== localStorage || e.newValue == null) return
+      cb.current(e.newValue)
+    }
+    window.addEventListener('storage', alStorage)
+    return () => window.removeEventListener('storage', alStorage)
+  }, [clave])
+}
+
+/**
  * Como useState, pero cada cambio queda guardado en localStorage, de modo
  * que altas, pagos, asignaciones, etc. sobreviven a una recarga de página.
  * Es el paso intermedio hasta conectar Supabase: la firma no cambia, así
@@ -70,6 +97,19 @@ export function usePersistentState<T>(clave: string, inicial: T) {
       // sin espacio o sin localStorage: la app sigue funcionando en memoria
     }
   }, [clave, value])
+
+  // Lo que cambie en otra pestaña se refleja aquí. Si ya es lo mismo se
+  // devuelve el estado tal cual: sin cambio de estado no hay efecto, y sin
+  // efecto no se vuelve a escribir (que es lo que provocaría un ping-pong).
+  useEscuchaOtrasPestanas(clave, (crudo) => {
+    setValue((actual) => {
+      try {
+        return JSON.stringify(actual) === crudo ? actual : (JSON.parse(crudo) as T)
+      } catch {
+        return actual
+      }
+    })
+  })
 
   return [value, setValue] as const
 }

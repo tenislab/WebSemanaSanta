@@ -183,12 +183,12 @@ export default function Inventario() {
         <table>
           <thead>
             <tr>
-              <th>Nº</th>
+              <th className="col-opcional">Nº</th>
               <th>Pieza</th>
-              <th>Ubicación</th>
+              <th className="col-opcional">Ubicación</th>
               <th>Conservación</th>
-              <th>Valor asegurado</th>
-              <th></th>
+              <th className="col-opcional">Valor asegurado</th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
@@ -199,7 +199,7 @@ export default function Inventario() {
                 onClick={() => openDetail(e)}
                 style={{ cursor: 'pointer' }}
               >
-                <td className="num">{e.numero}</td>
+                <td className="num col-opcional">{e.numero}</td>
                 <td>
                   <span className="row-person__name">{e.nombre}</span>
                   <br />
@@ -207,13 +207,17 @@ export default function Inventario() {
                     {e.categoria}
                     {e.prestadoA && ' · en préstamo'}
                   </span>
+                  {/* En el móvil se oculta la columna de ubicación. */}
+                  <span className="row-person__sub solo-movil">
+                    {e.ubicacion} · {e.valorAsegurado != null ? formatCurrency(e.valorAsegurado) : 'sin asegurar'}
+                  </span>
                 </td>
-                <td>{e.ubicacion}</td>
+                <td className="col-opcional">{e.ubicacion}</td>
                 <td>
                   <span className={`pill ${estadoClass(e.estadoConservacion)}`}>{e.estadoConservacion}</span>
                 </td>
-                <td className="num">{e.valorAsegurado != null ? formatCurrency(e.valorAsegurado) : <span className="table-muted">Sin asegurar</span>}</td>
-                <td>
+                <td className="num col-opcional">{e.valorAsegurado != null ? formatCurrency(e.valorAsegurado) : <span className="table-muted">Sin asegurar</span>}</td>
+                <td className="col-opcional">
                   <button
                     className="icon-btn"
                     title="Ver ficha"

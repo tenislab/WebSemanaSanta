@@ -203,14 +203,14 @@ export default function Tesoreria() {
         <table>
           <thead>
             <tr>
-              <th>Nº</th>
-              <th>Fecha</th>
+              <th className="col-opcional">Nº</th>
+              <th className="col-opcional">Fecha</th>
               <th>Concepto</th>
-              <th>Categoría</th>
-              <th>Cuenta</th>
+              <th className="col-opcional">Categoría</th>
+              <th className="col-opcional">Cuenta</th>
               <th>Importe</th>
-              <th>Estado</th>
-              <th></th>
+              <th className="col-opcional">Estado</th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
@@ -221,22 +221,26 @@ export default function Tesoreria() {
                 onClick={() => setSelected(m)}
                 style={{ cursor: 'pointer' }}
               >
-                <td className="num">{String(m.numero).padStart(4, '0')}</td>
-                <td className="num">{m.fecha}</td>
+                <td className="num col-opcional">{String(m.numero).padStart(4, '0')}</td>
+                <td className="num col-opcional">{m.fecha}</td>
                 <td>
                   {m.concepto}
                   <span className={`pill pill--${m.tipo === 'Ingreso' ? 'ok' : 'err'} tesoreria-tipo`}>{m.tipo}</span>
+                  {/* En el móvil se ocultan fecha, categoría, cuenta y estado. */}
+                  <span className="row-person__sub solo-movil">
+                    {m.fecha} · {m.categoria} · {m.estado}
+                  </span>
                 </td>
-                <td>{m.categoria}</td>
-                <td>{m.cuenta}</td>
+                <td className="col-opcional">{m.categoria}</td>
+                <td className="col-opcional">{m.cuenta}</td>
                 <td className={`num tesoreria-importe tesoreria-importe--${m.tipo === 'Ingreso' ? 'ok' : 'err'}`}>
                   {m.tipo === 'Gasto' ? '−' : '+'}
                   {formatCurrency(m.importe)}
                 </td>
-                <td>
+                <td className="col-opcional">
                   <span className={`pill ${m.estado === 'Conciliado' ? 'pill--ok' : 'pill--warn'}`}>{m.estado}</span>
                 </td>
-                <td>
+                <td className="col-opcional">
                   <div className="row-actions">
                     <button
                       className="icon-btn"

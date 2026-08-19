@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import EscudoHermandad from '../components/EscudoHermandad'
@@ -27,6 +27,7 @@ import {
 import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
 import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
 import { useAvisosHermano } from '../lib/avisosHermano'
+import { useAjustesCuotas } from '../lib/ajustesCuotas'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
 import CalendarioMes from '../components/CalendarioMes'
 import { claseTipo, fechaLarga } from '../lib/calendario'
@@ -82,6 +83,14 @@ function leerSesion(): Sesion | null {
 function guardarSesion(sesion: Sesion) {
   sessionStorage.setItem(SESION_KEY, JSON.stringify(sesion))
 }
+
+/**
+ * Un hermano dado de baja no entra en su área. Se le dice por qué: un «DNI o
+ * contraseña incorrectos» le haría probar diez veces y llamar a secretaría
+ * pensando que ha perdido la clave.
+ */
+const MENSAJE_BAJA =
+  'Tu ficha figura de baja en la hermandad, así que el área del hermano no está disponible. Si crees que es un error, habla con secretaría.'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -179,6 +188,7 @@ export default function HermanoPortal() {
   )
   const papeletasMuestra = useTablaPorHermandad<Papeleta>('cabildo-papeletas', () => [])
 
+  const [ajustesCuotas] = useAjustesCuotas()
   const tramos = useMemo(() => getTramos(), [])
   const campana = useMemo(() => getCampana(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
@@ -227,6 +237,40 @@ export default function HermanoPortal() {
   )
 
   const hermanoActivo = hermanoPrincipal ?? hermanoMuestra
+  /**
+   * A quien le tramitan la baja mientras tiene su área abierta se le dice ahí
+   * mismo (las pestañas ya se enteran unas de otras) y se le cierran las
+   * acciones. No se le echa de golpe: puede querer ver su histórico o
+   * descargar sus datos.
+   */
+  const deBaja = hermanoPrincipal?.estado === 'Baja'
+
+  /**
+   * Lo que debe este hermano: cuotas pendientes, en mora o devueltas, de
+   * cualquier ejercicio. Es el mismo cálculo que hace el panel al emitir una
+   * papeleta.
+   */
+  const miDeuda = useMemo(() => {
+    if (!hermanoPrincipal) return 0
+    return cuotas
+      .filter((c) => c.hermanoId === hermanoPrincipal.id)
+      .filter((c) => c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta')
+      .reduce((n, c) => n + c.importe, 0)
+  }, [cuotas, hermanoPrincipal])
+
+  /**
+   * ¿Puede pedir o renovar su sitio? Y si no, por qué.
+   *
+   * La regla de «no hay papeleta con cuotas pendientes» ya existía y la
+   * respetaba el panel al emitirlas, pero el hermano podía saltársela pidiendo
+   * la suya desde aquí: la secretaría se encontraba con una solicitud que su
+   * propio ajuste prohibía.
+   */
+  const bloqueoPapeleta: string | null = deBaja
+    ? 'Tu ficha figura de baja en la hermandad: no se puede sacar papeleta de sitio.'
+    : ajustesCuotas.bloquearPapeletaConDeuda && miDeuda > 0
+      ? `Tienes ${formatCurrency(miDeuda)} en cuotas pendientes. La hermandad pide estar al corriente para sacar papeleta de sitio: ponte al día y vuelve por aquí.`
+      : null
   const { avisos: avisosSecretaria, sinLeer: avisosSinLeer, marcarLeidos: marcarAvisosLeidos } =
     useAvisosHermano(hermanoActivo?.id ?? null)
   const nombreHermandadActiva = esPrincipal ? nombrePrincipal : hermandadMuestra?.nombre ?? 'tu hermandad'
@@ -305,6 +349,13 @@ export default function HermanoPortal() {
           setErrorLogin('No se pudo cargar tu ficha. Inténtalo de nuevo en unos segundos.')
           return
         }
+        if (fila.estado === 'Baja') {
+          // La contraseña era correcta, así que la sesión de Supabase ya está
+          // abierta: se cierra antes de salir.
+          await supabase.auth.signOut()
+          setErrorLogin(MENSAJE_BAJA)
+          return
+        }
         const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: fila.id as string }
         guardarSesion(nueva)
         setSesion(nueva)
@@ -315,6 +366,10 @@ export default function HermanoPortal() {
       const encontrado = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
       if (!encontrado) {
         setErrorLogin('DNI o contraseña incorrectos.')
+        return
+      }
+      if (encontrado.estado === 'Baja') {
+        setErrorLogin(MENSAJE_BAJA)
         return
       }
       const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: encontrado.id }
@@ -422,6 +477,15 @@ export default function HermanoPortal() {
     () => (hayDemo ? hermanos.filter((h) => h.estado !== 'Baja').slice(0, 4) : []),
     [hermanos, hayDemo],
   )
+
+  // El censo puede haber perdido a este hermano (borrado desde el panel). Con
+  // la sesión apuntando a nadie el área se quedaba a medias; se cierra sola.
+  // `hermanos.length > 0` evita cerrarla mientras el censo aún está cargando.
+  useEffect(() => {
+    if (!sesion || !esPrincipal || hermanos.length === 0) return
+    if (!hermanos.some((h) => h.id === sesion.hermanoId)) salir()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sesion, esPrincipal, hermanos])
 
   function salir() {
     if (usarSupabase && supabase) {
@@ -577,7 +641,7 @@ export default function HermanoPortal() {
   }
 
   function renovarSitio() {
-    if (!hermanoPrincipal || !renovacion?.sitioAnterior?.tramoId) return
+    if (bloqueoPapeleta || !hermanoPrincipal || !renovacion?.sitioAnterior?.tramoId) return
     const tramoAnterior = tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)
     const tramoId = renovacion.sitioAnterior.tramoId
     const importe = renovacion.sitioAnterior.importe || precioDeTramo(tramoAnterior, precioBase)
@@ -604,7 +668,7 @@ export default function HermanoPortal() {
   }
 
   function noRenovar() {
-    if (!hermanoPrincipal) return
+    if (deBaja || !hermanoPrincipal) return
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
@@ -633,7 +697,7 @@ export default function HermanoPortal() {
    */
   function enviarSolicitudPapeleta(e: FormEvent) {
     e.preventDefault()
-    if (!hermanoPrincipal) return
+    if (bloqueoPapeleta || !hermanoPrincipal) return
     const nueva = {
       id: nuevoId(),
       hermanoId: hermanoPrincipal.id,
@@ -656,7 +720,7 @@ export default function HermanoPortal() {
   /** El hermano avisa de que ya ha pagado su papeleta por Bizum o transferencia; la secretaría lo confirma. */
   function comunicarPago(metodo: MetodoPago) {
     const p = renovacion?.papeletaActual
-    if (!p) return
+    if (deBaja || !p) return
     setPapeletas((prev) => prev.map((x) => (x.id === p.id ? { ...x, pagoComunicado: { metodo, fecha: hoy() } } : x)))
   }
 
@@ -711,6 +775,7 @@ export default function HermanoPortal() {
   }
 
   function solicitarBaja() {
+    if (deBaja) return
     if (!window.confirm('¿Seguro que quieres solicitar la baja como hermano/a? La secretaría tramitará tu solicitud.')) return
     if (esPrincipal && hermanoPrincipal) {
       // Es una SOLICITUD: no se da de baja solo. Queda marcada para que la
@@ -979,6 +1044,15 @@ export default function HermanoPortal() {
         onSalir={salir}
       />
       <main className="portal__main">
+        {deBaja && (
+          <div className="banner-inline banner-inline--warn portal__baja">
+            <span>
+              <b>Tu ficha figura de baja en la hermandad.</b> Puedes seguir viendo tu histórico y
+              descargar tus datos, pero no sacar papeleta de sitio ni renovar tu sitio. Si crees que
+              es un error, habla con secretaría.
+            </span>
+          </div>
+        )}
         <div className="portal__welcome" style={{ ['--portal-accent' as string]: colorActivo }}>
           <span className="portal__welcome-avatar">{inicialesHermandad(hermanoActivo?.nombre ?? primerNombre)}</span>
           <div className="portal__welcome-text">
@@ -1205,7 +1279,16 @@ export default function HermanoPortal() {
                   {asignacion?.tramo && <span className="pill pill--info">{etiquetaTramo(asignacion.tramo)}</span>}
                 </div>
 
-                {renovacion.estado === 'Por renovar' && renovacion.sitioAnterior?.tramoId && (
+                {bloqueoPapeleta && (
+                  <div className="banner-inline banner-inline--warn">
+                    <span>{bloqueoPapeleta}</span>
+                    {/* Decir que debe algo sin enseñarle el qué deja al hermano
+                        buscándolo por la página. */}
+                    {!deBaja && <a className="btn btn-outline btn-sm" href="#mis-cuotas">Ver mis cuotas</a>}
+                  </div>
+                )}
+
+                {!bloqueoPapeleta && renovacion.estado === 'Por renovar' && renovacion.sitioAnterior?.tramoId && (
                   <>
                     <p className="portal__lead">
                       El año pasado saliste en{' '}
@@ -1248,7 +1331,8 @@ export default function HermanoPortal() {
                   </div>
                 )}
 
-                {renovacion.papeletaActual?.estado !== 'Renuncia' &&
+                {!bloqueoPapeleta &&
+                  renovacion.papeletaActual?.estado !== 'Renuncia' &&
                   (renovacion.estado === 'Sin papeleta' || renovacion.estado === 'No renovada') &&
                   (miSolicitud && miSolicitud.estado === 'Pendiente' ? (
                     <div className="assign-box assign-box--wait">
@@ -1402,7 +1486,7 @@ export default function HermanoPortal() {
 
         {/* Mis cuotas — solo si la hermandad tiene el módulo activo */}
         {esPrincipal && (
-          <section className="portal__section">
+          <section className="portal__section" id="mis-cuotas">
             <h2>Mis cuotas</h2>
             {misCuotas.length === 0 ? (
               <p className="form-hint">No tienes recibos registrados.</p>

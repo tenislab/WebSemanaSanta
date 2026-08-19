@@ -64,11 +64,11 @@ necesitan servidor.
 | **W2** | Las secciones que faltan | No | Hecha |
 | **W3** | Noticias con cuerpo y enlace propio | No | Hecha |
 | **W4** | Titulares y patrimonio con foto | No | Hecha |
-| **W5** | Diseño editorial: romper el centrado | No | Pendiente |
-| **W6** | Imágenes y peso de la página | No | Pendiente |
-| **W7** | Accesibilidad e idioma | No | Pendiente |
-| **W8** | El editor, a la altura | No | Pendiente |
-| **W9** | Que se comparta y se encuentre | **Sí** | Pendiente |
+| **W5** | Diseño editorial: romper el centrado | No | Hecha |
+| **W6** | Imágenes y peso de la página | No | Hecha |
+| **W7** | Accesibilidad e idioma | No | Hecha |
+| **W8** | El editor, a la altura | No | Hecha |
+| **W9** | Que se comparta y se encuentre | **Sí** | Hecha (falta encenderla) |
 | **W10** | Formularios, donativos y dominio | **Sí** | Pendiente |
 
 ---
@@ -152,64 +152,137 @@ texto alternativo de las fotos sueltas de la ficha.
 Todas las secciones son texto centrado, una detrás de otra. Con contenido de
 verdad se hace largo y plano, y se nota que es una plantilla.
 
-- **Disposiciones alternas**: foto a la izquierda y texto a la derecha, y al
-  revés en la siguiente.
-- **Fondos alternos** por sección, para que se separen sin líneas.
-- **Imagen a sangre** (de borde a borde) como separador entre bloques.
-- **Cita destacada** y **capitular** en los textos largos.
-- Entrada suave al hacer scroll, respetando «reducir movimiento».
-- Dos o tres bloques nuevos para la portada: cuenta atrás a la salida,
-  próximo culto destacado, cifras de la hermandad.
+**Hecho:**
+
+- **Disposiciones alternas**: las fotos de una sección ya no se amontonan en
+  una rejilla antes del texto; se reparten entre los párrafos, foto a un lado
+  y texto al otro, cambiando de lado en cada bloque.
+- **Franjas de fondo alternas** por sección, de borde a borde, para que se
+  separen sin una sola línea.
+- **Foto a sangre** con su frase encima, colocada detrás de la sección que
+  elija la hermandad.
+- **Cita destacada**: cualquier párrafo se marca como cita desde el editor, y
+  su subtítulo pasa a ser la firma. **Capitular** como interruptor propio (y
+  puesta de fábrica en el estilo «Boletín»).
+- **Entrada suave** al bajar, que se apaga sola con «reducir movimiento» y no
+  se aplica en la vista previa del panel.
+- **Tres bloques de portada**: cuenta atrás a la salida (con la fecha de la
+  campaña de Papeletas si no hay una propia), próximo culto sacado del
+  calendario, y las cifras de la hermandad.
+
+El editor avisa si la fecha de la salida ya pasó: la cuenta atrás desaparecía
+sola y la hermandad se quedaba con un dato viejo sin enterarse.
 
 ## W6 — Imágenes y peso de la página
 
 Las fotos se guardan como *data URL* dentro del propio contenido. Una galería
 de treinta fotos son varios megas que viajan en cada carga.
 
-- Comprimir mejor al subir y guardar **dos tamaños** (una pequeña para la
-  rejilla, la grande solo al abrirla).
-- `width` y `height` en todas las imágenes, para que la página no salte
-  mientras carga.
-- `loading="lazy"` en todas (hoy en tres sitios).
-- **Aviso de peso en el editor**: «tu web pesa 8 MB; en un móvil con mala
-  cobertura tarda 20 segundos».
-- Pasar las fotos a un almacén de verdad cuando haya Supabase (enlaza con W10).
+**Hecho:**
+
+- **WebP** al comprimir, cuando el navegador sabe (todos desde hace años). En
+  la prueba, una foto de 622 kB baja a 196 kB, y si sale más gorda que la
+  original se queda la original.
+- **Dos tamaños en la galería**: la rejilla usa una copia de 520 px (~55 kB) y
+  la grande solo se descarga al abrir la foto. Con treinta fotos son varios
+  megas que dejan de viajar.
+- **Cada foto al tamaño en que se ve**: portada 1920 px, galería 1600, y las
+  de sección, titular o noticia 1100, que nunca se ven a más de media página.
+- **Botón «Aligerar las fotos»** para las subidas antes de esto: les hace la
+  copia pequeña sin volver a comprimir la grande (recomprimir lo ya comprimido
+  solo quita calidad).
+- **Caja reservada** en todas las imágenes, con `aspect-ratio`: la página ya no
+  da un salto cuando una foto acaba de cargar.
+- **`loading="lazy"` y `decoding="async"`** en todas las que no se ven al
+  entrar.
+- **Aviso de peso en el editor**: «Tu web pesa 2,4 MB: unos 6 segundos en un
+  móvil con mala cobertura», con el añadido de que pasados los 4 MB el
+  navegador puede no dejar guardarla.
+
+Queda para W10 pasar las fotos a un almacén de verdad cuando haya Supabase:
+hoy viven dentro del propio contenido.
 
 ## W7 — Accesibilidad e idioma
 
-- Texto alternativo obligatorio en las fotos que se suben (hoy va vacío).
-- Contraste comprobado también en la web pública, no solo en el editor.
-- Foco visible y orden de tabulación revisado en el menú y en el visor de
-  fotos.
-- Tamaños de pulsación cómodos en el menú de móvil.
-- Preparar el terreno para una **segunda lengua** (muchas hermandades quieren
-  al menos la portada en inglés por el turismo).
+**Hecho:**
+
+- **Texto alternativo** en todas las fotos que llevan información: las de una
+  sección (el modelo pasa de «una lista de imágenes» a imagen + qué se ve), las
+  de un titular, las de galería (su pie) y la de una noticia. Las decorativas
+  se quedan vacías a propósito, que es lo correcto. El editor avisa de las que
+  se publican sin describir y dice en qué sección están.
+- **Contraste medido en la web publicada**, con los ocho estilos de un clic y
+  todo el contenido pintado: 0 problemas. (La primera medición decía que los
+  dos estilos oscuros estaban a 1,12:1; era la propia medición, que leía
+  `color(srgb 0.70 …)` como si fuera 0-255.)
+- **El foco no se sale** del visor de fotos ni del menú de móvil mientras están
+  abiertos, y vuelve a donde estaba al cerrarlos.
+- **44 px de alto** en los enlaces del menú de móvil y en los botones del
+  visor, que es lo que recomiendan Apple y Google para el dedo.
+- **Idioma declarado** (`lang`): sin él un lector de pantalla lee el castellano
+  con voz inglesa. Y un bloque de cuatro líneas en otra lengua bajo la portada,
+  marcado con SU idioma, para el visitante de fuera.
+
+Traducir la web entera sigue pendiente: no es realista para una hermandad y no
+lo pide nadie todavía. El terreno está: idioma declarado y un sitio donde
+escribir en otra lengua.
 
 ## W8 — El editor, a la altura
 
-- **Vista previa de cómo se ve en Google** y en WhatsApp, con el recorte real.
-- **Deshacer por secciones** y aviso al salir con cambios sin publicar.
-- **Publicar por partes**: dejar una sección en borrador sin ocultarla entera.
-- **Plantillas de contenido**: «rellena tu historia» con un guion de ejemplo,
-  para la hermandad que se queda mirando la caja vacía.
-- **Duplicar** páginas y noticias.
-- Buscar dentro del editor (con doce secciones ya hace falta).
+**Hecho:**
+
+- **Previa de Google y de WhatsApp**, una al lado de la otra, con **el recorte
+  de verdad** de cada sitio (60 y 155 caracteres en Google; 65 y 120 en la
+  tarjeta de WhatsApp). Enseñar el texto entero era engañar: la hermandad
+  escribía tres líneas y en Google salía una.
+- **Publicar por partes**: cada sección puede estar publicada, **en borrador**
+  (se ve en la vista previa con su marca, no en la web) u oculta. El editor
+  avisa de cuántas hay en borrador y las publica todas de un clic.
+- **Guiones de ejemplo** para la historia (cuatro apartados), la estación de
+  penitencia (itinerario completo con horas) y la página de bolsa de caridad.
+  Solo se ofrecen con la sección vacía.
+- **Duplicar** noticias, titulares, cultos, álbumes y páginas. La copia sale
+  sin publicar y con enlace nuevo (dos noticias con el mismo enlace y una no se
+  puede abrir), y las fotos del álbum copiado llevan id nuevo (el visor las
+  localiza por id y dos iguales lo descolocaban).
+- **Buscar en el raíl**, por nombre o por lo que hay dentro: «itinerario»
+  encuentra «Estación de penitencia». Enter abre la primera.
+- El **deshacer dice qué deshace**: «Deshacer «los titulares» (3)».
+
+El «aviso al salir con cambios sin publicar» no se ha hecho como diálogo del
+navegador: el editor guarda solo en cada cambio, así que no hay nada que
+perder al salir. Lo que sí falta es publicar, y de eso avisa el editor por
+dentro, que es más útil y menos molesto.
 
 ## W9 — Que se comparta y se encuentre *(necesita Supabase + despliegue)*
 
 La fase de más impacto y la única que no se puede cerrar desde el navegador.
 
-- **HTML servido con los datos de la hermandad**: una función en el borde
-  (Vercel/Netlify) que lea la web de esa hermandad y devuelva el HTML con su
-  título, su descripción y su imagen. Es lo que arregla el problema del
-  principio.
+**Hecho, y funcionando hoy** (Google sí ejecuta JavaScript al indexar):
+
 - **Datos estructurados** (JSON-LD): la hermandad como `Organization`, la sede
-  como `Place` y **cada culto como `Event`**, que es lo que hace que los
-  cultos salgan en Google con su fecha y su hora.
-- `canonical`, `og:url`, `theme-color` y **favicon con el escudo** de la
-  hermandad.
-- `robots.txt` y `sitemap.xml` generados con las páginas y las noticias.
-- Redirección del enlace largo al dominio propio.
+  como `Place` y **cada culto como `Event`** con su fecha y su hora.
+- `canonical`, `og:url`, `og:site_name`, `theme-color` y el **escudo de la
+  hermandad en la pestaña**. Con dominio propio configurado, el `canonical`
+  apunta al dominio y no al enlace largo.
+- `sitemap.xml` y `robots.txt` **generados** con la portada, el listado de
+  noticias, cada noticia publicada con su fecha y cada ficha de titular. Se
+  descargan desde el editor. Una web sin publicar se cierra a los buscadores.
+
+**Escrito y listo, falta encenderlo** (dos pasos, en `docs/SEO.md`):
+
+- `api/w.ts` devuelve el `index.html` con la cabecera de esa hermandad. Es lo
+  único que arregla la vista previa de WhatsApp, que no ejecuta JavaScript. Si
+  no hay base de datos o no encuentra la web, devuelve la página tal cual: no
+  hay forma de que rompa nada.
+- `api/seo.ts` sirve el sitemap y el robots.
+- `supabase/web-publica.sql` crea la tabla desde la que lo lee, y la aplicación
+  ya sube ahí la web en cada guardado (primero al navegador, siempre).
+
+Queda de verdad para W10: mientras las fotos vivan dentro del contenido como
+`data:`, la tarjeta al compartir sale sin imagen. Ningún rastreador descarga un
+`data:`, y el código ya lo tiene en cuenta: si la imagen no es una URL, no se
+promete.
 
 ## W10 — Formularios, donativos y dominio *(necesita Supabase + banco)*
 

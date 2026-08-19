@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { leerPersistido } from './persistencia'
+import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { leerCatalogoRemoto, reemplazarCatalogo } from './db/catalogos'
 
@@ -42,6 +42,10 @@ export function useLista(clave: string, porDefecto: readonly string[]): string[]
       cancelado = true
     }
   }, [clave])
+  // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
+  // la vez) se refleja aquí sin recargar.
+  useEscuchaOtrasPestanas(clave, () => setLista(getLista(clave, porDefecto)))
+
   return lista
 }
 
@@ -94,6 +98,19 @@ export function useCatalogos(
       cancelado = true
     }
     // Solo al montar: Configuración monta este hook una vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Un catálogo cambiado en otra pestaña. Como aquí hay varias claves, se
+  // escucha `storage` a pelo y se recargan todas las que toque.
+  useEffect(() => {
+    function alStorage(e: StorageEvent) {
+      if (e.storageArea !== localStorage || !e.key) return
+      const def = defs.find((d) => d.clave === e.key)
+      if (!def) return
+      setListas((actual) => ({ ...actual, [def.k]: getLista(def.clave, def.porDefecto) }))
+    }
+    window.addEventListener('storage', alStorage)
+    return () => window.removeEventListener('storage', alStorage)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return listas

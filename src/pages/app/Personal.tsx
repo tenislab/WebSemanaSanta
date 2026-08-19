@@ -169,19 +169,23 @@ export default function Personal() {
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>Correo</th>
-              <th>Cargo</th>
+              <th className="col-opcional">Correo</th>
+              <th className="col-opcional">Cargo</th>
               <th>Estado</th>
-              <th></th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
             {personal.map((p) => (
               <tr key={p.id} onClick={() => setSelected(p)} style={{ cursor: 'pointer' }}>
                 {/* El span evita aplicar display:block al propio <td>, que rompería la alineación de la tabla. */}
-                <td><span className="row-person__name">{p.nombre}</span></td>
-                <td className="table-subtle">{p.email}</td>
                 <td>
+                  <span className="row-person__name">{p.nombre}</span>
+                  {/* En el móvil se oculta la columna del correo. */}
+                  <span className="row-person__sub solo-movil">{p.cargo} · {p.email}</span>
+                </td>
+                <td className="table-subtle col-opcional">{p.email}</td>
+                <td className="col-opcional">
                   <span className="pill pill--info">{p.cargo}</span>
                 </td>
                 <td>
@@ -189,7 +193,7 @@ export default function Personal() {
                     {p.activo ? 'Activo' : 'Desactivado'}
                   </span>
                 </td>
-                <td>
+                <td className="col-opcional">
                   <button
                     className="icon-btn"
                     title={p.activo ? 'Desactivar acceso' : 'Activar acceso'}

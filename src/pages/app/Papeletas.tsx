@@ -643,13 +643,13 @@ export default function Papeletas() {
         <table>
           <thead>
             <tr>
-              <th>Nº</th>
+              <th className="col-opcional">Nº</th>
               <th>Hermano</th>
-              <th>Antigüedad</th>
-              <th>Sitio {campana.anio - 1}</th>
+              <th className="col-opcional">Antigüedad</th>
+              <th className="col-opcional">Sitio {campana.anio - 1}</th>
               <th>Estado {campana.anio}</th>
               <th>Sitio {campana.anio}</th>
-              <th></th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
@@ -659,21 +659,25 @@ export default function Papeletas() {
               const tramoActual = asigActual?.tramo ?? null
               return (
                 <tr key={h.id} onClick={() => abrirDetalle(h.id)} style={{ cursor: 'pointer' }}>
-                  <td className="num">{h.numero}</td>
+                  <td className="num col-opcional">{h.numero}</td>
                   <td>
                     <div className="row-person">
                       <span className="row-avatar">{initials(h.nombre)}</span>
                       <span>
                         <span className="row-person__name">{h.nombre}</span>
-                        <span className="row-person__sub">{h.estado}</span>
+                        <span className="row-person__sub">Nº {h.numero} · {h.estado}</span>
+                        {/* En el móvil se ocultan sus columnas: el dato baja aquí. */}
+                        <span className="row-person__sub solo-movil">
+                          {Math.max(0, campana.anio - h.antiguedad)} años · {tramoAnterior ? etiquetaTramo(tramoAnterior) : 'sin sitio anterior'}
+                        </span>
                       </span>
                     </div>
                   </td>
-                  <td className="table-subtle td-nowrap">
+                  <td className="table-subtle td-nowrap col-opcional">
                     {Math.max(0, campana.anio - h.antiguedad)} años
                     <span className="table-muted"> · {h.antiguedad}</span>
                   </td>
-                  <td>{tramoAnterior ? etiquetaTramo(tramoAnterior) : <span className="table-muted">—</span>}</td>
+                  <td className="col-opcional">{tramoAnterior ? etiquetaTramo(tramoAnterior) : <span className="table-muted">—</span>}</td>
                   <td>
                     <span className={`pill ${claseEstado(r.estado)}`}>{r.estado}</span>
                   </td>
@@ -694,7 +698,7 @@ export default function Papeletas() {
                       <span className="table-muted">—</span>
                     )}
                   </td>
-                  <td>
+                  <td className="col-opcional">
                     <button
                       className="icon-btn"
                       title="Ver ficha"

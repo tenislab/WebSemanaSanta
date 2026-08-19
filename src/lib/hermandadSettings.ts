@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
+import { useEscuchaOtrasPestanas } from './persistencia'
 
 export interface HermandadSettings {
   nombreLegal: string
@@ -130,6 +131,10 @@ export function useHermandadSettings(fallbackNombre?: string): HermandadSettings
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
+  // la vez) se refleja aquí sin recargar.
+  useEscuchaOtrasPestanas(STORAGE_KEY, () => setSettings(getHermandadSettings(fallbackNombre)))
 
   return settings
 }

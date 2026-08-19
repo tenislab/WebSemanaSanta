@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { tramoToRow, rowToTramo } from './db/tramos'
+import { useEscuchaOtrasPestanas } from './persistencia'
 
 /**
  * Un cuerpo es cada bloque del cortejo (un paso y su acompañamiento): Cristo,
@@ -98,6 +99,10 @@ export function useTramos(): Tramo[] {
       cancelado = true
     }
   }, [])
+  // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
+  // la vez) se refleja aquí sin recargar.
+  useEscuchaOtrasPestanas(STORAGE_KEY, () => setTramosState(getTramos()))
+
   return tramos
 }
 

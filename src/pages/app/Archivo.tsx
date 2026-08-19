@@ -320,12 +320,12 @@ export default function Archivo() {
         <table>
           <thead>
             <tr>
-              <th>Nº</th>
+              <th className="col-opcional">Nº</th>
               <th>Documento</th>
-              <th>Fecha</th>
+              <th className="col-opcional">Fecha</th>
               <th>Acceso</th>
-              <th>Archivado por</th>
-              <th></th>
+              <th className="col-opcional">Archivado por</th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
@@ -336,7 +336,7 @@ export default function Archivo() {
                   onClick={() => abrirFicha(d)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="num">{d.numero}</td>
+                  <td className="num col-opcional">{d.numero}</td>
                   <td>
                     <span className="row-person__name">{d.nombre}</span>
                     {d.archivoNombre && (
@@ -346,8 +346,12 @@ export default function Archivo() {
                     )}
                     <br />
                     <span className="table-subtle">{d.categoria}</span>
+                    {/* En el móvil se ocultan la fecha y quién lo archivó. */}
+                    <span className="row-person__sub solo-movil">
+                      {fmt(d.fecha)}{d.archivadoPor ? ` · ${d.archivadoPor}` : ''}
+                    </span>
                   </td>
-                  <td className="num td-nowrap">{fmt(d.fecha)}</td>
+                  <td className="num td-nowrap col-opcional">{fmt(d.fecha)}</td>
                   <td>
                     {d.cargosConAcceso ? (
                       <span className="pill pill--restricted">
@@ -357,8 +361,8 @@ export default function Archivo() {
                       <span className="pill pill--info">Todos</span>
                     )}
                   </td>
-                  <td>{d.archivadoPor ?? <span className="table-muted">—</span>}</td>
-                  <td>
+                  <td className="col-opcional">{d.archivadoPor ?? <span className="table-muted">—</span>}</td>
+                  <td className="col-opcional">
                     <button
                       className="icon-btn"
                       title="Ver ficha"

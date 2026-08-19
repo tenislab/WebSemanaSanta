@@ -1,9 +1,59 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, marcaDeAgua, nombreSeccion, noticiasPublicadas, slugNoticia, slugTitular, titularConFicha, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type Noticia, type TipoSeccion, type Titular, type WebPublica } from '../lib/webPublica'
+import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, diasHasta, marcaDeAgua, nombreSeccion, noticiasPublicadas, slugNoticia, slugTitular, titularConFicha, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type FotoSangre, type Noticia, type ParrafoPagina, type TipoSeccion, type Titular, type WebPublica } from '../lib/webPublica'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
+import { getCampana } from '../lib/campana'
+
+/**
+ * Deja el foco dentro de una caja mientras esté abierta (el menú de móvil, el
+ * visor de fotos). Sin esto, tabulando desde el visor se salía a la página de
+ * detrás —que el visitante no puede ver— y no había forma de volver.
+ *
+ * Al cerrarse devuelve el foco a donde estaba, que es lo que espera quien
+ * navega con teclado.
+ */
+function useTrampaDeFoco(activo: boolean, caja: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    if (!activo) return
+    const veniaDe = document.activeElement as HTMLElement | null
+    // Se guarda el nodo aquí: en la limpieza, `caja.current` ya puede ser otro.
+    const nodo = caja.current
+    function enfocables(): HTMLElement[] {
+      if (!nodo) return []
+      return [...nodo.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+        .filter((el) => el.offsetParent !== null || el === document.activeElement)
+    }
+    function alTabular(e: KeyboardEvent) {
+      if (e.key !== 'Tab') return
+      const lista = enfocables()
+      if (lista.length === 0) return
+      const primero = lista[0]
+      const ultimo = lista[lista.length - 1]
+      const dentro = nodo?.contains(document.activeElement)
+      if (e.shiftKey && (document.activeElement === primero || !dentro)) {
+        e.preventDefault()
+        ultimo.focus()
+      } else if (!e.shiftKey && (document.activeElement === ultimo || !dentro)) {
+        e.preventDefault()
+        primero.focus()
+      }
+    }
+    window.addEventListener('keydown', alTabular)
+    return () => {
+      window.removeEventListener('keydown', alTabular)
+      // Se devuelve el foco si seguía dentro de lo que se cierra, o si se ha
+      // quedado en el aire (al desaparecer la caja, el navegador lo suelta en
+      // el `body` y quien navega con teclado vuelve al principio de la web).
+      // Si el visitante ya se había ido a otro sitio, no se le mueve.
+      const perdido = !document.activeElement || document.activeElement === document.body
+      if (veniaDe && document.contains(veniaDe) && (perdido || nodo?.contains(document.activeElement))) {
+        veniaDe.focus()
+      }
+    }
+  }, [activo, caja])
+}
 
 /**
  * A dónde puede saltar la vista previa: una sección del cuerpo, o el marco de
@@ -37,6 +87,7 @@ export default function SitioContenido({
   seccionActiva?: FocoPreview
 }) {
   const raiz = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLElement>(null)
   const [menuAbierto, setMenuAbierto] = useState(false)
   /** Ancla de la sección que se está viendo, para resaltarla en el menú. */
   const [enPantalla, setEnPantalla] = useState<string>('')
@@ -48,6 +99,10 @@ export default function SitioContenido({
     const destino = raiz.current.querySelector(`[data-seccion="${seccionActiva}"]`)
     destino?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [seccionActiva, interactivo])
+
+  // Con el menú de móvil abierto, el foco se queda dentro: es un panel que tapa
+  // la página, y tabulando se salía a lo que hay debajo sin verlo.
+  useTrampaDeFoco(menuAbierto && interactivo, menuRef)
 
   // Con el menú abierto: Escape lo cierra y la página de detrás no se mueve.
   useEffect(() => {
@@ -93,6 +148,35 @@ export default function SitioContenido({
     return () => obs.disconnect()
   }, [interactivo, web.secciones, web.paginas])
 
+  /**
+   * Entrada suave de cada bloque al bajar por la página.
+   *
+   * Solo en la web de verdad: en la vista previa del panel el marco tiene su
+   * propio scroll y las secciones se habrían quedado en blanco. Y solo si el
+   * visitante no ha pedido «reducir movimiento» en su sistema.
+   */
+  useEffect(() => {
+    if (!interactivo || !web.animaciones || !raiz.current) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const nodos = raiz.current.querySelectorAll<HTMLElement>('.sitio__seccion, .sitio__portada, .sitio__sangre')
+    if (nodos.length === 0) return
+    nodos.forEach((n) => n.classList.add('sitio__entra'))
+    const obs = new IntersectionObserver(
+      (entradas) => {
+        entradas.forEach((e) => {
+          if (!e.isIntersecting) return
+          e.target.classList.add('sitio__entra--visto')
+          // Una vez visto se deja en paz: la entrada es de una sola vez, no un
+          // parpadeo cada vez que se sube y se baja.
+          obs.unobserve(e.target)
+        })
+      },
+      { rootMargin: '0px 0px -8% 0px' },
+    )
+    nodos.forEach((n) => obs.observe(n))
+    return () => obs.disconnect()
+  }, [interactivo, web.animaciones, web.secciones, web.paginas])
+
   const titulo = web.titulo || hermandad.nombreLegal || 'Nuestra Hermandad'
   const color = web.colorPrimario || hermandad.colorPrimario || '#6A1A23'
   const color2 = web.colorSecundario || '#C5A059'
@@ -104,7 +188,9 @@ export default function SitioContenido({
   const radio = { recto: '0px', suave: '10px', redondo: '20px' }[web.redondeo] ?? '10px'
   const aire = { compacta: '0.72', normal: '1', amplia: '1.35' }[web.densidad] ?? '1'
   const logo = web.logoDataUrl || hermandad.logoDataUrl
-  const seccionesVisibles = web.secciones.filter((s) => s.visible)
+  // Una sección en borrador se ve en la vista previa del panel, con su marca,
+  // pero no en la web: así se puede ir escribiendo sin ocultarla entera.
+  const seccionesVisibles = web.secciones.filter((s) => s.visible && (!interactivo || !s.borrador))
   // Los del calendario van primero: son los que están al caer.
   const cultosVisibles = web.cultosDelCalendario ? [...cultosDelCalendario, ...web.cultos] : web.cultos
 
@@ -154,10 +240,27 @@ export default function SitioContenido({
       return [{ ancla: hijos[0].ancla, texto: nombreSeccion(s), hijos }]
     })
 
+  /**
+   * Detrás de qué sección va la foto a sangre. Si la elegida no se pinta (no
+   * tiene contenido), se cae a la primera que sí, para no dejarla suelta al
+   * final ni desaparecida.
+   */
+  const conContenido = seccionesVisibles.filter((s) => tieneContenido(s.tipo))
+  const seccionSangre = web.sangre.fotoDataUrl
+    ? (conContenido.find((s) => s.tipo === web.sangre.despuesDe)?.tipo ?? conContenido[0]?.tipo)
+    : undefined
+
   return (
     <div
       ref={raiz}
-      className={`sitio${web.cabecera.fija ? ' sitio--navfija' : ''}`}
+      lang={web.idioma || 'es'}
+      className={
+        'sitio'
+        + (web.cabecera.fija ? ' sitio--navfija' : '')
+        + (web.fondosAlternos ? ' sitio--franjas' : '')
+        + (web.letraCapital ? ' sitio--capital' : '')
+        + (web.animaciones ? ' sitio--anima' : '')
+      }
       data-plantilla={web.plantilla}
       data-tema={web.tema}
       style={{
@@ -178,7 +281,7 @@ export default function SitioContenido({
         className={`sitio__nav${web.cabecera.fija ? ' sitio__nav--fija' : ''}${seccionActiva === 'cabecera' ? ' sitio__marco--activo' : ''}`}
       >
         <div className="sitio__brand">
-          {web.cabecera.mostrarLogo && (logo ? <img src={logo} alt="" className="sitio__logo" /> : <LogoMark size={30} />)}
+          {web.cabecera.mostrarLogo && (logo ? <img src={logo} alt="" className="sitio__logo" decoding="async" /> : <LogoMark size={30} />)}
           {(web.cabecera.mostrarNombre || web.cabecera.mostrarLema) && (
             <span className="sitio__brand-texto">
               {web.cabecera.mostrarNombre && <span>{titulo}</span>}
@@ -201,6 +304,7 @@ export default function SitioContenido({
           <span aria-hidden="true" />
         </button>
         <nav
+          ref={menuRef}
           id="sitio-menu"
           className={`sitio__menu${menuAbierto ? ' sitio__menu--abierto' : ''}`}
           onClick={() => setMenuAbierto(false)}
@@ -228,17 +332,24 @@ export default function SitioContenido({
       <HeroFondo web={web} titulo={titulo} interactivo={interactivo} />
 
       <main className="sitio__main" id="sitio-contenido" tabIndex={-1}>
+        <BloquesPortada web={web} cultos={cultosVisibles} interactivo={interactivo} />
+        <ResumenOtroIdioma resumen={web.resumenOtroIdioma} />
         {seccionesVisibles.map((s) => (
-          <Seccion
-            key={s.tipo}
-            tipo={s.tipo}
-            nombre={s.nombre}
-            activa={s.tipo === seccionActiva}
-            interactivo={interactivo}
-            cultos={cultosVisibles}
-            web={web}
-            hermandad={hermandad}
-          />
+          <Fragment key={s.tipo}>
+            <Seccion
+              tipo={s.tipo}
+              nombre={s.nombre}
+              activa={s.tipo === seccionActiva}
+              borrador={s.borrador}
+              interactivo={interactivo}
+              cultos={cultosVisibles}
+              web={web}
+              hermandad={hermandad}
+            />
+            {/* La foto a sangre parte la página en dos justo detrás de la
+                sección que elija la hermandad. */}
+            {s.tipo === seccionSangre && <FotoASangre sangre={web.sangre} />}
+          </Fragment>
         ))}
       </main>
 
@@ -472,8 +583,11 @@ export function Galeria({
   const todas = albumes.flatMap((a) => a.fotos.map((f) => ({ ...f, album: a.titulo })))
   const [abierta, setAbierta] = useState<number | null>(null)
   const cerrarRef = useRef<HTMLButtonElement>(null)
+  const visorRef = useRef<HTMLDivElement>(null)
 
   const hayVisor = interactivo && abierta !== null
+  // Con el visor abierto, el foco no se sale de él.
+  useTrampaDeFoco(hayVisor, visorRef)
   useEffect(() => {
     if (!hayVisor) return
     function tecla(e: KeyboardEvent) {
@@ -514,11 +628,11 @@ export function Galeria({
                 <figure className="sitio__foto" key={f.id}>
                   {interactivo ? (
                     <button type="button" className="sitio__foto-boton" onClick={() => setAbierta(i)}>
-                      <FotoConMarca src={f.fotoDataUrl} alt={f.pie || a.titulo} marca={marca} />
+                      <FotoConMarca src={f.miniDataUrl || f.fotoDataUrl} alt={f.pie || a.titulo} marca={marca} />
                       <span className="sitio__foto-lupa" aria-hidden="true">⤢</span>
                     </button>
                   ) : (
-                    <FotoConMarca src={f.fotoDataUrl} alt={f.pie || a.titulo} marca={marca} />
+                    <FotoConMarca src={f.miniDataUrl || f.fotoDataUrl} alt={f.pie || a.titulo} marca={marca} />
                   )}
                   {(f.pie.trim() || f.autor?.trim()) && (
                     <figcaption>
@@ -535,7 +649,7 @@ export function Galeria({
       <AvisoFotos texto={aviso} />
 
       {foto && (
-        <div className="sitio__visor" role="dialog" aria-modal="true" aria-label="Foto ampliada">
+        <div ref={visorRef} className="sitio__visor" role="dialog" aria-modal="true" aria-label="Foto ampliada">
           {/* El fondo cierra: es lo que todo el mundo intenta primero. */}
           <button type="button" className="sitio__visor-fondo" aria-label="Cerrar" onClick={() => setAbierta(null)} />
           <button ref={cerrarRef} type="button" className="sitio__visor-cerrar" aria-label="Cerrar" onClick={() => setAbierta(null)}>✕</button>
@@ -667,7 +781,7 @@ export function FotoConMarca({
 }) {
   return (
     <span className="sitio__conmarca">
-      <img src={src} alt={alt} loading="lazy" className={clase} />
+      <img src={src} alt={alt} loading="lazy" decoding="async" className={clase} />
       {marca && <span className="sitio__marca-agua" aria-hidden="true">{marca}</span>}
     </span>
   )
@@ -703,7 +817,7 @@ export function TarjetaNoticia({
   const tieneCuerpo = (n.parrafos ?? []).some((p) => p.texto.trim())
   return (
     <article className={`sitio__noticia${grande ? ' sitio__noticia--grande' : ''}`}>
-      {n.fotoDataUrl && <img src={n.fotoDataUrl} alt="" loading="lazy" />}
+      {n.fotoDataUrl && <img src={n.fotoDataUrl} alt={n.altFoto ?? ''} loading="lazy" decoding="async" />}
       <div>
         <span className="sitio__noticia-fecha">{fechaBonita(n.fecha)}</span>
         <h3>
@@ -724,26 +838,178 @@ function fechaBonita(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : formatDate(d)
 }
 
-/** Bloque de contenido con formato (entradilla, párrafos con subtítulo y fotos). */
+/**
+ * Bloque de contenido con formato. Antes era una entradilla, una rejilla con
+ * todas las fotos amontonadas arriba y los párrafos debajo, uno tras otro y
+ * centrados. Ahora las fotos se reparten entre los párrafos, alternando el
+ * lado, y los párrafos marcados salen como cita destacada.
+ */
 function Contenido({ c }: { c: ContenidoRico }) {
+  const parrafos = c.parrafos.filter((p) => p.texto.trim() || p.subtitulo.trim())
+  // Cada párrafo normal se lleva una foto; las citas no gastan ninguna.
+  let conFoto = 0
+  const usadas = parrafos.filter((p) => !p.destacado).length
   return (
     <>
       {c.entradilla.trim() && <p className="sitio__entradilla">{c.entradilla}</p>}
-      {c.fotos.length > 0 && (
+      <div className="sitio__editorial">
+        {parrafos.map((p) => {
+          if (p.destacado) return <Cita key={p.id} parrafo={p} />
+          const i = conFoto++
+          const foto = c.fotos[i]
+          return (
+            <div
+              key={p.id}
+              className={`sitio__bloque${foto ? ' sitio__bloque--confoto' : ''}${i % 2 === 1 ? ' sitio__bloque--vuelto' : ''}`}
+            >
+              {foto && (
+                <figure className="sitio__bloque-foto">
+                  <img src={foto.url} alt={foto.alt} loading="lazy" decoding="async" />
+                </figure>
+              )}
+              <div className="sitio__parrafo sitio__bloque-texto">
+                {p.subtitulo.trim() && <h3>{p.subtitulo}</h3>}
+                {p.texto.trim() && <p className="sitio__texto">{p.texto}</p>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {/* Las fotos que sobran (más fotos que párrafos) siguen en rejilla. */}
+      {c.fotos.length > usadas && (
         <div className="sitio__galeria">
-          {c.fotos.map((f, i) => (
-            <figure className="sitio__foto" key={i}><img src={f} alt="" /></figure>
+          {c.fotos.slice(usadas).map((f, i) => (
+            <figure className="sitio__foto" key={i}>
+              <img src={f.url} alt={f.alt} loading="lazy" decoding="async" />
+            </figure>
           ))}
         </div>
       )}
-      {c.parrafos
+    </>
+  )
+}
+
+/**
+ * Los tres bloques de la portada: la cuenta atrás a la salida, el próximo culto
+ * y las cifras de la hermandad. Es lo que se pregunta la gente al entrar («¿qué
+ * día salen?», «¿cuándo es el próximo culto?») y hasta ahora había que bajar a
+ * buscarlo, si es que estaba.
+ */
+function BloquesPortada({
+  web,
+  cultos,
+  interactivo,
+}: {
+  web: WebPublica
+  cultos: CultoWeb[]
+  interactivo: boolean
+}) {
+  // Si la hermandad no ha escrito la fecha en la web, se usa la de la campaña
+  // del panel: ya la tienen puesta ahí y no hay por qué pedirla dos veces.
+  const dias = diasHasta(web.estacion.fechaSalida || getCampana().fechaSalida || undefined)
+  // Solo cuentan los cultos con fecha de verdad: los escritos a mano llevan
+  // texto libre («del 3 al 7 de marzo») y no se pueden ordenar.
+  const proximo = cultos.find((c) => c.fechaIso)
+  const cifras = web.cifras.filter((c) => c.numero.trim() || c.texto.trim())
+  const hayCuenta = web.cuentaAtras && dias !== null && dias >= 0
+  const hayProximo = web.proximoCulto && Boolean(proximo)
+  if (!hayCuenta && !hayProximo && cifras.length === 0) return null
+  return (
+    <div className="sitio__portada">
+      {hayCuenta && (
+        <div className="sitio__cuenta">
+          <span className="sitio__cuenta-num">{dias}</span>
+          <span className="sitio__cuenta-txt">
+            {dias === 0 ? 'Hoy es el día' : dias === 1 ? 'día para la salida' : 'días para la salida'}
+          </span>
+          {(web.estacion.dia.trim() || web.estacion.horaSalida.trim()) && (
+            <span className="sitio__cuenta-pie">
+              {[web.estacion.dia.trim(), web.estacion.horaSalida.trim()].filter(Boolean).join(' · ')}
+            </span>
+          )}
+        </div>
+      )}
+      {hayProximo && proximo && (
+        <div className="sitio__proximo">
+          <span className="sitio__proximo-ante">Próximo culto</span>
+          <h3>{proximo.titulo}</h3>
+          <p className="sitio__proximo-cuando">{proximo.fecha}</p>
+          {proximo.lugar.trim() && <p className="sitio__proximo-donde">{proximo.lugar}</p>}
+          <a className="sitio__seguir" href={interactivo ? '#cultos' : undefined}>Ver todos los cultos →</a>
+        </div>
+      )}
+      {cifras.length > 0 && (
+        <div className="sitio__cifras">
+          {cifras.map((c) => (
+            <div key={c.id}>
+              <strong>{c.numero}</strong>
+              <span>{c.texto}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Foto a sangre: de borde a borde, con una frase encima si la hermandad la
+ * pone. Es lo que corta el pergamino de secciones y da respiro a la página.
+ */
+function FotoASangre({ sangre }: { sangre: FotoSangre }) {
+  if (!sangre.fotoDataUrl) return null
+  return (
+    <div className="sitio__sangre">
+      <img src={sangre.fotoDataUrl} alt="" loading="lazy" />
+      {sangre.texto.trim() && <p className="sitio__sangre-texto">{sangre.texto}</p>}
+    </div>
+  )
+}
+
+/**
+ * Unas líneas en otra lengua bajo la portada, marcadas con SU idioma para que
+ * un lector de pantalla las lea con la voz que toca. Traducir la web entera no
+ * es realista para una hermandad; cuatro líneas en inglés, sí.
+ */
+function ResumenOtroIdioma({ resumen }: { resumen: WebPublica['resumenOtroIdioma'] }) {
+  if (!resumen.texto.trim()) return null
+  return (
+    <aside className="sitio__otroidioma" lang={resumen.idioma || 'en'}>
+      {resumen.titulo.trim() && <h2>{resumen.titulo}</h2>}
+      <p>{resumen.texto}</p>
+    </aside>
+  )
+}
+
+/** Un párrafo marcado como destacado: cita grande que rompe el texto largo. */
+export function Cita({ parrafo }: { parrafo: ParrafoPagina }) {
+  return (
+    <blockquote className="sitio__cita">
+      <p>{parrafo.texto}</p>
+      {parrafo.subtitulo.trim() && <cite>{parrafo.subtitulo}</cite>}
+    </blockquote>
+  )
+}
+
+/**
+ * Los párrafos de una página suelta (una noticia, la ficha de un titular).
+ * Aquí no hay fotos que repartir, pero sí citas destacadas.
+ */
+export function Parrafos({ parrafos }: { parrafos: ParrafoPagina[] }) {
+  return (
+    <>
+      {parrafos
         .filter((p) => p.texto.trim() || p.subtitulo.trim())
-        .map((p) => (
-          <div className="sitio__parrafo" key={p.id}>
-            {p.subtitulo.trim() && <h4>{p.subtitulo}</h4>}
-            {p.texto.trim() && <p className="sitio__texto">{p.texto}</p>}
-          </div>
-        ))}
+        .map((p) =>
+          p.destacado ? (
+            <Cita key={p.id} parrafo={p} />
+          ) : (
+            <div className="sitio__parrafo" key={p.id}>
+              {p.subtitulo.trim() && <h2>{p.subtitulo}</h2>}
+              {p.texto.trim() && <p className="sitio__texto">{p.texto}</p>}
+            </div>
+          ),
+        )}
     </>
   )
 }
@@ -752,6 +1018,7 @@ function Seccion({
   tipo,
   nombre,
   activa,
+  borrador,
   interactivo,
   cultos,
   web,
@@ -762,6 +1029,8 @@ function Seccion({
   nombre?: string
   /** Se está editando esta sección: se marca en la vista previa. */
   activa?: boolean
+  /** En borrador: solo se ve aquí, con su marca, no en la web. */
+  borrador?: boolean
   /** En la vista previa del panel los enlaces no navegan. */
   interactivo: boolean
   /** Los del calendario ya mezclados con los escritos a mano. */
@@ -774,7 +1043,8 @@ function Seccion({
   // ella desde el editor y el resaltado de «estás editando esto».
   const props = {
     'data-seccion': tipo,
-    className: `sitio__seccion${activa ? ' sitio__seccion--activa' : ''}`,
+    className:
+      `sitio__seccion${activa ? ' sitio__seccion--activa' : ''}${borrador ? ' sitio__seccion--borrador' : ''}`,
   }
 
   if (tipo === 'historia') {
@@ -915,7 +1185,7 @@ function Seccion({
         <div className="sitio__cultos">
           {cultos.map((c) => (
             <article key={c.id} className="sitio__culto">
-              {c.fotoDataUrl && <img className="sitio__culto-foto" src={c.fotoDataUrl} alt="" />}
+              {c.fotoDataUrl && <img className="sitio__culto-foto" src={c.fotoDataUrl} alt="" loading="lazy" decoding="async" />}
               <h3>{c.titulo}</h3>
               {(c.fecha?.trim() || c.lugar?.trim()) && (
                 <p className="sitio__culto-cuando">
@@ -1008,7 +1278,7 @@ function Seccion({
               <article key={bo.id} className="sitio__boletin">
                 <div className="sitio__boletin-portada">
                   {bo.portadaDataUrl
-                    ? <img src={bo.portadaDataUrl} alt="" />
+                    ? <img src={bo.portadaDataUrl} alt="" loading="lazy" decoding="async" />
                     : <span className="sitio__boletin-sinportada" aria-hidden="true">PDF</span>}
                 </div>
                 <div className="sitio__boletin-datos">

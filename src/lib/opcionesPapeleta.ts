@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { leerPersistido } from './persistencia'
+import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { isSupabaseConfigured } from './supabase'
 import { leerTablaRemota, reemplazarTablaCompleta } from './db/catalogos'
 
@@ -47,6 +47,10 @@ export function useOpcionesPapeleta(): OpcionPapeleta[] {
       cancelado = true
     }
   }, [])
+  // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
+  // la vez) se refleja aquí sin recargar.
+  useEscuchaOtrasPestanas(STORAGE_KEY, () => setOpciones(getOpcionesPapeleta()))
+
   return opciones
 }
 

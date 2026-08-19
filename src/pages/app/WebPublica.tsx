@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSPropert
 import { Link } from 'react-router-dom'
 import {
   ESTILOS,
+  GUION_ESTACION,
+  GUION_HISTORIA,
+  GUION_PAGINA_CARIDAD,
+  IDIOMAS,
   PLANTILLAS,
   SECCIONES_INFO,
   PALETAS,
@@ -9,7 +13,11 @@ import {
   cambiosDeEstilo,
   estiloActual,
   aSlug,
+  avisoDePeso,
   contenidoVacio,
+  fotosSinDescribir,
+  diasHasta,
+  pesoWeb,
   slugNoticia,
   marcaDeAgua,
   slugTitular,
@@ -36,6 +44,7 @@ import {
   type PaginaWeb,
   type PlantillaWeb,
   type RedWeb,
+  type TipoSeccion,
   type TemaWeb,
   type TipoRed,
   type Titular,
@@ -48,21 +57,44 @@ import { avisosDeContraste } from '../../lib/contraste'
 import { nuevoId } from '../../lib/supabaseSync'
 import SitioContenido, { type FocoPreview } from '../../components/SitioContenido'
 import { cultosDelCalendario } from '../../lib/cultosDelCalendario'
+import { getCampana } from '../../lib/campana'
+import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml } from '../../lib/seoWeb'
 import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
 
-function comprimirImagen(dataUrl: string, maxLado = 1600): Promise<string> {
+/**
+ * WebP pesa entre un tercio y la mitad que JPEG a la misma calidad, y lo
+ * entienden todos los navegadores desde hace años. Se comprueba una vez: si
+ * este navegador no sabe, se sigue con JPEG y no pasa nada.
+ */
+let formatoFotos: string | null = null
+function mejorFormato(): string {
+  if (formatoFotos) return formatoFotos
+  try {
+    const c = document.createElement('canvas')
+    c.width = 1
+    c.height = 1
+    formatoFotos = c.toDataURL('image/webp').startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg'
+  } catch {
+    formatoFotos = 'image/jpeg'
+  }
+  return formatoFotos
+}
+
+function comprimirImagen(dataUrl: string, maxLado = 1600, calidad = 0.82): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
       const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
-      if (escala >= 1) return resolve(dataUrl)
       const canvas = document.createElement('canvas')
       canvas.width = Math.round(img.width * escala)
       canvas.height = Math.round(img.height * escala)
       const ctx = canvas.getContext('2d')
       if (!ctx) return resolve(dataUrl)
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      resolve(canvas.toDataURL('image/jpeg', 0.82))
+      const salida = canvas.toDataURL(mejorFormato(), calidad)
+      // Si por lo que sea sale más gorda que la original (un PNG plano, una
+      // foto ya diminuta), se queda la original.
+      resolve(salida.length < dataUrl.length ? salida : dataUrl)
     }
     img.onerror = () => resolve(dataUrl)
     img.src = dataUrl
@@ -70,10 +102,19 @@ function comprimirImagen(dataUrl: string, maxLado = 1600): Promise<string> {
 }
 
 /**
+ * La copia pequeña para la rejilla de la galería. 520 px de lado basta y sobra
+ * para una miniatura, y baja de ~300 kB a ~30 kB por foto: con treinta fotos
+ * de una salida son nueve megas que dejan de viajar en cada visita.
+ */
+function miniatura(dataUrl: string): Promise<string> {
+  return comprimirImagen(dataUrl, 520, 0.72)
+}
+
+/**
  * Varias imágenes de una tacada. Se leen en serie a propósito: en paralelo, con
  * treinta fotos de una salida, el navegador se queda clavado comprimiendo.
  */
-async function leerImagenes(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void) {
+async function leerImagenes(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void, maxLado = 1600) {
   const files = [...(e.target.files ?? [])].filter((f) => f.type.startsWith('image/'))
   e.target.value = ''
   for (const file of files) {
@@ -83,7 +124,7 @@ async function leerImagenes(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: stri
       lector.onerror = () => reject(new Error('no se pudo leer'))
       lector.readAsDataURL(file)
     }).catch(() => null)
-    if (dataUrl) cb(await comprimirImagen(dataUrl))
+    if (dataUrl) cb(await comprimirImagen(dataUrl, maxLado))
   }
 }
 
@@ -100,13 +141,66 @@ async function leerArchivos(files: File[], cb: (dataUrl: string) => void) {
   }
 }
 
-function leerImagen(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void) {
+function leerImagen(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void, maxLado = 1600) {
   const file = e.target.files?.[0]
   if (!file || !file.type.startsWith('image/')) return
   const lector = new FileReader()
-  lector.onload = async () => cb(await comprimirImagen(String(lector.result)))
+  lector.onload = async () => cb(await comprimirImagen(String(lector.result), maxLado))
   lector.readAsDataURL(file)
   e.target.value = ''
+}
+
+/**
+ * Fotos que en la web nunca se ven a más de media página (las de una sección,
+ * las de un titular, la de una noticia): guardarlas a 1600 px es pagar el
+ * doble de peso por píxeles que nadie ve.
+ */
+function leerImagenMediana(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void) {
+  leerImagen(e, cb, 1100)
+}
+
+/** La portada se ve a pantalla completa: esa sí necesita píxeles. */
+function leerImagenGrande(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void) {
+  leerImagen(e, cb, 1920)
+}
+
+/**
+ * Corta como cortan Google y WhatsApp: por la última palabra entera antes del
+ * límite y con puntos suspensivos. Enseñar el texto completo en la vista previa
+ * era engañar: la hermandad escribía tres líneas y en Google salía una.
+ */
+/**
+ * Mete una copia justo detrás del original. Duplicar es lo que se hace en una
+ * hermandad: la convocatoria de cabildo es la del año pasado con otra fecha, y
+ * el quinario, el del año pasado con otros predicadores.
+ */
+function duplicarEn<T extends { id: string }>(lista: T[], id: string, comoCopia: (x: T) => T): T[] {
+  const i = lista.findIndex((x) => x.id === id)
+  if (i < 0) return lista
+  return [...lista.slice(0, i + 1), comoCopia(lista[i]), ...lista.slice(i + 1)]
+}
+
+/** Descarga un texto como archivo, sin pasar por ningún servidor. */
+function descargarTexto(nombre: string, contenido: string, tipo: string) {
+  const url = URL.createObjectURL(new Blob([contenido], { type: `${tipo};charset=utf-8` }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nombre
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/** Para buscar: sin acentos ni mayúsculas, que nadie escribe «Galería» con tilde. */
+function sinAcentos(t: string): string {
+  return t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+}
+
+function recortar(texto: string, max: number): string {
+  const limpio = texto.trim()
+  if (limpio.length <= max) return limpio
+  const corte = limpio.slice(0, max)
+  const espacio = corte.lastIndexOf(' ')
+  return `${(espacio > max * 0.6 ? corte.slice(0, espacio) : corte).replace(/[.,;:\s]+$/, '')}…`
 }
 
 /** Fecha de hoy en ISO pero en hora LOCAL: con toISOString, de madrugada en
@@ -152,6 +246,43 @@ const SECCION_DE_PESTANA: Partial<Record<Pestana, FocoPreview>> = {
  * dos y no se sabía dónde estaba nada; en un raíl lateral con grupos se lee de
  * un vistazo y deja el ancho para lo que importa: la vista previa.
  */
+/**
+ * Por qué palabras se encuentra cada pestaña. Con quince secciones, buscar
+ «itinerario» y que salga «Estación de penitencia» ahorra recorrer el raíl
+ entero acordándose de dónde estaba cada cosa.
+ */
+/** Cómo se llama cada campo cuando se lo enseñamos a la hermandad. */
+const NOMBRE_CAMPO: Record<string, string> = {
+  titulo: 'el nombre', lema: 'el lema', logoDataUrl: 'el escudo',
+  colorPrimario: 'el color', colorSecundario: 'el color secundario',
+  plantilla: 'la plantilla', pareja: 'la tipografía', tema: 'el fondo',
+  redondeo: 'las esquinas', densidad: 'el aire', secciones: 'las secciones',
+  historia: 'la historia', titulares: 'los titulares', cultos: 'los cultos',
+  albumes: 'la galería', noticias: 'las noticias', paginas: 'las páginas',
+  boletines: 'los boletines', hazte: 'hazte hermano', estacion: 'la estación de penitencia',
+  junta: 'la junta', horarios: 'el horario', cifras: 'las cifras', sangre: 'la foto a sangre',
+  heroFotos: 'la portada', cabecera: 'la cabecera', pie: 'el pie', seo: 'lo que se comparte',
+  redes: 'las redes', estilo: 'el estilo',
+}
+
+const PALABRAS_PESTANA: Partial<Record<Pestana, string>> = {
+  diseno: 'estilo plantilla color colores paleta tipografia fuente secciones orden franjas capitular animacion idioma',
+  marco: 'cabecera pie menu logo escudo legal columnas redes',
+  portada: 'hero foto principal cuenta atras cifras sangre proximo culto boton',
+  titulares: 'imagenes cristo virgen autoria marca agua derechos fotografo',
+  estacion: 'itinerario salida horario paso calle viernes santo recorrido',
+  hazte: 'alta solicitud requisitos cuota pasos hermano nuevo',
+  junta: 'cargos gobierno hermano mayor secretario tesorero',
+  historia: 'fundacion sede texto parrafos citas',
+  galeria: 'fotos albumes peso imagenes salida',
+  actualidad: 'noticias avisos cabildo enlace destacada',
+  cultos: 'misa quinario funcion triduo calendario eventos',
+  paginas: 'textos informacion caridad bolsa formacion',
+  boletines: 'revista pdf descargas',
+  contacto: 'direccion telefono correo mapa secretaria horario',
+  compartir: 'seo google whatsapp titulo descripcion imagen enlace',
+}
+
 const GRUPOS_PESTANAS: { titulo: string; items: { id: Pestana; label: string; icono: ReactNode }[] }[] = [
   {
     titulo: 'Aspecto',
@@ -233,6 +364,37 @@ function avisosDeLaWeb(web: WebPublica, hermandad: HermandadSettings): AvisoWeb[
   if (!tel && !email) avisos.push({ id: 'contacto', texto: 'No hay forma de contactar: pon al menos un teléfono o un correo.', pestana: 'contacto', grave: true })
   if (web.heroFotos.length === 0) avisos.push({ id: 'portada', texto: 'La portada no tiene ninguna foto (se ve un degradado de color).', pestana: 'portada' })
   if (contenidoVacio(web.historia)) avisos.push({ id: 'historia', texto: 'La sección «Historia» está vacía y no se publica.', pestana: 'diseno' })
+  // La cuenta atrás desaparece sola cuando la fecha pasa, y la hermandad no se
+  // entera de que hay un dato viejo en su web.
+  if (web.estacion.fechaSalida && diasHasta(web.estacion.fechaSalida) !== null && diasHasta(web.estacion.fechaSalida)! < 0) {
+    avisos.push({ id: 'salida-pasada', texto: 'La fecha de la salida ya pasó: pon la del año que viene.', pestana: 'estacion' })
+  }
+  // El peso: las fotos van dentro del propio contenido, así que esto ES lo que
+  // se descarga en cada visita.
+  const peso = avisoDePeso(pesoWeb(web))
+  if (peso.nivel !== 'ok') {
+    avisos.push({
+      id: 'peso',
+      texto: `Tu web pesa ${peso.peso}: unos ${peso.segundos} segundos en un móvil con mala cobertura.`,
+      pestana: 'galeria',
+    })
+  }
+  const sinDescribir = fotosSinDescribir(web)
+  if (sinDescribir.length > 0) {
+    avisos.push({
+      id: 'alt',
+      texto: `Hay fotos sin describir (${sinDescribir.map((f) => f.donde).filter((v, i, xs) => xs.indexOf(v) === i).join(', ')}): quien no las ve no sabe qué hay.`,
+      pestana: sinDescribir[0].donde === 'Galería' ? 'galeria' : sinDescribir[0].donde === 'Actualidad' ? 'actualidad' : 'titulares',
+    })
+  }
+  const enBorrador = web.secciones.filter((s) => s.visible && s.borrador)
+  if (enBorrador.length > 0) {
+    avisos.push({
+      id: 'borrador',
+      texto: `${enBorrador.length} ${enBorrador.length === 1 ? 'sección está' : 'secciones están'} en borrador: se ven aquí, pero no en tu web.`,
+      pestana: 'diseno',
+    })
+  }
   if (web.titulares.length === 0) avisos.push({ id: 'titulares', texto: 'No has puesto ningún titular.', pestana: 'diseno' })
   // La sección con más devoción detrás es la que peor sale sin fotos: ahora se
   // publican a lo ancho, y sin imagen se quedan en un párrafo suelto.
@@ -364,11 +526,14 @@ export default function WebPublica() {
     pila: [], rehacer: [], ultimoCampo: '', ultimoMs: 0,
   })
   const [pasos, setPasos] = useState({ atras: 0, adelante: 0 })
+  /** Qué se deshace: «Deshacer» a secas no dice si vas a perder el color o el texto. */
+  const [ultimoCambio, setUltimoCambio] = useState('')
 
   function apuntar(campo: string, anterior: WebPublica) {
     const h = historial.current
     const ahora = performance.now()
     const seguido = campo === h.ultimoCampo && ahora - h.ultimoMs < 900
+    setUltimoCambio(NOMBRE_CAMPO[campo] ?? campo)
     if (!seguido) {
       h.pila = [...h.pila.slice(-49), anterior]
       h.rehacer = []
@@ -426,6 +591,21 @@ export default function WebPublica() {
     setWeb((actual) => ({ ...actual, ...cambios }))
   }
 
+  const [busca, setBusca] = useState('')
+  /** El raíl filtrado por lo que se busque: por el nombre o por sus palabras. */
+  const gruposFiltrados = useMemo(() => {
+    const q = sinAcentos(busca)
+    if (!q) return GRUPOS_PESTANAS
+    return GRUPOS_PESTANAS
+      .map((g) => ({
+        ...g,
+        items: g.items.filter(
+          (it) => sinAcentos(it.label).includes(q) || sinAcentos(PALABRAS_PESTANA[it.id] ?? '').includes(q),
+        ),
+      }))
+      .filter((g) => g.items.length > 0)
+  }, [busca])
+
   function copiarEnlace() {
     navigator.clipboard?.writeText(enlace).then(() => {
       setCopiado(true)
@@ -453,7 +633,7 @@ export default function WebPublica() {
               className="icon-btn"
               onClick={deshacer}
               disabled={pasos.atras === 0}
-              title={`Deshacer${pasos.atras ? ` (${pasos.atras})` : ''} · Ctrl+Z`}
+              title={`Deshacer${ultimoCambio ? ` «${ultimoCambio}»` : ''}${pasos.atras ? ` (${pasos.atras})` : ''} · Ctrl+Z`}
               aria-label="Deshacer"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10H9" /></svg>
@@ -482,7 +662,24 @@ export default function WebPublica() {
         {/* Raíl de secciones. En pantalla estrecha se vuelve una fila que se
             desplaza a lo ancho, sin partirse en dos líneas. */}
         <nav className="cms-rail" aria-label="Secciones de la web">
-          {GRUPOS_PESTANAS.map((g) => (
+          <div className="cms-rail__buscar">
+            <input
+              type="search"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar sección…"
+              aria-label="Buscar una sección del editor"
+              onKeyDown={(e) => {
+                // Enter abre la primera que salga: buscar y tener que apuntar
+                // con el ratón es media búsqueda.
+                if (e.key !== 'Enter') return
+                const primera = gruposFiltrados[0]?.items[0]
+                if (primera) { setPestana(primera.id); setBusca('') }
+              }}
+            />
+          </div>
+          {gruposFiltrados.length === 0 && <p className="cms-rail__vacio">Nada con «{busca}».</p>}
+          {gruposFiltrados.map((g) => (
             <div className="cms-rail__grupo" key={g.titulo}>
               <p className="cms-rail__titulo">{g.titulo}</p>
               {g.items.map((it) => (
@@ -928,9 +1125,6 @@ function DisenoTab({
     editarLote(`estilo:${e.id}`, cambiosDeEstilo(e))
   }
 
-  function toggleSeccion(i: number) {
-    editar('secciones', (xs) => xs.map((s, idx) => (idx === i ? { ...s, visible: !s.visible } : s)))
-  }
   /** Título a medida de una sección; vacío = el nombre de fábrica. */
   function renombrarSeccion(i: number, nombre: string) {
     editar('secciones', (xs) => xs.map((s, idx) => (idx === i ? { ...s, nombre } : s)))
@@ -1164,6 +1358,29 @@ function DisenoTab({
               </select>
             </div>
           </div>
+
+          <div className="afinar__bloque">
+            <h3 className="afinar__h">Ritmo de la página</h3>
+            <p className="form-hint">
+              Lo que evita que la web sea una columna de texto centrado, una sección detrás de otra.
+            </p>
+            <label className="checkbox">
+              <input type="checkbox" checked={web.fondosAlternos} onChange={(e) => editar('fondosAlternos', e.target.checked)} />
+              <span>Franjas de fondo alternas, para que las secciones se separen solas</span>
+            </label>
+            <label className="checkbox">
+              <input type="checkbox" checked={web.letraCapital} onChange={(e) => editar('letraCapital', e.target.checked)} />
+              <span>Letra capital al empezar cada sección, como en el boletín impreso</span>
+            </label>
+            <label className="checkbox">
+              <input type="checkbox" checked={web.animaciones} onChange={(e) => editar('animaciones', e.target.checked)} />
+              <span>Los bloques entran suavemente al bajar</span>
+            </label>
+            <p className="form-hint">
+              A quien tenga puesto «reducir movimiento» en su móvil u ordenador no se le anima nada,
+              lo marques o no.
+            </p>
+          </div>
         </div>
       </details>
 
@@ -1182,14 +1399,42 @@ function DisenoTab({
       </section>
 
       <section className="settings-card">
-        <div className="settings-card__head"><h2 className="settings-card__title">Secciones (orden y visibilidad)</h2></div>
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Secciones (orden y visibilidad)</h2>
+          {web.secciones.some((s) => s.visible && s.borrador) && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => editarLote('secciones', { secciones: web.secciones.map((s) => ({ ...s, borrador: false })) })}
+            >
+              Publicar los borradores
+            </button>
+          )}
+        </div>
         <ul className="secciones-lista">
           {web.secciones.map((s, i) => (
             <li key={s.tipo} className="seccion-item">
-              <label className="checkbox">
-                <input type="checkbox" checked={s.visible} onChange={() => toggleSeccion(i)} />
-                <span>{SECCIONES_INFO[s.tipo].nombre}</span>
-              </label>
+              <span className="seccion-item__nom">
+                {SECCIONES_INFO[s.tipo].nombre}
+                {s.visible && s.borrador && <span className="cms-borrador">Borrador</span>}
+              </span>
+              {/* Tres estados en vez de un interruptor: publicada, en borrador
+                  (se ve aquí pero no en la web) y oculta del todo. */}
+              <select
+                className="seccion-item__estado"
+                value={!s.visible ? 'oculta' : s.borrador ? 'borrador' : 'publicada'}
+                onChange={(e) => {
+                  const v = e.target.value
+                  editar('secciones', (xs) => xs.map((x, j) => (
+                    j !== i ? x : { ...x, visible: v !== 'oculta', borrador: v === 'borrador' }
+                  )))
+                }}
+                aria-label={`Estado de ${SECCIONES_INFO[s.tipo].nombre}`}
+              >
+                <option value="publicada">Publicada</option>
+                <option value="borrador">En borrador</option>
+                <option value="oculta">Oculta</option>
+              </select>
               <input
                 className="seccion-item__nombre"
                 type="text"
@@ -1304,6 +1549,18 @@ function EstacionTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
           La hora de salida y el itinerario son EL dato que se busca en Semana Santa. Mientras esté
           vacío, la sección no sale ni en la web ni en el menú.
         </p>
+        {!e.dia.trim() && !e.horaSalida.trim() && e.itinerario.length === 0 && (
+          <div className="banner-inline banner-inline--accent">
+            <span>Te dejamos un itinerario de ejemplo con sus horas para que solo tengas que cambiar las calles.</span>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => editar('estacion', { ...GUION_ESTACION, itinerario: GUION_ESTACION.itinerario.map((x) => ({ ...x, id: nuevoId() })) })}
+            >
+              Rellenar con un guion
+            </button>
+          </div>
+        )}
         <div className="form-grid-2">
           <div className="form-row">
             <label htmlFor="estDia">Día</label>
@@ -1327,6 +1584,14 @@ function EstacionTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
         <div className="form-row">
           <label htmlFor="estDesde">Desde dónde sale</label>
           <input id="estDesde" type="text" value={e.salidaDesde} onChange={(x) => set({ salidaDesde: x.target.value })} placeholder="Parroquia de San Juan" />
+        </div>
+        <div className="form-row">
+          <label htmlFor="estFecha">Fecha exacta de la salida</label>
+          <input id="estFecha" type="date" value={e.fechaSalida ?? ''} onChange={(x) => set({ fechaSalida: x.target.value })} />
+          <p className="form-hint">
+            Solo para la cuenta atrás de la portada: con «Viernes Santo» no se pueden contar los
+            días. En la web se sigue leyendo lo que hayas escrito arriba.
+          </p>
         </div>
         <div className="form-row">
           <label htmlFor="estNota">Recomendaciones</label>
@@ -1456,6 +1721,18 @@ function HistoriaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
         Se publica como una sección con formato: una entradilla, los párrafos que quieras (con su
         subtítulo) y fotos.
       </p>
+      {contenidoVacio(web.historia) && (
+        <div className="banner-inline banner-inline--accent">
+          <span>¿No sabes por dónde empezar? Te dejamos un guion con los cuatro apartados de siempre.</span>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => editar('historia', { ...GUION_HISTORIA, parrafos: GUION_HISTORIA.parrafos.map((x) => ({ ...x, id: nuevoId() })) })}
+          >
+            Rellenar con un guion
+          </button>
+        </div>
+      )}
       <div className="form-row">
         <label htmlFor="historiaEntradilla">Entradilla</label>
         <input
@@ -1474,7 +1751,7 @@ function HistoriaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
       <EditorFotos
         fotos={web.historia.fotos}
         onChange={(fotos) => editar('historia', (h) => ({ ...h, fotos: typeof fotos === 'function' ? fotos(h.fotos) : fotos }))}
-        onSubir={leerImagen}
+        onSubir={leerImagenMediana}
         titulo="Fotos de la sección"
       />
     </section>
@@ -1521,7 +1798,15 @@ function TitularesTab({ web, editar, hermandad }: { web: WebPublica; editar: Edi
                 <label className="btn btn-outline btn-sm">{t.fotoDataUrl ? 'Cambiar foto' : 'Foto'}<input type="file" accept="image/*" hidden onChange={(e) => leerImagen(e, (d) => editarTitular(t.id, { fotoDataUrl: d }))} /></label>
                 <button type="button" className="icon-btn" title="Subir" disabled={i === 0} onClick={() => mover(i, -1)}>▲</button>
                 <button type="button" className="icon-btn" title="Bajar" disabled={i === web.titulares.length - 1} onClick={() => mover(i, 1)}>▼</button>
-                <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" style={{ marginLeft: 'auto' }} onClick={() => editar('titulares', (xs) => xs.filter((x) => x.id !== t.id))}>Quitar titular</button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => editar('titulares', (xs) => duplicarEn(xs, t.id, (x) => ({ ...x, id: nuevoId(), nombre: `${x.nombre} (copia)`, slug: '' })))}
+                >
+                  Duplicar
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('titulares', (xs) => xs.filter((x) => x.id !== t.id))}>Quitar titular</button>
               </div>
               <div className="form-grid-2">
                 <div className="form-row">
@@ -1577,7 +1862,7 @@ function TitularesTab({ web, editar, hermandad }: { web: WebPublica; editar: Edi
               <EditorFotos
                 fotos={t.fotos ?? []}
                 onChange={(fotos) => editar('titulares', (xs) => xs.map((x) => (x.id === t.id ? { ...x, fotos: typeof fotos === 'function' ? fotos(x.fotos ?? []) : fotos } : x)))}
-                onSubir={leerImagen}
+                onSubir={leerImagenMediana}
                 titulo="Más fotos para su ficha"
               />
             </div>
@@ -1638,7 +1923,7 @@ function PortadaTab({ web, editar, actualizar }: { web: WebPublica; editar: Edit
         <h2 className="settings-card__title">Fotos de portada</h2>
         <label className="btn btn-primary btn-sm">
           + Añadir fotos
-          <input type="file" accept="image/*" multiple hidden onChange={(e) => leerImagenes(e, anadir)} />
+          <input type="file" accept="image/*" multiple hidden onChange={(e) => leerImagenes(e, anadir, 1920)} />
         </label>
       </div>
       <p className="form-hint">
@@ -1656,7 +1941,7 @@ function PortadaTab({ web, editar, actualizar }: { web: WebPublica; editar: Edit
                 <button type="button" className="icon-btn" title="Después" disabled={i === web.heroFotos.length - 1} onClick={() => mover(i, 1)}>▶</button>
                 <label className="icon-btn" title="Cambiar esta foto">
                   ⟳
-                  <input type="file" accept="image/*" hidden onChange={(e) => leerImagen(e, (d) => editar('heroFotos', (xs) => xs.map((x, j) => (j === i ? d : x))))} />
+                  <input type="file" accept="image/*" hidden onChange={(e) => leerImagenGrande(e, (d) => editar('heroFotos', (xs) => xs.map((x, j) => (j === i ? d : x))))} />
                 </label>
                 <button type="button" className="icon-btn rgpd-borrar" title="Quitar" onClick={() => editar('heroFotos', (xs) => xs.filter((_, j) => j !== i))}>✕</button>
               </div>
@@ -1675,6 +1960,164 @@ function PortadaTab({ web, editar, actualizar }: { web: WebPublica; editar: Edit
         </div>
       </div>
       <div className="form-row"><label>Texto del botón de portada</label><input type="text" value={web.heroTextoBoton} onChange={(e) => editar('heroTextoBoton', e.target.value)} placeholder="Portal del hermano" /></div>
+
+      <div className="settings-card__head" style={{ marginTop: '1.4rem' }}>
+        <h2 className="settings-card__title">Lo primero que se ve</h2>
+      </div>
+      <p className="form-hint">
+        Tres bloques bajo la portada con lo que pregunta todo el que entra: cuándo salís, cuál es el
+        próximo culto y quiénes sois.
+      </p>
+      <label className="checkbox">
+        <input type="checkbox" checked={web.cuentaAtras} onChange={(e) => editar('cuentaAtras', e.target.checked)} />
+        <span>Cuenta atrás para la estación de penitencia</span>
+      </label>
+      <p className="form-hint">
+        {web.estacion.fechaSalida
+          ? `Cuenta hasta el ${web.estacion.fechaSalida}. La fecha se pone en «Estación de penitencia».`
+          : getCampana().fechaSalida
+            ? `Sin fecha propia usa la de la campaña (${getCampana().fechaSalida}), que ya tienes puesta en Papeletas.`
+            : 'Necesita la fecha exacta de la salida: ponla en «Estación de penitencia» o en la campaña de Papeletas.'}
+      </p>
+      <label className="checkbox">
+        <input type="checkbox" checked={web.proximoCulto} onChange={(e) => editar('proximoCulto', e.target.checked)} />
+        <span>El próximo culto, destacado</span>
+      </label>
+      <p className="form-hint">Sale el primero del calendario que aún no haya pasado. Si no hay ninguno, no se enseña.</p>
+
+      <div className="settings-card__head" style={{ marginTop: '1rem' }}>
+        <h3 className="settings-card__title" style={{ fontSize: '0.95rem' }}>Cifras de la hermandad</h3>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          onClick={() => editar('cifras', (xs) => [...xs, { id: nuevoId(), numero: '', texto: '' }])}
+        >
+          + Añadir cifra
+        </button>
+      </div>
+      {web.cifras.length === 0 ? (
+        <p className="form-hint">Por ejemplo: «1.240 · hermanos», «1595 · desde», «3 · pasos».</p>
+      ) : (
+        web.cifras.map((c) => (
+          <div className="assign-box__row" key={c.id}>
+            <input
+              type="text"
+              value={c.numero}
+              onChange={(e) => editar('cifras', (xs) => xs.map((x) => (x.id === c.id ? { ...x, numero: e.target.value } : x)))}
+              placeholder="1.240"
+              aria-label="La cifra"
+              style={{ maxWidth: '9rem' }}
+            />
+            <input
+              type="text"
+              value={c.texto}
+              onChange={(e) => editar('cifras', (xs) => xs.map((x) => (x.id === c.id ? { ...x, texto: e.target.value } : x)))}
+              placeholder="hermanos"
+              aria-label="Qué es esa cifra"
+            />
+            <button
+              type="button"
+              className="icon-btn rgpd-borrar"
+              title="Quitar"
+              onClick={() => editar('cifras', (xs) => xs.filter((x) => x.id !== c.id))}
+            >
+              ✕
+            </button>
+          </div>
+        ))
+      )}
+
+      <div className="settings-card__head" style={{ marginTop: '1.4rem' }}>
+        <h2 className="settings-card__title">Idioma</h2>
+      </div>
+      <div className="form-row">
+        <label htmlFor="idiomaWeb">La web está escrita en</label>
+        <select id="idiomaWeb" value={web.idioma} onChange={(e) => editar('idioma', e.target.value)}>
+          {IDIOMAS.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+        </select>
+        <p className="form-hint">
+          Sin esto, un lector de pantalla lee el castellano con voz inglesa y no hay quien lo
+          entienda. Google también lo usa para saber a quién enseñar tu web.
+        </p>
+      </div>
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="otroIdioma">Unas líneas en otra lengua</label>
+          <select
+            id="otroIdioma"
+            value={web.resumenOtroIdioma.idioma}
+            onChange={(e) => editar('resumenOtroIdioma', (v) => ({ ...v, idioma: e.target.value }))}
+          >
+            {IDIOMAS.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+          </select>
+        </div>
+        <div className="form-row">
+          <label htmlFor="otroIdiomaTitulo">Título</label>
+          <input
+            id="otroIdiomaTitulo"
+            type="text"
+            value={web.resumenOtroIdioma.titulo}
+            onChange={(e) => editar('resumenOtroIdioma', (v) => ({ ...v, titulo: e.target.value }))}
+            placeholder="About our brotherhood"
+          />
+        </div>
+      </div>
+      <div className="form-row">
+        <textarea
+          rows={3}
+          value={web.resumenOtroIdioma.texto}
+          onChange={(e) => editar('resumenOtroIdioma', (v) => ({ ...v, texto: e.target.value }))}
+          placeholder="Founded in 1595, our brotherhood walks the streets of the old quarter every Good Friday…"
+          aria-label="Resumen en otra lengua"
+        />
+        <p className="form-hint">
+          Cuatro líneas bajo la portada para el visitante de fuera. Traducir la web entera no es
+          realista; esto sí, y es lo que busca quien viene de turismo en Semana Santa.
+        </p>
+      </div>
+
+      <div className="settings-card__head" style={{ marginTop: '1.4rem' }}>
+        <h2 className="settings-card__title">Foto a sangre</h2>
+        <label className="btn btn-outline btn-sm">
+          {web.sangre.fotoDataUrl ? 'Cambiar foto' : 'Subir foto'}
+          <input type="file" accept="image/*" hidden onChange={(e) => leerImagen(e, (d) => editar('sangre', (v) => ({ ...v, fotoDataUrl: d })))} />
+        </label>
+      </div>
+      <p className="form-hint">
+        Una foto de borde a borde que corta la página en dos. Es lo que da respiro entre tanta
+        sección seguida. Elige una apaisada y con aire abajo, que ahí va la frase.
+      </p>
+      {web.sangre.fotoDataUrl && (
+        <>
+          <div className="assign-box__row">
+            <img src={web.sangre.fotoDataUrl} alt="" style={{ width: 120, height: 60, objectFit: 'cover', borderRadius: 8 }} />
+            <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('sangre', (v) => ({ ...v, fotoDataUrl: null }))}>Quitar</button>
+          </div>
+          <div className="form-row">
+            <label htmlFor="sangreTexto">Frase encima (opcional)</label>
+            <input
+              id="sangreTexto"
+              type="text"
+              value={web.sangre.texto}
+              onChange={(e) => editar('sangre', (v) => ({ ...v, texto: e.target.value }))}
+              placeholder="Desde 1595 por las calles de nuestro barrio"
+            />
+          </div>
+          <div className="form-row">
+            <label htmlFor="sangreDonde">Dónde va</label>
+            <select
+              id="sangreDonde"
+              value={web.sangre.despuesDe}
+              onChange={(e) => editar('sangre', (v) => ({ ...v, despuesDe: e.target.value as TipoSeccion | '' }))}
+            >
+              <option value="">Detrás de la primera sección</option>
+              {web.secciones.filter((x) => x.visible).map((x) => (
+                <option key={x.tipo} value={x.tipo}>Detrás de «{nombreSeccion(x)}»</option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
     </section>
   )
 }
@@ -1703,17 +2146,53 @@ function GaleriaTab({ web, editar, actualizar }: { web: WebPublica; editar: Edit
    * y con el objeto capturado en el render se perdían fotos al subir varias
    * seguidas.
    */
-  function anadirFoto(albumId: string, dataUrl: string) {
+  async function anadirFoto(albumId: string, dataUrl: string) {
+    // Se guarda también una copia pequeña: la rejilla usa esa y la grande solo
+    // se descarga al abrir la foto a pantalla completa.
+    const mini = await miniatura(dataUrl)
     actualizar((actual) => ({
       ...actual,
       albumes: actual.albumes.map((a) =>
-        a.id === albumId ? { ...a, fotos: [...a.fotos, { id: nuevoId(), fotoDataUrl: dataUrl, pie: '' } as FotoGaleria] } : a,
+        a.id === albumId
+          ? { ...a, fotos: [...a.fotos, { id: nuevoId(), fotoDataUrl: dataUrl, miniDataUrl: mini, pie: '' } as FotoGaleria] }
+          : a,
       ),
     }))
   }
 
   const totalFotos = web.albumes.reduce((n, a) => n + a.fotos.length, 0)
   const [soltandoEn, setSoltandoEn] = useState<string | null>(null)
+
+  const peso = avisoDePeso(pesoWeb(web))
+  // Las fotos subidas antes de que hubiera copia pequeña: siguen mandando la
+  // grande a la rejilla, que es de donde viene casi todo el peso.
+  const sinMini = web.albumes.reduce((n, a) => n + a.fotos.filter((f) => !f.miniDataUrl).length, 0)
+  const [aligerando, setAligerando] = useState(false)
+
+  /**
+   * Le hace una copia pequeña a las fotos que no la tengan. No se vuelve a
+   * comprimir la grande: ya está comprimida, y volver a hacerlo solo le quita
+   * calidad. Va de una en una para no clavar el navegador con treinta fotos.
+   */
+  async function aligerar() {
+    setAligerando(true)
+    try {
+      for (const a of web.albumes) {
+        for (const f of a.fotos) {
+          if (f.miniDataUrl) continue
+          const mini = await miniatura(f.fotoDataUrl)
+          actualizar((actual) => ({
+            ...actual,
+            albumes: actual.albumes.map((x) =>
+              x.id !== a.id ? x : { ...x, fotos: x.fotos.map((y) => (y.id === f.id ? { ...y, miniDataUrl: mini } : y)) },
+            ),
+          }))
+        }
+      }
+    } finally {
+      setAligerando(false)
+    }
+  }
 
   // Pegar una captura o una foto del portapapeles va al primer álbum, que es
   // el que se está mirando el 90 % de las veces.
@@ -1747,6 +2226,22 @@ function GaleriaTab({ web, editar, actualizar }: { web: WebPublica; editar: Edit
         de derechos y la marca de agua se ponen en «Titulares».
         {totalFotos > 0 && ` Ahora mismo: ${totalFotos} ${totalFotos === 1 ? 'foto' : 'fotos'}.`}
       </p>
+
+      {/* Lo que pesa la web. Las fotos viajan dentro del contenido, así que
+          esto es lo que se descarga cada visita. */}
+      <div className={`banner-inline ${peso.nivel === 'malo' ? 'banner-inline--warn' : 'banner-inline--accent'}`}>
+        <span>
+          Tu web pesa <b>{peso.peso}</b>
+          {peso.segundos >= 2 && `: unos ${peso.segundos} segundos en un móvil con mala cobertura`}
+          {peso.nivel === 'malo' && '. Pasado de aquí, el navegador puede no dejar guardarla'}.
+          {sinMini > 0 && ` Hay ${sinMini} ${sinMini === 1 ? 'foto' : 'fotos'} sin copia pequeña.`}
+        </span>
+        {sinMini > 0 && (
+          <button type="button" className="btn btn-outline btn-sm" disabled={aligerando} onClick={aligerar}>
+            {aligerando ? 'Aligerando…' : 'Aligerar las fotos'}
+          </button>
+        )}
+      </div>
       {web.albumes.length === 0 && (
         <p className="form-hint">Todavía no hay ningún álbum. Crea el primero con el botón de arriba.</p>
       )}
@@ -1770,6 +2265,20 @@ function GaleriaTab({ web, editar, actualizar }: { web: WebPublica; editar: Edit
             />
             <button type="button" className="icon-btn" title="Subir" disabled={i === 0} onClick={() => moverAlbum(i, -1)}>▲</button>
             <button type="button" className="icon-btn" title="Bajar" disabled={i === web.albumes.length - 1} onClick={() => moverAlbum(i, 1)}>▼</button>
+            {/* Las fotos de la copia llevan id nuevo: el visor las localiza por
+                id en la lista de TODAS, y dos iguales lo descolocaban. */}
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => editar('albumes', (xs) => duplicarEn(xs, a.id, (x) => ({
+                ...x,
+                id: nuevoId(),
+                titulo: `${x.titulo} (copia)`,
+                fotos: x.fotos.map((f) => ({ ...f, id: nuevoId() })),
+              })))}
+            >
+              Duplicar
+            </button>
             <button
               type="button"
               className="btn btn-ghost btn-sm rgpd-borrar"
@@ -1883,6 +2392,18 @@ function ActualidadTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
             <div className="form-row"><label>Título</label><input type="text" value={n.titulo} onChange={(e) => editarNoticia(n.id, { titulo: e.target.value })} /></div>
             <div className="form-row"><label>Fecha</label><input type="date" value={n.fecha} onChange={(e) => editarNoticia(n.id, { fecha: e.target.value })} /></div>
           </div>
+          {n.fotoDataUrl && (
+            <div className="form-row">
+              <label>Qué se ve en la foto</label>
+              <input
+                type="text"
+                value={n.altFoto ?? ''}
+                onChange={(e) => editarNoticia(n.id, { altFoto: e.target.value })}
+                placeholder="El paso de palio saliendo de la parroquia"
+              />
+              <p className="form-hint">Para quien no puede verla. Déjalo vacío solo si la foto es de adorno.</p>
+            </div>
+          )}
           <div className="form-row">
             <label>Entradilla</label>
             <textarea rows={2} value={n.resumen} onChange={(e) => editarNoticia(n.id, { resumen: e.target.value })} />
@@ -1929,6 +2450,15 @@ function ActualidadTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
               />
               <span>Destacada (sale la primera y a lo grande)</span>
             </label>
+            {/* La copia sale sin publicar y con enlace nuevo: dos noticias con
+                el mismo enlace y una de las dos no se puede abrir. */}
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => editar('noticias', (xs) => duplicarEn(xs, n.id, (x) => ({ ...x, id: nuevoId(), titulo: `${x.titulo} (copia)`, slug: '', publicada: false })))}
+            >
+              Duplicar
+            </button>
             <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('noticias', (xs) => xs.filter((x) => x.id !== n.id))}>Eliminar noticia</button>
           </div>
         </div>
@@ -1998,7 +2528,15 @@ function CultosTab({ web, editar, delCalendario }: { web: WebPublica; editar: Ed
             {c.fotoDataUrl && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => editarCulto(c.id, { fotoDataUrl: null })}>Quitar foto</button>
             )}
-            <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" style={{ marginLeft: 'auto' }} onClick={() => editar('cultos', (xs) => xs.filter((x) => x.id !== c.id))}>Quitar culto</button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => editar('cultos', (xs) => duplicarEn(xs, c.id, (x) => ({ ...x, id: nuevoId(), titulo: `${x.titulo} (copia)` })))}
+            >
+              Duplicar
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('cultos', (xs) => xs.filter((x) => x.id !== c.id))}>Quitar culto</button>
           </div>
           <div className="form-row">
             <label>Título</label>
@@ -2059,6 +2597,23 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
       <div className="settings-card__head">
         <h2 className="settings-card__title">Páginas y textos</h2>
         <button type="button" className="btn btn-outline btn-sm" onClick={nuevaPagina}>+ Nueva página</button>
+        {/* La página que más se pide y la que peor se arranca. */}
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            const id = nuevoId()
+            editar('paginas', (xs) => [...xs, {
+              ...GUION_PAGINA_CARIDAD,
+              id,
+              enMenu: true,
+              parrafos: GUION_PAGINA_CARIDAD.parrafos.map((x) => ({ ...x, id: nuevoId() })),
+            }])
+            setPaginaSel(id)
+          }}
+        >
+          + Bolsa de caridad (guion)
+        </button>
       </div>
       <div className="cms-chips">
         {web.paginas.map((p) => (
@@ -2082,6 +2637,22 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
             <div className="assign-box__row">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => moverPagina(sel.id, -1)}>▲ Subir</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => moverPagina(sel.id, 1)}>▼ Bajar</button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => {
+                  const copiaId = nuevoId()
+                  editar('paginas', (xs) => duplicarEn(xs, sel.id, (x) => ({
+                    ...x,
+                    id: copiaId,
+                    titulo: `${x.titulo} (copia)`,
+                    parrafos: x.parrafos.map((pa) => ({ ...pa, id: nuevoId() })),
+                  })))
+                  setPaginaSel(copiaId)
+                }}
+              >
+                Duplicar
+              </button>
             </div>
           </div>
 
@@ -2096,7 +2667,7 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
             onChange={(fotos) => editar('paginas', (ps) => ps.map((p) => (
               p.id === sel.id ? { ...p, fotos: typeof fotos === 'function' ? fotos(p.fotos) : fotos } : p
             )))}
-            onSubir={leerImagen}
+            onSubir={leerImagenMediana}
             titulo="Fotos de la página"
           />
 
@@ -2266,15 +2837,41 @@ function CompartirTab({
           Así se ve tu web cuando alguien pega el enlace en WhatsApp o la encuentra en Google.
         </p>
 
-        {/* Vista previa de la tarjeta: es lo que convence de rellenarlo. */}
-        <div className="compartir-previa">
-          <div className="compartir-previa__img">
-            {imagen ? <img src={imagen} alt="" /> : <span>Sin imagen</span>}
+        {/* Las dos previas, con el recorte de verdad de cada sitio: es lo que
+            convence de rellenarlo, y lo que evita el «pero si yo lo escribí». */}
+        <div className="compartir-previas">
+          <div>
+            <p className="compartir-previa__eti">En Google</p>
+            <div className="google-previa">
+              <div className="google-previa__marca">
+                <span className="google-previa__favicon" aria-hidden="true">
+                  {(titulo[0] ?? 'H').toUpperCase()}
+                </span>
+                <span>
+                  <b>{web.titulo || hermandad.nombreLegal || 'Tu hermandad'}</b>
+                  <small>{dominio}</small>
+                </span>
+              </div>
+              <p className="google-previa__titulo">{recortar(titulo, 60)}</p>
+              <p className="google-previa__desc">
+                {descripcion
+                  ? recortar(descripcion, 155)
+                  : 'Sin descripción, Google se inventa un trozo del texto de tu web.'}
+              </p>
+            </div>
           </div>
-          <div className="compartir-previa__texto">
-            <span className="compartir-previa__dominio">{dominio}</span>
-            <b>{titulo}</b>
-            <p>{descripcion || 'Sin descripción. Aquí saldría el texto que escribas abajo.'}</p>
+          <div>
+            <p className="compartir-previa__eti">En WhatsApp</p>
+            <div className="compartir-previa">
+              <div className="compartir-previa__img">
+                {imagen ? <img src={imagen} alt="" /> : <span>Sin imagen</span>}
+              </div>
+              <div className="compartir-previa__texto">
+                <b>{recortar(titulo, 65)}</b>
+                <p>{recortar(descripcion, 120) || 'Sin descripción. Aquí saldría el texto que escribas abajo.'}</p>
+                <span className="compartir-previa__dominio">{dominio}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2322,6 +2919,51 @@ function CompartirTab({
           <p className="form-hint">
             Sin imagen propia se usa la primera foto de la portada. Se ve mejor apaisada (1200×630).
           </p>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head"><h2 className="settings-card__title">Para Google</h2></div>
+        <p className="form-hint">
+          El <b>sitemap</b> es la lista de páginas que se le da a Google para que las visite: sin
+          él, las noticias y las fichas de los titulares tardan semanas en salir, o no salen. El
+          <b> robots</b> dice quién puede mirar.
+        </p>
+        <div className="assign-box__row">
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => descargarTexto('sitemap.xml', sitemapXml(web, baseDeLaWeb(web, window.location.origin)), 'application/xml')}
+          >
+            Descargar sitemap.xml
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => descargarTexto('robots.txt', robotsTxt(web, baseDeLaWeb(web, window.location.origin)), 'text/plain')}
+          >
+            Descargar robots.txt
+          </button>
+        </div>
+        <p className="form-hint">
+          {rutasDeLaWeb(web).length} {rutasDeLaWeb(web).length === 1 ? 'página' : 'páginas'} en el
+          sitemap. {!web.publicada && 'Mientras la web no esté publicada, el robots pide a los buscadores que no la indexen: si Google indexa una hermandad a medio hacer, luego cuesta meses quitarlo.'}
+        </p>
+
+        <div className="banner-inline banner-inline--accent" style={{ marginTop: '0.8rem' }}>
+          <span>
+            <b>Lo que Google sí ve.</b> El título, la descripción, la dirección buena de cada
+            página, el escudo en la pestaña y los datos de cada culto (con su fecha y su hora) ya
+            van puestos: Google ejecuta JavaScript al indexar y los lee.
+          </span>
+        </div>
+        <div className="banner-inline banner-inline--warn">
+          <span>
+            <b>Lo que WhatsApp todavía no ve.</b> WhatsApp y Facebook no ejecutan JavaScript: piden
+            el HTML y leen lo que hay. Para que la vista previa del enlace diga el nombre de tu
+            hermandad y no el de Cabildo, hace falta encender la parte de servidor. Está escrita y
+            lista: son dos pasos, y están explicados en <code>docs/SEO.md</code>.
+          </span>
         </div>
       </section>
     </>

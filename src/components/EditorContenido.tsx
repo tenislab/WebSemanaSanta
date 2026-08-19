@@ -1,6 +1,6 @@
 import type { ChangeEvent } from 'react'
 import { nuevoId } from '../lib/supabaseSync'
-import type { ParrafoPagina } from '../lib/webPublica'
+import type { FotoWeb, ParrafoPagina } from '../lib/webPublica'
 
 /**
  * Editor de párrafos con subtítulo, con opción de reordenarlos. Lo comparten la
@@ -78,6 +78,17 @@ export function EditorParrafos({
               >
                 ▼
               </button>
+              {/* Una cita destacada rompe un texto largo. El subtítulo pasa a
+                  ser la firma («Reglas de 1595», «Hermano mayor, 2026»). */}
+              <button
+                type="button"
+                className={`icon-btn${par.destacado ? ' icon-btn--on' : ''}`}
+                title={par.destacado ? 'Volver a párrafo normal' : 'Destacar como cita'}
+                aria-pressed={par.destacado ? 'true' : 'false'}
+                onClick={() => editarUno(par.id, { destacado: !par.destacado })}
+              >
+                ❝
+              </button>
               <button
                 type="button"
                 className="icon-btn rgpd-borrar"
@@ -92,8 +103,13 @@ export function EditorParrafos({
             rows={3}
             value={par.texto}
             onChange={(e) => editarUno(par.id, { texto: e.target.value })}
-            placeholder="Texto del párrafo"
+            placeholder={par.destacado ? 'La cita' : 'Texto del párrafo'}
           />
+          {par.destacado && (
+            <p className="form-hint">
+              Se publica como cita destacada. El subtítulo de arriba sale como firma, debajo.
+            </p>
+          )}
         </div>
       ))}
     </>
@@ -110,13 +126,13 @@ export function EditorFotos({
   onSubir,
   titulo = 'Fotos',
 }: {
-  fotos: string[]
+  fotos: FotoWeb[]
   /**
    * Acepta también una función de la lista actual: al subir una foto, el
    * archivo se lee y se comprime en segundo plano, y con la lista capturada en
    * el render se perdía lo editado entretanto.
    */
-  onChange: (siguiente: string[] | ((actual: string[]) => string[])) => void
+  onChange: (siguiente: FotoWeb[] | ((actual: FotoWeb[]) => FotoWeb[])) => void
   /** Lee el archivo elegido y devuelve la imagen ya comprimida. */
   onSubir: (e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => void) => void
   titulo?: string
@@ -139,7 +155,7 @@ export function EditorFotos({
             type="file"
             accept="image/*"
             hidden
-            onChange={(e) => onSubir(e, (d) => onChange((actuales) => [...actuales, d]))}
+            onChange={(e) => onSubir(e, (d) => onChange((actuales) => [...actuales, { url: d, alt: '' }]))}
           />
         </label>
       </div>
@@ -147,7 +163,17 @@ export function EditorFotos({
         <div className="galeria-editor">
           {fotos.map((f, i) => (
             <div className="galeria-editor__item" key={i}>
-              <img src={f} alt="" />
+              <img src={f.url} alt="" />
+              {/* Qué se ve en la foto, para quien no puede verla. Si está
+                  vacío se publica como decorativa y el lector de pantalla la
+                  salta, que es lo correcto cuando no aporta nada. */}
+              <input
+                type="text"
+                value={f.alt}
+                onChange={(e) => onChange(fotos.map((x, j) => (j === i ? { ...x, alt: e.target.value } : x)))}
+                placeholder="Qué se ve (opcional)"
+                aria-label="Qué se ve en la foto"
+              />
               <div className="galeria-editor__acciones">
                 <button type="button" className="icon-btn" title="Antes" disabled={i === 0} onClick={() => mover(i, -1)}>◀</button>
                 <button type="button" className="icon-btn" title="Después" disabled={i === fotos.length - 1} onClick={() => mover(i, 1)}>▶</button>

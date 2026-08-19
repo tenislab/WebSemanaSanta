@@ -29,13 +29,14 @@ import { etiquetaSegmento, filtrarSegmento, limpiarCriterios, mismosCriterios, t
  * vale CRITERIOS_POR_DEFECTO, que ya filtra a activos con correo.
  */
 type OrdenCampo = 'numero' | 'nombre' | 'estado' | 'cuota' | 'antiguedad'
-const COLUMNAS: { id: OrdenCampo | 'tramo'; label: string; orden: boolean }[] = [
-  { id: 'numero', label: 'Nº', orden: true },
+/** `opcional`: columna de apoyo que se oculta en el móvil (ver `col-opcional`). */
+const COLUMNAS: { id: OrdenCampo | 'tramo'; label: string; orden: boolean; opcional?: boolean }[] = [
+  { id: 'numero', label: 'Nº', orden: true, opcional: true },
   { id: 'nombre', label: 'Hermano', orden: true },
-  { id: 'tramo', label: 'Tramo', orden: false },
+  { id: 'tramo', label: 'Tramo', orden: false, opcional: true },
   { id: 'estado', label: 'Estado', orden: true },
-  { id: 'cuota', label: 'Cuota', orden: true },
-  { id: 'antiguedad', label: 'Antigüedad', orden: true },
+  { id: 'cuota', label: 'Cuota', orden: true, opcional: true },
+  { id: 'antiguedad', label: 'Antigüedad', orden: true, opcional: true },
 ]
 
 const SIN_SESGO: CriteriosSegmento = {
@@ -747,7 +748,7 @@ export default function Hermanos() {
                 />
               </th>
               {COLUMNAS.map((c) => (
-                <th key={c.id} className={c.orden ? 'th-ordenable' : undefined}>
+                <th key={c.id} className={`${c.orden ? 'th-ordenable' : ''}${c.opcional ? ' col-opcional' : ''}`.trim() || undefined}>
                   {c.orden ? (
                     <button type="button" onClick={() => ordenarPor(c.id as OrdenCampo)} aria-label={`Ordenar por ${c.label}`}>
                       {c.label}
@@ -758,7 +759,7 @@ export default function Hermanos() {
                   ) : c.label}
                 </th>
               ))}
-              <th></th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
@@ -777,7 +778,7 @@ export default function Hermanos() {
                     aria-label={`Marcar a ${h.nombre}`}
                   />
                 </td>
-                <td className="num">{h.numero > 0 ? h.numero : '—'}</td>
+                <td className="num col-opcional">{h.numero > 0 ? h.numero : '—'}</td>
                 <td>
                   <div className="row-person">
                     {/* Un tono estable por persona: el censo deja de ser una
@@ -788,25 +789,29 @@ export default function Hermanos() {
                     <span>
                       <span className="row-person__name">{h.nombre}</span>
                       <span className="row-person__sub">{h.email}</span>
+                      {/* En el móvil se ocultan Nº, tramo y antigüedad. */}
+                      <span className="row-person__sub solo-movil">
+                        Nº {h.numero > 0 ? h.numero : '—'} · cuota {h.cuotaAlDia ? 'al día' : 'pendiente'} · {tramoPorHermano.get(h.id) ?? 'sin papeleta'}
+                      </span>
                     </span>
                   </div>
                 </td>
-                <td>
+                <td className="col-opcional">
                   {tramoPorHermano.get(h.id) ?? <span className="table-muted">Sin papeleta</span>}
                 </td>
                 <td>
                   <span className={`pill ${estadoClass(h.estado)}`}>{h.estado}</span>
                 </td>
-                <td>
+                <td className="col-opcional">
                   <span className={`pill ${h.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
                     {h.cuotaAlDia ? 'Al día' : 'Pendiente'}
                   </span>
                 </td>
-                <td className="num">
+                <td className="num col-opcional">
                   {h.antiguedad}
                   <span className="table-subtle"> · {aniosDeHermandad(h.antiguedad)} años</span>
                 </td>
-                <td>
+                <td className="col-opcional">
                   <button
                     className="icon-btn"
                     title="Ver ficha"

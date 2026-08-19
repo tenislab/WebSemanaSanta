@@ -523,14 +523,16 @@ export default function Cuotas() {
       <div className="table-card">
         <table>
           <thead>
+            {/* En el móvil solo caben tres columnas: el resto se oculta y sus
+                datos se doblan bajo el nombre del hermano (`solo-movil`). */}
             <tr>
-              <th>Nº</th>
+              <th className="col-opcional">Nº</th>
               <th>Hermano</th>
-              <th>Concepto</th>
+              <th className="col-opcional">Concepto</th>
               <th>Estado</th>
               <th>Importe</th>
-              <th>Cobro</th>
-              <th></th>
+              <th className="col-opcional">Cobro</th>
+              <th className="col-opcional"></th>
             </tr>
           </thead>
           <tbody>
@@ -543,22 +545,23 @@ export default function Cuotas() {
                   onClick={() => setSelected(c)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="num">{String(c.numero).padStart(4, '0')}</td>
+                  <td className="num col-opcional">{String(c.numero).padStart(4, '0')}</td>
                   <td>
                     <div className="row-person">
                       <span className="row-avatar">{h ? initials(h.nombre) : '?'}</span>
                       <span>
                         <span className="row-person__name">{h?.nombre ?? 'Hermano desconocido'}</span>
                         <span className="row-person__sub">Nº {h?.numero ?? '—'}</span>
+                        <span className="row-person__sub solo-movil">{c.concepto} · {c.fechaCobro}</span>
                       </span>
                     </div>
                   </td>
-                  <td>{c.concepto}</td>
+                  <td className="col-opcional">{c.concepto}</td>
                   <td>
                     <span className={`pill ${estadoClass(c.estado)}`}>{c.estado}</span>
                   </td>
                   <td className="num">{formatCurrency(c.importe)}</td>
-                  <td>
+                  <td className="col-opcional">
                     <span className="cobro-cell">
                       <span className="num">{c.fechaCobro}</span>
                       <span className={`cobro-tag${c.domiciliada ? ' cobro-tag--bank' : ''}`}>
@@ -566,7 +569,7 @@ export default function Cuotas() {
                       </span>
                     </span>
                   </td>
-                  <td>
+                  <td className="col-opcional">
                     <div className="row-actions">
                       <button
                         className="icon-btn"
@@ -613,10 +616,15 @@ export default function Cuotas() {
         title="Recibo de cuota"
         subtitle={selected ? `Nº ${String(selected.numero).padStart(4, '0')}` : undefined}
         footer={
-          selected && (
+          selected && (() => {
+            const sinCobrar =
+              selected.estado === 'Pendiente' || selected.estado === 'En mora' || selected.estado === 'Devuelta'
+            return (
             <>
-              {(selected.estado === 'Pendiente' || selected.estado === 'En mora' || selected.estado === 'Devuelta') && (
-                <button className="btn btn-outline" onClick={() => marcarPagada(selected.id)}>
+              {/* En un recibo sin cobrar, la acción importante es cobrarlo, no
+                  imprimirlo: manda ella y el resto pasa a segundo plano. */}
+              {sinCobrar && (
+                <button className="btn btn-primary" onClick={() => marcarPagada(selected.id)}>
                   Marcar como pagada
                 </button>
               )}
@@ -654,11 +662,12 @@ export default function Cuotas() {
                   Quitar mora
                 </button>
               )}
-              <button className="btn btn-primary" onClick={() => window.print()}>
+              <button className={`btn ${sinCobrar ? 'btn-outline' : 'btn-primary'}`} onClick={() => window.print()}>
                 Imprimir / Descargar
               </button>
             </>
-          )
+            )
+          })()
         }
       >
         {selected && selected.moraPropuestaPor && selected.estado === 'Pendiente' && (

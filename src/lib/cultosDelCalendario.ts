@@ -33,6 +33,8 @@ export function cultosDelCalendario(hoy = new Date(), maximo = 6): CultoWeb[] {
       fecha: fechaLegible(e.fecha, e.hora, anioActual),
       lugar: e.lugar ?? '',
       fotoDataUrl: null,
+      // La fecha de verdad, para saber cuál es el próximo y contar los días.
+      fechaIso: e.fecha,
     }))
 }
 

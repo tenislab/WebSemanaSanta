@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { leerPersistido } from './persistencia'
+import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
 
 export type EstadoSolicitud = 'Pendiente' | 'Aprobada' | 'Rechazada'
@@ -74,6 +74,10 @@ export function useSolicitudes(): SolicitudAlta[] {
       cancelado = true
     }
   }, [])
+  // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
+  // la vez) se refleja aquí sin recargar.
+  useEscuchaOtrasPestanas(STORAGE_KEY, () => setSolicitudes(getSolicitudes()))
+
   return solicitudes
 }
 
