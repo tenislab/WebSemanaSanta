@@ -68,7 +68,17 @@ export function hermanosSinCuota(
  * recibos y volvía a cobrar el año entero a quien ya lo estaba pagando a plazos.
  */
 export function mismoConcepto(conceptoCuota: string, concepto: string): boolean {
-  return conceptoBase(conceptoCuota) === conceptoBase(concepto)
+  return llano(conceptoBase(conceptoCuota)) === llano(conceptoBase(concepto))
+}
+
+/**
+ * Sin mayúsculas ni tildes. El concepto se escribe a mano en los catálogos y
+ * queda copiado dentro de cada recibo: si alguien lo cambiaba de «Cuota Anual»
+ * a «Cuota anual», la emisión del año siguiente no reconocía los recibos ya
+ * emitidos y volvía a cobrar a todo el censo.
+ */
+function llano(t: string): string {
+  return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
 /** Quita el sufijo de fraccionamiento (« · mes 3/12») de un concepto. */

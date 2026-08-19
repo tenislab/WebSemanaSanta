@@ -818,7 +818,13 @@ export default function Cuotas() {
         }
       >
         <div className="app-form">
-          {avisoAcreedor && <div className="banner-inline banner-inline--warn">{avisoAcreedor}</div>}
+          {avisoAcreedor && (
+            <div className="banner-inline banner-inline--warn">
+              <span>{avisoAcreedor}</span>
+              {/* Antes decía «(Configuración)» y había que buscarlo a mano. */}
+              <Link to="/app/configuracion" className="btn btn-outline btn-sm">Ir a Configuración</Link>
+            </div>
+          )}
           <div className="form-row">
             <label htmlFor="fechaRemesa">Fecha de cobro</label>
             <input

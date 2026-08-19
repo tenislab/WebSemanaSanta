@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import MenuAcciones from '../../components/MenuAcciones'
@@ -9,6 +9,7 @@ import { isPlausibleIban, maskIban } from '../../lib/format'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { isSupabaseConfigured, supabaseAlta } from '../../lib/supabase'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
@@ -103,6 +104,9 @@ export default function Hermanos() {
     setParams({}, { replace: true })
   }, [params, setParams])
   const [filter, setFilter] = useState<'Todos' | EstadoHermano>('Todos')
+  /** Cumpleaños del mes: las hermandades felicitan, y es un dato que estaba
+   *  guardado y no se usaba para nada. */
+  const [soloCumples, setSoloCumples] = useState(false)
   const [filtroEtiqueta, setFiltroEtiqueta] = useState<string>('')
   /**
    * La ficha abierta se DERIVA del censo, no se copia. Guardar una copia en
@@ -234,6 +238,7 @@ export default function Hermanos() {
     // que el sesgo ya ha dejado.
     return sesgados
       .filter((h) => (filter === 'Todos' ? true : h.estado === filter))
+      .filter((h) => (soloCumples ? cumpleEsteMes(h.fechaNacimiento) : true))
       .filter((h) => (filtroEtiqueta ? (h.etiquetas ?? []).includes(filtroEtiqueta) : true))
       .filter((h) => {
         const q = query.trim().toLowerCase()
@@ -249,7 +254,12 @@ export default function Hermanos() {
         if (orden.campo === 'antiguedad') return signo * (a.antiguedad - b.antiguedad)
         return signo * ((a.numero || Infinity) - (b.numero || Infinity))
       })
-  }, [sesgados, query, filter, filtroEtiqueta, orden])
+  }, [sesgados, query, filter, filtroEtiqueta, orden, soloCumples])
+
+  const cumplenEsteMes = useMemo(
+    () => hermanos.filter((h) => h.estado !== 'Baja' && cumpleEsteMes(h.fechaNacimiento)).length,
+    [hermanos],
+  )
 
   /** Añade o quita una etiqueta a un hermano (y refleja el cambio en la ficha abierta). */
   function toggleEtiquetaHermano(hermanoId: string, etiqueta: string) {
@@ -400,6 +410,9 @@ export default function Hermanos() {
 
     if (hermanos.some((h) => h.dni.toUpperCase() === dni)) {
       setDniError(`Ya hay un hermano registrado con el DNI ${dni}.`)
+      // Sin esto el botón se quedaba en «Guardando…» y deshabilitado para
+      // siempre: había que cerrar el panel y volver a escribirlo todo.
+      setGuardandoAlta(false)
       return
     }
     setDniError(null)
@@ -637,6 +650,16 @@ export default function Hermanos() {
               {f === 'Todos' ? 'Todos' : f === 'Activo' ? 'Activos' : f === 'Nuevo' ? 'Nuevos' : 'Baja'}
             </button>
           ))}
+          {cumplenEsteMes > 0 && (
+            <button
+              type="button"
+              className={`chip chip--cumples${soloCumples ? ' chip--active' : ''}`}
+              onClick={() => setSoloCumples((v) => !v)}
+              title={`Hermanos que cumplen años en ${mesEnCurso()}`}
+            >
+              🎂 Cumplen en {mesEnCurso()} ({cumplenEsteMes})
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -757,7 +780,11 @@ export default function Hermanos() {
                 <td className="num">{h.numero > 0 ? h.numero : '—'}</td>
                 <td>
                   <div className="row-person">
-                    <span className="row-avatar">{initials(h.nombre)}</span>
+                    {/* Un tono estable por persona: el censo deja de ser una
+                        columna de círculos grises todos iguales. */}
+                    <span className="row-avatar" style={{ '--tono': tonoDe(h.nombre).fondo } as CSSProperties}>
+                      {initials(h.nombre)}
+                    </span>
                     <span>
                       <span className="row-person__name">{h.nombre}</span>
                       <span className="row-person__sub">{h.email}</span>
@@ -775,7 +802,10 @@ export default function Hermanos() {
                     {h.cuotaAlDia ? 'Al día' : 'Pendiente'}
                   </span>
                 </td>
-                <td className="num">{h.antiguedad}</td>
+                <td className="num">
+                  {h.antiguedad}
+                  <span className="table-subtle"> · {aniosDeHermandad(h.antiguedad)} años</span>
+                </td>
                 <td>
                   <button
                     className="icon-btn"
@@ -834,23 +864,58 @@ export default function Hermanos() {
       {/* Ficha individual */}
       <Drawer
         open={!!selected}
+        ancho="ancho"
         onClose={() => setSelectedId(null)}
         title={selected?.nombre ?? ''}
         subtitle={selected ? (selected.numero > 0 ? `Hermano nº ${selected.numero}` : 'De baja · sin número activo') : undefined}
       >
         {selected && (
           <div className="ficha">
-            <div className="ficha__row">
-              <span className={`pill ${estadoClass(selected.estado)}`}>{selected.estado}</span>
-              <span className={`pill ${selected.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
-                {selected.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
-              </span>
-            </div>
+            {/* Cabecera de la ficha: quién es, de un vistazo. Antes se entraba
+                directamente a una lista de campos y no se sabía ni a quién se
+                estaba mirando más allá del título del panel. */}
+            <header className="ficha-hero" style={{ '--tono': tonoDe(selected.nombre).fondo, '--tono-tinta': tonoDe(selected.nombre).tinta } as CSSProperties}>
+              <span className="ficha-hero__avatar" aria-hidden="true">{initials(selected.nombre)}</span>
+              {/* Sin repetir el nombre ni el número: los tiene justo encima, en
+                  la cabecera del panel. Aquí va lo que los completa. */}
+              <div className="ficha-hero__quien">
+                <b>{fraseAntiguedad(selected)}</b>
+                <small>
+                  {tramoPorHermano.get(selected.id)
+                    ? `En el cortejo: ${tramoPorHermano.get(selected.id)}`
+                    : 'Sin papeleta este año'}
+                </small>
+                <div className="ficha-hero__pills">
+                  <span className={`pill ${estadoClass(selected.estado)}`}>{selected.estado}</span>
+                  <span className={`pill ${selected.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
+                    {selected.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
+                  </span>
+                  {(selected.etiquetas ?? []).slice(0, 3).map((et) => (
+                    <span key={et} className="pill pill--info">{et}</span>
+                  ))}
+                </div>
+              </div>
+            </header>
 
-            <dl className="ficha__list">
+            {esSuCumpleHoy(selected.fechaNacimiento) && (
+              <p className="ficha-cumple">🎂 Hoy es su cumpleaños.</p>
+            )}
+
+            <dl className="ficha__list ficha__list--dos">
               <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>
-              <div><dt>Hermano desde</dt><dd>{selected.antiguedad}</dd></div>
-              <div><dt>Tramo en el cortejo</dt><dd>{tramoPorHermano.get(selected.id) ?? 'Sin papeleta este año'}</dd></div>
+              {selected.fechaNacimiento && (
+                <div>
+                  <dt>Cumpleaños</dt>
+                  <dd>
+                    {diaYMes(selected.fechaNacimiento)}
+                    {edadDe(selected.fechaNacimiento) !== null && ` · ${edadDe(selected.fechaNacimiento)} años`}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>Entra a su área con</dt>
+                <dd>su DNI y la contraseña <code>{selected.claveAcceso}</code></dd>
+              </div>
             </dl>
 
             <div className="assign-box">
@@ -897,11 +962,6 @@ export default function Hermanos() {
                 {contactoSaved && <span className="form-hint form-hint--ok">Guardado · avisado al hermano.</span>}
               </div>
             </div>
-            <p className="form-hint">
-              Accede a su área del hermano con este DNI y la contraseña <code>{selected.claveAcceso}</code>, que
-              podrá cambiar desde su área.
-            </p>
-
             <div className="assign-box">
               <label>Etiquetas</label>
               <p className="form-hint">
@@ -989,6 +1049,12 @@ export default function Hermanos() {
               )}
             </div>
 
+            <details className="afinar afinar--suelto ficha-admin">
+              <summary className="afinar__cabeza">
+                <span className="afinar__titulo">Administración</span>
+                <span className="afinar__nota">Baja, reactivación y protección de datos</span>
+              </summary>
+              <div className="afinar__cuerpo">
             <div className="assign-box">
               <label>Situación en la hermandad</label>
               {selected.bajaSolicitada && selected.estado !== 'Baja' && (
@@ -1049,6 +1115,8 @@ export default function Hermanos() {
                 la hermandad.
               </p>
             </div>
+              </div>
+            </details>
           </div>
         )}
       </Drawer>

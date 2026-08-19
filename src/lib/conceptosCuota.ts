@@ -51,11 +51,12 @@ export function useConceptosCuota(): ConceptoCuotaConfig[] {
 }
 
 export async function saveConceptosCuota(conceptos: ConceptoCuotaConfig[]) {
+  // Primero el navegador (ver `saveLista`).
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(conceptos))
   if (isSupabaseConfigured) {
     await reemplazarTablaCompleta(
       'conceptos_cuota',
       conceptos.map((c, orden) => ({ id: c.id, nombre: c.nombre, importe: c.importe, orden })),
     )
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(conceptos))
 }

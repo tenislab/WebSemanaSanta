@@ -8,13 +8,15 @@ interface DrawerProps {
   subtitle?: string
   children: ReactNode
   footer?: ReactNode
+  /** «ancho» para fichas con mucho que enseñar (la del hermano). */
+  ancho?: 'normal' | 'ancho'
 }
 
 /**
  * Panel deslizante lateral reutilizable: ficha de hermano, alta de
  * hermano, y en próximas fases también papeletas y cuotas.
  */
-export default function Drawer({ open, onClose, title, subtitle, children, footer }: DrawerProps) {
+export default function Drawer({ open, onClose, title, subtitle, children, footer, ancho = 'normal' }: DrawerProps) {
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
@@ -29,7 +31,7 @@ export default function Drawer({ open, onClose, title, subtitle, children, foote
   return (
     <div className="drawer-layer">
       <button className="drawer-scrim" aria-label="Cerrar" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+      <aside className={`drawer${ancho === 'ancho' ? ' drawer--ancho' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="drawer__head">
           <div>
             {subtitle && <p className="eyebrow">{subtitle}</p>}

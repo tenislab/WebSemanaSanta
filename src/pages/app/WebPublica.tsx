@@ -10,6 +10,7 @@ import {
   estiloActual,
   aSlug,
   contenidoVacio,
+  slugNoticia,
   esDeGoogleMaps,
   nombreSeccion,
   urlMapaIncrustado,
@@ -22,7 +23,11 @@ import {
   type ColumnaPie,
   type CultoWeb,
   type EnlacePie,
+  type EstacionPenitencia,
   type EstiloWeb,
+  type HazteHermano,
+  type MiembroJunta,
+  type ParadaItinerario,
   type FotoGaleria,
   type Noticia,
   type PaginaWeb,
@@ -115,7 +120,7 @@ const ALTURAS: { id: AlturaHero; label: string }[] = [
   { id: 'completa', label: 'Pantalla completa' },
 ]
 
-type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'paginas' | 'boletines'
+type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta'
 
 /**
  * A qué sección de la web corresponde cada pestaña del editor: la vista previa
@@ -128,23 +133,53 @@ const SECCION_DE_PESTANA: Partial<Record<Pestana, FocoPreview>> = {
   paginas: 'paginas',
   boletines: 'boletines',
   contacto: 'contacto',
+  historia: 'historia',
+  titulares: 'titulares',
+  hazte: 'hazte',
+  estacion: 'estacion',
+  junta: 'junta',
 }
 /**
  * El orden importa: primero lo que da forma a TODA la web (diseño, cabecera y
  * pie, contacto) y después el contenido. «Contacto» estaba la última y casi
  * nadie llegaba a ella: la dirección y las redes se quedaban sin poner.
  */
-const PESTANAS: { id: Pestana; label: string }[] = [
-  { id: 'diseno', label: 'Diseño y secciones' },
-  { id: 'marco', label: 'Cabecera y pie' },
-  { id: 'contacto', label: 'Contacto y mapa' },
-  { id: 'compartir', label: 'Al compartir' },
-  { id: 'portada', label: 'Fotos de portada' },
-  { id: 'galeria', label: 'Galería' },
-  { id: 'actualidad', label: 'Actualidad' },
-  { id: 'cultos', label: 'Cultos' },
-  { id: 'paginas', label: 'Páginas y textos' },
-  { id: 'boletines', label: 'Boletines' },
+/**
+ * Las secciones del editor, agrupadas. Diez pestañas en una fila se partían en
+ * dos y no se sabía dónde estaba nada; en un raíl lateral con grupos se lee de
+ * un vistazo y deja el ancho para lo que importa: la vista previa.
+ */
+const GRUPOS_PESTANAS: { titulo: string; items: { id: Pestana; label: string; icono: ReactNode }[] }[] = [
+  {
+    titulo: 'Aspecto',
+    items: [
+      { id: 'diseno', label: 'Estilo y secciones', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H13a1.5 1.5 0 0 1 0-3h3.5A4.5 4.5 0 0 0 21 9.5C21 5.9 16.97 3 12 3Z" /><circle cx="7.5" cy="10.5" r="1" fill="currentColor" /><circle cx="12" cy="7.5" r="1" fill="currentColor" /><circle cx="16.5" cy="10.5" r="1" fill="currentColor" /></svg> },
+      { id: 'marco', label: 'Cabecera y pie', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 8.5h18M3 16h18" /></svg> },
+    ],
+  },
+  {
+    titulo: 'Contenido',
+    items: [
+      { id: 'portada', label: 'Portada', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m3 16 5-4 4 3 3-2 6 4" /><circle cx="8.5" cy="9" r="1.3" /></svg> },
+      { id: 'titulares', label: 'Titulares', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3v18M8 7h8" /><circle cx="12" cy="15" r="3.2" /></svg> },
+      { id: 'estacion', label: 'Estación de penitencia', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 20h16" /><path d="M7 20V9l5-5 5 5v11" /><path d="M10.5 20v-4.5h3V20" /></svg> },
+      { id: 'hazte', label: 'Hazte hermano', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" /><path d="M18 8v6M15 11h6" /></svg> },
+      { id: 'junta', label: 'Junta de gobierno', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="8" cy="9" r="2.6" /><circle cx="16" cy="9" r="2.6" /><path d="M3 19c0-2.6 2.2-4.4 5-4.4s5 1.8 5 4.4M13 19c0-2.6 1.6-4.4 4-4.4s4 1.8 4 4.4" /></svg> },
+      { id: 'historia', label: 'Historia', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 18.5Z" /><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5a2.5 2.5 0 0 0 2.5-2.5Z" /></svg> },
+      { id: 'galeria', label: 'Galería', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M19 8v10a2 2 0 0 1-2 2H7" /></svg> },
+      { id: 'actualidad', label: 'Actualidad', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5h12v14H5a1 1 0 0 1-1-1V5Z" /><path d="M16 9h3a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2" /><path d="M7 8h6M7 11.5h6M7 15h4" /></svg> },
+      { id: 'cultos', label: 'Cultos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3v18M8 7h8" /></svg> },
+      { id: 'paginas', label: 'Páginas y textos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4M9 12h6M9 16h4" /></svg> },
+      { id: 'boletines', label: 'Boletines', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> },
+    ],
+  },
+  {
+    titulo: 'Datos',
+    items: [
+      { id: 'contacto', label: 'Contacto y mapa', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg> },
+      { id: 'compartir', label: 'Al compartir', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="m8.2 10.8 7.6-4.3M8.2 13.2l7.6 4.3" /></svg> },
+    ],
+  },
 ]
 
 /** Tamaños de la vista previa. El sitio se pinta a este ancho y se escala. */
@@ -281,6 +316,27 @@ export default function WebPublica() {
 
   const enlace = `${window.location.origin}/w/${web.slug}`
   const avisos = avisosDeLaWeb(web, hermandad)
+  /**
+   * Secciones que todavía no tienen nada. Se marcan con un punto en el raíl:
+   * enseña lo que queda por hacer sin echar la bronca por escrito.
+   */
+  const vacias = useMemo(() => {
+    const s = new Set<Pestana>()
+    if (web.heroFotos.length === 0) s.add('portada')
+    if (!web.albumes.some((a) => a.fotos.length > 0)) s.add('galeria')
+    if (web.noticias.length === 0) s.add('actualidad')
+    if (web.cultos.length === 0) s.add('cultos')
+    if (web.paginas.length === 0) s.add('paginas')
+    if (web.titulares.length === 0) s.add('titulares')
+    if (!web.estacion.dia.trim() && web.estacion.itinerario.length === 0) s.add('estacion')
+    if (web.junta.length === 0) s.add('junta')
+    if (contenidoVacio(web.historia)) s.add('historia')
+    if (web.boletines.length === 0) s.add('boletines')
+    if (!(web.direccion || hermandad.direccion) && !(web.telefono || hermandad.telefono)) s.add('contacto')
+    if (!web.seo.descripcion.trim()) s.add('compartir')
+    if (!web.pie.textoLegal.trim()) s.add('marco')
+    return s
+  }, [web, hermandad])
   // Los próximos cultos del módulo de Eventos, para verlos ya en la vista previa.
   const cultosCalendario = useMemo(() => cultosDelCalendario(), [])
 
@@ -376,8 +432,8 @@ export default function WebPublica() {
       <div className="dash-head dash-head--row">
         <div>
           <p className="eyebrow">Web pública</p>
-          <h1>Contenido web</h1>
-          <p className="dash-head__lead">Personaliza tu web por secciones. A la derecha ves cómo va quedando.</p>
+          <h1>Tu web</h1>
+          <p className="dash-head__lead">Elige un estilo, escribe el contenido y publica. A la derecha la ves cambiar en directo.</p>
         </div>
         <div className="dash-head__actions">
           <span className={`cms-guardado${mostrarGuardado ? ' cms-guardado--visible' : ''}`} role="status">
@@ -416,21 +472,40 @@ export default function WebPublica() {
 
       <AvisosWeb avisos={avisos} irA={setPestana} />
 
-      {/* Pestañas */}
-      <div className="cms-tabs">
-        {PESTANAS.map((p) => (
-          <button key={p.id} type="button" className={`cms-tab${pestana === p.id ? ' cms-tab--active' : ''}`} onClick={() => setPestana(p.id)}>
-            {p.label}
-          </button>
-        ))}
-      </div>
-
       <div className="cms-layout">
+        {/* Raíl de secciones. En pantalla estrecha se vuelve una fila que se
+            desplaza a lo ancho, sin partirse en dos líneas. */}
+        <nav className="cms-rail" aria-label="Secciones de la web">
+          {GRUPOS_PESTANAS.map((g) => (
+            <div className="cms-rail__grupo" key={g.titulo}>
+              <p className="cms-rail__titulo">{g.titulo}</p>
+              {g.items.map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`cms-rail__item${pestana === it.id ? ' cms-rail__item--on' : ''}`}
+                  onClick={() => setPestana(it.id)}
+                  aria-current={pestana === it.id ? 'true' : undefined}
+                >
+                  <span className="cms-rail__ic" aria-hidden="true">{it.icono}</span>
+                  <span className="cms-rail__label">{it.label}</span>
+                  {vacias.has(it.id) && <span className="cms-rail__punto" title="Todavía sin contenido" />}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
         <div className="cms-editor">
           {pestana === 'diseno' && (
             <DisenoTab web={web} editar={editar} editarLote={editarLote} copiado={copiado} copiarEnlace={copiarEnlace} />
           )}
           {pestana === 'marco' && <MarcoTab web={web} editar={editar} onFoco={setFocoMarco} />}
+          {pestana === 'historia' && <HistoriaTab web={web} editar={editar} />}
+          {pestana === 'hazte' && <HazteTab web={web} editar={editar} />}
+          {pestana === 'estacion' && <EstacionTab web={web} editar={editar} />}
+          {pestana === 'junta' && <JuntaTab web={web} editar={editar} />}
+          {pestana === 'titulares' && <TitularesTab web={web} editar={editar} />}
           {pestana === 'portada' && <PortadaTab web={web} editar={editar} actualizar={actualizar} />}
           {pestana === 'galeria' && <GaleriaTab web={web} editar={editar} actualizar={actualizar} />}
           {pestana === 'actualidad' && <ActualidadTab web={web} editar={editar} />}
@@ -568,7 +643,12 @@ type EditarLoteFn = (etiqueta: string, cambios: Partial<WebPublica>) => void
  * resto se despliega a petición.
  */
 function AvisosWeb({ avisos, irA }: { avisos: AvisoWeb[]; irA: (p: Pestana) => void }) {
-  const [verTodo, setVerTodo] = useState(false)
+  const graves = avisos.filter((a) => a.grave)
+  // Se despliega solo si hay algo grave; con detalles sueltos no merece la pena
+  // robarle media pantalla al editor. No se congela en el primer render: un
+  // aviso grave que aparece después (al borrar la dirección) tiene que salir.
+  const [abiertoManual, setAbiertoManual] = useState<boolean | null>(null)
+  const abierto = abiertoManual ?? graves.length > 0
   const hechos = COMPROBACIONES_WEB - avisos.length
   const pct = Math.round((hechos / COMPROBACIONES_WEB) * 100)
 
@@ -583,37 +663,43 @@ function AvisosWeb({ avisos, irA }: { avisos: AvisoWeb[]; irA: (p: Pestana) => v
 
   // Primero lo grave: sin dirección ni forma de contactar, la web no sirve.
   const ordenados = [...avisos].sort((a, b) => Number(!!b.grave) - Number(!!a.grave))
-  const visibles = verTodo ? ordenados : ordenados.slice(0, 3)
-  const ocultos = ordenados.length - visibles.length
-  const graves = avisos.filter((a) => a.grave).length
 
   return (
-    <section className={`cms-avisos${graves ? ' cms-avisos--grave' : ''}`}>
-      <div className="cms-progreso">
-        <div className="cms-progreso__texto">
-          <b>Tu web va por el {pct} %</b>
-          <small>
-            {hechos} de {COMPROBACIONES_WEB} cosas hechas ·{' '}
-            {graves > 0 ? 'lo de abajo es lo importante' : 'lo que queda son detalles'}
-          </small>
-        </div>
-        <div className="cms-progreso__barra" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+    <section className={`cms-avisos${graves.length ? ' cms-avisos--grave' : ''}`}>
+      <button
+        type="button"
+        className="cms-progreso"
+        onClick={() => setAbiertoManual(!abierto)}
+        aria-expanded={abierto}
+      >
+        <span className="cms-progreso__pct">{pct} %</span>
+        <span
+          className="cms-progreso__barra"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Lo que llevas hecho de la web"
+        >
           <span style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-      <ul className="cms-avisos__lista">
-        {visibles.map((a) => (
-          <li key={a.id}>
-            {a.grave && <span className="cms-avisos__marca" aria-hidden="true">!</span>}
-            <span>{a.texto}</span>
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => irA(a.pestana)}>Arreglar</button>
-          </li>
-        ))}
-      </ul>
-      {(ocultos > 0 || verTodo) && (
-        <button type="button" className="cms-avisos__mas" onClick={() => setVerTodo(!verTodo)}>
-          {verTodo ? 'Ver solo lo urgente' : `Ver ${ocultos} ${ocultos === 1 ? 'cosa' : 'cosas'} más`}
-        </button>
+        </span>
+        <span className="cms-progreso__texto">
+          {graves.length > 0
+            ? `${graves.length} ${graves.length === 1 ? 'cosa importante' : 'cosas importantes'} y ${avisos.length - graves.length} ${avisos.length - graves.length === 1 ? 'detalle' : 'detalles'}`
+            : `${avisos.length} ${avisos.length === 1 ? 'detalle' : 'detalles'} por rematar`}
+        </span>
+        <span className="cms-progreso__flecha" aria-hidden="true">{abierto ? '▲' : '▼'}</span>
+      </button>
+      {abierto && (
+        <ul className="cms-avisos__lista">
+          {ordenados.map((a) => (
+            <li key={a.id}>
+              {a.grave && <span className="cms-avisos__marca" aria-hidden="true">!</span>}
+              <span>{a.texto}</span>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => irA(a.pestana)}>Arreglar</button>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   )
@@ -1090,35 +1176,6 @@ function DisenoTab({
       </section>
 
       <section className="settings-card">
-        <div className="settings-card__head"><h2 className="settings-card__title">Historia</h2></div>
-        <p className="form-hint">
-          Se publica como una sección con formato: una entradilla, los párrafos que quieras (con su
-          subtítulo) y fotos. Lo que tuvieras escrito antes está en el primer párrafo.
-        </p>
-        <div className="form-row">
-          <label htmlFor="historiaEntradilla">Entradilla</label>
-          <input
-            id="historiaEntradilla"
-            type="text"
-            value={web.historia.entradilla}
-            onChange={(e) => editar('historia', (h) => ({ ...h, entradilla: e.target.value }))}
-            placeholder="Una frase que resuma la historia de la hermandad"
-          />
-        </div>
-        <EditorParrafos
-          parrafos={web.historia.parrafos}
-          onChange={(parrafos) => editar('historia', (h) => ({ ...h, parrafos }))}
-          ayuda="Por ejemplo: «Fundación», «Los titulares», «La sede», «Hoy»."
-        />
-        <EditorFotos
-          fotos={web.historia.fotos}
-          onChange={(fotos) => editar('historia', (h) => ({ ...h, fotos: typeof fotos === 'function' ? fotos(h.fotos) : fotos }))}
-          onSubir={leerImagen}
-          titulo="Fotos de la sección"
-        />
-      </section>
-
-      <section className="settings-card">
         <div className="settings-card__head"><h2 className="settings-card__title">Secciones (orden y visibilidad)</h2></div>
         <ul className="secciones-lista">
           {web.secciones.map((s, i) => (
@@ -1144,8 +1201,277 @@ function DisenoTab({
         </ul>
       </section>
 
-      <TitularesTab web={web} editar={editar} />
     </>
+  )
+}
+
+/* ----------------------------- Hazte hermano ----------------------------- */
+/** Una lista de líneas sueltas (requisitos, pasos) se edita como un textarea. */
+function lineas(texto: string): string[] {
+  return texto.split('\n').map((l) => l.trim()).filter(Boolean)
+}
+
+function HazteTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+  const h = web.hazte
+  function set(c: Partial<HazteHermano>) { editar('hazte', { ...h, ...c }) }
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head"><h2 className="settings-card__title">Hazte hermano</h2></div>
+      <p className="form-hint">
+        Lo que más se busca en la web de una hermandad después de los cultos. Si está claro qué hace
+        falta y cuánto cuesta, la gente se anima; si hay que llamar para enterarse, no llama.
+      </p>
+      <div className="form-row">
+        <label htmlFor="hazteEntradilla">Frase de entrada</label>
+        <input
+          id="hazteEntradilla" type="text" value={h.entradilla}
+          onChange={(e) => set({ entradilla: e.target.value })}
+          placeholder="Cualquiera puede ser hermano de esta casa."
+        />
+      </div>
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="hazteReq">Qué hace falta</label>
+          <textarea
+            id="hazteReq" rows={5} value={h.requisitos.join('\n')}
+            onChange={(e) => set({ requisitos: lineas(e.target.value) })}
+            placeholder={'Estar bautizado\nAceptar las reglas\nLos menores, con firma del tutor'}
+          />
+          <p className="form-hint">Uno por línea.</p>
+        </div>
+        <div className="form-row">
+          <label htmlFor="haztedPasos">Cómo se hace</label>
+          <textarea
+            id="haztedPasos" rows={5} value={h.pasos.join('\n')}
+            onChange={(e) => set({ pasos: lineas(e.target.value) })}
+            placeholder={'Rellena la solicitud\nSecretaría la revisa\nSe te da de alta en el censo'}
+          />
+          <p className="form-hint">Uno por línea. Salen numerados en orden.</p>
+        </div>
+      </div>
+      <div className="form-row">
+        <label htmlFor="hazteCuota">La cuota</label>
+        <input
+          id="hazteCuota" type="text" value={h.cuota}
+          onChange={(e) => set({ cuota: e.target.value })}
+          placeholder="60 € al año"
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="hazteBoton">Texto del botón</label>
+        <input
+          id="hazteBoton" type="text" value={h.textoBoton}
+          onChange={(e) => set({ textoBoton: e.target.value })}
+          placeholder="Quiero hacerme hermano (vacío = sin botón)"
+        />
+      </div>
+      <label className="checkbox">
+        <input type="checkbox" checked={h.alAreaDelHermano} onChange={(e) => set({ alAreaDelHermano: e.target.checked })} />
+        <span>
+          El botón lleva al área del hermano, donde se pide el alta.
+          {!h.alAreaDelHermano && ' Ahora lleva a la sección de contacto.'}
+        </span>
+      </label>
+    </section>
+  )
+}
+
+/* -------------------------- Estación de penitencia -------------------------- */
+function EstacionTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+  const e = web.estacion
+  function set(c: Partial<EstacionPenitencia>) { editar('estacion', { ...e, ...c }) }
+  function setParada(id: string, c: Partial<ParadaItinerario>) {
+    set({ itinerario: e.itinerario.map((x) => (x.id === id ? { ...x, ...c } : x)) })
+  }
+  function mover(i: number, dir: -1 | 1) {
+    const j = i + dir
+    if (j < 0 || j >= e.itinerario.length) return
+    const lista = [...e.itinerario]
+    ;[lista[i], lista[j]] = [lista[j], lista[i]]
+    set({ itinerario: lista })
+  }
+  return (
+    <>
+      <section className="settings-card">
+        <div className="settings-card__head"><h2 className="settings-card__title">El día grande</h2></div>
+        <p className="form-hint">
+          La hora de salida y el itinerario son EL dato que se busca en Semana Santa. Mientras esté
+          vacío, la sección no sale ni en la web ni en el menú.
+        </p>
+        <div className="form-grid-2">
+          <div className="form-row">
+            <label htmlFor="estDia">Día</label>
+            <input id="estDia" type="text" value={e.dia} onChange={(x) => set({ dia: x.target.value })} placeholder="Viernes Santo" />
+          </div>
+          <div className="form-row">
+            <label htmlFor="estAnio">Año</label>
+            <input id="estAnio" type="text" value={e.anio} onChange={(x) => set({ anio: x.target.value })} placeholder="2027" />
+          </div>
+        </div>
+        <div className="form-grid-2">
+          <div className="form-row">
+            <label htmlFor="estSalida">Hora de salida</label>
+            <input id="estSalida" type="text" value={e.horaSalida} onChange={(x) => set({ horaSalida: x.target.value })} placeholder="17:30" />
+          </div>
+          <div className="form-row">
+            <label htmlFor="estEntrada">Hora de entrada</label>
+            <input id="estEntrada" type="text" value={e.horaEntrada} onChange={(x) => set({ horaEntrada: x.target.value })} placeholder="01:15" />
+          </div>
+        </div>
+        <div className="form-row">
+          <label htmlFor="estDesde">Desde dónde sale</label>
+          <input id="estDesde" type="text" value={e.salidaDesde} onChange={(x) => set({ salidaDesde: x.target.value })} placeholder="Parroquia de San Juan" />
+        </div>
+        <div className="form-row">
+          <label htmlFor="estNota">Recomendaciones</label>
+          <textarea id="estNota" rows={3} value={e.nota} onChange={(x) => set({ nota: x.target.value })} placeholder="Dónde se ve mejor, qué llevar, a qué hora conviene estar…" />
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Itinerario</h2>
+          <button
+            type="button" className="btn btn-outline btn-sm"
+            onClick={() => set({ itinerario: [...e.itinerario, { id: nuevoId(), lugar: '', hora: '', destacada: false }] })}
+          >
+            + Añadir parada
+          </button>
+        </div>
+        <p className="form-hint">
+          Calle a calle, con su hora de paso. Marca como hito la salida, la carrera oficial y la
+          entrada: salen resaltadas.
+        </p>
+        {e.itinerario.length === 0 && <p className="form-hint">Todavía no hay ninguna parada.</p>}
+        <div className="opciones-editor">
+          {e.itinerario.map((par, i) => (
+            <div className="opcion-row opcion-row--parada" key={par.id}>
+              <input
+                type="text" value={par.hora} placeholder="18:40" aria-label="Hora de paso"
+                onChange={(x) => setParada(par.id, { hora: x.target.value })}
+              />
+              <input
+                type="text" value={par.lugar} placeholder="Calle o plaza" aria-label="Lugar"
+                onChange={(x) => setParada(par.id, { lugar: x.target.value })}
+              />
+              <label className="checkbox" title="Resaltar esta parada">
+                <input type="checkbox" checked={par.destacada} onChange={(x) => setParada(par.id, { destacada: x.target.checked })} />
+                <span>Hito</span>
+              </label>
+              <span className="seccion-item__orden">
+                <button type="button" className="icon-btn" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">▲</button>
+                <button type="button" className="icon-btn" onClick={() => mover(i, 1)} disabled={i === e.itinerario.length - 1} aria-label="Bajar">▼</button>
+              </span>
+              <button
+                type="button" className="icon-btn" title="Quitar parada"
+                onClick={() => set({ itinerario: e.itinerario.filter((x) => x.id !== par.id) })}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
+  )
+}
+
+/* --------------------------- Junta de gobierno --------------------------- */
+const CARGOS_JUNTA = [
+  'Hermano Mayor', 'Teniente de Hermano Mayor', 'Secretario/a', 'Tesorero/a',
+  'Fiscal', 'Mayordomo/a', 'Prioste', 'Diputado/a Mayor de Gobierno',
+  'Diputado/a de Caridad', 'Diputado/a de Cultos',
+]
+
+function JuntaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+  function set(id: string, c: Partial<MiembroJunta>) {
+    editar('junta', (xs) => xs.map((m) => (m.id === id ? { ...m, ...c } : m)))
+  }
+  function mover(i: number, dir: -1 | 1) {
+    const j = i + dir
+    if (j < 0 || j >= web.junta.length) return
+    const lista = [...web.junta]
+    ;[lista[i], lista[j]] = [lista[j], lista[i]]
+    editar('junta', lista)
+  }
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head">
+        <h2 className="settings-card__title">Junta de gobierno</h2>
+        <button
+          type="button" className="btn btn-outline btn-sm"
+          onClick={() => editar('junta', (xs) => [...xs, { id: nuevoId(), cargo: CARGOS_JUNTA[xs.length] ?? '', nombre: '' }])}
+        >
+          + Añadir cargo
+        </button>
+      </div>
+      <p className="form-hint">
+        Los cargos y quién los ocupa. Es lo que pide cualquier visita institucional, y hoy había que
+        meterlo a mano en una página de texto.
+      </p>
+      {web.junta.length === 0 && <p className="form-hint">Sin cargos, la sección no sale en la web.</p>}
+      <div className="opciones-editor">
+        {web.junta.map((m, i) => (
+          <div className="opcion-row opcion-row--junta" key={m.id}>
+            <input
+              type="text" value={m.cargo} placeholder="Cargo" aria-label="Cargo" list="cargos-junta"
+              onChange={(e) => set(m.id, { cargo: e.target.value })}
+            />
+            <input
+              type="text" value={m.nombre} placeholder="Nombre y apellidos" aria-label="Nombre"
+              onChange={(e) => set(m.id, { nombre: e.target.value })}
+            />
+            <span className="seccion-item__orden">
+              <button type="button" className="icon-btn" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">▲</button>
+              <button type="button" className="icon-btn" onClick={() => mover(i, 1)} disabled={i === web.junta.length - 1} aria-label="Bajar">▼</button>
+            </span>
+            <button
+              type="button" className="icon-btn" title="Quitar cargo"
+              onClick={() => editar('junta', (xs) => xs.filter((x) => x.id !== m.id))}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+          </div>
+        ))}
+      </div>
+      <datalist id="cargos-junta">
+        {CARGOS_JUNTA.map((c) => <option key={c} value={c} />)}
+      </datalist>
+    </section>
+  )
+}
+
+/* ------------------------------- Historia ------------------------------- */
+function HistoriaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head"><h2 className="settings-card__title">Historia</h2></div>
+      <p className="form-hint">
+        Se publica como una sección con formato: una entradilla, los párrafos que quieras (con su
+        subtítulo) y fotos.
+      </p>
+      <div className="form-row">
+        <label htmlFor="historiaEntradilla">Entradilla</label>
+        <input
+          id="historiaEntradilla"
+          type="text"
+          value={web.historia.entradilla}
+          onChange={(e) => editar('historia', (h) => ({ ...h, entradilla: e.target.value }))}
+          placeholder="Una frase que resuma la historia de la hermandad"
+        />
+      </div>
+      <EditorParrafos
+        parrafos={web.historia.parrafos}
+        onChange={(parrafos) => editar('historia', (h) => ({ ...h, parrafos }))}
+        ayuda="Por ejemplo: «Fundación», «Los titulares», «La sede», «Hoy»."
+      />
+      <EditorFotos
+        fotos={web.historia.fotos}
+        onChange={(fotos) => editar('historia', (h) => ({ ...h, fotos: typeof fotos === 'function' ? fotos(h.fotos) : fotos }))}
+        onSubir={leerImagen}
+        titulo="Fotos de la sección"
+      />
+    </section>
   )
 }
 
@@ -1435,7 +1761,7 @@ function ActualidadTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
     <section className="settings-card">
       <div className="settings-card__head">
         <h2 className="settings-card__title">Noticias publicadas en la web</h2>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => editar('noticias', (xs) => [{ id: nuevoId(), titulo: 'Nueva noticia', fecha: fechaHoyLocal(), resumen: '', fotoDataUrl: null, publicada: true }, ...xs])}>+ Nueva noticia</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => editar('noticias', (xs) => [{ id: nuevoId(), titulo: 'Nueva noticia', fecha: fechaHoyLocal(), resumen: '', fotoDataUrl: null, publicada: true, parrafos: [], destacada: false }, ...xs])}>+ Nueva noticia</button>
       </div>
       {web.noticias.length === 0 && <p className="form-hint">Aún no hay noticias.</p>}
       {web.noticias.map((n) => (
@@ -1450,15 +1776,53 @@ function ActualidadTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
             <div className="form-row"><label>Fecha</label><input type="date" value={n.fecha} onChange={(e) => editarNoticia(n.id, { fecha: e.target.value })} /></div>
           </div>
           <div className="form-row">
-            <label>Resumen</label>
+            <label>Entradilla</label>
             <textarea rows={2} value={n.resumen} onChange={(e) => editarNoticia(n.id, { resumen: e.target.value })} />
-            {/* En la web sale entero, pero por encima de tres líneas la tarjeta
+            {/* En la web sale entera, pero por encima de tres líneas la tarjeta
                 se descuadra respecto a las demás. */}
             <p className={`form-hint${n.resumen.length > 220 ? ' form-hint--alerta' : ''}`}>
               {n.resumen.length} caracteres{n.resumen.length > 220 && ' — queda muy largo para la tarjeta de la web'}
             </p>
           </div>
-          <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('noticias', (xs) => xs.filter((x) => x.id !== n.id))}>Eliminar noticia</button>
+
+          {/* El cuerpo es opcional: sin él, la noticia sigue siendo un titular
+              con su entradilla, como hasta ahora. Con él, gana página propia. */}
+          <details className="afinar afinar--suelto">
+            <summary className="afinar__cabeza">
+              <span className="afinar__titulo">Cuerpo de la noticia</span>
+              <span className="afinar__nota">
+                {(n.parrafos ?? []).some((p) => p.texto.trim())
+                  ? `${(n.parrafos ?? []).length} ${(n.parrafos ?? []).length === 1 ? 'párrafo' : 'párrafos'} · tiene página propia`
+                  : 'Opcional — al escribirlo, la noticia gana su propio enlace'}
+              </span>
+            </summary>
+            <div className="afinar__cuerpo">
+              <EditorParrafos
+                parrafos={n.parrafos ?? []}
+                onChange={(parrafos) => editarNoticia(n.id, { parrafos })}
+                ayuda="Con cuerpo, la noticia tiene su propia página y se puede compartir sola."
+              />
+              <p className="form-hint">
+                Enlace propio: <code>/w/{web.slug}/n/{slugNoticia(n)}</code>
+              </p>
+            </div>
+          </details>
+
+          <div className="assign-box__row">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={Boolean(n.destacada)}
+                onChange={(e) => {
+                  // Solo una destacada: marcar una desmarca la que hubiera.
+                  const marcar = e.target.checked
+                  editar('noticias', (xs) => xs.map((x) => ({ ...x, destacada: marcar && x.id === n.id })))
+                }}
+              />
+              <span>Destacada (sale la primera y a lo grande)</span>
+            </label>
+            <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => editar('noticias', (xs) => xs.filter((x) => x.id !== n.id))}>Eliminar noticia</button>
+          </div>
         </div>
       ))}
     </section>
@@ -1874,6 +2238,48 @@ function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: H
         <div className="form-grid-2">
           <div className="form-row"><label htmlFor="telefono">Teléfono</label><input id="telefono" type="text" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder={hermandad.telefono || '954 00 00 00'} /></div>
           <div className="form-row"><label htmlFor="email">Correo</label><input id="email" type="email" value={web.email} onChange={(e) => editar('email', e.target.value)} placeholder={hermandad.email || 'secretaria@…'} /></div>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Horario de secretaría</h2>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => editar('horarios', (xs) => [...xs, { id: nuevoId(), dias: '', horas: '', nota: '' }])}
+          >
+            + Añadir franja
+          </button>
+        </div>
+        <p className="form-hint">
+          Cuándo se atiende y para qué. Es de lo que más se pregunta por teléfono, y si está en la
+          web se pregunta bastante menos.
+        </p>
+        {web.horarios.length === 0 && <p className="form-hint">Sin franjas, la web no enseña ningún horario.</p>}
+        <div className="opciones-editor">
+          {web.horarios.map((f) => (
+            <div className="opcion-row opcion-row--horario" key={f.id}>
+              <input
+                type="text" value={f.dias} placeholder="Martes y jueves" aria-label="Días"
+                onChange={(e) => editar('horarios', (xs) => xs.map((x) => (x.id === f.id ? { ...x, dias: e.target.value } : x)))}
+              />
+              <input
+                type="text" value={f.horas} placeholder="de 20:00 a 21:30" aria-label="Horas"
+                onChange={(e) => editar('horarios', (xs) => xs.map((x) => (x.id === f.id ? { ...x, horas: e.target.value } : x)))}
+              />
+              <input
+                type="text" value={f.nota} placeholder="Para qué (opcional)" aria-label="Para qué"
+                onChange={(e) => editar('horarios', (xs) => xs.map((x) => (x.id === f.id ? { ...x, nota: e.target.value } : x)))}
+              />
+              <button
+                type="button" className="icon-btn" title="Quitar franja"
+                onClick={() => editar('horarios', (xs) => xs.filter((x) => x.id !== f.id))}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 

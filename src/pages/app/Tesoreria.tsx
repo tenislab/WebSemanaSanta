@@ -53,6 +53,8 @@ export default function Tesoreria() {
   const [formOpen, setFormOpen] = useState(false)
   const [tipoNuevo, setTipoNuevo] = useState<TipoMovimiento>('Ingreso')
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
+  /** Por qué no se ha podido guardar el movimiento (antes se salía en silencio). */
+  const [errorAlta, setErrorAlta] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     return movimientos
@@ -103,7 +105,15 @@ export default function Tesoreria() {
     const importe = Number(importeRaw.replace(',', '.'))
     const cuenta = String(data.get('cuenta') ?? 'Cuenta bancaria') as CuentaMovimiento
     const fechaRaw = String(data.get('fecha') ?? '')
-    if (!concepto || !categoria || !Number.isFinite(importe) || importe <= 0) return
+    // Antes se salía en silencio: pulsabas «Guardar», no pasaba nada y no
+    // había forma de saber por qué (pasa al poner 0, o una cantidad que el
+    // navegador no acepta en un campo numérico).
+    if (!concepto || !categoria) { setErrorAlta('Pon un concepto y elige una categoría.'); return }
+    if (!Number.isFinite(importe) || importe <= 0) {
+      setErrorAlta('El importe tiene que ser mayor que cero. Usa la coma o el punto para los céntimos.')
+      return
+    }
+    setErrorAlta(null)
 
     const nextNumero = Math.max(0, ...movimientos.map((m) => m.numero)) + 1
     const nuevo: Movimiento = {
@@ -334,7 +344,7 @@ export default function Tesoreria() {
             </div>
             <div className="form-row">
               <label htmlFor="importe">Importe (€)</label>
-              <input id="importe" name="importe" type="number" min="0" step="0.01" required />
+              <input id="importe" name="importe" type="number" min="0.01" step="0.01" required />
             </div>
           </div>
           <div className="form-grid-2">
@@ -357,6 +367,7 @@ export default function Tesoreria() {
             El movimiento se registra como «Pendiente» hasta que lo concilies con el extracto
             bancario o la caja.
           </p>
+          {errorAlta && <p className="form-hint form-hint--error">{errorAlta}</p>}
         </form>
       </Drawer>
     </div>

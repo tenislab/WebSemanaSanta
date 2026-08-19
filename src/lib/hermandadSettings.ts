@@ -140,21 +140,31 @@ export function useHermandadSettings(fallbackNombre?: string): HermandadSettings
  * logos de 800 KB que no cabían y el usuario se iba tan tranquilo.
  */
 export async function saveHermandadSettings(settings: HermandadSettings): Promise<{ ok: boolean; error?: string }> {
-  if (isSupabaseConfigured && supabase) {
-    // `upsert`, no `update`: en una base recién creada la fila 1 no existe y el
-    // update afectaba a cero filas sin devolver error.
-    const { error } = await supabase.from('hermandad_settings').upsert({ id: 1, ...settingsToRow(settings) })
-    if (error) {
-      console.error('No se pudo guardar la configuración de la hermandad:', error.message)
-      return { ok: false, error: 'No se pudo guardar en la base de datos. Revisa la conexión.' }
-    }
-  }
+  // PRIMERO en el navegador. Si se intentaba Supabase antes y la red fallaba,
+  // se salía con un error y lo escrito NO se guardaba ni siquiera aquí: el
+  // usuario perdía el rato de rellenar la ficha de la hermandad. El resto de
+  // módulos (tramos, catálogos…) ya hacían lo correcto.
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
   } catch {
     return {
       ok: false,
       error: 'No cabe en el navegador. Suele pasar con logos muy grandes: prueba con una imagen más ligera.',
+    }
+  }
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      // `upsert`, no `update`: en una base recién creada la fila 1 no existe y
+      // el update afectaba a cero filas sin devolver error.
+      const { error } = await supabase.from('hermandad_settings').upsert({ id: 1, ...settingsToRow(settings) })
+      if (error) throw new Error(error.message)
+    } catch (err) {
+      console.error('No se pudo sincronizar la configuración de la hermandad:', err)
+      return {
+        ok: false,
+        error: 'Guardado en este navegador, pero no se ha podido enviar a la base de datos. Revisa la conexión.',
+      }
     }
   }
   return { ok: true }

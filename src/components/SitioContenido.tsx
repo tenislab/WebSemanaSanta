@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, nombreSeccion, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type TipoSeccion, type WebPublica } from '../lib/webPublica'
+import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, nombreSeccion, noticiasPublicadas, slugNoticia, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type Noticia, type TipoSeccion, type WebPublica } from '../lib/webPublica'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
@@ -37,6 +37,9 @@ export default function SitioContenido({
   seccionActiva?: FocoPreview
 }) {
   const raiz = useRef<HTMLDivElement>(null)
+  const [menuAbierto, setMenuAbierto] = useState(false)
+  /** Ancla de la sección que se está viendo, para resaltarla en el menú. */
+  const [enPantalla, setEnPantalla] = useState<string>('')
 
   // En la vista previa, al cambiar de pestaña en el editor se salta a esa
   // sección: si no, editabas «Cultos» y la vista previa seguía en la Historia.
@@ -45,6 +48,50 @@ export default function SitioContenido({
     const destino = raiz.current.querySelector(`[data-seccion="${seccionActiva}"]`)
     destino?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [seccionActiva, interactivo])
+
+  // Con el menú abierto: Escape lo cierra y la página de detrás no se mueve.
+  useEffect(() => {
+    if (!menuAbierto) return
+    function tecla(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuAbierto(false)
+    }
+    document.addEventListener('keydown', tecla)
+    // En la vista previa no se toca el scroll del panel: el menú vive dentro
+    // del marco del dispositivo, no ocupa la pantalla del que edita.
+    const antes = interactivo ? document.body.style.overflow : ''
+    if (interactivo) document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', tecla)
+      if (interactivo) document.body.style.overflow = antes
+    }
+  }, [menuAbierto, interactivo])
+
+  /**
+   * Qué sección se está viendo, para marcarla en el menú. Con
+   * IntersectionObserver: nada de escuchar el scroll y recalcular posiciones
+   * en cada píxel.
+   */
+  useEffect(() => {
+    if (!interactivo || !raiz.current) return
+    const secciones = raiz.current.querySelectorAll('section[id]')
+    if (secciones.length === 0) return
+    const visibles = new Set<string>()
+    const obs = new IntersectionObserver(
+      (entradas) => {
+        entradas.forEach((e) => {
+          if (e.isIntersecting) visibles.add(e.target.id)
+          else visibles.delete(e.target.id)
+        })
+        // La primera en orden de documento de las que se ven: al bajar, manda
+        // la de arriba, que es la que el visitante está leyendo.
+        const primera = [...secciones].find((s) => visibles.has(s.id))
+        setEnPantalla(primera?.id ?? '')
+      },
+      { rootMargin: '-20% 0px -70% 0px' },
+    )
+    secciones.forEach((s) => obs.observe(s))
+    return () => obs.disconnect()
+  }, [interactivo, web.secciones, web.paginas])
 
   const titulo = web.titulo || hermandad.nombreLegal || 'Nuestra Hermandad'
   const color = web.colorPrimario || hermandad.colorPrimario || '#6A1A23'
@@ -68,6 +115,15 @@ export default function SitioContenido({
    */
   function tieneContenido(tipo: TipoSeccion): boolean {
     if (tipo === 'historia') return !contenidoVacio(web.historia)
+    if (tipo === 'hazte') {
+      const h = web.hazte
+      return Boolean(h.entradilla.trim() || h.requisitos.length || h.pasos.length || h.cuota.trim())
+    }
+    if (tipo === 'estacion') {
+      const e = web.estacion
+      return Boolean(e.dia.trim() || e.horaSalida.trim() || e.itinerario.length)
+    }
+    if (tipo === 'junta') return web.junta.some((m) => m.cargo.trim() || m.nombre.trim())
     if (tipo === 'titulares') return web.titulares.length > 0
     if (tipo === 'cultos') return cultosVisibles.length > 0
     if (tipo === 'galeria') return web.albumes.some((a) => a.fotos.length > 0)
@@ -75,9 +131,28 @@ export default function SitioContenido({
     if (tipo === 'paginas') return web.paginas.filter((p) => p.enMenu !== false).length > 0
     if (tipo === 'boletines') return web.boletines.length > 0
     if (tipo === 'contacto')
-      return Boolean(web.direccion || hermandad.direccion || web.telefono || hermandad.telefono || web.email || hermandad.email || web.mapaUrl)
+      return Boolean(
+        web.direccion || hermandad.direccion || web.telefono || hermandad.telefono
+        || web.email || hermandad.email || web.mapaUrl || web.horarios.length > 0,
+      )
     return true
   }
+
+  /**
+   * Los enlaces del menú. Las páginas cuelgan de un submenú («La Hermandad»)
+   * en vez de soltar una a una en la barra: con cuatro páginas, el menú se
+   * comía la cabecera entera.
+   */
+  const enlacesMenu: EnlaceMenu[] = seccionesVisibles
+    .filter((s) => tieneContenido(s.tipo))
+    .flatMap((s): EnlaceMenu[] => {
+      if (s.tipo !== 'paginas') return [{ ancla: s.tipo, texto: nombreSeccion(s) }]
+      const pags = web.paginas.filter((p) => p.enMenu !== false)
+      const hijos = pags.map((p) => ({ ancla: `pagina-${p.id}`, texto: p.titulo || 'Página' }))
+      // Con una sola página no hace falta desplegable: es un enlace y ya.
+      if (hijos.length <= 1) return hijos
+      return [{ ancla: hijos[0].ancla, texto: nombreSeccion(s), hijos }]
+    })
 
   return (
     <div
@@ -94,6 +169,10 @@ export default function SitioContenido({
         ['--sitio-aire' as string]: aire,
       }}
     >
+      {/* Con teclado había que pasar por todo el menú en cada visita. */}
+      {interactivo && (
+        <a className="sitio__saltar" href="#sitio-contenido">Saltar al contenido</a>
+      )}
       <header
         data-seccion="cabecera"
         className={`sitio__nav${web.cabecera.fija ? ' sitio__nav--fija' : ''}${seccionActiva === 'cabecera' ? ' sitio__marco--activo' : ''}`}
@@ -107,20 +186,39 @@ export default function SitioContenido({
             </span>
           )}
         </div>
-        <nav className="sitio__menu">
-          {seccionesVisibles.filter((s) => tieneContenido(s.tipo)).map((s) => {
-            // La sección "paginas" no da un enlace, sino uno por cada página del menú.
-            if (s.tipo === 'paginas') {
-              return web.paginas
-                .filter((p) => p.enMenu !== false)
-                .map((p) => (
-                  <a key={p.id} href={interactivo ? `#pagina-${p.id}` : undefined}>{p.titulo || 'Página'}</a>
-                ))
-            }
-            return (
-              <a key={s.tipo} href={interactivo ? `#${s.tipo}` : undefined}>{nombreSeccion(s)}</a>
-            )
-          })}
+        {/* Con ocho secciones, en un móvil el menú suelto ocupaba tres
+            renglones antes de que empezara la web. */}
+        <button
+          type="button"
+          className={`sitio__hamburguesa${menuAbierto ? ' sitio__hamburguesa--abierta' : ''}`}
+          onClick={() => setMenuAbierto((v) => !v)}
+          aria-expanded={menuAbierto}
+          aria-controls="sitio-menu"
+          aria-label={menuAbierto ? 'Cerrar el menú' : 'Abrir el menú'}
+        >
+          <span aria-hidden="true" />
+          <span aria-hidden="true" />
+          <span aria-hidden="true" />
+        </button>
+        <nav
+          id="sitio-menu"
+          className={`sitio__menu${menuAbierto ? ' sitio__menu--abierto' : ''}`}
+          onClick={() => setMenuAbierto(false)}
+        >
+          {enlacesMenu.map((e) =>
+            e.hijos ? (
+              <MenuDesplegable key={e.ancla} enlace={e} interactivo={interactivo} enPantalla={enPantalla} />
+            ) : (
+              <a
+                key={e.ancla}
+                href={interactivo ? `#${e.ancla}` : undefined}
+                className={enPantalla === e.ancla ? 'sitio__menu-a--aqui' : undefined}
+                aria-current={enPantalla === e.ancla ? 'true' : undefined}
+              >
+                {e.texto}
+              </a>
+            ),
+          )}
           {web.cabecera.textoBoton.trim() && (
             <BotonEntrar interactivo={interactivo} clase="sitio-btn sitio-btn--entrar">{web.cabecera.textoBoton}</BotonEntrar>
           )}
@@ -129,7 +227,7 @@ export default function SitioContenido({
 
       <HeroFondo web={web} titulo={titulo} interactivo={interactivo} />
 
-      <main className="sitio__main">
+      <main className="sitio__main" id="sitio-contenido" tabIndex={-1}>
         {seccionesVisibles.map((s) => (
           <Seccion
             key={s.tipo}
@@ -153,6 +251,59 @@ export default function SitioContenido({
         interactivo={interactivo}
         activo={seccionActiva === 'pie'}
       />
+    </div>
+  )
+}
+
+interface EnlaceMenu {
+  ancla: string
+  texto: string
+  hijos?: { ancla: string; texto: string }[]
+}
+
+/**
+ * Entrada del menú con submenú. Se abre al pasar por encima en escritorio y al
+ * pulsarla con el dedo; el desplegable es un <details> para que funcione con
+ * teclado sin inventar nada.
+ */
+function MenuDesplegable({
+  enlace,
+  interactivo,
+  enPantalla,
+}: {
+  enlace: EnlaceMenu
+  interactivo: boolean
+  enPantalla: string
+}) {
+  // Además del :hover, se abre al pulsarlo: en una tableta táctil no hay ratón
+  // que pasar por encima y el submenú era inalcanzable.
+  const [abierto, setAbierto] = useState(false)
+  const aqui = enlace.hijos?.some((h) => h.ancla === enPantalla) ?? false
+  return (
+    <div
+      className={`sitio__menu-grupo${aqui ? ' sitio__menu-a--aqui' : ''}${abierto ? ' sitio__menu-grupo--abierto' : ''}`}
+      onMouseLeave={() => setAbierto(false)}
+    >
+      <button
+        type="button"
+        className="sitio__menu-grupo-btn"
+        onClick={(e) => { e.stopPropagation(); setAbierto((v) => !v) }}
+        aria-expanded={abierto}
+      >
+        {enlace.texto}
+        <span aria-hidden="true">▾</span>
+      </button>
+      <div className="sitio__menu-sub">
+        {enlace.hijos?.map((h) => (
+          <a
+            key={h.ancla}
+            href={interactivo ? `#${h.ancla}` : undefined}
+            className={enPantalla === h.ancla ? 'sitio__menu-a--aqui' : undefined}
+          >
+            {h.texto}
+          </a>
+        ))}
+      </div>
     </div>
   )
 }
@@ -226,7 +377,7 @@ function HeroFondo({ web, titulo, interactivo }: { web: WebPublica; titulo: stri
  * suyo. Todo lo que quede vacío no se pinta: un pie con títulos huérfanos da
  * peor impresión que un pie escueto.
  */
-function PieSitio({
+export function PieSitio({
   web,
   hermandad,
   titulo,
@@ -426,6 +577,40 @@ function Redes({ web, interactivo }: { web: WebPublica; interactivo: boolean }) 
   )
 }
 
+/**
+ * Una noticia en el listado. Con enlace propio: es lo que se pega en redes, y
+ * hasta ahora la única forma de compartir una noticia era mandar la web entera.
+ */
+export function TarjetaNoticia({
+  noticia: n,
+  interactivo,
+  slugWeb,
+  grande = false,
+}: {
+  noticia: Noticia
+  interactivo: boolean
+  slugWeb: string
+  grande?: boolean
+}) {
+  const enlace = `/w/${slugWeb}/n/${slugNoticia(n)}`
+  const tieneCuerpo = (n.parrafos ?? []).some((p) => p.texto.trim())
+  return (
+    <article className={`sitio__noticia${grande ? ' sitio__noticia--grande' : ''}`}>
+      {n.fotoDataUrl && <img src={n.fotoDataUrl} alt="" loading="lazy" />}
+      <div>
+        <span className="sitio__noticia-fecha">{fechaBonita(n.fecha)}</span>
+        <h3>
+          {tieneCuerpo && interactivo ? <a href={enlace}>{n.titulo}</a> : n.titulo}
+        </h3>
+        <p>{n.resumen}</p>
+        {tieneCuerpo && (
+          <a className="sitio__seguir" href={interactivo ? enlace : undefined}>Seguir leyendo →</a>
+        )}
+      </div>
+    </article>
+  )
+}
+
 function fechaBonita(iso: string): string {
   if (!iso) return ''
   const d = new Date(`${iso}T00:00:00`)
@@ -520,6 +705,104 @@ function Seccion({
       </section>
     )
   }
+  if (tipo === 'hazte') {
+    const h = web.hazte
+    if (!h.entradilla.trim() && h.requisitos.length === 0 && h.pasos.length === 0 && !h.cuota.trim()) return null
+    return (
+      <section id="hazte" {...props}>
+        <h2>{titulo(SECCIONES_INFO.hazte.publico)}</h2>
+        {h.entradilla.trim() && <p className="sitio__entradilla">{h.entradilla}</p>}
+        <div className="sitio__hazte">
+          {h.requisitos.length > 0 && (
+            <div className="sitio__hazte-bloque">
+              <h3>Qué hace falta</h3>
+              <ul className="sitio__lista-marcada">
+                {h.requisitos.map((r, i) => <li key={i}>{r}</li>)}
+              </ul>
+            </div>
+          )}
+          {h.pasos.length > 0 && (
+            <div className="sitio__hazte-bloque">
+              <h3>Cómo se hace</h3>
+              <ol className="sitio__pasos">
+                {h.pasos.map((r, i) => <li key={i}>{r}</li>)}
+              </ol>
+            </div>
+          )}
+          {h.cuota.trim() && (
+            <div className="sitio__hazte-bloque sitio__hazte-cuota">
+              <h3>La cuota</h3>
+              <p className="sitio__cuota-cifra">{h.cuota}</p>
+              <p>Con ella se sostienen los cultos, la caridad y el patrimonio de la hermandad.</p>
+            </div>
+          )}
+        </div>
+        {h.textoBoton.trim() && (
+          <p className="sitio__cta">
+            {h.alAreaDelHermano ? (
+              <BotonEntrar interactivo={interactivo} clase="sitio-btn">{h.textoBoton}</BotonEntrar>
+            ) : (
+              <a href={interactivo ? '#contacto' : undefined} className="sitio-btn">{h.textoBoton}</a>
+            )}
+          </p>
+        )}
+      </section>
+    )
+  }
+  if (tipo === 'estacion') {
+    const e = web.estacion
+    if (!e.dia.trim() && !e.horaSalida.trim() && e.itinerario.length === 0) return null
+    const datos = [
+      e.horaSalida.trim() && { k: 'Salida', v: e.horaSalida },
+      e.salidaDesde.trim() && { k: 'Desde', v: e.salidaDesde },
+      e.horaEntrada.trim() && { k: 'Entrada', v: e.horaEntrada },
+    ].filter(Boolean) as { k: string; v: string }[]
+    return (
+      <section id="estacion" {...props}>
+        <h2>{titulo(SECCIONES_INFO.estacion.publico)}</h2>
+        {(e.dia.trim() || e.anio.trim()) && (
+          <p className="sitio__estacion-dia">
+            {e.dia}{e.dia.trim() && e.anio.trim() ? ' · ' : ''}{e.anio}
+          </p>
+        )}
+        {datos.length > 0 && (
+          <dl className="sitio__estacion-datos">
+            {datos.map((d) => (
+              <div key={d.k}><dt>{d.k}</dt><dd>{d.v}</dd></div>
+            ))}
+          </dl>
+        )}
+        {e.itinerario.length > 0 && (
+          <ol className="sitio__itinerario">
+            {e.itinerario.map((par) => (
+              <li key={par.id} className={par.destacada ? 'sitio__parada--hito' : undefined}>
+                {par.hora.trim() && <span className="sitio__parada-hora">{par.hora}</span>}
+                <span className="sitio__parada-lugar">{par.lugar}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {e.nota.trim() && <p className="sitio__estacion-nota">{e.nota}</p>}
+      </section>
+    )
+  }
+  if (tipo === 'junta') {
+    const miembros = web.junta.filter((m) => m.cargo.trim() || m.nombre.trim())
+    if (miembros.length === 0) return null
+    return (
+      <section id="junta" {...props}>
+        <h2>{titulo(SECCIONES_INFO.junta.publico)}</h2>
+        <ul className="sitio__junta">
+          {miembros.map((m) => (
+            <li key={m.id}>
+              <span className="sitio__junta-cargo">{m.cargo}</span>
+              <span className="sitio__junta-nombre">{m.nombre}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
   if (tipo === 'cultos') {
     if (cultos.length === 0) return null
     return (
@@ -553,20 +836,35 @@ function Seccion({
     )
   }
   if (tipo === 'actualidad') {
-    const noticias = web.noticias.filter((n) => n.publicada)
-    if (noticias.length === 0) return null
+    const todas = noticiasPublicadas(web.noticias)
+    if (todas.length === 0) return null
+    // En la portada solo van las tres últimas: con quince noticias, la sección
+    // se comía la web entera y había que bajar media pantalla para pasar de ella.
+    const enPortada = todas.slice(0, 3)
+    const [primera, ...resto] = enPortada
+    const hayMas = todas.length > enPortada.length
     return (
       <section id="actualidad" {...props}>
         {/* En la web pública, sin la coletilla "(noticias)" del editor. */}
         <h2>{titulo('Actualidad')}</h2>
-        <div className="sitio__noticias">
-          {noticias.map((n) => (
-            <article key={n.id} className="sitio__noticia">
-              {n.fotoDataUrl && <img src={n.fotoDataUrl} alt="" />}
-              <div><span className="sitio__noticia-fecha">{fechaBonita(n.fecha)}</span><h3>{n.titulo}</h3><p>{n.resumen}</p></div>
-            </article>
-          ))}
-        </div>
+        <TarjetaNoticia noticia={primera} interactivo={interactivo} slugWeb={web.slug} grande />
+        {resto.length > 0 && (
+          <div className="sitio__noticias">
+            {resto.map((n) => (
+              <TarjetaNoticia key={n.id} noticia={n} interactivo={interactivo} slugWeb={web.slug} />
+            ))}
+          </div>
+        )}
+        {hayMas && (
+          <p className="sitio__cta">
+            <a
+              href={interactivo ? `/w/${web.slug}/noticias` : undefined}
+              className="sitio-btn sitio-btn--sm"
+            >
+              Ver todas las noticias ({todas.length})
+            </a>
+          </p>
+        )}
       </section>
     )
   }
@@ -634,7 +932,7 @@ function Seccion({
     const tel = web.telefono || hermandad.telefono
     const email = web.email || hermandad.email
     // Sin ningún dato de contacto, la sección no se pinta (nada de títulos vacíos).
-    if (!dir && !tel && !email && !web.mapaUrl) return null
+    if (!dir && !tel && !email && !web.mapaUrl && web.horarios.length === 0) return null
     const mapa = web.mapaIncrustado ? urlMapaIncrustado(web.mapaUrl, dir) : null
     const enlaceMapa = urlSegura(web.mapaUrl)
     return (
@@ -649,6 +947,20 @@ function Seccion({
               {tel && <li>Tel. <a href={interactivo ? `tel:${tel.replace(/\s+/g, '')}` : undefined}>{tel}</a></li>}
               {email && <li><a href={interactivo ? `mailto:${email}` : undefined}>{email}</a></li>}
             </ul>
+            {web.horarios.length > 0 && (
+              <div className="sitio__horario">
+                <h3>Cuándo atendemos</h3>
+                <ul>
+                  {web.horarios.map((f) => (
+                    <li key={f.id}>
+                      <b>{f.dias}</b>
+                      <span>{f.horas}</span>
+                      {f.nota && <small>{f.nota}</small>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {enlaceMapa && (
               <a
                 href={interactivo ? enlaceMapa : undefined}

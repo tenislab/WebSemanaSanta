@@ -1139,9 +1139,13 @@ h1, h2, h3,
 .row-person { display: flex; align-items: center; gap: 0.6rem; }
 .row-avatar {
   width: 30px; height: 30px; border-radius: 50%; flex: none;
-  background: var(--bg-sunken); border: 1px solid var(--line);
+  /* Con `--tono` (un color estable sacado del nombre) el avatar se tiñe
+     suavemente; sin él se queda como estaba. */
+  background: color-mix(in srgb, var(--tono, var(--text-muted)) 15%, var(--bg-sunken));
+  border: 1px solid color-mix(in srgb, var(--tono, var(--line)) 28%, var(--line));
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.7rem; font-weight: 700; color: var(--text-muted);
+  font-size: 0.7rem; font-weight: 700;
+  color: color-mix(in srgb, var(--tono, var(--text-muted)) 78%, var(--text));
 }
 .row-person__name { display: block; font-weight: 600; color: var(--text); }
 .row-person__sub { display: block; font-size: 0.76rem; color: var(--text-muted); }
@@ -1232,6 +1236,11 @@ h1, h2, h3,
 .ficha__list { display: flex; flex-direction: column; gap: 0.9rem; margin: 0; }
 .ficha__list > div { display: flex; flex-direction: column; gap: 0.15rem; padding-bottom: 0.8rem; border-bottom: 1px dashed var(--line); }
 .ficha__list > div:last-child { border-bottom: none; }
+/* Dos columnas: los datos cortos (DNI, cumpleaños) ocupaban una fila entera
+   cada uno y la ficha empezaba a los tres scrolls. */
+.ficha__list--dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.9rem 1.4rem; }
+.ficha__list--dos > div { border-bottom: none; padding-bottom: 0; }
+.ficha__list--dos dd code { font-size: 0.86em; }
 .ficha__list dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 .ficha__list dd { margin: 0; font-size: 0.94rem; color: var(--text); }
 .ficha__note { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 0.85rem; }
@@ -1301,6 +1310,13 @@ h1, h2, h3,
   border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.84rem; line-height: 1.5;
   border: 1px solid transparent;
 }
+/* Solo los avisos que llevan un botón se reparten en fila. Poniéndolo a todos,
+   un <b> dentro del texto se volvía un elemento flex y salía con huecos
+   («Renovación   abierta   hasta el…»). */
+.banner-inline:has(> .btn) {
+  display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+}
+.banner-inline:has(> .btn) > .btn { margin-left: auto; }
 .dash > .banner-inline { margin-bottom: 1.1rem; }
 .banner-inline--warn { background: var(--warn-bg); color: var(--warn-fg); }
 .banner-inline select {
@@ -1810,6 +1826,9 @@ h1, h2, h3,
 .cms-avisos {
   border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2, rgba(0,0,0,0.03));
   margin-bottom: 1.1rem; overflow: hidden;
+  /* Sin tope, en pantalla ancha el botón «Arreglar» acababa a un palmo del
+     texto al que se refiere. */
+  max-width: 62rem;
 }
 /* Se apoya en los tokens de estado, que ya cambian solos con el tema: un color
    fijo aquí se volvía ilegible en oscuro. */
@@ -1827,17 +1846,18 @@ h1, h2, h3,
   font-size: 0.72rem; font-weight: 800; color: #fff; background: var(--text-muted);
 }
 .cms-avisos--ok .cms-avisos__icono { background: var(--ok-fg); color: var(--ok-bg); }
-/* Progreso de la web: dice cuánto queda, no solo lo que falla. */
+/* Progreso de la web, en UNA línea: dice cuánto queda sin robarle media
+   pantalla al editor. Se despliega para ver qué falta exactamente. */
 .cms-progreso {
-  display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap;
-  padding: 0.85rem 1rem 0.7rem;
+  display: flex; align-items: center; gap: 0.8rem; width: 100%;
+  padding: 0.7rem 1rem;
+  background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 0.86rem; color: var(--text); text-align: left;
 }
-.cms-progreso__texto b { display: block; font-size: 0.95rem; }
-.cms-progreso__texto small { display: block; margin-top: 0.1rem; color: var(--text-muted); font-size: 0.8rem; }
-/* El carril tiene que verse: sin él no se sabe cuánto falta, solo lo hecho.
-   Y no se estira a lo ancho de la tarjeta, que parecía una raya suelta. */
+.cms-progreso:hover { background: var(--bg-sunken); }
+.cms-progreso__pct { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cms-progreso__barra {
-  flex: 0 1 16rem; height: 8px; min-width: 8rem; margin-left: auto;
+  flex: 0 1 11rem; height: 8px; min-width: 5rem;
   background: color-mix(in srgb, var(--text) 13%, transparent);
   border-radius: 999px; overflow: hidden;
 }
@@ -1846,6 +1866,8 @@ h1, h2, h3,
   background: linear-gradient(90deg, var(--gold), var(--accent));
   transition: width 0.3s;
 }
+.cms-progreso__texto { flex: 1; min-width: 0; color: var(--text-muted); font-size: 0.83rem; }
+.cms-progreso__flecha { color: var(--text-muted); font-size: 0.68rem; }
 /* Con más peso que `.cms-avisos__lista li span`, que la estiraba a lo ancho. */
 .cms-avisos__lista li span.cms-avisos__marca {
   flex: 0 0 auto; width: 17px; height: 17px; border-radius: 50%;
@@ -1853,13 +1875,7 @@ h1, h2, h3,
   font-size: 0.66rem; font-weight: 800;
   background: var(--warn-fg); color: var(--warn-bg);
 }
-.cms-avisos__mas {
-  width: 100%; padding: 0.55rem 1rem 0.8rem;
-  background: none; border: 0; cursor: pointer;
-  font: inherit; font-size: 0.82rem; color: var(--gold); text-align: left;
-}
-.cms-avisos__mas:hover { text-decoration: underline; }
-.cms-avisos__lista { list-style: none; margin: 0; padding: 0 1rem 0.85rem; display: flex; flex-direction: column; gap: 0.45rem; }
+.cms-avisos__lista { list-style: none; margin: 0; padding: 0.2rem 1rem 0.85rem; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 0.45rem; }
 .cms-avisos__lista li {
   display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
   font-size: 0.86rem; color: var(--text-muted); line-height: 1.45;
@@ -1871,39 +1887,136 @@ h1, h2, h3,
 input[aria-invalid='true'], textarea[aria-invalid='true'] { border-color: var(--warn-fg); }
 
 /* CMS de la web: pestañas, layout con vista previa, chips de páginas */
-.cms-tabs {
-  display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 1.2rem;
-  padding: 0.35rem; border-radius: 14px;
-  background: var(--surface-2, rgba(0,0,0,0.04)); border: 1px solid var(--border);
+/* Editor de la web: raíl de secciones · panel de edición · vista previa.
+   La vista previa manda: es lo que se está haciendo, y antes iba encajonada en
+   400 px mientras los formularios se comían la pantalla. */
+.cms-layout {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 27rem) minmax(0, 1fr);
+  gap: 1.4rem;
+  align-items: start;
 }
-.cms-tab {
-  padding: 0.55rem 1rem; border-radius: 10px; border: 1px solid transparent;
-  background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.88rem; font-weight: 600;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
-}
-.cms-tab:hover { color: var(--text); background: color-mix(in srgb, var(--accent, #6A1A23) 8%, transparent); }
-.cms-tab--active {
-  background: var(--bg-raised, #fff); color: var(--accent, #6A1A23);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.12); border-color: var(--border);
-}
-.cms-layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 1.6rem; align-items: start; }
-@media (max-width: 1100px) { .cms-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1400px) { .cms-layout { grid-template-columns: 13rem minmax(0, 25rem) minmax(0, 1fr); } }
+@media (max-width: 1180px) { .cms-layout { grid-template-columns: 13rem minmax(0, 1fr); } }
+@media (max-width: 820px) { .cms-layout { grid-template-columns: minmax(0, 1fr); } }
 .cms-editor { min-width: 0; display: flex; flex-direction: column; gap: 1.1rem; }
 .cms-editor .settings-card { margin: 0; }
-.cms-preview { position: sticky; top: 1rem; }
+
+/* Raíl de secciones */
+.cms-rail {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.cms-rail__grupo { display: flex; flex-direction: column; gap: 0.15rem; }
+.cms-rail__titulo {
+  margin: 0 0 0.3rem 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cms-rail__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.cms-rail__item:hover { background: var(--bg-sunken); color: var(--text); }
+/* El :hover ganaba por especificidad y la sección activa perdía su color en
+   cuanto el ratón se quedaba encima (que es justo después de pulsarla). */
+.cms-rail__item--on,
+.cms-rail__item--on:hover {
+  position: relative;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-raised));
+  color: var(--accent);
+  font-weight: 650;
+}
+.cms-rail__item--on::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 20%; bottom: 20%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+.cms-rail__item--on .cms-rail__ic { opacity: 1; }
+.cms-rail__ic { flex: none; width: 17px; height: 17px; opacity: 0.85; }
+.cms-rail__ic svg { width: 100%; height: 100%; display: block; }
+.cms-rail__label { flex: 1; min-width: 0; }
+.cms-rail__punto {
+  flex: none; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gold);
+}
+
+/* En estrecho, el raíl es una tira horizontal que se desplaza. */
+@media (max-width: 820px) {
+  .cms-rail {
+    position: static;
+    flex-direction: row;
+    gap: 0.9rem;
+    overflow-x: auto;
+    padding-bottom: 0.3rem;
+    scrollbar-width: thin;
+  }
+  .cms-rail__grupo { flex-direction: row; gap: 0.25rem; }
+  .cms-rail__titulo { display: none; }
+  .cms-rail__item { width: auto; white-space: nowrap; border: 1px solid var(--line); }
+  .cms-rail__label { flex: none; }
+}
+
+.cms-preview {
+  position: sticky;
+  top: 1rem;
+  padding: 0.9rem 0.9rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  /* Un lienzo detrás del dispositivo: separa «lo que estoy tocando» de «cómo
+     va quedando», que antes flotaban en el mismo fondo. */
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
+    var(--bg-sunken);
+}
+@media (max-width: 1180px) { .cms-preview { grid-column: 1 / -1; } }
+@media (max-width: 820px) { .cms-preview { grid-column: auto; } }
 .cms-preview__head {
-  display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-bottom: 0.8rem;
   font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted);
 }
+/* Los tamaños, centrados sobre el dispositivo; «Abrir», a la derecha. */
+.cms-preview__head > :first-child { grid-column: 2; }
+.cms-preview__head > :last-child { grid-column: 3; justify-self: end; text-transform: none; letter-spacing: 0; }
+.cms-preview__dispositivos { background: var(--bg-raised); }
 /* Marco de dispositivo: la vista previa es un render React real (sin iframe,
    sin parpadeo), que se desplaza dentro del marco. Para tableta y escritorio,
    el sitio se pinta a su ancho real y se escala desde React. */
 .cms-preview__frame {
   border: 8px solid #1c1c1e; overflow-y: auto; overflow-x: hidden; background: #fff;
-  height: 640px; box-shadow: 0 12px 34px rgba(0,0,0,0.22);
+  /* Alto ligado a la ventana: en una pantalla grande se veía media pantalla de
+     web y media de hueco. */
+  height: clamp(520px, calc(100vh - 15rem), 900px);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.22);
   border-radius: 26px;
-  transition: border-radius 0.2s ease, border-width 0.2s ease;
+  margin-inline: auto;
+  transition: border-radius 0.2s ease, border-width 0.2s ease, max-width 0.2s ease;
 }
+/* El móvil no se estira a lo ancho de media pantalla: se queda a su tamaño y
+   se centra, como se ve de verdad. */
+.cms-preview__frame--movil { max-width: 420px; }
+.cms-preview__frame--tableta { max-width: 800px; }
 .cms-preview__frame--tableta { border-radius: 16px; border-width: 10px; }
 .cms-preview__frame--escritorio { border-radius: 8px; border-width: 6px; border-bottom-width: 14px; }
 .cms-preview__stage { width: 100%; }
@@ -2050,6 +2163,74 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .sitio__menu { display: flex; align-items: center; gap: 1.1rem; flex-wrap: wrap; }
 .sitio__menu a { color: var(--sitio-fg); text-decoration: none; font-size: 0.9rem; }
 .sitio__menu a:hover { color: var(--sitio-color-texto); }
+/* La sección que se está leyendo, marcada. */
+.sitio__menu a.sitio__menu-a--aqui {
+  color: var(--sitio-color-texto);
+  box-shadow: inset 0 -2px 0 var(--sitio-color2);
+}
+/* En ancho no hay hamburguesa: el menú cabe entero. */
+.sitio__hamburguesa { display: none; }
+
+/* Saltar al contenido, también en la web de la hermandad. */
+.sitio__saltar {
+  position: absolute;
+  left: 0.6rem;
+  top: -3rem;
+  z-index: 40;
+  padding: 0.55rem 0.9rem;
+  background: var(--sitio-color);
+  color: #fff;
+  border-radius: 0 0 var(--sitio-radio) var(--sitio-radio);
+  font-size: 0.86rem;
+  text-decoration: none;
+  transition: top 0.15s;
+}
+.sitio__saltar:focus { top: 0; }
+.sitio { position: relative; }
+
+/* Submenú («La Hermandad» con sus páginas colgando) */
+.sitio__menu-grupo { position: relative; }
+.sitio__menu-grupo-btn {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0; background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 0.9rem; color: var(--sitio-fg);
+}
+.sitio__menu-grupo-btn span { font-size: 0.62em; opacity: 0.7; }
+.sitio__menu-grupo:hover .sitio__menu-grupo-btn,
+.sitio__menu-grupo.sitio__menu-a--aqui .sitio__menu-grupo-btn { color: var(--sitio-color-texto); }
+.sitio__menu-sub {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  z-index: 25;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem;
+  background: var(--sitio-bg);
+  border: 1px solid var(--sitio-linea);
+  border-radius: var(--sitio-radio);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+}
+/* Sin `:focus-within`: tras pulsarlo el botón se queda con el foco y el
+   submenú no había forma de cerrarlo con un segundo toque. Con teclado se
+   abre y se cierra con Intro sobre el botón, que hace el mismo toggle. */
+.sitio__menu-grupo--abierto .sitio__menu-sub {
+  opacity: 1; visibility: visible; transform: translateX(-50%);
+}
+/* El :hover, solo donde hay ratón de verdad. En una pantalla táctil el hover
+   se queda «pegado» tras el primer toque y el segundo no cerraba nada. */
+@media (hover: hover) {
+  .sitio__menu-grupo:hover .sitio__menu-sub {
+    opacity: 1; visibility: visible; transform: translateX(-50%);
+  }
+}
+.sitio__menu-sub a { padding: 0.45rem 0.6rem; border-radius: 6px; white-space: nowrap; }
+.sitio__menu-sub a:hover { background: var(--sitio-bg2); }
 /* El botón vive dentro del menú, y `.sitio__menu a` (más específica) le
    robaba el color: texto oscuro sobre el burdeos del botón. */
 .sitio__menu a.sitio-btn { color: #fff; }
@@ -2260,16 +2441,95 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 
 /* Adaptación a anchos estrechos (vista previa y móvil real): mismo diseño,
    pero con menos aire y la navegación que fluye a varias líneas. */
-@container sitio (max-width: 560px) {
-  .sitio__nav { padding: 0.7rem 1rem; gap: 0.45rem 0.8rem; flex-wrap: wrap; }
-  .sitio__menu { gap: 0.55rem 0.9rem; }
-  .sitio__menu a { font-size: 0.82rem; }
+@container sitio (max-width: 700px) {
+  /* Con el mismo peso que `.sitio[data-plantilla='clasica'] .sitio__nav`, que
+     apila la marca sobre el menú: en móvil, con la hamburguesa, eso dejaba el
+     botón centrado en un segundo renglón. */
+  .sitio[data-plantilla] .sitio__nav {
+    padding: 0.7rem 1rem;
+    gap: 0.8rem;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  /* ---- Menú de móvil ---- */
+  .sitio__hamburguesa {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    flex: none;
+    width: 42px;
+    height: 42px;
+    padding: 0 9px;
+    background: none;
+    border: 1px solid var(--sitio-linea);
+    border-radius: var(--sitio-radio);
+    cursor: pointer;
+    z-index: 30;
+  }
+  .sitio__hamburguesa span {
+    display: block;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--sitio-fg);
+    transition: transform 0.2s, opacity 0.15s;
+  }
+  .sitio__hamburguesa--abierta span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .sitio__hamburguesa--abierta span:nth-child(2) { opacity: 0; }
+  .sitio__hamburguesa--abierta span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  .sitio__menu {
+    /* Cuelga POR DEBAJO de la barra: tapándola se perdían de vista el escudo
+       y el nombre, y no se sabía en qué web estabas. */
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.4rem 1.2rem 1.4rem;
+    background: var(--sitio-bg);
+    border-bottom: 1px solid var(--sitio-linea);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+    /* Cerrado: fuera de la vista, sin ocupar sitio ni recibir el tabulador. */
+    transform: translateY(-100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform 0.24s ease, opacity 0.18s ease, visibility 0.24s;
+  }
+  .sitio__menu--abierto { transform: none; opacity: 1; visibility: visible; }
+  .sitio__menu a {
+    padding: 0.85rem 0.2rem;
+    font-size: 1rem;
+    border-bottom: 1px solid var(--sitio-linea);
+  }
+  .sitio__menu a:last-of-type { border-bottom: 0; }
+  /* En el panel de móvil el submenú va en línea: nada de capas flotantes. */
+  .sitio__menu-grupo { border-bottom: 1px solid var(--sitio-linea); }
+  .sitio__menu-grupo-btn { width: 100%; padding: 0.85rem 0.2rem; font-size: 1rem; justify-content: space-between; }
+  .sitio__menu-grupo-btn span { display: none; }
+  .sitio__menu-sub {
+    position: static; transform: none; opacity: 1; visibility: visible;
+    min-width: 0; padding: 0 0 0.6rem 0.9rem; background: none; border: 0; box-shadow: none;
+  }
+  .sitio__menu-sub a { padding: 0.5rem 0.2rem; border-bottom: 0; font-size: 0.92rem; opacity: 0.85; }
+  .sitio__menu a.sitio__menu-a--aqui { box-shadow: inset 3px 0 0 var(--sitio-color2); padding-left: 0.7rem; }
+  .sitio__menu .sitio-btn { margin-top: 0.9rem; text-align: center; }
+  /* La cabecera es el marco del menú desplegado. Solo cuando NO es fija: con
+     `position: sticky` ya sirve de marco, y ponerle `relative` encima le
+     quitaba el pegado a la barra. */
+  .sitio__nav:not(.sitio__nav--fija) { position: relative; }
   .sitio__hero { padding: 2rem 1.1rem; }
   .sitio__lema { font-size: 1rem; }
   .sitio__main { padding: 1.8rem 1.1rem; }
   .sitio__seccion { margin-bottom: 2rem; }
-  /* En estrecho el menú va a varias líneas y la barra es mucho más alta. */
-  .sitio--navfija .sitio__seccion { scroll-margin-top: 140px; }
+  /* Con la hamburguesa, la barra vuelve a ser de una sola línea. */
+  .sitio--navfija .sitio__seccion { scroll-margin-top: 76px; }
   .sitio__contacto-grid { grid-template-columns: 1fr; }
   .sitio__mapa iframe { height: 220px; }
   /* Dos fotos por fila: a una sola por pantalla, ver un álbum es un maratón. */
@@ -2580,6 +2840,9 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .cortejo-orden__tramo ol { margin: 0; padding-left: 1.3rem; font-size: 0.86rem; display: flex; flex-direction: column; gap: 0.25rem; }
 
 .drawer--sm { max-width: 380px; }
+/* La ficha del hermano tiene mucho que contar: en 440 px todo iba en una
+   columna y hacían falta tres scrolls para llegar a las etiquetas. */
+.drawer--ancho { max-width: 640px; }
 
 /* =========================================================================
    Archivo documental — permisos por cargo (simulados, sin autenticación real)
@@ -3661,3 +3924,352 @@ html:has(.sitio) { scroll-behavior: smooth; }
 .masiva__hecho { color: var(--ok-fg); font-size: 0.82rem; }
 .col-marca { width: 1%; padding-right: 0 !important; }
 .col-marca input { width: 17px; height: 17px; cursor: pointer; vertical-align: middle; }
+
+/* ---------------- Ficha del hermano: cabecera con cara ---------------- */
+.ficha-hero {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+  padding: 0.95rem 1.05rem;
+  border-radius: 14px;
+  color: var(--tono-tinta);
+  background:
+    linear-gradient(135deg, var(--tono), color-mix(in srgb, var(--tono) 72%, #000));
+}
+.ficha-hero__avatar {
+  flex: none;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tono-tinta) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tono-tinta) 35%, transparent);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.ficha-hero__quien { min-width: 0; }
+.ficha-hero__quien b { display: block; font-size: 1.06rem; line-height: 1.25; }
+.ficha-hero__quien small {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.79rem;
+  /* 0,82 dejaba el texto pequeño por debajo de 4,5:1 en los tonos claros. */
+  opacity: 0.92;
+}
+.ficha-hero__pills { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+/* Las pastillas van sobre un fondo de color: se visten para el sitio. */
+.ficha-hero__pills .pill {
+  /* 20 % aclaraba tanto el fondo que la pastilla bajaba de 4,5:1. */
+  background: color-mix(in srgb, var(--tono-tinta) 12%, transparent);
+  color: var(--tono-tinta);
+  border: 1px solid color-mix(in srgb, var(--tono-tinta) 38%, transparent);
+}
+.ficha-cumple {
+  margin: -0.5rem 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 9px;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  font-size: 0.86rem;
+}
+.ficha-admin { margin-top: 1.2rem; }
+
+/* Chip de cumpleaños del mes: un dato que estaba guardado y no se usaba. */
+.chip--cumples { border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); }
+
+/* Ajustes: mismo raíl que el editor de la web. Nueve bloques en una columna
+   eran un scroll sin fin, y cinco botones de «Guardar» sueltos. */
+.cfg-layout {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  gap: 1.4rem;
+  align-items: start;
+}
+@media (max-width: 820px) { .cfg-layout { grid-template-columns: minmax(0, 1fr); } }
+/* Con el raíl, las tarjetas se estiraban a 950 px y las líneas de texto se
+   hacían ilegibles. Se limita a una medida de lectura cómoda. */
+.cfg-panel { min-width: 0; max-width: 50rem; display: flex; flex-direction: column; gap: 1.1rem; }
+.cfg-panel .settings-layout { max-width: none; }
+.cfg-panel > .settings-card { margin: 0; }
+
+/* Zona de peligro: borrar no puede parecerse a guardar. */
+.settings-card--peligro { border-color: color-mix(in srgb, var(--err-fg) 40%, var(--line)); }
+.settings-card--peligro .settings-card__title { color: var(--err-fg); }
+
+/* ============ W2 · Secciones nuevas de la web pública ============ */
+
+.sitio__entradilla {
+  font-size: 1.08rem;
+  line-height: 1.7;
+  color: var(--sitio-muted);
+  margin-bottom: 1.4rem;
+}
+.sitio__cta { margin-top: 1.6rem; }
+
+/* ---- Hazte hermano ---- */
+.sitio__hazte {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1.4rem;
+}
+/* Las listas van alineadas a la izquierda aunque la sección esté centrada: con
+   la marca y el número a un lado, el texto centrado bailaba. */
+.sitio__hazte-bloque { text-align: left; }
+.sitio__hazte-bloque h3 {
+  font-family: var(--sitio-fuente-titulos);
+  color: var(--sitio-color-texto);
+  font-size: 1.05rem;
+  margin-bottom: 0.7rem;
+}
+.sitio__lista-marcada,
+.sitio__pasos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
+.sitio__lista-marcada li,
+.sitio__pasos li { position: relative; padding-left: 1.9rem; line-height: 1.6; }
+.sitio__lista-marcada li::before {
+  content: '';
+  position: absolute;
+  left: 0.25rem;
+  top: 0.45em;
+  width: 0.5rem;
+  height: 0.85rem;
+  border: solid var(--sitio-color2);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+/* Los pasos van numerados: es un orden, no una lista suelta. */
+.sitio__pasos { counter-reset: paso; }
+.sitio__pasos li { counter-increment: paso; }
+.sitio__pasos li::before {
+  content: counter(paso);
+  position: absolute;
+  left: 0;
+  top: 0.05em;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sitio-color);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.sitio__hazte-cuota {
+  padding: 1.1rem 1.2rem;
+  background: var(--sitio-bg2);
+  border: 1px solid var(--sitio-linea);
+  border-radius: var(--sitio-radio);
+}
+.sitio__cuota-cifra {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 1.7rem;
+  color: var(--sitio-color-texto);
+  margin-bottom: 0.4rem;
+}
+.sitio__hazte-cuota p:last-child { font-size: 0.88rem; color: var(--sitio-muted); line-height: 1.6; }
+
+/* ---- Estación de penitencia ---- */
+.sitio__estacion-dia {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 1.35rem;
+  color: var(--sitio-color-texto);
+  margin-bottom: 1rem;
+}
+.sitio__estacion-datos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.6rem;
+  margin: 0 auto 1.6rem;
+  max-width: 34rem;
+  text-align: left;
+  padding: 0.9rem 1.1rem;
+  background: var(--sitio-bg2);
+  border: 1px solid var(--sitio-linea);
+  border-radius: var(--sitio-radio);
+}
+.sitio__estacion-datos dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sitio-muted);
+}
+.sitio__estacion-datos dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--sitio-color-texto);
+  font-variant-numeric: tabular-nums;
+}
+/* El itinerario, como un recorrido: una línea vertical y las paradas encima. */
+.sitio__itinerario {
+  list-style: none;
+  /* Centrado como bloque y con sitio para los puntos: pegado al borde de la
+     sección, la línea del recorrido se salía. */
+  margin: 0 auto;
+  max-width: 34rem;
+  padding: 0 0 0 1.6rem;
+  position: relative;
+}
+.sitio__itinerario::before {
+  content: '';
+  position: absolute;
+  left: 0.17rem;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 2px;
+  background: var(--sitio-linea);
+}
+.sitio__itinerario li {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  padding: 0.5rem 0;
+  text-align: left;
+}
+.sitio__itinerario li::before {
+  content: '';
+  position: absolute;
+  left: -1.45rem;
+  top: 0.95em;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--sitio-bg);
+  border: 2px solid var(--sitio-linea);
+}
+/* Con más peso que `.sitio__itinerario li::before`, que si no gana por
+   especificidad y los hitos salían igual que las paradas normales. */
+.sitio__itinerario li.sitio__parada--hito::before {
+  background: var(--sitio-color2);
+  border-color: var(--sitio-color2);
+  width: 12px;
+  height: 12px;
+  left: -1.63rem;
+}
+.sitio__parada--hito .sitio__parada-lugar { font-weight: 700; color: var(--sitio-color-texto); }
+.sitio__parada-hora {
+  flex: none;
+  min-width: 3.4rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--sitio-color-texto);
+}
+.sitio__parada-lugar { line-height: 1.5; }
+.sitio__estacion-nota {
+  margin: 1.3rem auto 0;
+  max-width: 34rem;
+  padding: 0.85rem 1rem;
+  border-left: 3px solid var(--sitio-color2);
+  background: var(--sitio-bg2);
+  color: var(--sitio-muted);
+  line-height: 1.65;
+  text-align: left;
+}
+
+/* ---- Junta de gobierno ---- */
+.sitio__junta {
+  list-style: none;
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem 1.6rem;
+}
+.sitio__junta li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--sitio-linea);
+  text-align: left;
+}
+.sitio__junta-cargo {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sitio-muted);
+}
+.sitio__junta-nombre { font-size: 1rem; color: var(--sitio-fg); }
+
+/* ---- Horario de secretaría (dentro de Contacto) ---- */
+.sitio__horario { margin: 1.2rem 0; text-align: left; }
+.sitio__horario h3 {
+  font-family: var(--sitio-fuente-titulos);
+  color: var(--sitio-color-texto);
+  font-size: 1rem;
+  margin-bottom: 0.6rem;
+}
+.sitio__horario ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.sitio__horario li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.6rem; }
+.sitio__horario b { color: var(--sitio-fg); }
+.sitio__horario span { color: var(--sitio-color-texto); font-variant-numeric: tabular-nums; }
+.sitio__horario small { flex-basis: 100%; color: var(--sitio-muted); font-size: 0.82rem; }
+
+/* Filas del editor de las secciones nuevas de la web */
+.opcion-row--horario { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 0.5rem; align-items: center; }
+.opcion-row--parada { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto auto auto; gap: 0.5rem; align-items: center; }
+.opcion-row--parada .checkbox { font-size: 0.8rem; white-space: nowrap; }
+.opcion-row--junta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 0.5rem; align-items: center; }
+@media (max-width: 760px) {
+  .opcion-row--horario, .opcion-row--parada, .opcion-row--junta { grid-template-columns: minmax(0, 1fr); }
+  .opcion-row--parada .seccion-item__orden, .opcion-row--junta .seccion-item__orden { justify-self: start; }
+}
+
+/* ============ W3 · Noticias con cuerpo y enlace propio ============ */
+
+/* La destacada, a lo grande: foto arriba y titular mayor. */
+.sitio__noticia--grande { flex-direction: column; gap: 0.9rem; margin-bottom: 1rem; text-align: left; }
+.sitio__noticia--grande img { width: 100%; height: clamp(160px, 34cqi, 320px); border-radius: var(--sitio-radio); }
+.sitio__noticia--grande h3 { font-size: 1.5rem; }
+.sitio__noticia--grande p { line-height: 1.7; }
+.sitio__noticia > div { min-width: 0; text-align: left; }
+.sitio__noticia h3 a { color: inherit; text-decoration: none; }
+.sitio__noticia h3 a:hover { text-decoration: underline; }
+.sitio__seguir {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--sitio-color-texto);
+  text-decoration: none;
+}
+.sitio__seguir:hover { text-decoration: underline; }
+
+/* Página propia de una noticia */
+.sitio__noticia-pagina { max-width: 44rem; margin: 0 auto; text-align: left; }
+.sitio__noticia-pagina h1 {
+  font-family: var(--sitio-fuente-titulos);
+  color: var(--sitio-color-texto);
+  font-size: clamp(1.6rem, 4.5cqi, 2.4rem);
+  line-height: 1.15;
+  margin: 0.3rem 0 0.9rem;
+}
+.sitio__noticia-pagina h2 {
+  font-family: var(--sitio-fuente-titulos);
+  color: var(--sitio-color-texto);
+  font-size: 1.25rem;
+  margin: 1.6rem 0 0.5rem;
+}
+.sitio__noticia-foto {
+  width: 100%;
+  max-height: 26rem;
+  object-fit: cover;
+  border-radius: var(--sitio-radio);
+  margin: 1.2rem 0;
+}
+.sitio__noticia-pagina .sitio__texto { margin-bottom: 1rem; }
+/* La cabecera de las páginas sueltas (noticia, listado) es un enlace. */
+.sitio__nav .sitio__brand { text-decoration: none; }
+/* Con el mismo peso que `.sitio[data-plantilla='clasica'] .sitio__nav`. */
+.sitio[data-plantilla] .sitio__nav--suelta {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+}

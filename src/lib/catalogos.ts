@@ -46,8 +46,10 @@ export function useLista(clave: string, porDefecto: readonly string[]): string[]
 }
 
 export async function saveLista(clave: string, valores: string[]) {
-  if (isSupabaseConfigured) await reemplazarCatalogo(clave, valores)
+  // Primero el navegador: si la llamada remota lanza, lo que acaba de escribir
+  // el usuario no se puede perder por el camino.
   localStorage.setItem(clave, JSON.stringify(valores))
+  if (isSupabaseConfigured) await reemplazarCatalogo(clave, valores)
 }
 
 /**

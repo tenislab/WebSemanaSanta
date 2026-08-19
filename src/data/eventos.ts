@@ -181,12 +181,42 @@ function aIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** Suma días a una fecha sin tocar la original. */
+function sumaDias(base: Date, dias: number): Date {
+  const d = new Date(base)
+  d.setDate(d.getDate() + dias)
+  return d
+}
+
+/**
+ * La fecha de la vuelta `n` de una repetición. Para las mensuales y anuales se
+ * calcula desde el AÑO Y MES, y el día se recorta al último del mes: con
+ * `setMonth` sobre un 31 de enero se saltaba al 3 de marzo y a partir de ahí
+ * todas las vueltas iban corridas; un 29 de febrero se convertía en 1 de marzo
+ * para siempre, en vez de volver al 29 en el siguiente bisiesto.
+ */
+function fechaDeVuelta(inicio: Date, tipo: TipoRepeticion, cada: number, vuelta: number): Date {
+  if (tipo === 'diaria') return sumaDias(inicio, cada * vuelta)
+  if (tipo === 'semanal') return sumaDias(inicio, 7 * cada * vuelta)
+  const saltoMeses = (tipo === 'mensual' ? cada : 12 * cada) * vuelta
+  const total = inicio.getMonth() + saltoMeses
+  const anio = inicio.getFullYear() + Math.floor(total / 12)
+  const mes = ((total % 12) + 12) % 12
+  const ultimoDia = new Date(anio, mes + 1, 0).getDate()
+  return new Date(anio, mes, Math.min(inicio.getDate(), ultimoDia))
+}
+
+const MS_POR_DIA = 86_400_000
+
 /**
  * Todas las apariciones de un evento entre dos fechas. Se calcula al vuelo: no
  * se guardan cientos de copias en la base por un ensayo semanal.
  *
- * Tope de seguridad de 400 apariciones: un evento diario «para siempre»
- * consultado a diez años vista colgaría el navegador.
+ * Se salta de golpe hasta la ventana pedida en vez de recorrer vuelta a vuelta
+ * desde el principio: un ensayo semanal creado hace ocho años se quedaba sin
+ * vueltas antes de llegar al mes que se estaba mirando y DESAPARECÍA del
+ * calendario. El tope ahora limita las apariciones DENTRO de la ventana, que
+ * es lo que de verdad hay que acotar.
  */
 export function aparicionesEntre(evento: Evento, desde: string, hasta: string, tope = 400): Aparicion[] {
   const inicio = aFecha(evento.fecha)
@@ -203,25 +233,32 @@ export function aparicionesEntre(evento: Evento, desde: string, hasta: string, t
 
   const finRepeticion = rep.hasta ? aFecha(rep.hasta) : null
   const cada = Math.max(1, rep.cada || 1)
+  const limite = finRepeticion && finRepeticion < dHasta ? finRepeticion : dHasta
+
+  // Cuántas vueltas hay que saltarse para plantarse justo antes de la ventana.
+  let primeraVuelta = 0
+  if (dDesde > inicio) {
+    if (rep.tipo === 'diaria' || rep.tipo === 'semanal') {
+      const paso = (rep.tipo === 'diaria' ? 1 : 7) * cada
+      const dias = Math.floor((dDesde.getTime() - inicio.getTime()) / MS_POR_DIA)
+      primeraVuelta = Math.floor(dias / paso)
+    } else {
+      const meses = (dDesde.getFullYear() - inicio.getFullYear()) * 12 + (dDesde.getMonth() - inicio.getMonth())
+      const paso = rep.tipo === 'mensual' ? cada : 12 * cada
+      primeraVuelta = Math.max(0, Math.floor(meses / paso))
+    }
+  }
+
   const salida: Aparicion[] = []
-  const cursor = new Date(inicio)
-  let vuelta = 0
-
-  while (vuelta < tope) {
-    if (finRepeticion && cursor > finRepeticion) break
-    if (cursor > dHasta) break
-    if (cursor >= dDesde) salida.push({ evento, fecha: aIso(cursor), vuelta })
-
-    vuelta += 1
-    if (rep.tipo === 'diaria') cursor.setDate(cursor.getDate() + cada)
-    else if (rep.tipo === 'semanal') cursor.setDate(cursor.getDate() + 7 * cada)
-    else if (rep.tipo === 'mensual') cursor.setMonth(cursor.getMonth() + cada)
-    else cursor.setFullYear(cursor.getFullYear() + cada)
+  for (let i = 0; i < tope; i += 1) {
+    const vuelta = primeraVuelta + i
+    const fecha = fechaDeVuelta(inicio, rep.tipo, cada, vuelta)
+    if (fecha > limite) break
+    if (fecha >= dDesde) salida.push({ evento, fecha: aIso(fecha), vuelta })
   }
   return salida
 }
 
-/** Lo mismo, para una lista de eventos, ya ordenado por fecha. */
 export function calendarioEntre(eventos: Evento[], desde: string, hasta: string): Aparicion[] {
   return eventos
     .flatMap((e) => aparicionesEntre(e, desde, hasta))

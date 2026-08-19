@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { LogoMark } from '../../components/Logo'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -55,7 +55,42 @@ const CATALOGOS_DEF = [
   { k: 'segmentos', clave: CLAVES_CATALOGOS.segmentosComunicado, titulo: 'Destinatarios de comunicados', porDefecto: SEGMENTOS },
 ] as const
 
+type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos'
+
+/** Las secciones de los ajustes, agrupadas como el editor de la web. */
+const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; icono: ReactNode }[] }[] = [
+  {
+    titulo: 'La hermandad',
+    items: [
+      { id: 'hermandad', label: 'Identidad y datos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3 4 7v6c0 4.4 3.4 7.4 8 8 4.6-.6 8-3.6 8-8V7l-8-4Z" /></svg> },
+      { id: 'ficha', label: 'Ficha del hermano', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2.2" /><path d="M5.5 16.5c.7-1.7 2-2.5 3.5-2.5s2.8.8 3.5 2.5M15 9.5h4M15 13h3" /></svg> },
+    ],
+  },
+  {
+    titulo: 'Cómo trabajáis',
+    items: [
+      { id: 'cortejo', label: 'Cuerpos y tramos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 6h16M4 12h16M4 18h10" /></svg> },
+      { id: 'papeletas', label: 'Papeletas', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M2.5 11a2 2 0 0 0 0 2M21.5 11a2 2 0 0 1 0 2M9 6v12" strokeDasharray="2 2" /></svg> },
+      { id: 'catalogos', label: 'Catálogos y cuotas', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg> },
+    ],
+  },
+  {
+    titulo: 'Mantenimiento',
+    items: [
+      { id: 'datos', label: 'Copias y datos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></svg> },
+    ],
+  },
+]
+
 export default function Configuracion() {
+  /** Sección abierta. Se recuerda durante la sesión: se entra y se sale mucho. */
+  const [seccion, setSeccion] = useState<SeccionCfg>(
+    () => (sessionStorage.getItem('cabildo-cfg-seccion') as SeccionCfg | null) ?? 'hermandad',
+  )
+  function irASeccion(s: SeccionCfg) {
+    setSeccion(s)
+    try { sessionStorage.setItem('cabildo-cfg-seccion', s) } catch { /* sin sessionStorage */ }
+  }
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
 
@@ -405,13 +440,40 @@ export default function Configuracion() {
     <div className="dash">
       <div className="dash-head">
         <p className="eyebrow">Configuración</p>
-        <h1>Datos de la hermandad</h1>
+        <h1>Ajustes de la hermandad</h1>
         <p className="dash-head__lead">
-          Esta información aparece en la cabecera de las cuotas y demás documentos que genera
-          Cabildo. Solo la ves tú, desde este panel.
+          Cómo se llama, cómo sale en los documentos y cómo trabajáis: el cortejo, las papeletas y
+          las listas que usa toda la aplicación. Solo lo ves tú, desde aquí.
         </p>
       </div>
 
+      <div className="cfg-layout">
+        {/* Mismo raíl que el editor de la web: nueve bloques en una sola
+            columna eran un scroll sin fin y cinco botones de «Guardar» que no
+            se sabía a qué parte correspondían. */}
+        <nav className="cms-rail" aria-label="Secciones de los ajustes">
+          {SECCIONES_CFG.map((g) => (
+            <div className="cms-rail__grupo" key={g.titulo}>
+              <p className="cms-rail__titulo">{g.titulo}</p>
+              {g.items.map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`cms-rail__item${seccion === it.id ? ' cms-rail__item--on' : ''}`}
+                  onClick={() => irASeccion(it.id)}
+                  aria-current={seccion === it.id ? 'true' : undefined}
+                >
+                  <span className="cms-rail__ic" aria-hidden="true">{it.icono}</span>
+                  <span className="cms-rail__label">{it.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="cfg-panel">
+
+      {seccion === 'hermandad' && (
       <form className="settings-layout" onSubmit={handleSubmit}>
         <section className="settings-card">
           <h2 className="settings-card__title">Escudo o logotipo</h2>
@@ -649,7 +711,10 @@ export default function Configuracion() {
           </button>
         </div>
       </form>
+      )}
 
+      {seccion === 'cortejo' && (
+        <>
       <section className="settings-card">
         <div className="settings-card__head">
           <h2 className="settings-card__title">Cuerpos del cortejo</h2>
@@ -842,7 +907,10 @@ export default function Configuracion() {
           </button>
         </div>
       </section>
+        </>
+      )}
 
+      {seccion === 'papeletas' && (
       <section className="settings-card">
         <div className="settings-card__head">
           <h2 className="settings-card__title">Papeletas personalizadas</h2>
@@ -894,7 +962,9 @@ export default function Configuracion() {
           </button>
         </div>
       </section>
+      )}
 
+      {seccion === 'catalogos' && (
       <section className="settings-card">
         <div className="settings-card__head">
           <h2 className="settings-card__title">Catálogos de la hermandad</h2>
@@ -982,9 +1052,12 @@ export default function Configuracion() {
           </button>
         </div>
       </section>
+      )}
 
-      <CamposPropiosCard />
+      {seccion === 'ficha' && <CamposPropiosCard />}
 
+      {seccion === 'datos' && (
+        <>
       <section className="settings-card">
         <div className="settings-card__head">
           <h2 className="settings-card__title">Copia de seguridad</h2>
@@ -1013,7 +1086,7 @@ export default function Configuracion() {
         </div>
       </section>
 
-      <section className="settings-card">
+      <section className="settings-card settings-card--peligro">
         <div className="settings-card__head">
           <h2 className="settings-card__title">Restablecer datos</h2>
         </div>
@@ -1035,6 +1108,10 @@ export default function Configuracion() {
           </button>
         </div>
       </section>
+        </>
+      )}
+        </div>
+      </div>
     </div>
   )
 }

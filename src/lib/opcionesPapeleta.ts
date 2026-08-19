@@ -51,11 +51,12 @@ export function useOpcionesPapeleta(): OpcionPapeleta[] {
 }
 
 export async function saveOpcionesPapeleta(opciones: OpcionPapeleta[]) {
+  // Primero el navegador (ver `saveLista`).
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(opciones))
   if (isSupabaseConfigured) {
     await reemplazarTablaCompleta(
       'opciones_papeleta',
       opciones.map((o, orden) => ({ id: o.id, nombre: o.nombre, importe: o.importe, orden })),
     )
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(opciones))
 }

@@ -17,7 +17,10 @@ export type TipografiaWeb = string
 export type AlturaHero = 'compacta' | 'media' | 'completa'
 export type TipoSeccion =
   | 'historia'
+  | 'hazte'
   | 'titulares'
+  | 'estacion'
+  | 'junta'
   | 'cultos'
   | 'galeria'
   | 'actualidad'
@@ -25,6 +28,63 @@ export type TipoSeccion =
   | 'boletines'
   | 'contacto'
 export type TipoRed = 'Instagram' | 'Facebook' | 'X' | 'YouTube' | 'TikTok' | 'Web'
+
+/** Una franja de atención al público («Martes y jueves, de 20:00 a 21:30»). */
+export interface FranjaHorario {
+  id: string
+  dias: string
+  horas: string
+  /** Para qué es esa franja: «papeletas de sitio», «altas y cuotas»… */
+  nota: string
+}
+
+/** Lo que hay que saber para hacerse hermano. */
+export interface HazteHermano {
+  entradilla: string
+  /** Requisitos, uno por línea en el editor. */
+  requisitos: string[]
+  /** Cuota, escrita como se quiera («60 € al año», «5 € al mes»). */
+  cuota: string
+  /** Los pasos que hay que dar, en orden. */
+  pasos: string[]
+  /** Texto del botón; vacío = sin botón. */
+  textoBoton: string
+  /** El botón lleva al área del hermano (donde se pide el alta) o al contacto. */
+  alAreaDelHermano: boolean
+}
+
+/** Una parada del itinerario, con su hora de paso. */
+export interface ParadaItinerario {
+  id: string
+  /** Calle, plaza o sitio de paso. */
+  lugar: string
+  /** Hora aproximada («18:40»). Puede ir vacía. */
+  hora: string
+  /** Marca los momentos grandes: salida, carrera oficial, entrada. */
+  destacada: boolean
+}
+
+/** La estación de penitencia: el dato más buscado de toda la web. */
+export interface EstacionPenitencia {
+  /** «Viernes Santo», «Domingo de Ramos»… */
+  dia: string
+  /** Año de la salida, para que se vea si el dato es de este año. */
+  anio: string
+  horaSalida: string
+  horaEntrada: string
+  /** Desde dónde sale (parroquia, capilla…). */
+  salidaDesde: string
+  /** Nota corta: recomendaciones, dónde verla mejor, qué llevar. */
+  nota: string
+  itinerario: ParadaItinerario[]
+}
+
+/** Un cargo de la junta de gobierno. */
+export interface MiembroJunta {
+  id: string
+  cargo: string
+  nombre: string
+}
 
 export const PLANTILLAS: { id: PlantillaWeb; nombre: string; descripcion: string }[] = [
   { id: 'clasica', nombre: 'Clásica', descripcion: 'Serif, tonos cálidos y aire tradicional cofrade.' },
@@ -127,6 +187,9 @@ export const TIPOGRAFIAS: { id: TipografiaWeb; nombre: string; css: string }[] =
  */
 export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string; publico: string }> = {
   historia: { nombre: 'Historia', publico: 'Historia' },
+  hazte: { nombre: 'Hazte hermano', publico: 'Hazte hermano' },
+  estacion: { nombre: 'Estación de penitencia', publico: 'Estación de penitencia' },
+  junta: { nombre: 'Junta de gobierno', publico: 'Junta de gobierno' },
   titulares: { nombre: 'Titulares', publico: 'Titulares' },
   cultos: { nombre: 'Cultos y actos', publico: 'Cultos' },
   galeria: { nombre: 'Galería de fotos', publico: 'Galería' },
@@ -196,9 +259,39 @@ export interface Noticia {
   id: string
   titulo: string
   fecha: string
+  /** Entradilla: lo que se lee en la tarjeta del listado. */
   resumen: string
   fotoDataUrl: string | null
   publicada: boolean
+  /**
+   * El cuerpo de la noticia, con el mismo editor de párrafos que la Historia.
+   * Vacío = la noticia es solo un titular con su entradilla, como hasta ahora.
+   */
+  parrafos?: ParrafoPagina[]
+  /** Sale la primera y a lo grande. Solo la primera marcada. */
+  destacada?: boolean
+  /**
+   * Parte final del enlace propio (…/w/slug/n/<slug>). Se calcula del título
+   * al crearla; se guarda para que el enlace no cambie si luego se reescribe
+   * el titular.
+   */
+  slug?: string
+}
+
+/** El enlace propio de una noticia, ya resuelto (el guardado o el del título). */
+export function slugNoticia(n: Noticia): string {
+  return n.slug?.trim() || aSlug(n.titulo) || n.id
+}
+
+/** Las noticias que se ven en la web, la destacada primero y por fecha. */
+export function noticiasPublicadas(noticias: Noticia[]): Noticia[] {
+  return noticias
+    .filter((n) => n.publicada)
+    .sort((a, b) => {
+      // La destacada manda sobre la fecha: es la que la hermandad quiere arriba.
+      if (Boolean(a.destacada) !== Boolean(b.destacada)) return a.destacada ? -1 : 1
+      return (b.fecha || '').localeCompare(a.fecha || '')
+    })
 }
 
 /** Párrafo de una página de texto (con subtítulo opcional). */
@@ -459,10 +552,19 @@ export interface WebPublica {
   paginas: PaginaWeb[]
   boletines: Boletin[]
 
+  /** Qué hay que hacer para ser hermano de esta casa. */
+  hazte: HazteHermano
+  /** El día grande: salida, itinerario y horas de paso. */
+  estacion: EstacionPenitencia
+  /** Los cargos de la junta de gobierno. */
+  junta: MiembroJunta[]
+
   // Contacto
   email: string
   telefono: string
   direccion: string
+  /** Cuándo se atiende en secretaría. Vacío = no se enseña. */
+  horarios: FranjaHorario[]
   /** URL de Google Maps (enlace o embed). */
   mapaUrl: string
   redes: RedWeb[]
@@ -494,7 +596,10 @@ export const CLAVE_WEB_PUBLICA = 'cabildo-web-publica'
 
 export const SECCIONES_POR_DEFECTO: SeccionConfig[] = [
   { tipo: 'historia', visible: true },
+  { tipo: 'hazte', visible: true },
   { tipo: 'titulares', visible: true },
+  { tipo: 'estacion', visible: true },
+  { tipo: 'junta', visible: true },
   { tipo: 'cultos', visible: true },
   { tipo: 'galeria', visible: true },
   { tipo: 'actualidad', visible: true },
@@ -563,6 +668,28 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
     },
   ],
   albumes: [],
+  hazte: {
+    entradilla: 'Cualquiera puede ser hermano de esta casa. Solo hace falta querer serlo.',
+    requisitos: [
+      'Estar bautizado',
+      'Aceptar las reglas de la hermandad',
+      'Los menores, con la firma de padre, madre o tutor',
+    ],
+    cuota: '60 € al año',
+    pasos: [
+      'Rellena la solicitud con tus datos',
+      'Secretaría la revisa y te avisa',
+      'Se te da de alta en el censo con tu número de hermano',
+    ],
+    textoBoton: 'Quiero hacerme hermano',
+    alAreaDelHermano: true,
+  },
+  // Vacías de fábrica: mientras no se rellenen, la sección no se pinta ni sale
+  // en el menú, así que no aparece un enlace que no lleva a ninguna parte.
+  estacion: {
+    dia: '', anio: '', horaSalida: '', horaEntrada: '', salidaDesde: '', nota: '', itinerario: [],
+  },
+  junta: [],
   noticias: [
     { id: 'not-1', titulo: 'Convocatoria de Cabildo General', fecha: '2026-02-02', resumen: 'Por orden del Hermano Mayor se convoca a todos los hermanos al Cabildo General.', fotoDataUrl: null, publicada: true },
   ],
@@ -580,6 +707,9 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   telefono: '',
   direccion: '',
   mapaUrl: '',
+  horarios: [
+    { id: 'hor-1', dias: 'Martes y jueves', horas: 'de 20:00 a 21:30', nota: 'Altas, cuotas y papeletas de sitio' },
+  ],
   redes: [],
 
   textoPie: '',

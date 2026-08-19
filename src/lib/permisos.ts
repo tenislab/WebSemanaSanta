@@ -91,10 +91,12 @@ export function usePermisosPorCargo(): Record<Cargo, string[]> {
 }
 
 export async function savePermisosPorCargo(permisos: Record<Cargo, string[]>) {
+  // Primero el navegador: `guardarPermisosPorCargoRemoto` no captura errores,
+  // y un fallo suyo dejaba los permisos sin guardar ni siquiera aquí.
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(permisos))
   if (isSupabaseConfigured) {
     await guardarPermisosPorCargoRemoto(permisos)
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(permisos))
 }
 
 /**

@@ -36,6 +36,9 @@ export default function App() {
       <Route path="/recuperar" element={<ForgotPassword />} />
       <Route path="/hermano" element={<HermanoPortal />} />
       <Route path="/w/:slug" element={<SitioPublico />} />
+      {/* Una noticia con su enlace propio, y el listado completo. */}
+      <Route path="/w/:slug/n/:noticia" element={<SitioPublico />} />
+      <Route path="/w/:slug/noticias" element={<SitioPublico />} />
       <Route path="/legal/:slug" element={<PaginaLegal />} />
       <Route path="/verificar" element={<VerificarPapeleta />} />
 

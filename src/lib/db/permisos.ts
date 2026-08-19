@@ -23,6 +23,12 @@ export async function fetchPermisosPorCargoRemoto(
 export async function guardarPermisosPorCargoRemoto(permisos: Record<Cargo, string[]>) {
   if (!supabase) return
   const filas = CARGOS.flatMap((cargo) => (permisos[cargo] ?? []).map((moduloId) => ({ cargo, modulo_id: moduloId })))
-  await supabase.from('permisos_cargo').delete().in('cargo', CARGOS)
-  if (filas.length > 0) await supabase.from('permisos_cargo').insert(filas)
+  // Como el resto de guardados remotos: se avisa por consola y no se deja
+  // caer la excepción, que reventaría el guardado local de quien nos llama.
+  try {
+    await supabase.from('permisos_cargo').delete().in('cargo', CARGOS)
+    if (filas.length > 0) await supabase.from('permisos_cargo').insert(filas)
+  } catch (err) {
+    console.error('No se pudieron guardar los permisos en Supabase:', err)
+  }
 }

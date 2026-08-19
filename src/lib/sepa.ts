@@ -61,9 +61,11 @@ function fechaIso(d: Date) {
 
 /** Comprueba que hay lo mínimo para poder generar la remesa. */
 export function acreedorIncompleto(acreedor: SepaAcreedor): string | null {
-  if (!acreedor.nombre.trim()) return 'Falta el nombre legal de la hermandad (Configuración).'
-  if (!limpiarIban(acreedor.iban)) return 'Falta el IBAN de la hermandad (Configuración).'
-  if (!acreedor.identificadorAcreedor.trim()) return 'Falta el identificador de acreedor SEPA (Configuración).'
+  if (!acreedor.nombre.trim()) return 'Falta el nombre legal de la hermandad.'
+  if (!limpiarIban(acreedor.iban)) return 'Falta el IBAN de la hermandad: sin él el banco no sabe dónde ingresar.'
+  if (!acreedor.identificadorAcreedor.trim()) {
+    return 'Falta el identificador de acreedor SEPA. Lo da el banco, y es gratis.'
+  }
   return null
 }
 
