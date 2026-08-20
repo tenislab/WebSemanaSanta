@@ -73,15 +73,120 @@ hermano al que la secretaría le crea el acceso.
 2 o 3 correos por hora y se caen sin avisar. Con una hermandad de 800 hermanos
 no llega ni al primer día.
 
-**Lo que tienes que hacer:**
+**Este remitente es UNO para todo el proyecto, no uno por hermandad.** Como
+todas comparten el mismo Supabase, por aquí salen los correos de cuenta de
+todo el mundo. Si se pone una dirección personal, un hermano de una hermandad
+cualquiera recibirá su «confirma tu correo» desde ese Gmail:
 
-1. Supabase → **Authentication → Emails → SMTP Settings**.
-2. Activa *Enable Custom SMTP* y mete los datos de un proveedor. Con Resend:
-   - Host: `smtp.resend.com` · Puerto: `465` · Usuario: `resend`
-   - Contraseña: tu clave de API de Resend
-   - Sender email: un correo **de tu dominio verificado**
-3. Authentication → **URL Configuration** → *Site URL*: la dirección real de la
-   aplicación. Si no, los enlaces de los correos apuntan a `localhost`.
+    De: jrrjaime2004@gmail.com
+    Asunto: Confirma tu correo
+
+Funciona, pero se ve mal. Para probar da igual; para vender conviene un
+`no-responder@` de un dominio propio.
+
+Esto vale solo para los correos de cuenta. Los **comunicados y avisos** que
+manda cada hermandad son otro remitente distinto (punto 2.b) y ahí sí puede
+salir el nombre de cada una.
+
+### ¿Y si luego quiero cambiar la dirección?
+
+**No es ningún lío, y no ata a nada.** Son dos campos en dos sitios:
+
+| Qué correos | Dónde se cambia |
+|---|---|
+| Los de cuenta | Supabase → Authentication → SMTP Settings |
+| Los de la hermandad | `supabase secrets set CORREO_REMITENTE=...` |
+
+No se pierde ninguna cuenta, no hay que migrar nada, nadie tiene que volver a
+registrarse, y los enlaces de los correos ya enviados siguen funcionando
+(apuntan al *Site URL*, no al remitente). Lo único que lleva tiempo es
+verificar el dominio nuevo en Resend, que se hace una vez.
+
+Así que **no merece la pena esperar**: se arranca con lo que haya, se prueba
+todo, y se cambia el día que haya dominio.
+
+Se configura en Supabase → **Authentication → Emails → SMTP Settings**.
+
+#### Antes de nada: los tres errores que es fácil cometer aquí
+
+**1. El «Host» NO es la dirección de tu web.** Es el servidor de correo, que es
+otra cosa. `web-semana-santa.vercel.app` es donde vive la aplicación; ahí no hay
+ningún servidor de correo escuchando. Y **nunca lleva `https://` delante**: no
+es una página web, es un servidor SMTP.
+
+| Mal | Bien |
+|---|---|
+| `https://web-semana-santa.vercel.app` | `smtp.gmail.com` |
+| | `smtp.resend.com` |
+
+**2. El usuario y la contraseña no te los inventas.** Te los da el proveedor de
+correo. Poner `CabildoWEB` / `CabildoWEB` no configura nada: es como escribir un
+nombre cualquiera en la puerta de un banco.
+
+**3. El remitente tiene que ser de un dominio que controles.** Con Resend no
+puedes enviar desde `@gmail.com`: hay que verificar el dominio antes, y
+`gmail.com` no es tuyo. Con Gmail (opción A) sí puedes, porque envías desde tu
+propia cuenta.
+
+#### Opción A · Gmail — para probar hoy, sin dominio
+
+Funciona en cinco minutos y no hay que comprar nada. Sirve para comprobar que
+todo el circuito va: registro, confirmación, contraseña olvidada.
+
+1. Cuenta de Google → **Seguridad**.
+2. Activa la **Verificación en 2 pasos**. Sin esto, el paso siguiente no
+   aparece; es el motivo por el que la mayoría de la gente se atasca aquí.
+3. Busca **«Contraseñas de aplicaciones»** y crea una. Te da 16 letras.
+   No es tu contraseña de Gmail: es una aparte, solo para esto.
+4. En Supabase:
+
+   | Campo | Valor |
+   |---|---|
+   | Host | `smtp.gmail.com` |
+   | Port number | `465` |
+   | Username | tu correo completo de Gmail |
+   | Password | las 16 letras del paso 3 |
+   | Sender email address | el mismo correo de Gmail |
+   | Sender name | `Cabildo` |
+
+⚠️ **Esto es para probar, no para abrir al público.** Gmail corta sobre los 500
+correos al día, salen desde una cuenta personal y una buena parte acaba en la
+carpeta de spam. Una hermandad de 800 hermanos no cabe.
+
+#### Opción B · Resend — para el día que se abra al público
+
+👉 **La web es https://resend.com**
+
+**Hace falta un dominio propio** (algo como `cabildo.es`). Sin dominio, Resend
+no se puede usar para nada más que escribirte a ti mismo, así que si todavía no
+lo tienes, quédate en la opción A hasta comprarlo.
+
+1. Compra el dominio donde prefieras.
+2. Entra en https://resend.com y regístrate.
+3. **Domains → Add Domain** → escribe tu dominio.
+4. Resend te enseña unos registros DNS (SPF, DKIM). Cópialos donde compraste el
+   dominio. Tarda entre unos minutos y unas horas en dar el visto bueno.
+5. **API Keys → Create API Key**. Te da una clave que empieza por `re_`.
+   Se enseña UNA vez: cópiala en ese momento.
+6. En Supabase:
+
+   | Campo | Valor |
+   |---|---|
+   | Host | `smtp.resend.com` |
+   | Port number | `465` |
+   | Username | `resend` (literalmente esa palabra) |
+   | Password | la clave `re_...` |
+   | Sender email address | `no-responder@tudominio.es` |
+   | Sender name | el nombre de la hermandad |
+
+> La misma clave `re_...` vale también para el punto 2.b (los correos que manda
+> la hermandad). Allí NO va en esta pantalla, sino como secreto de Supabase.
+
+#### Y una cosa más, que si no los enlaces no funcionan
+
+Authentication → **URL Configuration** → *Site URL*: la dirección real de la
+aplicación. Si se queda como está, los enlaces de «confirma tu correo» y
+«recupera tu contraseña» apuntan a `localhost` y no le funcionan a nadie.
 
 ### 2.b · Los correos que manda la hermandad (los manda Cabildo)
 

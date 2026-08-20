@@ -18,8 +18,6 @@ import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 export interface AjustesCorreo {
   /** La hermandad ha activado el envío. Se apaga sin desconfigurar nada. */
   activo: boolean
-  /** Cómo firma: «Hdad. de la Vera-Cruz <avisos@hermandad.es>». Lo pone la función; esto es solo para enseñarlo. */
-  remitente: string
   /** A dónde contestan los hermanos si le dan a «responder». */
   responderA: string
   /** Qué tipos de aviso salen por correo, además de al buzón. */
@@ -30,7 +28,6 @@ export const CLAVE_CORREO = 'cabildo-correo'
 
 export const CORREO_INICIAL: AjustesCorreo = {
   activo: false,
-  remitente: '',
   responderA: '',
   // Los comunicados sí por defecto (es para lo que se contrata); los cambios de
   // ficha no, que son muchos y menores.

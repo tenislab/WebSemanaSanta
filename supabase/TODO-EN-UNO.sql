@@ -1626,13 +1626,43 @@ create policy "documentos_mi_hermandad" on storage.objects for all to authentica
 -- podría crear la hermandad y no quedar como titular, y ya no podría entrar en
 -- ella ni él ni nadie.
 
+-- --- La mudanza desde el proyecto de UNA sola hermandad --------------------
+-- Quien ya usaba Cabildo antes de esto tiene datos —hermanos, cuotas, recibos,
+-- su web— guardados sin decir de quién son, porque entonces no hacía falta:
+-- todo lo que había dentro era suyo. Al repartir por hermandades, esas filas
+-- se quedan sin dueño, y una fila sin dueño no la ve nadie nunca más.
+--
+-- Esto se las asigna. Es seguro precisamente porque el proyecto de antes era
+-- de una sola hermandad: no hay forma de que esas filas fueran de otra.
+--
+-- Solo toca lo que está sin asignar (`hermandad_id is null`). Lo que ya tiene
+-- dueño no se mueve, así que llamarla dos veces no hace daño.
+create or replace function adoptar_datos_sin_hermandad(p_hermandad_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare t text;
+begin
+  foreach t in array array[
+    'hermanos', 'tramos', 'cuotas', 'papeletas', 'movimientos', 'incidencias',
+    'enseres', 'documentos', 'comunicados', 'cuentas_sociales', 'permisos_cargo',
+    'solicitudes_alta', 'conceptos_cuota', 'opciones_papeleta', 'catalogos',
+    'eventos', 'personal', 'hermandad_settings', 'web_publica', 'mensajes_web'
+  ]
+  loop
+    execute format('update %I set hermandad_id = $1 where hermandad_id is null', t)
+      using p_hermandad_id;
+  end loop;
+end $$;
+
 create or replace function crear_hermandad(p_nombre text) returns uuid
 language plpgsql security definer set search_path = public as $$
-declare nueva uuid;
+declare
+  nueva uuid;
+  ya_era_titular boolean := false;
 begin
   if auth.uid() is null then
     raise exception 'Hay que haber iniciado sesión para crear una hermandad.';
   end if;
+
   -- Una cuenta, una hermandad. Si ya pertenece a alguna —como titular, como
   -- personal o como hermana— se le devuelve esa en vez de crearle otra.
   --
@@ -1645,15 +1675,111 @@ begin
     return nueva;
   end if;
 
-  insert into hermandades (nombre) values (coalesce(nullif(trim(p_nombre), ''), 'Mi hermandad'))
-    returning id into nueva;
-  insert into titulares (auth_user_id, hermandad_id) values (auth.uid(), nueva);
+  -- ¿Venía del proyecto de UNA sola hermandad? Entonces ya tiene fila en
+  -- `titulares` —la que había que escribir a mano— pero sin hermandad, porque
+  -- entonces no hacía falta decir de cuál. Su caso no es «alta nueva», es
+  -- «mudanza», y se trata distinto: hay datos suyos esperando.
+  select true into ya_era_titular from titulares where auth_user_id = auth.uid();
+
+  if ya_era_titular then
+    -- Si un compañero de la misma junta ha entrado antes que él, la hermandad
+    -- ya está creada y se une a ELLA. Sin esto, cada miembro de la junta se
+    -- fabricaría una hermandad distinta al entrar y se perderían de vista unos
+    -- a otros, cada uno con un trozo de lo que era una sola casa.
+    select t.hermandad_id into nueva
+      from titulares t where t.hermandad_id is not null limit 1;
+  end if;
+
+  if nueva is null then
+    insert into hermandades (nombre) values (coalesce(nullif(trim(p_nombre), ''), 'Mi hermandad'))
+      returning id into nueva;
+  end if;
+
+  -- `on conflict` porque la fila puede existir ya, del alta a mano de antes.
+  insert into titulares (auth_user_id, hermandad_id) values (auth.uid(), nueva)
+    on conflict (auth_user_id) do update set hermandad_id = excluded.hermandad_id;
+
+  -- La mudanza: todo lo que había en el proyecto de una sola hermandad pasa a
+  -- ser de esta. Va ANTES de crear los ajustes, porque si ya había una fila de
+  -- ajustes hay que adoptarla en vez de crear otra que chocaría.
+  if ya_era_titular then
+    perform adoptar_datos_sin_hermandad(nueva);
+  end if;
+
   -- Los ajustes, ya creados: si no, la aplicación arranca sin fila y el primer
   -- guardado tiene que adivinar si insertar o actualizar.
-  insert into hermandad_settings (hermandad_id, nombre_legal) values (nueva, p_nombre);
+  insert into hermandad_settings (hermandad_id, nombre_legal) values (nueva, p_nombre)
+    on conflict (hermandad_id) do nothing;
+
   return nueva;
 end $$;
 grant execute on function crear_hermandad(text) to authenticated;
+
+
+-- --- La misma alta, pero desde el editor SQL --------------------------------
+-- `crear_hermandad()` se apoya en quién ha iniciado sesión, así que desde el
+-- editor SQL de Supabase no sirve: allí no hay sesión de nadie y se queda en
+-- «hay que haber iniciado sesión».
+--
+-- Esta hace lo mismo diciendo el correo a mano. Hace falta cuando la aplicación
+-- que está publicada todavía es la de antes y no llama a la otra, o
+-- simplemente para dejar una hermandad montada antes de entrar por primera vez.
+--
+--     select crear_hermandad_manual('tucorreo@ejemplo.com', 'Hdad. de la X');
+--
+-- NO se puede llamar desde el navegador, y eso es a propósito: crea una
+-- hermandad para el correo que se le diga, así que en manos de cualquiera
+-- sería una forma de colarse. El editor SQL de Supabase funciona porque va con
+-- permisos de administrador, no con los del navegador.
+create or replace function crear_hermandad_manual(p_email text, p_nombre text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid;
+  nueva uuid;
+  ya_era_titular boolean := false;
+begin
+  select id into uid from auth.users where lower(email) = lower(trim(p_email));
+  if uid is null then
+    raise exception 'No hay ninguna cuenta registrada con el correo %. Regístrate primero en la aplicación.', p_email;
+  end if;
+
+  -- Si ya pertenece a una, se devuelve esa. Igual que la otra: pulsar dos
+  -- veces no puede dejar dos hermandades.
+  select coalesce(
+    (select t.hermandad_id from titulares t where t.auth_user_id = uid),
+    (select pe.hermandad_id from personal pe where pe.auth_user_id = uid and pe.activo),
+    (select h.hermandad_id from hermanos h where h.auth_user_id = uid)
+  ) into nueva;
+  if nueva is not null then
+    return nueva;
+  end if;
+
+  select true into ya_era_titular from titulares where auth_user_id = uid;
+  if ya_era_titular then
+    select t.hermandad_id into nueva from titulares t where t.hermandad_id is not null limit 1;
+  end if;
+
+  if nueva is null then
+    insert into hermandades (nombre) values (coalesce(nullif(trim(p_nombre), ''), 'Mi hermandad'))
+      returning id into nueva;
+  end if;
+
+  insert into titulares (auth_user_id, hermandad_id) values (uid, nueva)
+    on conflict (auth_user_id) do update set hermandad_id = excluded.hermandad_id;
+
+  if ya_era_titular then
+    perform adoptar_datos_sin_hermandad(nueva);
+  end if;
+
+  insert into hermandad_settings (hermandad_id, nombre_legal) values (nueva, p_nombre)
+    on conflict (hermandad_id) do nothing;
+
+  return nueva;
+end $$;
+
+-- Postgres da permiso de ejecución a todo el mundo por defecto. Aquí NO.
+revoke execute on function crear_hermandad_manual(text, text) from public;
+revoke execute on function crear_hermandad_manual(text, text) from anon, authenticated;
 
 
 -- -----------------------------------------------------------------------------
@@ -1730,4 +1856,3 @@ grant execute on function hermandades_publicas() to anon, authenticated;
 --                     where c.table_name = t.table_name and c.column_name = 'hermandad_id');
 --
 -- =============================================================================
-

@@ -144,6 +144,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         olvidarHermandad()
         return
       }
+
+      // Hay sesión de verdad contra Supabase, así que esto no es una
+      // demostración: fuera la marca del modo demo.
+      //
+      // Hace falta AQUÍ y no solo al iniciar sesión. La marca vive en el
+      // navegador y sobrevive a todo: quien primero prueba la demostración
+      // —que es lo que hace todo el mundo— y luego conecta su base de datos
+      // se queda con ella puesta, y entonces la aplicación le sigue enseñando
+      // el censo de ejemplo en vez del suyo. Parece que la base de datos no
+      // funciona, cuando lo que pasa es que ni siquiera se está mirando.
+      //
+      // Poniéndolo donde se resuelve la sesión, quedan cubiertos todos los
+      // caminos: registrarse, iniciar sesión, volver con la sesión guardada o
+      // confirmar el correo. Los datos de ejemplo nunca llegaron a subirse a
+      // Supabase (en modo local no se sincroniza), así que no hay nada que
+      // limpiar en la base: solo dejar de mirar al sitio equivocado.
+      limpiarModoDemo()
       // No se toca el estado aquí: dejarlo en su valor previo evita que cada
       // re-sincronización (p. ej. el refresco de token, cada hora o al volver a
       // la pestaña) lo ponga en "comprobando" y parpadee el spinner a pantalla
@@ -278,6 +295,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             },
           })
           if (error) return { error: translateError(error.message) }
+          // Alta real: se sale del modo demostración aunque todavía no haya
+          // sesión (cuando hace falta confirmar el correo antes de entrar).
+          limpiarModoDemo()
           // Si la confirmación por email está activada, no hay sesión todavía.
           const needsConfirmation = !data.session
           return { error: null, needsConfirmation }

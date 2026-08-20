@@ -15,7 +15,6 @@ export default async function ({ cargar, caso }) {
   ]
   const encendido = {
     activo: true,
-    remitente: 'hermandad@ejemplo.test',
     responderA: '',
     avisaDe: { comunicados: true, cuotas: true, papeletas: true, ficha: true },
   }
