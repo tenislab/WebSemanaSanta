@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTema } from '../lib/tema'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
-import { CLAVES_DATOS, leerPersistido } from '../lib/persistencia'
+import { CLAVES_DATOS, leerDatos } from '../lib/persistencia'
 
 export interface DestinoPaleta {
   to: string
@@ -110,7 +110,7 @@ export default function PaletaComandos({
   const verCenso = destinos.some((d) => d.to === '/app/hermanos')
   useEffect(() => {
     if (!abierta || !verCenso || censo.length > 0) return
-    setCenso(leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES))
+    setCenso(leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES))
   }, [abierta, verCenso, censo.length])
 
   /** Hasta cinco hermanos que encajen con lo escrito, por nombre o por número. */

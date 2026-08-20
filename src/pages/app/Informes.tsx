@@ -13,7 +13,7 @@ import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { ENSERES_INICIALES } from '../../data/enseres'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
 import { getCamposPropios, valorLegible } from '../../lib/camposPropios'
 
@@ -30,12 +30,12 @@ interface Informe {
 function construirInformes(): Informe[] {
   // Los informes se calculan sobre los datos guardados (localStorage), no
   // sobre los de ejemplo: reflejan las altas, pagos y cambios hechos en la app.
-  const hermanosActuales = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
-  const cuotasActuales = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+  const hermanosActuales = leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+  const cuotasActuales = leerDatos(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
   const anioCampana = getCampana().anio
-  const papeletasActuales = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anioCampana)
-  const movimientosActuales = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
-  const enseresActuales = leerPersistido(CLAVES_DATOS.enseres, ENSERES_INICIALES)
+  const papeletasActuales = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anioCampana)
+  const movimientosActuales = leerDatos(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
+  const enseresActuales = leerDatos(CLAVES_DATOS.enseres, ENSERES_INICIALES)
 
   const camposPropios = getCamposPropios().filter((c) => c.nombre.trim())
   const hermanoDe = (id: string) => hermanosActuales.find((h) => h.id === id)
@@ -213,7 +213,7 @@ export default function Informes() {
   const generadoEl = useMemo(() => formatDate(new Date()), [])
 
   const movimientosEstado = useMemo(
-    () => leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES),
+    () => leerDatos(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES),
     [],
   )
   const aniosDisponibles = useMemo(() => {
@@ -239,11 +239,11 @@ export default function Informes() {
   }, [imprimiendoEstado])
 
   const kpis = useMemo(() => {
-    const hermanos = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
-    const cuotas = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+    const hermanos = leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+    const cuotas = leerDatos(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
     const anio = getCampana().anio
-    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anio)
-    const movimientos = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
+    const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anio)
+    const movimientos = leerDatos(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
     const totalHermanos = hermanos.length
     const cobrado = cuotas.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
     const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada' && p.estado !== 'Renuncia').length

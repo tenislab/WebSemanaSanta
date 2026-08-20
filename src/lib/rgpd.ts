@@ -1,4 +1,4 @@
-import { CLAVES_DATOS, leerPersistido } from './persistencia'
+import { CLAVES_DATOS, leerDatos } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { rowToHermano } from './db/hermanos'
 import { rowToCuota } from './db/cuotas'
@@ -25,10 +25,10 @@ export interface DatosHermano {
 }
 
 function todos() {
-  const hermanos = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
-  const cuotas = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
-  const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
-  const incidencias = leerPersistido(CLAVES_DATOS.incidencias, INCIDENCIAS_INICIALES)
+  const hermanos = leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+  const cuotas = leerDatos(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+  const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+  const incidencias = leerDatos(CLAVES_DATOS.incidencias, INCIDENCIAS_INICIALES)
   return { hermanos, cuotas, papeletas, incidencias }
 }
 

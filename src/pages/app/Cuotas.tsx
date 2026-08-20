@@ -34,7 +34,7 @@ import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { descargarArchivo, toCsv } from '../../lib/csv'
@@ -130,7 +130,7 @@ export default function Cuotas() {
   const [ajustesOpen, setAjustesOpen] = useState(false)
   const [ajustes, setAjustes] = useAjustesCuotas()
 
-  const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const conceptosCuota = useMemo(() => getConceptosCuota(), [])
 
   // --- Salto de año (emisión anual del ejercicio) ---

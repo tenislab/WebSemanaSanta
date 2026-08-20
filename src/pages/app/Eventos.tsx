@@ -21,7 +21,7 @@ import {
   type TipoEvento,
 } from '../../data/eventos'
 import { HERMANOS_INICIALES } from '../../data/hermanos'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
 import { claseTipo, fechaLarga, iso } from '../../lib/calendario'
@@ -35,7 +35,7 @@ export default function Eventos() {
     rowToEvento,
   )
   const { user } = useAuth()
-  const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanosActivos = useMemo(() => hermanos.filter((h) => h.estado !== 'Baja'), [hermanos])
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))

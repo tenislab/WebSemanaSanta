@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../supabase'
-import { CLAVES_DATOS, leerPersistido } from '../persistencia'
+import { CLAVES_DATOS, leerDatos } from '../persistencia'
 import { CUENTAS_SOCIALES_INICIALES, type Comunicado, type CuentaSocial } from '../../data/comunicados'
 
 export function comunicadoToRow(c: Comunicado): Record<string, unknown> {
@@ -61,7 +61,7 @@ function rowToCuenta(r: Record<string, unknown>): CuentaSocial {
  */
 export function useCuentasSociales() {
   const [cuentas, setCuentasState] = useState<CuentaSocial[]>(() =>
-    leerPersistido(CLAVES_DATOS.cuentasSociales, CUENTAS_SOCIALES_INICIALES),
+    leerDatos(CLAVES_DATOS.cuentasSociales, CUENTAS_SOCIALES_INICIALES),
   )
 
   useEffect(() => {

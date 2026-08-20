@@ -37,7 +37,7 @@ import {
   type Campana,
   type EstadoRenovacion,
 } from '../../lib/campana'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
@@ -77,7 +77,7 @@ export default function Papeletas() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useHermandadSettings(fallbackNombre)
   const tramos = useMemo(() => getTramos(), [])
-  const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
   const [ajustes, setAjustes] = useAjustesCuotas()

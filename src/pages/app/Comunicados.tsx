@@ -15,7 +15,7 @@ import {
   type RedSocial,
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerPersistido, leerDatos } from '../../lib/persistencia'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { getCampana } from '../../lib/campana'
 import { getTramos } from '../../lib/tramos'
@@ -124,7 +124,7 @@ export default function Comunicados() {
    */
   const rolesPorHermano = useMemo(() => {
     const anio = getCampana().anio
-    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+    const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
     return indiceRoles(papeletas, getTramos(), getOpcionesPapeleta(), anio)
   }, [])
   const rolesDisponibles = useMemo(

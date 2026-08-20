@@ -9,7 +9,7 @@ import { isPlausibleIban, maskIban } from '../../lib/format'
 import { getOpcionesPapeleta } from '../../lib/opcionesPapeleta'
 import { getTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { isSupabaseConfigured, supabaseAlta } from '../../lib/supabase'
@@ -146,7 +146,7 @@ export default function Hermanos() {
    */
   const roles = useMemo(() => {
     const anio = getCampana().anio
-    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
+    const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
     return indiceRoles(papeletas, tramosRoles, opcionesRoles, anio)
   }, [tramosRoles, opcionesRoles])
   const rolesAutomaticos = useMemo(
@@ -361,7 +361,7 @@ export default function Hermanos() {
   }, [hermanos])
   const tramoPorHermano = useMemo(() => {
     const anio = getCampana().anio
-    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anio)
+    const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anio)
     const map = new Map<string, string>()
     repartoCompleto(tramos, papeletas, hermanoDe, new Set()).forEach((a) => {
       if (!a.tramo) return

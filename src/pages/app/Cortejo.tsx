@@ -23,7 +23,7 @@ import {
 import { repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { incidenciaToRow, rowToIncidencia } from '../../lib/db/incidencias'
@@ -107,7 +107,7 @@ export default function Cortejo() {
   const [ordenOpen, setOrdenOpen] = useState(false)
   const [incidenciaPara, setIncidenciaPara] = useState<string | null>(null)
 
-  const hermanos = useMemo(() => leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)

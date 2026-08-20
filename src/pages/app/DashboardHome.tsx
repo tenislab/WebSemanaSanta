@@ -1,16 +1,23 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { HERMANOS_INICIALES } from '../../data/hermanos'
-import { CUOTAS_INICIALES, esAvisado } from '../../data/cuotas'
+import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
+import { CUOTAS_INICIALES, esAvisado, type Cuota } from '../../data/cuotas'
 import { getMensajesWeb, sinLeer } from '../../lib/mensajesWeb'
 import { contextoActual, requisitosPendientes } from '../../lib/requisitos'
 import { getSolicitudes } from '../../lib/solicitudes'
-import { PAPELETAS_INICIALES } from '../../data/papeletas'
-import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
-import { DOCUMENTOS_INICIALES } from '../../data/documentos'
-import { EVENTOS_INICIALES } from '../../data/eventos'
-import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
+import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
+import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import { DOCUMENTOS_INICIALES, type Documento } from '../../data/documentos'
+import { EVENTOS_INICIALES, type Evento } from '../../data/eventos'
+import { CLAVES_DATOS } from '../../lib/persistencia'
+import { useSupabaseTable } from '../../lib/supabaseSync'
+import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
+import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
+import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
+import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
+import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
 import { cargoDeCuenta } from '../../lib/permisos'
 import { getPersonal } from '../../lib/personal'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
@@ -68,14 +75,21 @@ export default function DashboardHome() {
   const cargo = cargoDeCuenta(user?.user_metadata?.personalId as string | undefined, getPersonal())
   const { suscripcion } = useSuscripcion()
 
-  // Todo lo que muestra el Inicio se calcula en vivo de los mismos datos que
-  // gestionan los módulos (guardados en este navegador), no de cifras fijas.
+  // El Inicio lee de la BASE DE DATOS, igual que el resto de pantallas.
+  //
+  // Antes leía solo del navegador, y cuando no encontraba nada usaba los datos
+  // de ejemplo que vienen con la aplicación. Con eso, una hermandad recién
+  // creada abría el panel y se encontraba «4 cuotas pendientes» y «un hermano
+  // pagó su cuota anual» teniendo cero hermanos. Números inventados en la
+  // primera pantalla que ve un cliente, y encima contradiciéndose entre sí.
+  const [hermanos] = useSupabaseTable<Hermano>('hermanos', CLAVES_DATOS.hermanos, HERMANOS_INICIALES, hermanoToRow, rowToHermano, 'numero')
+  const [cuotas] = useSupabaseTable<Cuota>('cuotas', CLAVES_DATOS.cuotas, CUOTAS_INICIALES, cuotaToRow, rowToCuota)
+  const [papeletas] = useSupabaseTable<Papeleta>('papeletas', CLAVES_DATOS.papeletas, PAPELETAS_INICIALES, papeletaToRow, rowToPapeleta)
+  const [movimientos] = useSupabaseTable<Movimiento>('movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento)
+  const [documentos] = useSupabaseTable<Documento>('documentos', CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES, documentoToRow, rowToDocumento)
+  const [eventos] = useSupabaseTable<Evento>('eventos', CLAVES_DATOS.eventos, EVENTOS_INICIALES, eventoToRow, rowToEvento)
+
   const { stats, actividad, alertas } = useMemo(() => {
-    const hermanos = leerPersistido(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
-    const cuotas = leerPersistido(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
-    const papeletas = leerPersistido(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
-    const movimientos = leerPersistido(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
-    const documentos = leerPersistido(CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES)
     const campana = getCampana()
     const papeletasCampana = papeletas.filter((p) => p.anio === campana.anio)
 
@@ -195,7 +209,10 @@ export default function DashboardHome() {
       })
 
     return { stats, actividad, alertas }
-  }, [])
+    // Con las dependencias puestas: los datos llegan de la red DESPUÉS del
+    // primer pintado, así que sin esto el Inicio se calcularía una sola vez con
+    // las listas vacías y se quedaría en ceros para siempre.
+  }, [hermanos, cuotas, papeletas, movimientos, documentos])
 
   // Se ve un módulo en el Inicio si lo permite el cargo Y lo incluye el pack
   // contratado (si no, una suscripción de solo web vería datos de gestión).
@@ -209,7 +226,6 @@ export default function DashboardHome() {
 
   // Próximos eventos reales del módulo de Eventos (los 3 más cercanos desde hoy).
   const agendaProxima = useMemo(() => {
-    const eventos = leerPersistido(CLAVES_DATOS.eventos, EVENTOS_INICIALES)
     // En hora LOCAL: con toISOString, de madrugada en España «hoy» era ayer y la
     // agenda enseñaba eventos ya pasados.
     const ahora = new Date()
@@ -218,7 +234,7 @@ export default function DashboardHome() {
       .filter((e) => e.fecha >= hoyIso)
       .sort((a, b) => (a.fecha === b.fecha ? (a.hora ?? '').localeCompare(b.hora ?? '') : a.fecha.localeCompare(b.fecha)))
       .slice(0, 3)
-  }, [])
+  }, [eventos])
 
   return (
     <div className="dash">
@@ -227,8 +243,7 @@ export default function DashboardHome() {
           <p className="eyebrow">Inicio</p>
           <h1>{nombre ? `Hola, ${nombre}` : 'Bienvenido a tu hermandad'}</h1>
           <p className="dash-head__lead">
-            Esto es lo más relevante hoy, calculado en vivo con los datos guardados en este
-            navegador.
+            Esto es lo más relevante hoy, calculado en vivo con los datos de tu hermandad.
           </p>
         </div>
       </div>

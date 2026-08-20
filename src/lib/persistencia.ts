@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isSupabaseConfigured } from './supabase'
 
 /**
  * Claves de localStorage de cada colección de datos. Centralizadas aquí para
@@ -30,6 +31,32 @@ export function leerPersistido<T>(clave: string, fallback: T): T {
     // localStorage no disponible o datos corruptos: seguimos con los de ejemplo
   }
   return fallback
+}
+
+/**
+ * Como `leerPersistido`, pero para las colecciones de datos de la hermandad
+ * (el censo, las cuotas, las papeletas...) cuando hace falta consultarlas
+ * desde una pantalla que no es la suya.
+ *
+ * La diferencia está en qué se devuelve cuando en el navegador no hay nada, y
+ * es toda la diferencia del mundo:
+ *
+ *   · SIN base de datos (demostración): los datos de ejemplo. Es lo que hace
+ *     que se pueda enseñar la aplicación funcionando.
+ *   · CON base de datos: **vacío**. Ahí, «no hay nada guardado en este
+ *     navegador» significa «esta pantalla todavía no ha traído nada», no
+ *     «usa el censo de ejemplo».
+ *
+ * Sin esta distinción, una hermandad recién creada abría el panel y se
+ * encontraba con doce hermanos, cuatro cuotas pendientes y un recibo cobrado
+ * que no existían: los ejemplos que vienen con la aplicación, colándose como
+ * si fueran suyos. Y no era un detalle estético, porque los informes salían
+ * cuadrados sobre datos inventados.
+ *
+ * Mejor enseñar cero que enseñar mentiras.
+ */
+export function leerDatos<T>(clave: string, ejemplos: T[]): T[] {
+  return leerPersistido<T[]>(clave, isSupabaseConfigured ? [] : ejemplos)
 }
 
 /**
