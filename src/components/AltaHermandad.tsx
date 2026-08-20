@@ -146,7 +146,7 @@ export default function AltaHermandad({
                 </div>
               </div>
               <p className="form-hint">
-                Cabildo no cobra por vosotros: el dinero va siempre a esta cuenta, nunca a la
+                Gobergo no cobra por vosotros: el dinero va siempre a esta cuenta, nunca a la
                 nuestra.
               </p>
             </>

@@ -192,7 +192,7 @@ Para papeletas, donativos y lotería: **Redsys** (lo da el propio banco) o
 ## Lo que vino después: las fases P
 
 Cuando F, W y H estuvieron hechas quedaba lo que hace falta para que una
-hermandad **empiece a usar Cabildo de verdad**: importar su censo, que las
+hermandad **empiece a usar Gobergo de verdad**: importar su censo, que las
 solicitudes lleguen a alguien, la foto del hermano, el alta en condiciones…
 Está todo en [`FASES-PUESTA-EN-MARCHA.md`](FASES-PUESTA-EN-MARCHA.md), y lo que
 queda por conectar (correo, cobros, dominio) en [`CONECTAR.md`](CONECTAR.md).

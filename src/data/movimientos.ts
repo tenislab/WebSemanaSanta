@@ -15,6 +15,11 @@ export interface Movimiento {
   importe: number
   cuenta: CuentaMovimiento
   estado: EstadoMovimiento
+  /**
+   * De dónde salió este apunte: `cuota:<id>`, `papeleta:<id>`, o nada si lo
+   * escribió alguien a mano en Tesorería. Ver `lib/apuntes.ts`.
+   */
+  origen?: string
 }
 
 /**

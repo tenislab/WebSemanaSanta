@@ -15,7 +15,7 @@ export default function Signup() {
   return (
     <AuthLayout
       eyebrow="Nueva hermandad"
-      title="Crea tu hermandad en Cabildo"
+      title="Crea tu hermandad en Gobergo"
       subtitle="En unos minutos tendrás tu espacio listo para empezar a trabajar."
       footer={
         <>

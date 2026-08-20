@@ -124,15 +124,15 @@ async function leerDetalle(error: unknown): Promise<string | null> {
  * convocatoria de cabildo a mil personas.
  */
 export function correoDePrueba(nombreHermandad: string): { asunto: string; texto: string; html: string } {
-  const asunto = `Prueba de correo · ${nombreHermandad || 'Cabildo'}`
+  const asunto = `Prueba de correo · ${nombreHermandad || 'Gobergo'}`
   const texto =
     `Si estás leyendo esto, el envío de correo funciona.\n\n` +
-    `Este mensaje lo ha mandado Cabildo para comprobar la configuración de ` +
+    `Este mensaje lo ha mandado Gobergo para comprobar la configuración de ` +
     `${nombreHermandad || 'la hermandad'}. No hay que hacer nada.`
   const html =
     `<div style="font-family:system-ui,sans-serif;line-height:1.6;max-width:34rem">` +
     `<p><b>Si estás leyendo esto, el envío de correo funciona.</b></p>` +
-    `<p>Este mensaje lo ha mandado Cabildo para comprobar la configuración de ` +
+    `<p>Este mensaje lo ha mandado Gobergo para comprobar la configuración de ` +
     `${escapar(nombreHermandad || 'la hermandad')}. No hay que hacer nada.</p>` +
     `</div>`
   return { asunto, texto, html }

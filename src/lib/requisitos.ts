@@ -72,7 +72,7 @@ export function requisitos(ctx: ContextoRequisitos = {}): Record<IdRequisito, Re
       porQue:
         'Sin base de datos conectada, todo lo que se guarda vive en este ordenador y en este navegador. No lo ve nadie más de la junta, y si se borran los datos de navegación, se pierde.',
       comoSeArregla:
-        'Lo conecta quien administre Cabildo: se crea un proyecto en Supabase, se ejecutan los ficheros de la carpeta supabase/ y se pegan las dos claves en el archivo .env.',
+        'Lo conecta quien administre Gobergo: se crea un proyecto en Supabase, se ejecutan los ficheros de la carpeta supabase/ y se pegan las dos claves en el archivo .env.',
       listo: supabaseListo,
     },
     correo: {
@@ -91,7 +91,7 @@ export function requisitos(ctx: ContextoRequisitos = {}): Record<IdRequisito, Re
       nombre: 'Pasarela de cobro',
       queNoVa: 'No se puede pagar con tarjeta',
       porQue:
-        'Cabildo no puede cobrar en nombre de la hermandad: el dinero tiene que entrar en una cuenta suya, y eso exige una pasarela contratada a su nombre, con su CIF.',
+        'Gobergo no puede cobrar en nombre de la hermandad: el dinero tiene que entrar en una cuenta suya, y eso exige una pasarela contratada a su nombre, con su CIF.',
       comoSeArregla:
         'La contrata la hermandad (con su banco o con Stripe) y se pega el enlace de pago en Web pública → Donativos. Mientras tanto se paga por Bizum o transferencia y la tesorería lo confirma al ver el ingreso.',
       enlace: { a: '/app/web', texto: 'Ir a Web pública' },
@@ -122,7 +122,7 @@ export function requisitos(ctx: ContextoRequisitos = {}): Record<IdRequisito, Re
       nombre: 'Dominio propio',
       queNoVa: 'La web vive en un enlace largo',
       porQue:
-        'Sin dominio propio, la web se comparte con la dirección larga de Cabildo. Funciona, pero no es la dirección de la hermandad.',
+        'Sin dominio propio, la web se comparte con la dirección larga de Gobergo. Funciona, pero no es la dirección de la hermandad.',
       comoSeArregla:
         'La hermandad compra el dominio en un registrador y lo apunta aquí siguiendo las instrucciones de Web pública → Estilo y secciones.',
       enlace: { a: '/app/web', texto: 'Ir a Web pública' },

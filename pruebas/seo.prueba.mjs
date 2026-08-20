@@ -80,7 +80,7 @@ export default async function ({ cargar, caso }) {
   // --- La cabecera que devuelve el servidor ---
   const html = m.cabeceraHtml(base, hermandad, cultos, 'https://veracruz.es')
   caso('lleva el título de la hermandad', true, html.includes('<title>Hdad. de la Vera-Cruz</title>'))
-  caso('y no el de Cabildo', false, html.includes('Software para gestionar'))
+  caso('y no el de Gobergo', false, html.includes('Software para gestionar'))
   caso('con canonical', true, html.includes('<link rel="canonical" href="https://veracruz.es">'))
   caso('con og:url', true, html.includes('content="https://veracruz.es"'))
   caso('con el color de la hermandad', true, html.includes('name="theme-color" content="#6A1A23"'))

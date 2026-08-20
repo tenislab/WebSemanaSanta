@@ -1,4 +1,4 @@
-# ¿Está Cabildo para salir al público?
+# ¿Está Gobergo para salir al público?
 
 Sin adornos, porque no sirven de nada.
 
@@ -56,7 +56,7 @@ hermandad que avise de lo que falla vale más que otras diez fases.
   mira el extracto, que es lo que hacen hoy.
 
 Está todo explicado en [`CONECTAR.md`](CONECTAR.md), y la propia aplicación lo
-avisa en rojo donde se nota. Pero mientras no se haga, **Cabildo es una
+avisa en rojo donde se nota. Pero mientras no se haga, **Gobergo es una
 demostración muy buena, no un sistema en producción**.
 
 ### 3. Falta el manual

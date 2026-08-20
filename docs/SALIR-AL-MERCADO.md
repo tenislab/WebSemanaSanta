@@ -120,7 +120,7 @@ es una página web, es un servidor SMTP.
 | | `smtp.resend.com` |
 
 **2. El usuario y la contraseña no te los inventas.** Te los da el proveedor de
-correo. Poner `CabildoWEB` / `CabildoWEB` no configura nada: es como escribir un
+correo. Poner `GobergoWEB` / `GobergoWEB` no configura nada: es como escribir un
 nombre cualquiera en la puerta de un banco.
 
 **3. El remitente tiene que ser de un dominio que controles.** Con Resend no
@@ -147,7 +147,7 @@ todo el circuito va: registro, confirmación, contraseña olvidada.
    | Username | tu correo completo de Gmail |
    | Password | las 16 letras del paso 3 |
    | Sender email address | el mismo correo de Gmail |
-   | Sender name | `Cabildo` |
+   | Sender name | `Gobergo` |
 
 ⚠️ **Esto es para probar, no para abrir al público.** Gmail corta sobre los 500
 correos al día, salen desde una cuenta personal y una buena parte acaba en la
@@ -188,7 +188,7 @@ Authentication → **URL Configuration** → *Site URL*: la dirección real de l
 aplicación. Si se queda como está, los enlaces de «confirma tu correo» y
 «recupera tu contraseña» apuntan a `localhost` y no le funcionan a nadie.
 
-### 2.b · Los correos que manda la hermandad (los manda Cabildo)
+### 2.b · Los correos que manda la hermandad (los manda Gobergo)
 
 Comunicados, avisos de cuota, papeletas, cambios de ficha, bajas.
 
@@ -234,15 +234,15 @@ Aquí hay **dos dineros distintos** y no se mezclan nunca. Es lo primero que hay
 que entender, porque cambia qué hay que contratar y a nombre de quién.
 
 ```
-   La hermandad  ──paga la suscripción──►  Cabildo      (paso 3.a)
+   La hermandad  ──paga la suscripción──►  Gobergo      (paso 3.a)
    Los hermanos  ──pagan cuotas──────────►  Su hermandad (paso 3.b)
 ```
 
-El dinero de los hermanos **no pasa por Cabildo en ningún momento**. No puede:
+El dinero de los hermanos **no pasa por Gobergo en ningún momento**. No puede:
 cobrar en nombre de otro exige ser entidad de pago. Va directo a la cuenta de
 la hermandad.
 
-### 3.a · La suscripción a Cabildo (esto lo cobras tú)
+### 3.a · La suscripción a Gobergo (esto lo cobras tú)
 
 ✅ **Preparado y apagado.** `src/lib/pagoSuscripcion.ts` y la función
 `supabase/functions/crear-suscripcion/`. Mientras no haya claves, la pantalla
@@ -250,7 +250,7 @@ de suscripción activa la cuenta sin cobrar y **lo dice** («pago simulado»). E
 cuanto haya precios, el mismo botón lleva a Stripe y el texto cambia solo. No
 hay que tocar código.
 
-Va por **Stripe Checkout**: la tarjeta se teclea en Stripe, no en Cabildo. Eso
+Va por **Stripe Checkout**: la tarjeta se teclea en Stripe, no en Gobergo. Eso
 deja el cumplimiento de PCI en el mínimo.
 
 **Lo que tienes que hacer, cuando quieras empezar a cobrar:**
@@ -295,11 +295,11 @@ Hay **tres formas**, y las tres están ya en la aplicación:
 
 **1. Domiciliación bancaria (SEPA) — es como cobra el 90% de las hermandades**
 
-✅ Cabildo genera el fichero de remesa (XML `pain.008`, el que pide el banco)
+✅ Gobergo genera el fichero de remesa (XML `pain.008`, el que pide el banco)
 desde Cuotas. Se descarga y se sube a la banca electrónica. No hace falta
 contratar nada: se usa la cuenta que ya tiene la hermandad.
 
-⚠️ **Antes de la primera remesa real, hablar con el banco.** Cabildo todavía no
+⚠️ **Antes de la primera remesa real, hablar con el banco.** Gobergo todavía no
 guarda los mandatos SEPA firmados: el identificador de mandato lo compone a
 partir del número de hermano. Es un punto de partida razonable, pero el banco
 tiene que dar el visto bueno, y por ley hace falta la orden firmada de cada
@@ -317,7 +317,7 @@ Redsys o Stripe), pega el enlace de pago en Web pública → Donativos y ya cobr
 con tarjeta. El dinero entra en su cuenta, no en la tuya.
 
 ⬜ **Más adelante, si lo quieres más redondo:** Stripe Connect. Cada hermandad
-se da de alta desde dentro de Cabildo, en unos minutos y sin salir de la
+se da de alta desde dentro de Gobergo, en unos minutos y sin salir de la
 aplicación, y cobra con tarjeta con el dinero yendo a su cuenta. Tú puedes
 llevarte una comisión por operación si quieres. Es bastante trabajo (alta de
 cuentas, verificación de identidad, reparto, devoluciones), así que **no es

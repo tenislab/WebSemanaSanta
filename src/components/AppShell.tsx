@@ -213,14 +213,14 @@ export default function AppShell() {
   const moduloActual = moduloIdDeRuta(location.pathname)
 
   useEffect(() => {
-    // Con varias pestañas abiertas, todas ponían «Cabildo» y no se distinguían.
+    // Con varias pestañas abiertas, todas ponían «Gobergo» y no se distinguían.
     // Se busca el enlace más largo que encaje: así «/app/hermanos/lo-que-sea»
     // sigue diciendo «Hermanos», y «/app» a secas cae en «Inicio».
     const enlace = NAV.flatMap((g) => g.items)
       .filter((i) => location.pathname === i.to || location.pathname.startsWith(`${i.to}/`))
       .sort((a, b) => b.to.length - a.to.length)[0]
     const nombre = enlace?.label ?? 'Inicio'
-    document.title = `${nombre} · ${hermandad} · Cabildo`
+    document.title = `${nombre} · ${hermandad} · Gobergo`
   }, [location.pathname, hermandad])
   const accesoBloqueado =
     moduloActual !== null &&

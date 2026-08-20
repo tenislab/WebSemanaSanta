@@ -33,7 +33,7 @@ export default function Dashboard() {
       <main className="app-body">
         <div className="app-welcome">
           <p className="eyebrow">Área privada</p>
-          <h1>Bienvenido a Cabildo</h1>
+          <h1>Bienvenido a Gobergo</h1>
           <p className="app-welcome__lead">
             Has accedido como <strong>{user?.email}</strong>
             {user?.user_metadata?.hermandad ? (

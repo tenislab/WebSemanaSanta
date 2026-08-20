@@ -74,7 +74,7 @@ export default function InformeImpreso({
         </tbody>
       </table>
 
-      <p className="recibo-doc__note">Documento generado por Cabildo · datos de ejemplo, sin validez oficial</p>
+      <p className="recibo-doc__note">Documento generado por Gobergo · datos de ejemplo, sin validez oficial</p>
     </div>
   )
 }

@@ -132,7 +132,7 @@ export default function PantallaSuscripcion({ nombreHermandad, onActivar, onSali
         )}
         <p className="paywall__nota">
           {seCobra
-            ? 'El pago se hace en Stripe: la tarjeta no pasa por Cabildo. Podrás cambiar de pack o cancelar cuando quieras.'
+            ? 'El pago se hace en Stripe: la tarjeta no pasa por Gobergo. Podrás cambiar de pack o cancelar cuando quieras.'
             : 'Precios provisionales. Pago simulado mientras conectamos la pasarela: al pulsar, tu cuenta se activa. Podrás cambiar de pack o cancelar cuando quieras.'}
         </p>
         <button type="button" className="btn btn-ghost btn-block" onClick={onSalir}>

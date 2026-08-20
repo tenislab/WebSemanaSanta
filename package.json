@@ -1,9 +1,9 @@
 {
-  "name": "cabildo",
+  "name": "gobergo",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Cabildo — software para gestionar hermandades y cofradías",
+  "description": "Gobergo — software para gestionar hermandades y cofradías",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

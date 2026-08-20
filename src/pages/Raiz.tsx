@@ -3,7 +3,7 @@ import Landing from './Landing'
 import SitioPublico from './SitioPublico'
 import { cargarWebPorDominio, type WebPublica } from '../lib/webPublica'
 import { fijarHermandadDeLaPagina } from '../lib/multiHermandad'
-import { esCasaDeCabildo } from '../lib/dominio'
+import { esCasaDeGobergo } from '../lib/dominio'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { LogoMark } from '../components/Logo'
 
@@ -12,11 +12,11 @@ import { LogoMark } from '../components/Logo'
  *
  * Depende del dominio por el que se haya entrado, y esa es toda la gracia:
  *
- *   cabildo.es              → la página de Cabildo (vender la aplicación)
+ *   cabildo.es              → la página de Gobergo (vender la aplicación)
  *   hermandaddetriana.es    → la web DE ESA HERMANDAD
  *
  * Cuando una hermandad compra su dominio y lo apunta aquí, quien lo escriba
- * llega a la raíz. Antes se encontraba con la página de venta de Cabildo, que
+ * llega a la raíz. Antes se encontraba con la página de venta de Gobergo, que
  * es lo contrario de lo que se le prometió al configurarlo: la aplicación le
  * decía «apunta tu dominio y tu web se verá ahí» y luego enseñaba otra cosa.
  *
@@ -27,10 +27,10 @@ import { LogoMark } from '../components/Logo'
 
 export default function Raiz() {
   const host = typeof window !== 'undefined' ? window.location.hostname : ''
-  // En casa no se pregunta nada: se pinta la página de Cabildo al momento. Sin
+  // En casa no se pregunta nada: se pinta la página de Gobergo al momento. Sin
   // esto, cada visita a la página de venta esperaría una consulta a la base de
   // datos para averiguar algo que ya se sabe.
-  const enCasa = !isSupabaseConfigured || esCasaDeCabildo(host)
+  const enCasa = !isSupabaseConfigured || esCasaDeGobergo(host)
 
   const [web, setWeb] = useState<WebPublica | null>(null)
   const [buscando, setBuscando] = useState(!enCasa)
@@ -62,7 +62,7 @@ export default function Raiz() {
 
   // Hay una hermandad con este dominio: su web, como si se hubiera entrado por
   // /w/su-slug. Si no la hay —el dominio apunta aquí pero nadie lo ha
-  // configurado todavía— se enseña la página de Cabildo, que al menos explica
+  // configurado todavía— se enseña la página de Gobergo, que al menos explica
   // qué es esto en vez de dar un error.
   if (web) return <SitioPublico webPorDominio={web} />
   return <Landing />

@@ -54,7 +54,7 @@ export default function AuthLayout({
           <div className="auth-switch">{footer}</div>
         </section>
 
-        <p className="auth-legal">Conexión cifrada · © 2026 Cabildo</p>
+        <p className="auth-legal">Conexión cifrada · © 2026 Gobergo</p>
       </main>
     </div>
   )

@@ -601,7 +601,7 @@ export default function Comunicados() {
         <form id="comunicado-form" className="app-form" onSubmit={handleCreate}>
           <div className="form-row">
             <label htmlFor="titulo">Título</label>
-            <input id="titulo" name="titulo" type="text" placeholder="Ej. Convocatoria de Cabildo" required />
+            <input id="titulo" name="titulo" type="text" placeholder="Ej. Convocatoria de Gobergo" required />
           </div>
           <div className="form-row">
             <label htmlFor="cuerpo">Mensaje</label>

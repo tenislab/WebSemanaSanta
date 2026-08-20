@@ -95,16 +95,16 @@ export function explicarEstado(estado: EstadoDominio, dominio: string): string {
  * ¿Este dominio es donde vive la aplicación, o es el de una hermandad?
  *
  * Al entrar por la puerta principal hay que decidir qué enseñar: la página de
- * Cabildo o la web de la hermandad que tenga puesto ese dominio. Aquí solo se
+ * Gobergo o la web de la hermandad que tenga puesto ese dominio. Aquí solo se
  * responde lo primero —si estamos en casa— para poder pintar la página de
- * Cabildo al momento, sin preguntar nada a la base de datos por cada visita.
+ * Gobergo al momento, sin preguntar nada a la base de datos por cada visita.
  *
- * `VITE_DOMINIO_APP` es el dominio propio de Cabildo cuando lo haya. Sin
+ * `VITE_DOMINIO_APP` es el dominio propio de Gobergo cuando lo haya. Sin
  * definirlo también funciona: entonces se consulta, se ve que ninguna
- * hermandad tiene ese dominio y se acaba enseñando la página de Cabildo
+ * hermandad tiene ese dominio y se acaba enseñando la página de Gobergo
  * igualmente. Definirlo solo ahorra la consulta.
  */
-export function esCasaDeCabildo(host: string, dominioApp?: string): boolean {
+export function esCasaDeGobergo(host: string, dominioApp?: string): boolean {
   const h = host.trim().toLowerCase().replace(/:\d+$/, '')
   if (!h) return true
   if (h === 'localhost' || h === '127.0.0.1') return true

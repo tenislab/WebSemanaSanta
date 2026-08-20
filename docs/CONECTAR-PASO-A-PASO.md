@@ -1,4 +1,4 @@
-# 🔧 Conectar Cabildo — todo en uno
+# 🔧 Conectar Gobergo — todo en uno
 
 Guía para hacerlo de un tirón. Marca las casillas según vayas.
 
@@ -127,7 +127,7 @@ supabase functions deploy enviar-correo
 
 ## 2.3 Encenderlo
 
-- [ ] En Cabildo → **Configuración → Correo**
+- [ ] En Gobergo → **Configuración → Correo**
 - [ ] Marca *Mandar los avisos también por correo*
 - [ ] Escribe tu dirección y dale a **«Enviar prueba»**
 
@@ -221,7 +221,7 @@ supabase secrets set CORREO_REMITENTE="Hdad. de X <avisos@tudominio.es>"
 supabase functions deploy enviar-correo
 ```
 
-## 4.5 Decírselo a Cabildo
+## 4.5 Decírselo a Gobergo
 
 - [ ] Web pública → Estilo y secciones → *Usar un dominio propio*
 - [ ] Escribe el dominio
@@ -240,7 +240,7 @@ admite Bizum, o sea Bizum automático.
 
 - [ ] stripe.com → alta **con el CIF de la hermandad**
 - [ ] Payment Links → crear un enlace de pago
-- [ ] Cabildo → Web pública → Donativos → *Cobrar con tarjeta* → pegar el enlace
+- [ ] Gobergo → Web pública → Donativos → *Cobrar con tarjeta* → pegar el enlace
 
 > 💰 Comisión de en torno al **1,5 % + 0,25 €** por cobro con tarjeta europea.
 >

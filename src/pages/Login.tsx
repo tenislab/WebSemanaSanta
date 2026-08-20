@@ -23,7 +23,7 @@ export default function Login() {
       subtitle="Introduce tus credenciales para acceder al área de gestión."
       footer={
         <>
-          ¿Tu hermandad aún no está en Cabildo?{' '}
+          ¿Tu hermandad aún no está en Gobergo?{' '}
           <Link to="/registro">Créala gratis</Link>
         </>
       }

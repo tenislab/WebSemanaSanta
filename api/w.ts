@@ -6,7 +6,7 @@
  * cuando la página ya se ha cargado. Pero WhatsApp, Facebook, X y buena parte
  * de los rastreadores NO ejecutan JavaScript: piden el HTML y leen lo que hay.
  * Sin esta función, al pegar el enlace de la hermandad en el grupo de WhatsApp
- * la vista previa dice «Cabildo — Software para gestionar tu hermandad».
+ * la vista previa dice «Gobergo — Software para gestionar tu hermandad».
  *
  * CÓMO FUNCIONA: pide el `index.html` de este mismo despliegue, le mete en el
  * `<head>` las etiquetas de esa hermandad y lo devuelve. La aplicación arranca

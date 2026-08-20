@@ -712,7 +712,7 @@ export default function Cortejo() {
               </div>
             )
           })}
-          <p className="recibo-doc__note">Documento generado por Cabildo · datos de ejemplo</p>
+          <p className="recibo-doc__note">Documento generado por Gobergo · datos de ejemplo</p>
         </div>
       </Drawer>
 
@@ -959,7 +959,7 @@ function TramoFicha({
         />
       </div>
 
-      <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Cabildo</p>
+      <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Gobergo</p>
 
       {/* Documento imprimible: solo aparece en el papel, no en la ficha en pantalla (ver .screen-hidden). */}
       <div className="cortejo-orden screen-hidden print-doc">
@@ -1005,7 +1005,7 @@ function TramoFicha({
             </ol>
           )}
         </div>
-        <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Cabildo</p>
+        <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Gobergo</p>
       </div>
     </div>
   )

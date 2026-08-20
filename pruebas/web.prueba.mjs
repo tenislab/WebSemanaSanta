@@ -89,7 +89,7 @@ export default async function ({ cargar, caso }) {
     ...m.WEB_PUBLICA_INICIAL,
     titulares: [{ id: 't', nombre: 'El Señor', fotoDataUrl: 'x', descripcion: '', autoria: '', parrafos: [] }],
     albumes: [{ id: 'a', titulo: 'Salida', descripcion: '', fecha: '', fotos: [{ id: 'f', fotoDataUrl: 'x', pie: '' }] }],
-    noticias: [{ id: 'n', titulo: 'Cabildo', fecha: '', resumen: '', fotoDataUrl: 'x', publicada: true }],
+    noticias: [{ id: 'n', titulo: 'Gobergo', fecha: '', resumen: '', fotoDataUrl: 'x', publicada: true }],
   }
   caso('encuentra las fotos sin describir', 3, m.fotosSinDescribir(conFotos).length)
   caso('dice dónde está cada una', 'Titulares,Galería,Actualidad', m.fotosSinDescribir(conFotos).map((f) => f.donde).join(','))

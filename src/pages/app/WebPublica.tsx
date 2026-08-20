@@ -3381,7 +3381,7 @@ function CompartirTab({
           <span>
             <b>Lo que WhatsApp todavía no ve.</b> WhatsApp y Facebook no ejecutan JavaScript: piden
             el HTML y leen lo que hay. Para que la vista previa del enlace diga el nombre de tu
-            hermandad y no el de Cabildo, hace falta encender la parte de servidor. Está escrita y
+            hermandad y no el de Gobergo, hace falta encender la parte de servidor. Está escrita y
             lista: son dos pasos, y están explicados en <code>docs/SEO.md</code>.
           </span>
         </div>

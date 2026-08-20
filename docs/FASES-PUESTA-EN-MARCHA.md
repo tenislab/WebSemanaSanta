@@ -2,7 +2,7 @@
 
 Las fases **F** (gestión), **W** (web pública) y **H** (área del hermano) están
 hechas. Lo que queda es distinto: no son funciones nuevas, es lo que hace falta
-para que una hermandad real **empiece a usar Cabildo un lunes por la mañana**
+para que una hermandad real **empiece a usar Gobergo un lunes por la mañana**
 con sus mil hermanos dentro, cobrando de verdad y mandando correos de verdad.
 
 Este documento sale de una revisión del código, no de una idea: cada fase dice
@@ -66,7 +66,7 @@ en el pago del hermano un párrafo, en Donativos un `banner-inline--warn`.
 no se importa.** No hay ninguna forma de meter un censo existente.
 
 Esto es, con diferencia, **lo más urgente de toda la lista**: sin ello, adoptar
-Cabildo significa teclear mil fichas a mano, y ninguna hermandad va a hacer eso.
+Gobergo significa teclear mil fichas a mano, y ninguna hermandad va a hacer eso.
 
 **Qué entra:**
 
@@ -247,7 +247,7 @@ hermano no entra, no se entera.
    sacaría del código y mandaría correo en nombre de la hermandad. Va en una
    **función de servidor** (Edge Function de Supabase), y la aplicación le pide
    a esa función que envíe.
-4. En Cabildo: **Configuración → Correo**, con el estado de verificación, un
+4. En Gobergo: **Configuración → Correo**, con el estado de verificación, un
    **correo de prueba**, y la lista de qué avisos salen por correo y cuáles solo
    al buzón (que el hermano ya elige en H4).
 5. **Registro de envíos**: qué se mandó, a quién, si llegó y si rebotó. Sin eso,
@@ -312,7 +312,7 @@ el hermano avisa y a la tesorería le salta para revisar las cuentas.
 
 Preguntas cómo lo pondrán. El reparto de trabajo es este:
 
-**Lo que hace la hermandad (fuera de Cabildo):**
+**Lo que hace la hermandad (fuera de Gobergo):**
 
 1. **Compra el dominio** en un registrador — IONOS, GoDaddy, Namecheap,
    Dinahosting… Unos 10–15 € al año para un `.es` o un `.org`.
@@ -323,7 +323,7 @@ Preguntas cómo lo pondrán. El reparto de trabajo es este:
 4. En unos minutos (a veces unas horas, por cómo se propaga el DNS) el dominio
    ya sirve la web, **con certificado HTTPS que Vercel emite solo**.
 
-**Lo que hace Cabildo (ya hecho en W9/W10):** guardar el dominio, enseñar estas
+**Lo que hace Gobergo (ya hecho en W9/W10):** guardar el dominio, enseñar estas
 instrucciones, y **usarlo** en el enlace que se comparte, en el `sitemap.xml` y
 en el `robots.txt`.
 
@@ -396,7 +396,7 @@ que buscas.**
 
 ### Por qué SQLite no encaja aquí
 
-Cabildo es una aplicación **que corre entera en el navegador**. SQLite es un
+Gobergo es una aplicación **que corre entera en el navegador**. SQLite es un
 fichero en un disco: en el navegador no hay disco. Se puede meter SQLite
 compilado a WebAssembly, sí, pero entonces hay que **reescribir toda la capa de
 datos** para hablar SQL en vez de la API de Supabase, mantener dos capas en

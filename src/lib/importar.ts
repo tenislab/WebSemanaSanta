@@ -1,7 +1,7 @@
 import type { EstadoHermano, Hermano } from '../data/hermanos'
 
 /**
- * Traer el censo que la hermandad YA tiene. Es la pieza que decide si Cabildo
+ * Traer el censo que la hermandad YA tiene. Es la pieza que decide si Gobergo
  * se puede adoptar o no: sin ella, empezar significa teclear mil fichas a mano,
  * y ninguna junta va a hacer eso.
  *
@@ -415,7 +415,7 @@ export function aplicar(
       const i = porId.get(fila.idExistente as string)
       if (i === undefined) continue
       // Solo se pisa lo que trae el archivo: si la hoja no tiene columna de
-      // teléfono, no se borra el teléfono que ya tuviera en Cabildo.
+      // teléfono, no se borra el teléfono que ya tuviera en Gobergo.
       const cambios: Partial<Hermano> = {}
       for (const [k, v] of Object.entries(fila.datos)) {
         if (v !== '' && v !== undefined) (cambios as Record<string, unknown>)[k] = v

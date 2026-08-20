@@ -202,7 +202,7 @@ export default function DashboardHome() {
     const porConectar = requisitosPendientes(contextoActual()).length
     if (porConectar > 0)
       alertas.push({
-        text: `${porConectar} ${porConectar === 1 ? 'cosa' : 'cosas'} por conectar para que Cabildo funcione del todo`,
+        text: `${porConectar} ${porConectar === 1 ? 'cosa' : 'cosas'} por conectar para que Gobergo funcione del todo`,
         level: 'warn',
         to: '/app/configuracion',
         modulo: 'configuracion',

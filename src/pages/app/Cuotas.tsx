@@ -34,6 +34,9 @@ import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
+import { conApunteDeCobro, origenDeCuota, sinApunteDeCobro } from '../../lib/apuntes'
+import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
@@ -131,6 +134,11 @@ export default function Cuotas() {
   const [ajustes, setAjustes] = useAjustesCuotas()
 
   const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  // El libro de cuentas. Cobrar un recibo tiene que dejar su apunte aquí: sin
+  // esto, el dinero entraba en la hermandad y Tesorería no se enteraba.
+  const [, setMovimientos] = useSupabaseTable<Movimiento>(
+    'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
+  )
   const conceptosCuota = useMemo(() => getConceptosCuota(), [])
 
   // --- Salto de año (emisión anual del ejercicio) ---
@@ -217,6 +225,19 @@ export default function Cuotas() {
     // entrado ya mi cuota?», que es la más repetida de secretaría.
     const c = cuotas.find((x) => x.id === id)
     if (c) {
+      // Al libro de cuentas. Nace Pendiente, no conciliado: que conste el
+      // cobro no significa que se haya visto en el extracto del banco, y
+      // conciliar es justamente comprobar eso.
+      setMovimientos((prev) =>
+        conApunteDeCobro(prev, {
+          origen: origenDeCuota(c.id),
+          concepto: `${c.concepto} — ${hermanos.find((h) => h.id === c.hermanoId)?.nombre ?? 'hermano/a'}`,
+          categoria: 'Cuotas Hermanos/as',
+          importe: c.importe,
+          fecha: hoy(),
+          metodo: c.metodoCobro,
+        }),
+      )
       const texto = `Tu recibo de ${c.concepto} (${formatCurrency(c.importe)}) queda pagado. Gracias.`
       agregarAvisoHermano(c.hermanoId, texto, 'cuota', 'Cuota pagada')
       // Y por correo, si la hermandad lo tiene conectado y este hermano no lo
@@ -241,6 +262,12 @@ export default function Cuotas() {
   function aplicarCuota(id: string, cambios: Partial<Cuota>) {
     setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, ...cambios } : c)))
     setSelected((prev) => (prev && prev.id === id ? { ...prev, ...cambios } : prev))
+    // Si el recibo deja de estar pagado —se devuelve, o se corrige un error—
+    // su apunte se retira del libro. Si no, el ingreso se quedaría contado
+    // para siempre y el saldo diría que hay un dinero que no está.
+    if (cambios.estado && cambios.estado !== 'Pagada') {
+      setMovimientos((prev) => sinApunteDeCobro(prev, origenDeCuota(id)))
+    }
   }
 
   /**

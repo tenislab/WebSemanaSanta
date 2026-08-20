@@ -33,15 +33,15 @@ Y lo que hay hoy es esto:
 
 ```
 $ curl https://…/w/mi-hermandad
-<title>Cabildo — Software para gestionar tu hermandad</title>
-<meta name="description" content="Cabildo — el software para gestionar tu
+<title>Gobergo — Software para gestionar tu hermandad</title>
+<meta name="description" content="Gobergo — el software para gestionar tu
 hermandad o cofradía: hermanos, cuotas, papeletas de sitio…">
 ```
 
 Cero contenido de la hermandad.
 
 **Consecuencia práctica:** si el hermano mayor pega el enlace de su web en el
-grupo de WhatsApp de la hermandad, la vista previa dice *«Cabildo — Software
+grupo de WhatsApp de la hermandad, la vista previa dice *«Gobergo — Software
 para gestionar tu hermandad»*. Y Google, si llega a indexarla, indexa eso.
 
 La pestaña «Al compartir» del editor deja escribir un título y una
@@ -330,7 +330,7 @@ persona de verdad es mucho peor que colarse un spam.
 
 ### Lo que NO entró, y por qué
 
-**Cobrar con tarjeta desde la web.** Cabildo no puede cobrar por la hermandad:
+**Cobrar con tarjeta desde la web.** Gobergo no puede cobrar por la hermandad:
 el dinero tiene que ir a una cuenta suya, y eso exige contratar una pasarela
 (con su banco, Stripe, PayPal…) a su nombre, con su CIF y su contrato. Lo que
 sí hay es el hueco: en Donativos → «Cobrar con tarjeta desde la web» se pega el

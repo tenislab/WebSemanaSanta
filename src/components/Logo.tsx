@@ -60,7 +60,7 @@ export default function Logo({
       <LogoMark size={size} />
       {withText && (
         <span className="brand-name" style={{ fontSize: size * 0.42 }}>
-          Cabildo
+          Gobergo
         </span>
       )}
     </span>
@@ -68,7 +68,7 @@ export default function Logo({
 
   if (asLink) {
     return (
-      <Link to="/" className="brand-link" aria-label="Cabildo — inicio">
+      <Link to="/" className="brand-link" aria-label="Gobergo — inicio">
         {content}
       </Link>
     )

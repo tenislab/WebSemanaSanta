@@ -937,7 +937,7 @@ export default function HermanoPortal() {
     return (
       <div className="portal" style={estiloTema(hermandadElegida?.color ?? '#caa24a')}>
         <PortalHead
-          hermandad={hermandadElegida?.nombre ?? 'Cabildo'}
+          hermandad={hermandadElegida?.nombre ?? 'Gobergo'}
           logo={null}
           color={hermandadElegida?.color}
           icono={hermandadElegida?.icono}
@@ -990,7 +990,7 @@ export default function HermanoPortal() {
                     <li className="portal__picker-empty">
                       {queryHermandad.trim()
                         ? 'No encontramos ninguna hermandad con ese nombre.'
-                        : 'Todavía no hay ninguna hermandad dada de alta en Cabildo.'}
+                        : 'Todavía no hay ninguna hermandad dada de alta en Gobergo.'}
                     </li>
                   )}
                 </ul>

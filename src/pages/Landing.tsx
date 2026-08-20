@@ -195,7 +195,7 @@ export default function Landing() {
             <p className="eyebrow eyebrow--gold">Para quién es</p>
             <h2>Pensado para cualquier corporación, del tamaño que sea</h2>
             <p>
-              Da igual si sois cincuenta hermanos o cinco mil: Cabildo se adapta a tu forma de
+              Da igual si sois cincuenta hermanos o cinco mil: Gobergo se adapta a tu forma de
               trabajar, no al revés.
             </p>
           </div>
@@ -326,7 +326,7 @@ export default function Landing() {
           </div>
         </div>
         <div className="wrap footer-bottom">
-          <span>© 2026 Cabildo · Todos los derechos reservados</span>
+          <span>© 2026 Gobergo · Todos los derechos reservados</span>
           <span>Versión del {__BUILD_TIME__} · Hecho con cariño para el mundo cofrade</span>
         </div>
       </footer>

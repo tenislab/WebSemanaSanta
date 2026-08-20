@@ -156,7 +156,7 @@ export default function EstadoCuentas({
       </table>
 
       <p className="recibo-doc__note">
-        Documento generado por Cabildo a partir de los movimientos de tesorería registrados en la
+        Documento generado por Gobergo a partir de los movimientos de tesorería registrados en la
         app · sin validez oficial hasta su firma
       </p>
     </div>

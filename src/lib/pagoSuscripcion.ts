@@ -1,6 +1,6 @@
 /**
- * El cobro de la suscripción a Cabildo. Esto es lo que la hermandad le paga a
- * Cabildo, y NO tiene nada que ver con lo que los hermanos le pagan a su
+ * El cobro de la suscripción a Gobergo. Esto es lo que la hermandad le paga a
+ * Gobergo, y NO tiene nada que ver con lo que los hermanos le pagan a su
  * hermandad (cuotas y papeletas): ese dinero no pasa por aquí en ningún
  * momento, va directo a la cuenta de la hermandad. Ver `requisitos.ts`.
  *

@@ -11,6 +11,7 @@ export function movimientoToRow(m: Movimiento): Record<string, unknown> {
     importe: m.importe,
     cuenta: m.cuenta,
     estado: m.estado,
+    origen: m.origen ?? null,
   }
 }
 
@@ -25,5 +26,6 @@ export function rowToMovimiento(r: Record<string, unknown>): Movimiento {
     importe: Number(r.importe),
     cuenta: r.cuenta as string,
     estado: r.estado as Movimiento['estado'],
+    origen: (r.origen as string | null) ?? undefined,
   }
 }

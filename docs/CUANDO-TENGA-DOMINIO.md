@@ -158,7 +158,7 @@ Se pasa de Gmail a Resend. Adiós a la carpeta de spam.
 | Username | tu Gmail | `resend` |
 | Password | 16 letras de Google | tu clave `re_...` |
 | Sender email | tu Gmail | `no-responder@cabildo.es` |
-| Sender name | `Cabildo` | `Cabildo` |
+| Sender name | `Gobergo` | `Gobergo` |
 
 **Los seis campos, todos de Resend.** Mezclar el host de uno con el remitente
 del otro es lo que hace que los correos lleguen solo a tu propia dirección.
@@ -178,7 +178,7 @@ hoy no puede funcionar sin dominio.
 | Name | Value |
 |---|---|
 | `RESEND_API_KEY` | tu clave `re_...` |
-| `CORREO_REMITENTE` | `Cabildo <no-responder@cabildo.es>` |
+| `CORREO_REMITENTE` | `Gobergo <no-responder@cabildo.es>` |
 
 **Supabase → Edge Functions → Deploy** una función llamada `enviar-correo` con
 el contenido de `supabase/functions/enviar-correo/index.ts`.
@@ -187,11 +187,11 @@ O desde tu ordenador, si tienes la herramienta de Supabase instalada:
 
 ```
 supabase secrets set RESEND_API_KEY=re_xxx
-supabase secrets set CORREO_REMITENTE="Cabildo <no-responder@cabildo.es>"
+supabase secrets set CORREO_REMITENTE="Gobergo <no-responder@cabildo.es>"
 supabase functions deploy enviar-correo
 ```
 
-Después: Cabildo → **Configuración → Correo** → activar → **Enviar correo de
+Después: Gobergo → **Configuración → Correo** → activar → **Enviar correo de
 prueba**. Si falla, ahí sale el motivo de verdad.
 
 ---

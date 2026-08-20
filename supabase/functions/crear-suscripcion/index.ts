@@ -1,6 +1,6 @@
 /**
  * Abre una sesión de pago de Stripe para la suscripción de una hermandad a
- * Cabildo.
+ * Gobergo.
  *
  * Va en el servidor porque la clave secreta de Stripe NO puede estar en el
  * navegador: quien la tenga puede cobrar, devolver y consultar todo lo de la
@@ -12,7 +12,7 @@
  *   supabase functions deploy crear-suscripcion
  *
  * Devuelve `{ url }`: la página de Stripe a la que mandar al navegador. La
- * tarjeta la teclea la persona en Stripe, no en Cabildo.
+ * tarjeta la teclea la persona en Stripe, no en Gobergo.
  */
 
 const STRIPE_KEY = Deno.env.get('STRIPE_SECRET_KEY') ?? ''

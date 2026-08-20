@@ -1,4 +1,4 @@
-# Cabildo
+# Gobergo
 
 **El software para gestionar hermandades y cofradías.** Hermanos, cuotas,
 papeletas de sitio, cortejo, tesorería y comunicaciones en una única
@@ -100,7 +100,7 @@ src/
   components/
     AuthForm.tsx       formulario de acceso/registro (validación, estados)
     AuthLayout.tsx     pantalla partida premium para /login y /registro
-    Logo.tsx           marca de Cabildo (hornacina con punto de luz)
+    Logo.tsx           marca de Gobergo (hornacina con punto de luz)
     ProtectedRoute.tsx protege rutas según la sesión
     ThemeToggle.tsx    conmutador de tema claro/oscuro
   context/
@@ -118,5 +118,5 @@ src/
 
 ## Cambiar el nombre o el logo
 
-El nombre "Cabildo" y la marca viven en `src/components/Logo.tsx` (y en los
+El nombre "Gobergo" y la marca viven en `src/components/Logo.tsx` (y en los
 textos). Es un cambio de un solo sitio si en algún momento se decide otra marca.

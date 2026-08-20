@@ -1,6 +1,6 @@
 # Conectar lo que falta
 
-Cabildo funciona entero sin nada de esto: se lleva el censo, se cobran las
+Gobergo funciona entero sin nada de esto: se lleva el censo, se cobran las
 cuotas, se reparten las papeletas y se publica la web. Lo de aquí es lo que le
 falta para funcionar **del todo**, y casi todo lo contrata la hermandad a su
 nombre, no nosotros.
@@ -12,7 +12,7 @@ le falta y quién lo arregla.
 
 | Qué | Quién lo contrata | Coste aproximado |
 |---|---|---|
-| Base de datos (Supabase) | Quien administre Cabildo | Gratis para el tamaño de una hermandad |
+| Base de datos (Supabase) | Quien administre Gobergo | Gratis para el tamaño de una hermandad |
 | Envío de correo | La hermandad | Gratis o unos euros al mes |
 | Pasarela de cobro | **La hermandad, a su nombre** | Comisión por cobro |
 | Dominio propio | La hermandad | 10–15 € al año |
@@ -92,7 +92,7 @@ configuración y el correo de prueba. Lo que falta es la cuenta del proveedor.
    supabase functions deploy enviar-correo
    ```
 
-4. En Cabildo: **Configuración → Correo**, encender el envío y darle a
+4. En Gobergo: **Configuración → Correo**, encender el envío y darle a
    **«Enviar prueba»**.
 
 > **Sin dominio propio, Resend solo deja escribir a la dirección con la que te
@@ -141,7 +141,7 @@ supabase functions deploy enviar-correo
 
 ## 3. Cobrar con tarjeta
 
-**Cabildo no cobra por la hermandad.** El dinero tiene que entrar en una cuenta
+**Gobergo no cobra por la hermandad.** El dinero tiene que entrar en una cuenta
 suya, y eso exige una pasarela contratada a su nombre, con su CIF. Nosotros
 ponemos el camino, no la caja.
 
@@ -179,7 +179,7 @@ Para enchufarlo:
 
 ## 4. El dominio propio
 
-**Lo que hace la hermandad, fuera de Cabildo:**
+**Lo que hace la hermandad, fuera de Gobergo:**
 
 1. **Comprar el dominio** en un registrador (IONOS, GoDaddy, Namecheap,
    Dinahosting…). Unos 10–15 € al año para un `.es` o un `.org`.
@@ -194,7 +194,7 @@ Para enchufarlo:
 (`hermandaddetriana.es` y `www.hermandaddetriana.es`) y decirle a Vercel que
 uno redirija al otro; si no, quien escriba el `www` no llegará.
 
-**Lo que hace Cabildo:** guardar el dominio y usarlo en el enlace que se
+**Lo que hace Gobergo:** guardar el dominio y usarlo en el enlace que se
 comparte, en el `sitemap.xml` y en el `robots.txt`. Además valida la forma de lo
 que se escribe (quita el `https://`, el `www.` y la ruta si pegan la barra de
 direcciones entera; avisa de acentos y eñes, que es el error típico) y tiene un

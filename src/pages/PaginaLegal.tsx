@@ -70,7 +70,7 @@ export default function PaginaLegal() {
       </main>
 
       <footer className="legal-footer">
-        <span>© 2026 Cabildo · Todos los derechos reservados</span>
+        <span>© 2026 Gobergo · Todos los derechos reservados</span>
         <span>Hecho con cariño para el mundo cofrade</span>
       </footer>
     </div>

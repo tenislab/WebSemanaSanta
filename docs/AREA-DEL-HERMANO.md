@@ -1,6 +1,6 @@
 # El área del hermano (fases H1–H10)
 
-La otra mitad de Cabildo. El panel es para los cinco o seis que llevan la
+La otra mitad de Gobergo. El panel es para los cinco o seis que llevan la
 hermandad; **esta parte es para los mil que son hermanos**, y es la que decide
 si la hermandad deja de recibir las mismas cuatro llamadas todas las semanas:
 «¿os ha entrado ya mi cuota?», «¿en qué tramo voy?», «¿cuándo se saca la
@@ -56,7 +56,7 @@ Lo que hoy se hace por teléfono, sin llamar.
 - Si la hermandad no ha publicado datos de cobro, se dice; no se deja al
   hermano ante un botón que no lleva a ninguna parte.
 
-**Sin pasarela.** Cabildo no cobra por la hermandad: el dinero tiene que ir a
+**Sin pasarela.** Gobergo no cobra por la hermandad: el dinero tiene que ir a
 una cuenta suya, y eso exige contratar una pasarela a su nombre. Cuando la
 tengan, se pega el enlace en Web pública → Donativos y el botón lleva a ella
 (ver W10). Mientras tanto, esto es exactamente lo que ya hacen, pero sin la

@@ -257,7 +257,7 @@ export default function Configuracion() {
       const texto = await file.text()
       const obj = JSON.parse(texto)
       if (!esCopiaValida(obj)) {
-        setCopiaEstado('El archivo no es una copia de Cabildo válida.')
+        setCopiaEstado('El archivo no es una copia de Gobergo válida.')
         setTimeout(() => setCopiaEstado(null), 4000)
         return
       }
@@ -266,7 +266,7 @@ export default function Configuracion() {
       const r = resumirCopia(obj)
       if (r.masNueva) {
         setCopiaEstado(
-          'Esta copia la hizo una versión de Cabildo más nueva que la que tenéis. Restaurarla podría perder datos: actualizad Cabildo antes.',
+          'Esta copia la hizo una versión de Gobergo más nueva que la que tenéis. Restaurarla podría perder datos: actualizad Gobergo antes.',
         )
         setTimeout(() => setCopiaEstado(null), 9000)
         return
@@ -1284,7 +1284,7 @@ function CamposPropiosCard() {
 
 /**
  * Puesta en marcha: un solo sitio que dice qué falta por conectar para que
- * Cabildo funcione del todo, y quién lo arregla.
+ * Gobergo funcione del todo, y quién lo arregla.
  *
  * Existe porque lo que falta estaba repartido: la base de datos se veía en un
  * sitio, el correo en otro, la pasarela en un tercero, y nadie tenía la foto
@@ -1303,7 +1303,7 @@ function PuestaEnMarchaCard() {
         {pendientes.length > 0 && <span className="pill pill--warn">{pendientes.length} por conectar</span>}
       </div>
       <p className="form-hint">
-        Cabildo funciona entero sin nada de esto: se puede llevar el censo, cobrar las cuotas, repartir
+        Gobergo funciona entero sin nada de esto: se puede llevar el censo, cobrar las cuotas, repartir
         las papeletas y publicar la web. Lo de aquí abajo es lo que le falta para funcionar <b>del
         todo</b>, y casi todo lo contrata la hermandad a su nombre, no nosotros.
       </p>
@@ -1381,7 +1381,7 @@ function CorreoCard() {
           <li>Crear una cuenta en <b>Resend</b> (resend.com). El plan gratuito da 3.000 correos al mes, de sobra para una hermandad.</li>
           <li>Copiar la clave de API que dan al registrarse.</li>
           <li>
-            Guardarla como secreto de la función, desde el ordenador de quien administre Cabildo:
+            Guardarla como secreto de la función, desde el ordenador de quien administre Gobergo:
             <code className="cfg-codigo">supabase secrets set RESEND_API_KEY=re_xxx</code>
             <code className="cfg-codigo">supabase functions deploy enviar-correo</code>
           </li>

@@ -256,7 +256,7 @@ export default function ImportarCenso({
             </select>
             <p className="form-hint">
               Al actualizar solo se pisa lo que trae el archivo: si vuestra hoja no tiene columna de
-              teléfono, el teléfono que ya tengan en Cabildo no se borra. Su número de hermano
+              teléfono, el teléfono que ya tengan en Gobergo no se borra. Su número de hermano
               tampoco se toca.
             </p>
           </div>

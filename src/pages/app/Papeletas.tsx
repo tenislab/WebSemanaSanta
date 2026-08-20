@@ -42,6 +42,9 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
+import { conApunteDeCobro, origenDePapeleta, sinApunteDeCobro } from '../../lib/apuntes'
+import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -78,6 +81,10 @@ export default function Papeletas() {
   const hermandad = useHermandadSettings(fallbackNombre)
   const tramos = useMemo(() => getTramos(), [])
   const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  // El libro de cuentas: cobrar una papeleta deja su apunte aquí.
+  const [, setMovimientos] = useSupabaseTable<Movimiento>(
+    'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
+  )
   const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
   const [ajustes, setAjustes] = useAjustesCuotas()
@@ -381,6 +388,26 @@ export default function Papeletas() {
   /** Registra el cobro de la papeleta con el método elegido (emitida → pagada). */
   function registrarPago(id: string, metodo: MetodoPagoPapeleta) {
     actualizarPapeleta(id, { estado: 'Pagada', metodoPago: metodo, fechaPago: hoy() })
+    // Y al libro de cuentas. Esto es lo que faltaba: se cobraba la papeleta y
+    // Tesorería no lo veía, así que la recaudación de la campaña no aparecía
+    // por ninguna parte en el balance.
+    const p = papeletas.find((x) => x.id === id)
+    if (p) {
+      const h = hermanos.find((x) => x.id === p.hermanoId)
+      setMovimientos((prev) =>
+        conApunteDeCobro(prev, {
+          origen: origenDePapeleta(p.id),
+          concepto: `Papeleta de sitio ${p.anio} — ${h?.nombre ?? 'hermano/a'}`,
+          // No hay partida propia para papeletas en el Estado de Cuentas que
+          // piden las diócesis, y no se inventa una: iría en «Otros ingresos»
+          // igualmente al presentarlo. El concepto dice de qué es.
+          categoria: 'Otros ingresos',
+          importe: p.importe,
+          fecha: hoy(),
+          metodo,
+        }),
+      )
+    }
   }
 
   /** Anular ≠ borrar: la papeleta se conserva como «Anulada», con su motivo. */
@@ -388,6 +415,9 @@ export default function Papeletas() {
     const motivo = window.prompt('Motivo de la anulación (queda registrado):', '')
     if (motivo === null) return
     actualizarPapeleta(id, { estado: 'Anulada', motivoAnulacion: motivo.trim() || 'Sin especificar' })
+    // Anulada deja de ser un ingreso: fuera su apunte, o el saldo contaría un
+    // dinero que se devolvió.
+    setMovimientos((prev) => sinApunteDeCobro(prev, origenDePapeleta(id)))
   }
 
   // ---- Impresión masiva: un único PDF con una papeleta por página ----

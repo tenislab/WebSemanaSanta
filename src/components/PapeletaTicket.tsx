@@ -101,7 +101,7 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
       </div>
 
       <p className="recibo-doc__note">
-        Documento generado por Cabildo · el código QR es real y contiene los datos de la papeleta;
+        Documento generado por Gobergo · el código QR es real y contiene los datos de la papeleta;
         la verificación automática al escanear llegará con la base de datos
       </p>
     </div>

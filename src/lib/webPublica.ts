@@ -1391,7 +1391,7 @@ export async function cargarWebPorSlug(
  *
  * Cuando una hermandad compra su dominio y lo apunta a Vercel, quien lo abre
  * llega a la raíz de la aplicación. Sin esto, ahí se encontraba la página de
- * venta de Cabildo en lugar de la web de la hermandad, que es exactamente lo
+ * venta de Gobergo en lugar de la web de la hermandad, que es exactamente lo
  * contrario de lo que se le había prometido al configurarlo.
  *
  * Se busca con y sin `www.` porque media España lo escribe, y quien configura

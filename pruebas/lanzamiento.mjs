@@ -91,7 +91,7 @@ comprobar('Condiciones de uso', /slug: 'condiciones'/.test(legal), 'Definen qué
 comprobar(
   'Se dice quién es responsable y quién encargado',
   /encargada? del tratamiento/i.test(legal),
-  'La hermandad es la responsable; Cabildo, la encargada. Tiene que estar escrito.',
+  'La hermandad es la responsable; Gobergo, la encargada. Tiene que estar escrito.',
 )
 comprobar(
   'Se reconoce que el censo es dato de categoría especial',
@@ -101,7 +101,7 @@ comprobar(
 comprobar(
   'Existe el contrato de encargo de tratamiento',
   existsSync('docs/CONTRATO-ENCARGO.md'),
-  'El art. 28 del RGPD lo exige POR ESCRITO entre la hermandad y Cabildo. Sin él, la hermandad está incumpliendo.',
+  'El art. 28 del RGPD lo exige POR ESCRITO entre la hermandad y Gobergo. Sin él, la hermandad está incumpliendo.',
 )
 
 // --- 5. Que quede claro qué falta por conectar ---

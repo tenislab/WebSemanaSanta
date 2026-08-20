@@ -8,7 +8,7 @@ página ya se ha cargado. Pero **WhatsApp, Facebook y X no ejecutan
 JavaScript**: piden el HTML y leen lo que hay.
 
 Resultado: si el hermano mayor pega el enlace de su web en el grupo de
-WhatsApp, la vista previa dice *«Cabildo — Software para gestionar tu
+WhatsApp, la vista previa dice *«Gobergo — Software para gestionar tu
 hermandad»*.
 
 ---
@@ -19,7 +19,7 @@ Google **sí** ejecuta JavaScript al indexar, así que todo esto le llega:
 
 | | |
 |---|---|
-| Título y descripción | Los de la hermandad, no los de Cabildo |
+| Título y descripción | Los de la hermandad, no los de Gobergo |
 | `canonical` y `og:url` | La dirección buena de cada página (el dominio propio si lo hay) |
 | `theme-color` | El color de la hermandad en la barra del móvil |
 | Escudo en la pestaña | El de la hermandad |
@@ -75,7 +75,7 @@ página.
 curl -s https://tu-dominio/w/tu-hermandad | head -20
 ```
 
-Tiene que salir el nombre de tu hermandad en el `<title>`, no el de Cabildo. Y
+Tiene que salir el nombre de tu hermandad en el `<title>`, no el de Gobergo. Y
 después, en <https://developers.facebook.com/tools/debug/> pegando el enlace,
 la vista previa buena. (Si WhatsApp ya se había guardado la mala, ahí mismo se
 le dice que vuelva a mirar.)

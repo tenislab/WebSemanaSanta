@@ -1,5 +1,5 @@
 /**
- * Textos legales de Cabildo. Son plantillas razonables para una plataforma
+ * Textos legales de Gobergo. Son plantillas razonables para una plataforma
  * SaaS española (RGPD/LOPDGDD, LSSI-CE), pero NO sustituyen el asesoramiento
  * de un profesional: antes de publicarlos de verdad hay que rellenar los
  * datos entre corchetes [...] con los del titular real y revisarlos con un
@@ -37,20 +37,20 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
           'NIF/CIF: [NIF O CIF]',
           'Domicilio: [DIRECCIÓN COMPLETA]',
           'Correo de contacto: [CORREO DE CONTACTO]',
-          'Nombre comercial: Cabildo',
+          'Nombre comercial: Gobergo',
         ],
       },
       {
         titulo: '2. Objeto',
         parrafos: [
-          'Cabildo es una plataforma de software para la gestión de hermandades y cofradías (censo de hermanos, cuotas, papeletas de sitio, cortejo, tesorería, comunicaciones y documentación).',
+          'Gobergo es una plataforma de software para la gestión de hermandades y cofradías (censo de hermanos, cuotas, papeletas de sitio, cortejo, tesorería, comunicaciones y documentación).',
           'El uso de la plataforma atribuye la condición de usuario e implica la aceptación de este aviso legal y del resto de textos legales publicados.',
         ],
       },
       {
         titulo: '3. Propiedad intelectual e industrial',
         parrafos: [
-          'El código, el diseño, la marca «Cabildo», los textos y demás elementos de la plataforma son titularidad del responsable o de terceros que han autorizado su uso, y están protegidos por la normativa de propiedad intelectual e industrial.',
+          'El código, el diseño, la marca «Gobergo», los textos y demás elementos de la plataforma son titularidad del responsable o de terceros que han autorizado su uso, y están protegidos por la normativa de propiedad intelectual e industrial.',
           'Los datos que cada hermandad introduce (hermanos, cuotas, documentos, etc.) son de su exclusiva titularidad; la plataforma solo los trata para prestar el servicio.',
         ],
       },
@@ -80,7 +80,7 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
         titulo: '1. Responsable del tratamiento',
         parrafos: [
           'Respecto a los datos de la cuenta y el uso de la plataforma, el responsable es el titular indicado en el aviso legal: [RAZÓN SOCIAL], NIF [NIF O CIF], con domicilio en [DIRECCIÓN] y correo de contacto [CORREO DE CONTACTO].',
-          'Respecto a los datos de los hermanos que cada hermandad gestiona con Cabildo, la responsable del tratamiento es la propia hermandad; Cabildo actúa como encargada del tratamiento y los trata únicamente siguiendo sus instrucciones.',
+          'Respecto a los datos de los hermanos que cada hermandad gestiona con Gobergo, la responsable del tratamiento es la propia hermandad; Gobergo actúa como encargada del tratamiento y los trata únicamente siguiendo sus instrucciones.',
         ],
       },
       {
@@ -137,12 +137,12 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
     titulo: 'Condiciones de uso del servicio',
     actualizado: ACTUALIZADO,
     intro:
-      'Estas condiciones regulan el acceso y el uso de la plataforma Cabildo. Al registrarse o utilizar el servicio, el usuario las acepta.',
+      'Estas condiciones regulan el acceso y el uso de la plataforma Gobergo. Al registrarse o utilizar el servicio, el usuario las acepta.',
     secciones: [
       {
         titulo: '1. Objeto del servicio',
         parrafos: [
-          'Cabildo ofrece herramientas en línea para la gestión de hermandades y cofradías. El servicio se presta «tal cual» y puede evolucionar con nuevas funciones o cambios.',
+          'Gobergo ofrece herramientas en línea para la gestión de hermandades y cofradías. El servicio se presta «tal cual» y puede evolucionar con nuevas funciones o cambios.',
         ],
       },
       {
@@ -193,12 +193,12 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
     titulo: 'Política de cookies',
     actualizado: ACTUALIZADO,
     intro:
-      'Esta política informa sobre el uso de cookies y tecnologías similares (como el almacenamiento local del navegador) en la plataforma Cabildo.',
+      'Esta política informa sobre el uso de cookies y tecnologías similares (como el almacenamiento local del navegador) en la plataforma Gobergo.',
     secciones: [
       {
         titulo: '1. Qué usamos',
         parrafos: [
-          'Cabildo utiliza únicamente almacenamiento técnico estrictamente necesario para que la plataforma funcione: mantener la sesión iniciada y recordar preferencias básicas (por ejemplo, el tema claro/oscuro). Este almacenamiento se guarda en tu propio navegador.',
+          'Gobergo utiliza únicamente almacenamiento técnico estrictamente necesario para que la plataforma funcione: mantener la sesión iniciada y recordar preferencias básicas (por ejemplo, el tema claro/oscuro). Este almacenamiento se guarda en tu propio navegador.',
           'No se utilizan cookies de publicidad ni de seguimiento de terceros con fines comerciales.',
         ],
       },

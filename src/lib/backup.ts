@@ -30,7 +30,7 @@ export interface CopiaSeguridad {
   archivos: ArchivoCopia[]
 }
 
-function clavesCabildo(): string[] {
+function clavesGobergo(): string[] {
   const claves: string[] = []
   for (let i = 0; i < localStorage.length; i += 1) {
     const k = localStorage.key(i)
@@ -41,7 +41,7 @@ function clavesCabildo(): string[] {
 
 function leerDatosLocales(): Record<string, unknown> {
   const datos: Record<string, unknown> = {}
-  clavesCabildo().forEach((k) => {
+  clavesGobergo().forEach((k) => {
     const raw = localStorage.getItem(k)
     if (raw === null) return
     try {
@@ -93,13 +93,13 @@ export async function crearCopia(): Promise<CopiaSeguridad> {
   }
 }
 
-/** Valida que un JSON tenga forma de copia de Cabildo. */
+/** Valida que un JSON tenga forma de copia de Gobergo. */
 export const VERSION_COPIA = 1
 
 /**
  * Lo que se le enseña a la hermandad ANTES de dejarle sustituir todos sus
  * datos: de cuándo es la copia, cuánto trae y si la hizo una versión más nueva
- * de Cabildo.
+ * de Gobergo.
  *
  * Hasta ahora la copia guardaba su versión y su fecha y **nadie las leía**: se
  * confirmaba a ciegas, antes siquiera de abrir el archivo, y una copia de hace
@@ -110,7 +110,7 @@ export interface ResumenCopia {
   /** Cuántas claves de datos trae (hermanos, cuotas, papeletas…). */
   bloques: number
   archivos: number
-  /** La hizo una versión de Cabildo posterior a esta. */
+  /** La hizo una versión de Gobergo posterior a esta. */
   masNueva: boolean
 }
 
@@ -150,13 +150,13 @@ export async function restaurarCopia(copia: CopiaSeguridad): Promise<void> {
     .filter(([k]) => k.startsWith(PREFIJO) && !EXCLUIR.has(k))
     .map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)] as const)
 
-  const anterior = clavesCabildo().map((k) => [k, localStorage.getItem(k)] as const)
-  clavesCabildo().forEach((k) => localStorage.removeItem(k))
+  const anterior = clavesGobergo().map((k) => [k, localStorage.getItem(k)] as const)
+  clavesGobergo().forEach((k) => localStorage.removeItem(k))
   try {
     entradas.forEach(([k, v]) => localStorage.setItem(k, v))
   } catch {
     // Marcha atrás: se deja el navegador como estaba y se avisa de verdad.
-    clavesCabildo().forEach((k) => localStorage.removeItem(k))
+    clavesGobergo().forEach((k) => localStorage.removeItem(k))
     anterior.forEach(([k, v]) => { if (v !== null) localStorage.setItem(k, v) })
     throw new Error('La copia no cabe en este navegador (suele ser por las fotos y los PDF). No se ha cambiado nada.')
   }

@@ -13,8 +13,8 @@ export default function EntradaUnificada() {
     <AuthLayout
       eyebrow="Acceso"
       title="¿Quién eres?"
-      subtitle="Elige tu camino para entrar en Cabildo."
-      footer={<>¿Tu hermandad aún no está en Cabildo? Empieza gratis desde la portada.</>}
+      subtitle="Elige tu camino para entrar en Gobergo."
+      footer={<>¿Tu hermandad aún no está en Gobergo? Empieza gratis desde la portada.</>}
     >
       <div className="entrada-opciones">
         <Link to="/hermano" className="entrada-opcion">

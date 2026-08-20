@@ -423,7 +423,7 @@ function MetaWeb({
     const puestas: Element[] = []
     // Las que ya existen (las de la aplicación, en index.html) se REEMPLAZAN y
     // se restauran al salir: si solo se añadieran, seguiría mandando la
-    // descripción genérica de Cabildo y no la de la hermandad.
+    // descripción genérica de Gobergo y no la de la hermandad.
     const restaurar: { el: Element; attr: string; antes: string | null }[] = []
     function meta(clave: 'name' | 'property', valor: string, contenido: string) {
       if (!contenido) return
@@ -470,7 +470,7 @@ function MetaWeb({
     // Cuál es la dirección buena de esta página. Con dominio propio configurado
     // apunta al dominio, no al enlace largo, para que Google no cuente dos.
     enlace('canonical', url)
-    // El escudo de la hermandad en la pestaña, en vez del de Cabildo.
+    // El escudo de la hermandad en la pestaña, en vez del de Gobergo.
     const escudo = web.logoDataUrl ?? hermandad.logoDataUrl
     if (escudo) enlace('icon', escudo)
 

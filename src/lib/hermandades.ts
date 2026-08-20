@@ -1,5 +1,5 @@
 /**
- * Directorio de hermandades registradas en Cabildo. El área del hermano
+ * Directorio de hermandades registradas en Gobergo. El área del hermano
  * empieza siempre buscando la hermandad propia (como cualquier SaaS
  * multi-inquilino real): la "principal" es la que gestiona quien ha
  * iniciado sesión como secretaría en /app, con sus datos reales ya

@@ -19,7 +19,7 @@ export default function VerificarPapeleta() {
       <header className="verificar__head">
         <Logo size={32} />
         <Link className="btn btn-outline btn-sm" to="/">
-          Ir a Cabildo
+          Ir a Gobergo
         </Link>
       </header>
 

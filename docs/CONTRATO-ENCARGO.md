@@ -8,14 +8,14 @@
 >
 > Lo importante es que **este contrato es obligatorio** (artículo 28.3 del
 > RGPD) y **por escrito**. Sin él, la hermandad está incumpliendo desde el
-> primer día que mete un hermano en Cabildo, y quien responde es ella.
+> primer día que mete un hermano en Gobergo, y quien responde es ella.
 
 ---
 
 ## Por qué hace falta, en cristiano
 
 La hermandad decide qué datos guarda de sus hermanos y para qué: es la
-**responsable del tratamiento**. Cabildo los guarda y los procesa siguiendo sus
+**responsable del tratamiento**. Gobergo los guarda y los procesa siguiendo sus
 instrucciones: es el **encargado del tratamiento**.
 
 El RGPD exige que esa relación esté en un contrato con un contenido mínimo. No
@@ -41,13 +41,13 @@ domicilio en ____________, representada por D./Dña. ____________ en su calidad
 de ____________ (en adelante, «la Hermandad» o «el Responsable»).
 
 De otra parte, **[TITULAR DE CABILDO]**, con NIF/CIF ____________ y domicilio
-en ____________ (en adelante, «Cabildo» o «el Encargado»).
+en ____________ (en adelante, «Gobergo» o «el Encargado»).
 
 Ambas partes se reconocen capacidad para contratar y
 
 **EXPONEN**
 
-I. Que la Hermandad ha contratado con Cabildo la prestación de un servicio de
+I. Que la Hermandad ha contratado con Gobergo la prestación de un servicio de
 gestión que implica el tratamiento de datos personales de sus hermanos y del
 personal de su junta de gobierno.
 
@@ -60,7 +60,7 @@ III. Que las partes suscriben el presente contrato conforme a las siguientes
 
 ### 1. Objeto
 
-Cabildo tratará por cuenta de la Hermandad los datos personales necesarios para
+Gobergo tratará por cuenta de la Hermandad los datos personales necesarios para
 prestar el servicio contratado.
 
 ### 2. Identificación del tratamiento
@@ -83,12 +83,12 @@ prestar el servicio contratado.
   de sus tutores), miembros de la junta de gobierno y personal con acceso, y
   personas que contacten por los formularios de la web pública.
 
-### 3. Obligaciones de Cabildo como Encargado
+### 3. Obligaciones de Gobergo como Encargado
 
-Cabildo se obliga a:
+Gobergo se obliga a:
 
 a) **Tratar los datos únicamente siguiendo instrucciones documentadas** de la
-   Hermandad, incluidas las transferencias internacionales. Si Cabildo
+   Hermandad, incluidas las transferencias internacionales. Si Gobergo
    entendiera que una instrucción infringe la normativa, lo comunicará de
    inmediato.
 
@@ -132,7 +132,7 @@ i) **Llevar el registro de actividades de tratamiento** por cuenta de la
 
 ### 4. Subencargados
 
-La Hermandad autoriza a Cabildo a servirse de los siguientes subencargados,
+La Hermandad autoriza a Gobergo a servirse de los siguientes subencargados,
 necesarios para prestar el servicio:
 
 | Subencargado | Para qué | Dónde se alojan los datos |
@@ -142,10 +142,10 @@ necesarios para prestar el servicio:
 | [Proveedor de correo] | Envío de avisos, si se contrata | [región] |
 | [Pasarela de pago] | Cobros, si se contrata | [región] |
 
-Cabildo impondrá a cada subencargado, por contrato, las mismas obligaciones que
+Gobergo impondrá a cada subencargado, por contrato, las mismas obligaciones que
 asume en este documento, y responderá ante la Hermandad de su incumplimiento.
 
-Cabildo informará a la Hermandad de cualquier cambio de subencargado con al
+Gobergo informará a la Hermandad de cualquier cambio de subencargado con al
 menos **30 días** de antelación, pudiendo la Hermandad oponerse motivadamente.
 
 > **Elegid región europea al crear los proyectos.** Es lo más sencillo: si
@@ -155,7 +155,7 @@ menos **30 días** de antelación, pudiendo la Hermandad oponerse motivadamente.
 
 ### 5. Al terminar el contrato
 
-Terminado el contrato, Cabildo, a elección de la Hermandad:
+Terminado el contrato, Gobergo, a elección de la Hermandad:
 
 a) devolverá los datos en un formato de uso común y legible por máquina
    (la plataforma permite exportar una copia completa), o
@@ -163,7 +163,7 @@ a) devolverá los datos en un formato de uso común y legible por máquina
 b) los suprimirá, junto con las copias existentes, salvo que deba conservarlos
    por obligación legal.
 
-Cabildo certificará por escrito la devolución o supresión dentro de los
+Gobergo certificará por escrito la devolución o supresión dentro de los
 **30 días** siguientes.
 
 ### 6. Responsabilidad
@@ -173,7 +173,7 @@ obligaciones, conforme al artículo 82 del RGPD.
 
 Y en prueba de conformidad, firman por duplicado.
 
-Por la Hermandad **·** Por Cabildo
+Por la Hermandad **·** Por Gobergo
 
 Fdo.: ____________ **·** Fdo.: ____________
 

@@ -59,13 +59,13 @@ export default async function ({ cargar, caso }) {
  *
  * El caso que motiva esto: la aplicación le decía a la hermandad «compra tu
  * dominio, apúntalo aquí y tu web se verá ahí», y luego en la raíz enseñaba la
- * página de venta de Cabildo. Justo lo contrario de lo prometido.
+ * página de venta de Gobergo. Justo lo contrario de lo prometido.
  */
 export async function dominioRaiz({ cargar, caso }) {
   const m = await cargar('src/lib/dominio.ts')
-  const esCasa = m.esCasaDeCabildo
+  const esCasa = m.esCasaDeGobergo
 
-  // Donde vive la aplicación: la página de Cabildo, sin consultar nada.
+  // Donde vive la aplicación: la página de Gobergo, sin consultar nada.
   caso('localhost es casa', true, esCasa('localhost'))
   caso('con puerto también', true, esCasa('localhost:5173'))
   caso('el despliegue de Vercel es casa', true, esCasa('web-semana-santa.vercel.app'))
@@ -75,7 +75,7 @@ export async function dominioRaiz({ cargar, caso }) {
   caso('el dominio de una hermandad no es casa', false, esCasa('hermandaddetriana.es'))
   caso('ni con www', false, esCasa('www.hermandaddetriana.es'))
 
-  // Con dominio propio de Cabildo configurado.
+  // Con dominio propio de Gobergo configurado.
   caso('el dominio propio es casa', true, esCasa('cabildo.es', 'cabildo.es'))
   caso('su www también', true, esCasa('www.cabildo.es', 'cabildo.es'))
   caso('y da igual cómo se escriba el ajuste', true, esCasa('cabildo.es', 'www.CABILDO.es'))
