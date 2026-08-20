@@ -1386,6 +1386,42 @@ export async function cargarWebPorSlug(
   }
 }
 
+/**
+ * La web publicada que tiene puesto ESTE dominio propio.
+ *
+ * Cuando una hermandad compra su dominio y lo apunta a Vercel, quien lo abre
+ * llega a la raíz de la aplicación. Sin esto, ahí se encontraba la página de
+ * venta de Cabildo en lugar de la web de la hermandad, que es exactamente lo
+ * contrario de lo que se le había prometido al configurarlo.
+ *
+ * Se busca con y sin `www.` porque media España lo escribe, y quien configura
+ * el dominio puede haberlo guardado de cualquiera de las dos formas.
+ */
+export async function cargarWebPorDominio(
+  host: string,
+): Promise<{ web: WebPublica; hermandadId: string | null } | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  const limpio = host.trim().toLowerCase().replace(/^www\./, '').replace(/:\d+$/, '')
+  if (!limpio) return null
+  try {
+    const { data, error } = await supabase
+      .from('web_publica')
+      .select('datos, publicada, slug, hermandad_id')
+      .eq('publicada', true)
+      .or(`datos->>dominio.eq.${limpio},datos->>dominio.eq.www.${limpio}`)
+      .limit(1)
+      .maybeSingle()
+    if (error || !data) return null
+    const fila = data as { datos: Partial<WebPublica>; publicada: boolean; slug: string; hermandad_id: string | null }
+    return {
+      web: { ...conDefectos(fila.datos), publicada: true, slug: fila.slug },
+      hermandadId: fila.hermandad_id,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** Hook con la web pública y un setter que persiste. */
 export function useWebPublica(): [WebPublica, (siguiente: WebPublica | ((actual: WebPublica) => WebPublica)) => void] {
   const [web, setWebState] = useState<WebPublica>(() => getWebPublica())

@@ -50,4 +50,38 @@ export default async function ({ cargar, caso }) {
   caso('«no responde» explica lo de la propagación', true, /propagar/i.test(m.explicarEstado('noResponde', 'x.es')))
   caso('«otro sitio» dice dónde mirar', true, /DNS|despliegue/i.test(m.explicarEstado('otroSitio', 'x.es')))
   caso('sin probar no dice nada', '', m.explicarEstado('sinProbar', 'x.es'))
+
+  await dominioRaiz({ cargar, caso })
+}
+
+/**
+ * Qué se enseña al entrar por la puerta principal, según el dominio.
+ *
+ * El caso que motiva esto: la aplicación le decía a la hermandad «compra tu
+ * dominio, apúntalo aquí y tu web se verá ahí», y luego en la raíz enseñaba la
+ * página de venta de Cabildo. Justo lo contrario de lo prometido.
+ */
+export async function dominioRaiz({ cargar, caso }) {
+  const m = await cargar('src/lib/dominio.ts')
+  const esCasa = m.esCasaDeCabildo
+
+  // Donde vive la aplicación: la página de Cabildo, sin consultar nada.
+  caso('localhost es casa', true, esCasa('localhost'))
+  caso('con puerto también', true, esCasa('localhost:5173'))
+  caso('el despliegue de Vercel es casa', true, esCasa('web-semana-santa.vercel.app'))
+  caso('y las vistas previas de Vercel', true, esCasa('cabildo-git-rama-xyz.vercel.app'))
+
+  // El dominio de una hermandad NO es casa: hay que buscar su web.
+  caso('el dominio de una hermandad no es casa', false, esCasa('hermandaddetriana.es'))
+  caso('ni con www', false, esCasa('www.hermandaddetriana.es'))
+
+  // Con dominio propio de Cabildo configurado.
+  caso('el dominio propio es casa', true, esCasa('cabildo.es', 'cabildo.es'))
+  caso('su www también', true, esCasa('www.cabildo.es', 'cabildo.es'))
+  caso('y da igual cómo se escriba el ajuste', true, esCasa('cabildo.es', 'www.CABILDO.es'))
+  caso('pero el de una hermandad sigue sin serlo', false, esCasa('hermandaddetriana.es', 'cabildo.es'))
+
+  // Un host vacío (renderizado en servidor, sin navegador) no puede acabar
+  // buscando la web de nadie: se queda en casa.
+  caso('sin host, casa', true, esCasa(''))
 }

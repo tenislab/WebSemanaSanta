@@ -1223,9 +1223,9 @@ function DisenoTab({
             <ol style={{ margin: '0.5rem 0 0 1rem', lineHeight: 1.7 }}>
               <li>Compra el dominio en un registrador (IONOS, GoDaddy, Namecheap…).</li>
               <li>Escríbelo aquí arriba y guarda.</li>
-              <li>En el panel de despliegue (Vercel) → <b>Domains</b> → añade tu dominio.</li>
-              <li>En tu registrador, apunta los DNS a Vercel (un registro <code>A</code> a la IP que te indica, o un <code>CNAME</code>).</li>
-              <li>En unos minutos tu web se verá en <b>tu dominio</b> en vez de en el enlace largo.</li>
+              <li>Avísanos para que lo demos de alta en el servidor (es un paso nuestro, de un minuto).</li>
+              <li>En tu registrador, apunta los DNS a donde te digamos (un registro <code>A</code> o un <code>CNAME</code>).</li>
+              <li>En unos minutos, quien escriba <b>tu dominio</b> verá tu web directamente, sin el enlace largo.</li>
             </ol>
             <p style={{ marginTop: '0.4rem' }}>
               Ojo con el <code>www</code>: media España lo escribe. En Vercel añadid los dos

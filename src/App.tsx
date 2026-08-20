@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import Landing from './pages/Landing'
+import Raiz from './pages/Raiz'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
@@ -29,7 +29,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<Raiz />} />
       <Route path="/entrar" element={<EntradaUnificada />} />
       <Route path="/login" element={<Login />} />
       <Route path="/registro" element={<Signup />} />

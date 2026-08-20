@@ -34,18 +34,23 @@ import {
  * esté publicada (para la vista previa del panel). El render vive en
  * SitioContenido, compartido con la vista previa.
  */
-export default function SitioPublico() {
-  const { slug, noticia: slugNot, titular: slugTit } = useParams()
+export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPublica } = {}) {
+  const { slug: slugRuta, noticia: slugNot, titular: slugTit } = useParams()
+  // Cuando se llega por el dominio propio de la hermandad no hay slug en la
+  // dirección —se ha entrado por la raíz— así que se toma el de su web.
+  const slug = slugRuta ?? webPorDominio?.slug
   const [params] = useSearchParams()
   // La vista previa solo vale desde el panel (misma pestaña/origen): se exige
   // sesión abierta. Si no, cualquiera podía ver con ?preview=1 una web sin
   // publicar o de una hermandad que no tiene contratado el pack Web.
   const preview = params.get('preview') === '1' && haySesionAbierta()
-  const [traida, setTraida] = useState<WebPublica | null>(null)
+  const [traida, setTraida] = useState<WebPublica | null>(webPorDominio ?? null)
   // Con la base de datos conectada hay que esperar a que llegue: si no, se
   // pintaría «esta web no está disponible» un instante antes de recibirla, y
   // eso es justo lo que ve un rastreador que no espera.
-  const [esperando, setEsperando] = useState(isSupabaseConfigured)
+  // Si la web ya viene dada (se ha entrado por el dominio de la hermandad), no
+  // hay nada que esperar: ya está buscada.
+  const [esperando, setEsperando] = useState(isSupabaseConfigured && !webPorDominio)
 
   // La web de ESTA hermandad, buscada por el slug de la dirección.
   //
@@ -55,7 +60,7 @@ export default function SitioPublico() {
   // pública de verdad. Se sigue usando lo del navegador cuando no hay base de
   // datos (modo local) y como red de seguridad si la consulta falla.
   useEffect(() => {
-    if (!isSupabaseConfigured || !slug) {
+    if (webPorDominio || !isSupabaseConfigured || !slug) {
       setEsperando(false)
       return
     }
@@ -75,7 +80,7 @@ export default function SitioPublico() {
     return () => {
       cancelado = true
     }
-  }, [slug])
+  }, [slug, webPorDominio])
 
   const guardadaAqui = getWebPublica()
   const web = traida ?? guardadaAqui
