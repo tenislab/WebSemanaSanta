@@ -67,4 +67,42 @@ export default async function ({ cargar, caso }) {
   caso('el origen de una cuota', 'cuota:abc', m.origenDeCuota('abc'))
   caso('el de una papeleta', 'papeleta:abc', m.origenDePapeleta('abc'))
   caso('no se pisan entre sí', false, m.origenDeCuota('x') === m.origenDePapeleta('x'))
+
+  await dineroDeLaWeb({ cargar, caso })
+}
+
+/**
+ * Los donativos y la lotería que entran por la web.
+ *
+ * Un donativo de 300 € llegaba por el formulario, la tesorería lo daba por
+ * atendido, y el libro de cuentas no se enteraba. Al cerrar el año el balance
+ * no cuadraba y no había forma de saber por qué.
+ */
+async function dineroDeLaWeb({ cargar, caso }) {
+  const m = await cargar('src/lib/apuntes.ts')
+
+  caso('el origen de un mensaje de la web', 'web:abc', m.origenDeMensajeWeb('abc'))
+  caso('no se pisa con el de una cuota', false, m.origenDeMensajeWeb('x') === m.origenDeCuota('x'))
+  caso('ni con el de una papeleta', false, m.origenDeMensajeWeb('x') === m.origenDePapeleta('x'))
+
+  const donativo = {
+    origen: m.origenDeMensajeWeb('d1'),
+    concepto: 'Donativo — María López',
+    categoria: 'Donativos, Ofrendas y Cepillos',
+    importe: 300, fecha: '10 mar 2026', metodo: 'Transferencia',
+  }
+  const libro = m.conApunteDeCobro([], donativo)
+  caso('el donativo entra en el libro', 1, libro.length)
+  caso('en su partida propia', 'Donativos, Ofrendas y Cepillos', libro[0].categoria)
+  caso('pendiente de conciliar', 'Pendiente', libro[0].estado)
+
+  // Pulsar dos veces el botón no puede apuntar el donativo dos veces.
+  caso('no se apunta dos veces', 1, m.conApunteDeCobro(libro, donativo).length)
+  caso('y se sabe que ya está', true, m.yaApuntado(libro, m.origenDeMensajeWeb('d1')))
+  caso('otro donativo sí es otro apunte', 2,
+    m.conApunteDeCobro(libro, { ...donativo, origen: m.origenDeMensajeWeb('d2') }).length)
+
+  // Un mensaje de contacto sin importe no es dinero.
+  caso('sin importe no se apunta nada', 0,
+    m.conApunteDeCobro([], { ...donativo, origen: m.origenDeMensajeWeb('d3'), importe: 0 }).length)
 }

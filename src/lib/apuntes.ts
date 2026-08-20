@@ -30,6 +30,10 @@ export function origenDeCuota(cuotaId: string): string {
 export function origenDePapeleta(papeletaId: string): string {
   return `papeleta:${papeletaId}`
 }
+/** Un donativo o una reserva de lotería que llegó por el formulario de la web. */
+export function origenDeMensajeWeb(mensajeId: string): string {
+  return `web:${mensajeId}`
+}
 
 /**
  * A qué cuenta entra el dinero, según cómo hayan pagado.

@@ -288,6 +288,35 @@ export default function ImportarCenso({
             </p>
           </div>
 
+          {/* Números de hermano pedidos que ya estaban cogidos. No impide
+              importar, pero hay que decirlo ANTES: el número es lo que más
+              mira una hermandad, y enterarse después es lo peor. */}
+          {ensayo.avisos.length > 0 && (
+            <div className="banner banner--warn" role="note" style={{ marginTop: '0.8rem' }}>
+              <div>
+                <strong>
+                  {ensayo.avisos.length === 1
+                    ? 'Un número de hermano ya está cogido'
+                    : `${ensayo.avisos.length} números de hermano ya están cogidos`}
+                </strong>
+                <ul style={{ margin: '0.4rem 0 0 1rem', lineHeight: 1.6 }}>
+                  {ensayo.avisos.slice(0, 8).map((a) => (
+                    <li key={a}>{a}</li>
+                  ))}
+                </ul>
+                {ensayo.avisos.length > 8 && (
+                  <p className="form-hint" style={{ marginTop: '0.3rem' }}>
+                    Y {ensayo.avisos.length - 8} más.
+                  </p>
+                )}
+                <p className="form-hint" style={{ marginTop: '0.4rem' }}>
+                  Si el número importa, arreglad la hoja antes de importar. Si no, se les asigna el
+                  siguiente libre y podéis cambiarlo luego uno a uno.
+                </p>
+              </div>
+            </div>
+          )}
+
           {ensayo.errores > 0 && (
             <div className="aviso-falta" role="note">
               <p className="aviso-falta__titulo">

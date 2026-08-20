@@ -1,10 +1,12 @@
 /**
  * Textos legales de Gobergo. Son plantillas razonables para una plataforma
  * SaaS española (RGPD/LOPDGDD, LSSI-CE), pero NO sustituyen el asesoramiento
- * de un profesional: antes de publicarlos de verdad hay que rellenar los
- * datos entre corchetes [...] con los del titular real y revisarlos con un
- * abogado. La app muestra un aviso visible mientras queden corchetes.
+ * de un profesional: antes de publicarlos de verdad hay que rellenar los datos
+ * del titular en `data/identidad.ts` y revisarlos con un abogado. La app
+ * muestra un aviso visible mientras falte alguno.
  */
+
+import { GOBERGO, oPendiente } from './identidad'
 
 export interface SeccionLegal {
   titulo?: string
@@ -33,11 +35,11 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
       {
         titulo: '1. Titular',
         lista: [
-          'Titular: [RAZÓN SOCIAL O NOMBRE DEL RESPONSABLE]',
-          'NIF/CIF: [NIF O CIF]',
-          'Domicilio: [DIRECCIÓN COMPLETA]',
-          'Correo de contacto: [CORREO DE CONTACTO]',
-          'Nombre comercial: Gobergo',
+          `Titular: ${oPendiente(GOBERGO.razonSocial, 'nombre o razón social')}`,
+          `NIF/CIF: ${oPendiente(GOBERGO.nif, 'NIF o CIF')}`,
+          `Domicilio: ${oPendiente(GOBERGO.domicilio, 'domicilio')}`,
+          `Correo de contacto: ${oPendiente(GOBERGO.correo, 'correo de contacto')}`,
+          `Nombre comercial: ${GOBERGO.nombre}`,
         ],
       },
       {
@@ -79,7 +81,7 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
       {
         titulo: '1. Responsable del tratamiento',
         parrafos: [
-          'Respecto a los datos de la cuenta y el uso de la plataforma, el responsable es el titular indicado en el aviso legal: [RAZÓN SOCIAL], NIF [NIF O CIF], con domicilio en [DIRECCIÓN] y correo de contacto [CORREO DE CONTACTO].',
+          `Respecto a los datos de la cuenta y el uso de la plataforma, el responsable es el titular indicado en el aviso legal: ${oPendiente(GOBERGO.razonSocial, 'nombre o razón social')}, NIF ${oPendiente(GOBERGO.nif, 'NIF o CIF')}, con domicilio en ${oPendiente(GOBERGO.domicilio, 'domicilio')} y correo de contacto ${oPendiente(GOBERGO.correo, 'correo de contacto')}.`,
           'Respecto a los datos de los hermanos que cada hermandad gestiona con Gobergo, la responsable del tratamiento es la propia hermandad; Gobergo actúa como encargada del tratamiento y los trata únicamente siguiendo sus instrucciones.',
         ],
       },
@@ -117,7 +119,7 @@ export const DOCUMENTOS_LEGALES: DocumentoLegal[] = [
       {
         titulo: '6. Derechos de las personas',
         parrafos: [
-          'Cualquier persona puede ejercer sus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a [CORREO DE CONTACTO], acreditando su identidad.',
+          `Cualquier persona puede ejercer sus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a ${oPendiente(GOBERGO.correo, 'correo de contacto')}, acreditando su identidad.`,
           'Dentro de la plataforma, cada hermano puede descargar sus datos o solicitar su supresión desde su área personal (apartado «Mis datos y privacidad»).',
           'Si considera que sus datos no se tratan correctamente, puede reclamar ante la Agencia Española de Protección de Datos (www.aepd.es).',
         ],
@@ -231,13 +233,17 @@ export function getDocumentoLegal(slug: string): DocumentoLegal | undefined {
 }
 
 /**
- * Los huecos sin rellenar de los documentos legales: «[RAZÓN SOCIAL]»,
- * «[NIF O CIF]»… Están puestos a propósito para que cada cual ponga sus datos,
- * pero las páginas legales son PÚBLICAS: si se publican con los corchetes
- * dentro, cualquiera los ve, y además un aviso legal sin identificar al titular
- * no cumple lo que la ley pide.
+ * Los datos del titular que faltan por rellenar, tal como saldrían impresos:
+ * «[PENDIENTE: NIF o CIF]» y compañía.
  *
- * Se detectan solos para poder avisar en el panel antes de publicar.
+ * Salen de `data/identidad.ts`, que es donde se ponen una vez. Mientras estén
+ * vacíos, aquí aparecen, porque las páginas legales son PÚBLICAS: si se
+ * publican a medias cualquiera lo ve, y un aviso legal que no identifica a su
+ * titular no cumple lo que pide el artículo 10 de la LSSI.
+ *
+ * Se busca por el patrón y no por una lista de campos a propósito: si mañana
+ * se añade otro dato al aviso legal, aparece aquí sin que nadie se acuerde de
+ * apuntarlo en ningún sitio.
  */
 export function huecosLegalesSinRellenar(): { documento: string; hueco: string }[] {
   const salida: { documento: string; hueco: string }[] = []

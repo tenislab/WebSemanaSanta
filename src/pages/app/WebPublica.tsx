@@ -56,7 +56,12 @@ import type { HermandadSettings } from '../../lib/hermandadSettings'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { useSuscripcion, tieneCapacidad } from '../../lib/suscripcion'
 import { avisosDeContraste } from '../../lib/contraste'
-import { nuevoId } from '../../lib/supabaseSync'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { CLAVES_DATOS } from '../../lib/persistencia'
+import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
+import { conApunteDeCobro, origenDeMensajeWeb, yaApuntado } from '../../lib/apuntes'
+import { formatCurrency } from '../../lib/format'
 import SitioContenido, { type FocoPreview } from '../../components/SitioContenido'
 import Drawer from '../../components/Drawer'
 import {
@@ -1821,6 +1826,40 @@ function BuzonWebTab() {
   const [mensajes, guardar] = useMensajesWeb()
   const [filtro, setFiltro] = useState<'todos' | 'sinleer' | 'pendientes'>('todos')
   const [abierto, setAbierto] = useState<MensajeWeb | null>(null)
+  // El libro de cuentas: un donativo que entra por la web puede apuntarse aquí
+  // sin salir del buzón y sin teclear el importe otra vez.
+  const [movimientos, setMovimientos] = useSupabaseTable<Movimiento>(
+    'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
+  )
+
+  /**
+   * Apunta en tesorería un donativo o una reserva de lotería.
+   *
+   * Va con BOTÓN y no solo, al marcar el mensaje como atendido, a propósito.
+   * Un donativo por el formulario es alguien diciendo que QUIERE dar 300 €:
+   * el dinero puede tardar días o no llegar nunca. Apuntarlo solo metería en
+   * el libro ingresos que no han entrado, y ese descuadre es peor que no tener
+   * el apunte. Lo pulsa el tesorero cuando ve el ingreso.
+   */
+  function apuntarEnTesoreria(m: MensajeWeb) {
+    const origen = origenDeMensajeWeb(m.id)
+    setMovimientos((prev) =>
+      conApunteDeCobro(prev, {
+        origen,
+        concepto:
+          m.tipo === 'loteria'
+            ? `Lotería — ${m.nombre}${m.participaciones ? ` (${m.participaciones} participaciones)` : ''}`
+            : `Donativo — ${m.nombre}`,
+        categoria: m.tipo === 'loteria' ? 'Otros ingresos' : 'Donativos, Ofrendas y Cepillos',
+        importe: m.importe ?? 0,
+        fecha: m.fecha,
+        metodo: m.metodo,
+      }),
+    )
+    if (!m.atendido) cambiar(m.id, { atendido: true })
+  }
+
+  const yaEnTesoreria = (m: MensajeWeb) => yaApuntado(movimientos, origenDeMensajeWeb(m.id))
 
   const lista = mensajes.filter((m) =>
     filtro === 'sinleer' ? !m.leido : filtro === 'pendientes' ? !m.atendido : true,
@@ -1912,6 +1951,24 @@ function BuzonWebTab() {
               >
                 {abierto.atendido ? 'Marcar como pendiente' : 'Dar por atendido'}
               </button>
+              {/* Solo cuando hay dinero de por medio y todavía no se ha
+                  apuntado. Un donativo que se queda fuera del libro descuadra
+                  el balance del año sin que nadie sepa por qué. */}
+              {(abierto.tipo === 'donativo' || abierto.tipo === 'loteria') &&
+                (abierto.importe ?? 0) > 0 &&
+                (yaEnTesoreria(abierto) ? (
+                  <span className="form-hint form-hint--ok" style={{ alignSelf: 'center' }}>
+                    ✓ Apuntado en tesorería
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => apuntarEnTesoreria(abierto)}
+                  >
+                    Apuntar {formatCurrency(abierto.importe ?? 0)} en tesorería
+                  </button>
+                ))}
               <a className="btn btn-outline" href={`mailto:${abierto.email}?subject=${encodeURIComponent(abierto.asunto || 'Tu mensaje')}`}>
                 Contestar por correo
               </a>

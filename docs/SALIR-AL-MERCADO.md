@@ -157,7 +157,7 @@ carpeta de spam. Una hermandad de 800 hermanos no cabe.
 
 👉 **La web es https://resend.com**
 
-**Hace falta un dominio propio** (algo como `cabildo.es`). Sin dominio, Resend
+**Hace falta un dominio propio** (algo como `gobergo.es`). Sin dominio, Resend
 no se puede usar para nada más que escribirte a ti mismo, así que si todavía no
 lo tienes, quédate en la opción A hasta comprarlo.
 

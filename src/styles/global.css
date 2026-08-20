@@ -5419,3 +5419,26 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem;
   color: var(--text); user-select: all; overflow-x: auto; white-space: pre;
 }
+
+
+/* «¿Has olvidado tu contraseña?» del área del hermano. Discreto: quien se la
+   sabe no tiene por qué leerlo, y quien no, lo busca. */
+.portal__olvide {
+  display: block;
+  width: 100%;
+  margin-top: 0.7rem;
+  padding: 0.35rem;
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.portal__olvide:hover:not(:disabled) { color: var(--accent); }
+.portal__olvide:disabled { opacity: 0.6; cursor: default; }
+
+/* «Pon tu contraseña nueva», al volver del enlace del correo. */
+.portal__recuperar { display: flex; flex-direction: column; gap: 0.6rem; }
+.portal__recuperar h2 { margin: 0; font-size: 1.15rem; }

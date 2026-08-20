@@ -9,7 +9,9 @@
  *
  * CÓMO SE DESPLIEGA:
  *   supabase secrets set RESEND_API_KEY=re_xxx
- *   supabase secrets set CORREO_REMITENTE="Hdad. de X <avisos@tudominio.es>"
+ *   supabase secrets set CORREO_REMITENTE=no-responder@tudominio.es
+ *
+ * Solo la dirección: el NOMBRE que ve el hermano lo pone su hermandad.
  *   supabase functions deploy enviar-correo
  *
  * PARA PROBAR SIN DOMINIO PROPIO: Resend deja usar `onboarding@resend.dev`
@@ -20,6 +22,18 @@
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const REMITENTE = Deno.env.get('CORREO_REMITENTE') ?? 'onboarding@resend.dev'
+
+/**
+ * La dirección de dentro de `CORREO_REMITENTE`, venga como venga.
+ *
+ * El secreto se puede haber puesto como «Gobergo <no-responder@gobergo.es>» o
+ * como «no-responder@gobergo.es» a secas. Hace falta la dirección suelta
+ * porque el NOMBRE que se enseña ya no es fijo: lo pone cada hermandad.
+ */
+function soloLaDireccion(remitente: string): string {
+  const m = remitente.match(/<([^>]+)>/)
+  return (m ? m[1] : remitente).trim()
+}
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
@@ -42,7 +56,7 @@ function respuesta(cuerpo: unknown, estado = 200): Response {
  * función para mandar correo en nombre de la hermandad, que es exactamente lo
  * que se quería evitar sacando la clave del navegador.
  */
-async function quienLlama(req: Request): Promise<{ ok: boolean; motivo?: string }> {
+async function quienLlama(req: Request): Promise<{ ok: boolean; motivo?: string; auth?: string }> {
   const auth = req.headers.get('Authorization') ?? ''
   if (!auth.startsWith('Bearer ')) return { ok: false, motivo: 'Hace falta iniciar sesión.' }
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
@@ -55,7 +69,55 @@ async function quienLlama(req: Request): Promise<{ ok: boolean; motivo?: string 
   if (usuario?.user_metadata?.tipo === 'hermano') {
     return { ok: false, motivo: 'Tu cuenta no puede enviar correos.' }
   }
-  return { ok: true }
+  return { ok: true, auth }
+}
+
+/**
+ * Con qué nombre y a dónde se responde, según la hermandad de quien escribe.
+ *
+ * EL NOMBRE SE LEE AQUÍ, EN EL SERVIDOR, Y NO SE ACEPTA DEL NAVEGADOR. Si
+ * viniera de fuera, cualquiera con una sesión podría mandar correos firmados
+ * como «Banco Santander» desde un dominio verificado, que es justo lo que hace
+ * falta para un fraude creíble.
+ *
+ * Se consulta con el token de quien llama, así que las políticas de Supabase
+ * hacen el resto: solo puede salir la ficha de SU hermandad.
+ */
+async function comoFirmaSuHermandad(auth: string): Promise<{ nombre: string; responderA: string }> {
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/hermandad_settings?select=nombre_legal,email`,
+      { headers: { Authorization: auth, apikey: ANON_KEY } },
+    )
+    if (!r.ok) return { nombre: '', responderA: '' }
+    const filas = await r.json()
+    const fila = Array.isArray(filas) ? filas[0] : null
+    return {
+      nombre: (fila?.nombre_legal ?? '').trim(),
+      responderA: (fila?.email ?? '').trim(),
+    }
+  } catch {
+    return { nombre: '', responderA: '' }
+  }
+}
+
+/**
+ * El remitente tal como lo verá el hermano en su bandeja.
+ *
+ *     Hdad. de la Amargura <no-responder@gobergo.es>
+ *
+ * La dirección es siempre la misma —la del dominio verificado— y lo que cambia
+ * es el nombre. Que cada hermandad mandara desde su propio dominio obligaría a
+ * verificar uno por cada una, con sus registros DNS, y eso convierte el alta de
+ * una hermandad en una gestión técnica de días. Así funciona desde el primer
+ * momento y el hermano ve el nombre de SU hermandad, que es lo que mira.
+ *
+ * Las comillas del nombre se quitan porque romperían la cabecera del correo.
+ */
+function firmarComo(nombreHermandad: string): string {
+  const direccion = soloLaDireccion(REMITENTE)
+  const limpio = nombreHermandad.replace(/[<>"\r\n]/g, '').trim()
+  return limpio ? `${limpio} <${direccion}>` : REMITENTE
 }
 
 Deno.serve(async (req: Request) => {
@@ -71,6 +133,10 @@ Deno.serve(async (req: Request) => {
 
   const permiso = await quienLlama(req)
   if (!permiso.ok) return respuesta({ error: permiso.motivo }, 401)
+
+  // Con qué nombre firma esta hermandad, y a dónde van las respuestas.
+  const firma = await comoFirmaSuHermandad(permiso.auth ?? '')
+  const remitente = firmarComo(firma.nombre)
 
   let cuerpo: { para?: string[]; asunto?: string; texto?: string; html?: string; responderA?: string }
   try {
@@ -91,16 +157,22 @@ Deno.serve(async (req: Request) => {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: REMITENTE,
+      from: remitente,
       // Cada hermano en copia OCULTA: mandar el comunicado con las mil
       // direcciones a la vista es filtrar el censo entero, y en una hermandad
       // eso son datos de categoría especial.
-      to: [REMITENTE],
+      to: [soloLaDireccion(REMITENTE)],
       bcc: para,
       subject: cuerpo.asunto,
       ...(cuerpo.html ? { html: cuerpo.html } : {}),
       ...(cuerpo.texto ? { text: cuerpo.texto } : {}),
-      ...(cuerpo.responderA ? { reply_to: cuerpo.responderA } : {}),
+      // A dónde contesta el hermano si le da a «responder». Primero lo que la
+      // hermandad haya puesto en Configuración → Correo; si no, el correo de su
+      // ficha. Sin esto, las respuestas se perderían en un buzón que no lee
+      // nadie, y el hermano creería que ha contestado a su secretaría.
+      ...((cuerpo.responderA ?? firma.responderA)
+        ? { reply_to: cuerpo.responderA || firma.responderA }
+        : {}),
     }),
   })
 

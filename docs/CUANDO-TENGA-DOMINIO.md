@@ -4,7 +4,7 @@ Todo lo que hay que cambiar, y solo eso. **No hay que tocar código**: la
 aplicación usa siempre la dirección desde la que se abre, así que no lleva
 ningún dominio escrito dentro. Es todo configuración.
 
-Supongamos que el dominio es `cabildo.es`. Cambia el nombre por el tuyo.
+Supongamos que el dominio es `gobergo.es`. Cambia el nombre por el tuyo.
 
 ---
 
@@ -14,8 +14,8 @@ Con dominio propio hay **dos remitentes** y conviene no mezclarlos:
 
 | Tipo de correo | Quién lo manda | Ejemplo |
 |---|---|---|
-| Personas escribiendo a personas | **Google Workspace** | `jaime@cabildo.es` |
-| Los que manda la máquina | **Resend** | `no-responder@cabildo.es` |
+| Personas escribiendo a personas | **Google Workspace** | `jaime@gobergo.es` |
+| Los que manda la máquina | **Resend** | `no-responder@gobergo.es` |
 
 **No mandes los automáticos desde Workspace.** Google corta a las ~2.000 al día
 y, sobre todo, si un envío masivo cae en spam se arrastra la reputación de tu
@@ -81,7 +81,7 @@ Una sola línea, un solo `v=spf1`, un solo `~all`. Los `include` se encadenan.
 ### Y el DMARC, que conviene
 
 ```
-TXT  _dmarc  v=DMARC1; p=none; rua=mailto:jaime@cabildo.es
+TXT  _dmarc  v=DMARC1; p=none; rua=mailto:jaime@gobergo.es
 ```
 
 `p=none` es «solo avísame, no rechaces nada». Se empieza así y se endurece
@@ -91,12 +91,12 @@ más adelante, cuando lleves semanas viendo que todo llega bien.
 
 ## 3 · Vercel
 
-**Settings → Domains → Add** → `cabildo.es`
+**Settings → Domains → Add** → `gobergo.es`
 
 Te dice qué registros DNS poner (los `A`/`CNAME` de arriba). Cuando los
 detecte, el certificado HTTPS se genera solo.
 
-Añade también `www.cabildo.es` redirigiendo al principal, que la gente lo
+Añade también `www.gobergo.es` redirigiendo al principal, que la gente lo
 escribe.
 
 ### Y una variable más, el día que abras al público
@@ -123,15 +123,15 @@ suyo. Con la variable puesta, se cae con su error y se vuelve en un rato.
 
 | Campo | Valor |
 |---|---|
-| Site URL | `https://cabildo.es` |
+| Site URL | `https://gobergo.es` |
 
 **Redirect URLs** — se añaden, no se sustituyen:
 
 ```
-https://cabildo.es/login
-https://cabildo.es/hermano
-https://www.cabildo.es/login
-https://www.cabildo.es/hermano
+https://gobergo.es/login
+https://gobergo.es/hermano
+https://www.gobergo.es/login
+https://www.gobergo.es/hermano
 http://localhost:5173/login
 http://localhost:5173/hermano
 ```
@@ -157,7 +157,7 @@ Se pasa de Gmail a Resend. Adiós a la carpeta de spam.
 | Port | `465` | `465` |
 | Username | tu Gmail | `resend` |
 | Password | 16 letras de Google | tu clave `re_...` |
-| Sender email | tu Gmail | `no-responder@cabildo.es` |
+| Sender email | tu Gmail | `no-responder@gobergo.es` |
 | Sender name | `Gobergo` | `Gobergo` |
 
 **Los seis campos, todos de Resend.** Mezclar el host de uno con el remitente
@@ -173,12 +173,17 @@ eso impida a nadie registrarse.
 Esto va por su propia función y **no usa el SMTP de arriba**. Es lo único que
 hoy no puede funcionar sin dominio.
 
+> Solo la dirección, sin nombre delante. El nombre que ve el hermano lo pone
+> cada hermandad: le llega «Hdad. de la Amargura <no-responder@gobergo.es>»,
+> con el nombre sacado de su ficha. Así una sola dirección verificada sirve
+> para todas, y cada una firma con lo suyo.
+
 **Supabase → Edge Functions → Secrets:**
 
 | Name | Value |
 |---|---|
 | `RESEND_API_KEY` | tu clave `re_...` |
-| `CORREO_REMITENTE` | `Gobergo <no-responder@cabildo.es>` |
+| `CORREO_REMITENTE` | `no-responder@gobergo.es` |
 
 **Supabase → Edge Functions → Deploy** una función llamada `enviar-correo` con
 el contenido de `supabase/functions/enviar-correo/index.ts`.
@@ -187,7 +192,7 @@ O desde tu ordenador, si tienes la herramienta de Supabase instalada:
 
 ```
 supabase secrets set RESEND_API_KEY=re_xxx
-supabase secrets set CORREO_REMITENTE="Gobergo <no-responder@cabildo.es>"
+supabase secrets set CORREO_REMITENTE=no-responder@gobergo.es
 supabase functions deploy enviar-correo
 ```
 
@@ -209,7 +214,7 @@ tratamiento:
 
 La aplicación te los marca en rojo: **Configuración → Puesta en marcha**.
 
-El correo de contacto pásalo al del dominio (`hola@cabildo.es`), que es lo que
+El correo de contacto pásalo al del dominio (`hola@gobergo.es`), que es lo que
 va a ver la gente en el aviso legal.
 
 > Esto no es opcional. El censo de una hermandad revela convicciones religiosas
@@ -221,13 +226,13 @@ va a ver la gente en el aviso legal.
 
 Una por una, y en este orden:
 
-- [ ] `https://cabildo.es` abre y el candado del navegador sale cerrado
-- [ ] `https://www.cabildo.es` redirige al anterior
-- [ ] Te llega un correo a `jaime@cabildo.es` desde fuera (Workspace)
+- [ ] `https://gobergo.es` abre y el candado del navegador sale cerrado
+- [ ] `https://www.gobergo.es` redirige al anterior
+- [ ] Te llega un correo a `jaime@gobergo.es` desde fuera (Workspace)
 - [ ] Registras una cuenta con un correo que **no** es el tuyo y llega la
       confirmación
 - [ ] Ese correo llega **a la bandeja de entrada**, no a spam
-- [ ] El enlace del correo abre en `cabildo.es`, no en `vercel.app`
+- [ ] El enlace del correo abre en `gobergo.es`, no en `vercel.app`
 - [ ] Configuración → Correo → «Enviar correo de prueba» funciona
 - [ ] Mandas un comunicado de prueba a dos hermanos y les llega
 - [ ] Configuración → Puesta en marcha: sin nada en rojo

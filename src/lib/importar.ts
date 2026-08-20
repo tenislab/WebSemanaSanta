@@ -221,6 +221,11 @@ export interface Ensayo {
   errores: number
   /** DNI repetidos DENTRO del propio archivo. */
   duplicadosEnArchivo: string[]
+  /**
+   * Cosas que van a pasar y conviene saber antes de darle a importar, pero que
+   * no impiden hacerlo. Hoy: números de hermano pedidos que ya estaban cogidos.
+   */
+  avisos: string[]
 }
 
 /** Un DNI/NIE español bien formado. No se comprueba la letra: hay censos antiguos con erratas y rechazarlos entero sería peor. */
@@ -276,6 +281,27 @@ export function ensayar(
   const vistosEnArchivo = new Map<string, number>()
   const duplicadosEnArchivo: string[] = []
   const salida: FilaImportada[] = []
+
+  // Los números que ya están cogidos, para poder decir en la vista previa el
+  // número REAL que le va a tocar a cada uno.
+  //
+  // Esto tiene que repartir igual que `aplicar`, y por eso está aquí duplicado
+  // con la misma lógica: antes, el ensayo enseñaba el número que venía en la
+  // hoja sin mirar si estaba libre. La secretaría veía «Nuevo Uno → nº 1»,
+  // importaba, y le quedaba con el 3. En una hermandad el número de hermano es
+  // lo más delicado que hay, y encima no avisaba de nada.
+  const avisos: string[] = []
+  const ocupados = new Set(censoActual.filter((h) => h.numero > 0).map((h) => h.numero))
+  let siguienteLibre = Math.max(0, ...ocupados) + 1
+  const reservar = (deseado?: number): number => {
+    if (deseado !== undefined && deseado > 0 && !ocupados.has(deseado)) {
+      ocupados.add(deseado)
+      return deseado
+    }
+    while (ocupados.has(siguienteLibre)) siguienteLibre += 1
+    ocupados.add(siguienteLibre)
+    return siguienteLibre
+  }
 
   const dato = (fila: string[], campo: CampoImportable): string => {
     const i = emparejado[campo]
@@ -343,13 +369,32 @@ export function ensayar(
       direccion: dato(fila, 'direccion'),
       iban: dato(fila, 'iban') || null,
     }
-    if (numero !== undefined) datos.numero = numero
     const nacimiento = dato(fila, 'fechaNacimiento')
     if (nacimiento) datos.fechaNacimiento = nacimiento
 
+    const esError = problemas.length > 0
+    const queLePasa: FilaImportada['queLePasa'] = esError ? 'error' : existente ? 'actualiza' : 'nuevo'
+
+    // El número solo se reparte a los que entran nuevos. A quien ya está no se
+    // le toca el suyo —renumerar a un hermano de 1985 por lo que ponga una
+    // hoja de cálculo sería grave— y a las bajas les corresponde el 0.
+    if (queLePasa === 'nuevo' && estado !== 'Baja') {
+      const tocado = reservar(numero)
+      datos.numero = tocado
+      if (numero !== undefined && numero > 0 && tocado !== numero) {
+        const quien = censoActual.find((h) => h.numero === numero)
+        avisos.push(
+          `Línea ${linea}: el nº ${numero} ya es de ${quien ? quien.nombre : 'otro hermano'}, ` +
+            `así que a ${nombre || 'esta persona'} le tocará el ${tocado}.`,
+        )
+      }
+    } else if (numero !== undefined) {
+      datos.numero = numero
+    }
+
     salida.push({
       linea,
-      queLePasa: problemas.length > 0 ? 'error' : existente ? 'actualiza' : 'nuevo',
+      queLePasa,
       problemas,
       datos,
       idExistente: existente?.id,
@@ -363,6 +408,7 @@ export function ensayar(
     actualizados: salida.filter((f) => f.queLePasa === 'actualiza').length,
     errores: salida.filter((f) => f.queLePasa === 'error').length,
     duplicadosEnArchivo,
+    avisos,
   }
 }
 

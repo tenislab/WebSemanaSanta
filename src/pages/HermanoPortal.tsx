@@ -144,6 +144,48 @@ function guardarSolicitudMuestra(hermandadId: string, nueva: SolicitudAlta) {
   localStorage.setItem(clave, JSON.stringify([nueva, ...prev]))
 }
 
+/**
+ * ¿Estamos atendiendo un «he olvidado mi contraseña»?
+ *
+ * Supabase deja un `type=recovery` detrás de la almohadilla al volver del
+ * enlace del correo. Se lee UNA vez y se quita de la barra de direcciones en
+ * cuanto se ha visto: si se queda, acaba en el historial del navegador y en
+ * cualquier captura de pantalla que haga el hermano para pedir ayuda.
+ *
+ * Pero quitarlo de la barra y guardarlo solo en memoria no basta. React vuelve
+ * a montar la pantalla —en desarrollo siempre, y en producción a la que el
+ * navegador restaura la página— y ahí el estado se pierde. Como el token ya no
+ * está en la dirección, la segunda vez no queda ni rastro: el hermano pulsa el
+ * enlace del correo y aterriza en la pantalla de entrar como si nada.
+ *
+ * Por eso queda apuntado en `sessionStorage`, que sobrevive a los remontajes y
+ * se va al cerrar la pestaña.
+ */
+const CLAVE_RECUPERACION = 'gobergo-recuperando-clave'
+
+function hayRecuperacionEnMarcha(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const tras = window.location.hash.slice(1)
+    if (/(^|&)type=recovery(&|$)/.test(tras)) {
+      sessionStorage.setItem(CLAVE_RECUPERACION, 'si')
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+      return true
+    }
+    return sessionStorage.getItem(CLAVE_RECUPERACION) === 'si'
+  } catch {
+    return false
+  }
+}
+
+function olvidarRecuperacion(): void {
+  try {
+    sessionStorage.removeItem(CLAVE_RECUPERACION)
+  } catch {
+    // sin sessionStorage no hay nada que olvidar
+  }
+}
+
 export default function HermanoPortal() {
   const hermandadPrincipal = useHermandadSettings()
   const nombrePrincipal = hermandadPrincipal.nombreLegal || 'Tu hermandad (modo demo)'
@@ -210,6 +252,20 @@ export default function HermanoPortal() {
   const [dniInput, setDniInput] = useState(() => searchParams.get('dni') ?? '')
   const [claveInput, setClaveInput] = useState('')
   const [errorLogin, setErrorLogin] = useState<string | null>(null)
+  /** El acuse de «te hemos mandado un correo», o el motivo por el que no se puede. */
+  const [recuperacion, setRecuperacion] = useState<{ tipo: 'hecho' | 'aviso'; texto: string } | null>(null)
+  const [recuperando, setRecuperando] = useState(false)
+  /**
+   * Se ha llegado desde el enlace del correo de «he olvidado mi contraseña».
+   *
+   * Supabase deja un `type=recovery` en la parte de después de la almohadilla
+   * y abre una sesión limitada, solo para cambiar la contraseña. Hay que
+   * atenderlo aquí: si no, el hermano pulsa el enlace, aterriza en la pantalla
+   * de entrar como si nada, y no entiende para qué le hemos mandado el correo.
+   */
+  const [poniendoClaveNueva, setPoniendoClaveNueva] = useState(() => hayRecuperacionEnMarcha())
+  const [claveNuevaError, setClaveNuevaError] = useState<string | null>(null)
+  const [claveNuevaHecha, setClaveNuevaHecha] = useState(false)
   const [solicitudEnviada, setSolicitudEnviada] = useState(false)
   const [errorSolicitud, setErrorSolicitud] = useState<string | null>(null)
 
@@ -354,6 +410,51 @@ export default function HermanoPortal() {
     setClaveInput('')
   }
 
+  // El enlace del correo puede llegar SIN recargar la página: si el hermano
+  // ya tenía su área abierta, pulsar el enlace solo cambia lo que va detrás de
+  // la almohadilla y el navegador no vuelve a montar nada. Sin escuchar esto,
+  // se quedaría mirando la pantalla de entrar sin entender qué ha pasado.
+  useEffect(() => {
+    function alCambiarLaDireccion() {
+      if (hayRecuperacionEnMarcha()) setPoniendoClaveNueva(true)
+    }
+    window.addEventListener('hashchange', alCambiarLaDireccion)
+    return () => window.removeEventListener('hashchange', alCambiarLaDireccion)
+  }, [])
+
+  /** Guarda la contraseña nueva de quien viene del enlace del correo. */
+  async function guardarClaveNueva(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const datos = new FormData(e.currentTarget)
+    const nueva = String(datos.get('nueva') ?? '')
+    const repetida = String(datos.get('repetida') ?? '')
+    if (nueva.length < 6) {
+      setClaveNuevaError('La contraseña tiene que tener al menos 6 caracteres.')
+      return
+    }
+    if (nueva !== repetida) {
+      setClaveNuevaError('Las dos contraseñas no coinciden.')
+      return
+    }
+    if (!supabase) {
+      setClaveNuevaError('No hay conexión con la base de datos.')
+      return
+    }
+    const { error } = await supabase.auth.updateUser({ password: nueva })
+    if (error) {
+      // El enlace del correo caduca. Decirlo es más útil que «error»: lo que
+      // hay que hacer es pedir otro, no volver a intentarlo.
+      setClaveNuevaError(
+        'No se ha podido cambiar. El enlace del correo puede haber caducado: pide uno nuevo desde «¿Has olvidado tu contraseña?».',
+      )
+      return
+    }
+    setClaveNuevaError(null)
+    setClaveNuevaHecha(true)
+    setPoniendoClaveNueva(false)
+    olvidarRecuperacion()
+  }
+
   function volverABuscar() {
     setPaso('buscar')
     setHermandadElegida(null)
@@ -363,6 +464,60 @@ export default function HermanoPortal() {
     setErrorLogin(null)
     setErrorSolicitud(null)
     setSolicitudEnviada(false)
+  }
+
+  /**
+   * «He olvidado mi contraseña». Manda al hermano un correo para ponerse otra.
+   *
+   * LO IMPORTANTE AQUÍ NO ES EL CORREO, ES LO QUE SE RESPONDE. La respuesta es
+   * SIEMPRE la misma, exista o no ese DNI en el censo. Si dijera «ese DNI no
+   * está», cualquiera podría ir probando documentos para averiguar quién es
+   * hermano de qué hermandad — y eso revela convicciones religiosas, que es
+   * categoría especial del RGPD. Una pantalla de login no puede ser una forma
+   * de comprobar la fe de nadie.
+   *
+   * Tampoco se enseña a qué dirección se ha mandado, por lo mismo.
+   */
+  async function recuperarClave() {
+    setErrorLogin(null)
+    setRecuperacion(null)
+    const dni = normaliza(dniInput)
+    if (!dni) {
+      setRecuperacion({ tipo: 'aviso', texto: 'Escribe tu DNI y volvemos a intentarlo.' })
+      return
+    }
+
+    // Sin base de datos no hay correos que mandar: la contraseña la cambia la
+    // secretaría desde el panel, y eso es lo que hay que decir.
+    if (!usarSupabase || !supabase || !hermandadElegida) {
+      setRecuperacion({
+        tipo: 'aviso',
+        texto: 'Escribe a tu secretaría para que te pongan una nueva. Desde aquí todavía no se puede.',
+      })
+      return
+    }
+
+    setRecuperando(true)
+    try {
+      const { data: email } = await supabase.rpc('resolver_email_hermano', {
+        p_hermandad_id: hermandadElegida.id,
+        p_dni: dni,
+      })
+      if (email) {
+        await supabase.auth.resetPasswordForEmail(email as string, {
+          redirectTo: `${window.location.origin}/hermano`,
+        })
+      }
+      // Se responde igual haya salido correo o no. Ver el comentario de arriba.
+    } catch {
+      // Un fallo de red tampoco puede delatar nada: mismo mensaje.
+    }
+    setRecuperando(false)
+    setRecuperacion({
+      tipo: 'hecho',
+      texto:
+        'Si ese DNI está en el censo y tiene un correo puesto, te acabamos de mandar un enlace para cambiar la contraseña. Míralo también en la carpeta de spam.',
+    })
   }
 
   /** DNI + contraseña, ya dentro de la hermandad elegida — no hace falta adivinar dónde busca. */
@@ -1044,7 +1199,40 @@ export default function HermanoPortal() {
               </>
             )}
 
-            {paso === 'acceso' && hermandadElegida && (
+            {/* Viene del enlace del correo: lo único que tiene que hacer aquí es
+                poner su contraseña nueva. Se enseña por delante de todo lo
+                demás, hermandad incluida: ya está identificado por el enlace. */}
+            {poniendoClaveNueva && (
+              <div className="portal__recuperar">
+                <h2>Pon tu contraseña nueva</h2>
+                <p className="form-hint">
+                  Has llegado desde el enlace que te mandamos por correo. Elige una contraseña y ya
+                  puedes entrar con ella.
+                </p>
+                <form onSubmit={guardarClaveNueva}>
+                  <div className="form-row">
+                    <label htmlFor="claveNueva">Contraseña nueva</label>
+                    <input id="claveNueva" name="nueva" type="password" autoComplete="new-password" autoFocus required />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="claveNuevaRepetida">Repítela</label>
+                    <input id="claveNuevaRepetida" name="repetida" type="password" autoComplete="new-password" required />
+                  </div>
+                  {claveNuevaError && <p className="form-hint form-hint--error">{claveNuevaError}</p>}
+                  <button type="submit" className="btn btn-primary btn-block">
+                    Guardar y entrar
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {claveNuevaHecha && (
+              <div className="banner-inline banner-inline--accent" style={{ marginBottom: '1rem' }}>
+                Contraseña cambiada. Entra abajo con tu DNI y la nueva.
+              </div>
+            )}
+
+            {paso === 'acceso' && hermandadElegida && !poniendoClaveNueva && (
               <>
                 <button type="button" className="portal__back" onClick={volverABuscar}>
                   ← Cambiar de hermandad
@@ -1109,6 +1297,24 @@ export default function HermanoPortal() {
                       <button type="submit" className="btn btn-primary btn-block">
                         Entrar
                       </button>
+                      {/* Debajo del botón y no arriba: quien se sabe su
+                          contraseña no tiene por qué leer esto. */}
+                      <button
+                        type="button"
+                        className="portal__olvide"
+                        onClick={recuperarClave}
+                        disabled={recuperando}
+                      >
+                        {recuperando ? 'Mandando…' : '¿Has olvidado tu contraseña?'}
+                      </button>
+                      {recuperacion && (
+                        <p
+                          className={`form-hint${recuperacion.tipo === 'hecho' ? ' form-hint--ok' : ''}`}
+                          role="status"
+                        >
+                          {recuperacion.texto}
+                        </p>
+                      )}
                     </form>
                     {!usarSupabase && hermandadElegida.id === ID_HERMANDAD_PRINCIPAL && (
                       <>

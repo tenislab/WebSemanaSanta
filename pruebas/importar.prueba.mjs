@@ -148,4 +148,56 @@ export default async function ({ cargar, caso }) {
   caso('lleva cabecera con el motivo', true, csv.split('\n')[0].includes('Qué pasa'))
   caso('una línea por fila mala, más la cabecera', 4, csv.split('\n').length)
   caso('y el contenido original', true, csv.includes('11111111B'))
+
+  await numeroEnLaVistaPrevia({ cargar, caso })
+}
+
+/**
+ * La vista previa tiene que decir la verdad sobre el número de hermano.
+ *
+ * El caso: la hoja pide el nº 1 para alguien nuevo, pero el 1 ya es de otro.
+ * La vista previa enseñaba «nº 1» y al importar le quedaba el 3. En una
+ * hermandad el número es lo más delicado que hay, y no avisaba de nada.
+ */
+async function numeroEnLaVistaPrevia({ cargar, caso }) {
+  const m = await cargar('src/lib/importar.ts')
+  const censo = [
+    { id: 'h1', numero: 1, nombre: 'Ana', dni: '12345678A' },
+    { id: 'h2', numero: 2, nombre: 'Pepe', dni: '11111111A' },
+  ]
+  const filas = m.leerCsv('Nombre;DNI;Nº hermano\nNuevo Uno;99999999Z;1\n')
+  const emp = m.proponerEmparejado(filas[0])
+  const ens = m.ensayar(filas, emp, censo, 2026)
+
+  // Lo que enseña la vista previa tiene que ser lo que va a pasar.
+  caso('la vista previa no promete un número cogido', false, ens.filas[0].datos.numero === 1)
+  caso('enseña el que de verdad le tocará', 3, ens.filas[0].datos.numero)
+
+  // Y lo dice, en vez de cambiarlo por lo bajini.
+  caso('avisa de que el número pedido estaba cogido', true, ens.avisos.length === 1)
+  caso('y dice de quién era', true, /Ana/.test(ens.avisos[0]))
+  caso('y cuál le toca', true, /3/.test(ens.avisos[0]))
+
+  // Lo que enseña la vista previa y lo que hace la importación coinciden.
+  const res = m.aplicar(ens, censo, { conLosQueYaEstan: 'saltar', clavePorDefecto: 'k' }, () => 'n1')
+  const creado = res.censo.find((h) => h.id === 'n1')
+  caso('la importación da el mismo número que enseñó la previa', ens.filas[0].datos.numero, creado.numero)
+
+  // Si el número pedido está libre, se respeta y no se avisa de nada.
+  const filas2 = m.leerCsv('Nombre;DNI;Nº hermano\nOtro;88888888B;7\n')
+  const ens2 = m.ensayar(filas2, m.proponerEmparejado(filas2[0]), censo, 2026)
+  caso('un número libre se respeta', 7, ens2.filas[0].datos.numero)
+  caso('y no genera aviso', 0, ens2.avisos.length)
+
+  // A quien YA está en el censo no se le toca el número: renumerar a un
+  // hermano de 1985 por lo que ponga una hoja de cálculo sería grave.
+  const filas3 = m.leerCsv('Nombre;DNI;Nº hermano\nAna;12345678A;50\n')
+  const ens3 = m.ensayar(filas3, m.proponerEmparejado(filas3[0]), censo, 2026)
+  caso('a quien ya está no se le reparte número nuevo', 'actualiza', ens3.filas[0].queLePasa)
+
+  // Dos filas nuevas pidiendo el mismo número: la segunda no puede repetirlo.
+  const filas4 = m.leerCsv('Nombre;DNI;Nº hermano\nUno;77777777C;9\nDos;66666666D;9\n')
+  const ens4 = m.ensayar(filas4, m.proponerEmparejado(filas4[0]), censo, 2026)
+  caso('dos filas no se llevan el mismo número', false,
+    ens4.filas[0].datos.numero === ens4.filas[1].datos.numero)
 }
