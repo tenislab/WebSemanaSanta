@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { useCargoDeLaSesion } from '../../lib/permisos'
 import Drawer from '../../components/Drawer'
 import {
   CARGOS,
@@ -79,7 +80,22 @@ export default function Archivo() {
   )
   const [query, setQuery] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<'Todos' | CategoriaDocumento>('Todos')
-  const [viewAsCargo, setViewAsCargo] = useState<Cargo>('Hermano Mayor')
+  /**
+   * EL CARGO DE VERDAD, no uno elegido a mano.
+   *
+   * Este desplegable se llamaba «simulador de permisos» y lo tenía cualquiera.
+   * O sea: al vocal al que se le habían restringido las actas del cabildo le
+   * bastaba con cambiar el desplegable a «Hermano Mayor» y leerlas. No era una
+   * restricción, era una sugerencia.
+   *
+   * Ahora la vista arranca SIEMPRE en el cargo real de quien ha entrado, y solo
+   * el titular —que ya lo ve todo— puede mover el desplegable, que para él sí
+   * es lo que decía ser: una forma de comprobar qué verá su junta.
+   */
+  const cargoReal = useCargoDeLaSesion()
+  const puedeSimular = cargoReal === null
+  const [simulado, setSimulado] = useState<Cargo>('Hermano Mayor')
+  const viewAsCargo: Cargo = puedeSimular ? simulado : ((cargoReal ?? 'Vocal') as Cargo)
   const [selected, setSelected] = useState<Documento | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
@@ -262,18 +278,22 @@ export default function Archivo() {
       </div>
 
       <div className="banner-inline banner-inline--accent">
-        Simulador de permisos — así vería el archivo un/a{' '}
-        <select
-          aria-label="Ver el archivo como"
-          value={viewAsCargo}
-          onChange={(e) => setViewAsCargo(e.target.value as Cargo)}
-        >
-          {CARGOS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        {puedeSimular ? 'Simulador de permisos — así vería el archivo un/a ' : 'Estás viendo el archivo como '}
+        {puedeSimular ? (
+          <select
+            aria-label="Ver el archivo como"
+            value={simulado}
+            onChange={(e) => setSimulado(e.target.value as Cargo)}
+          >
+            {CARGOS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <b>{viewAsCargo}</b>
+        )}
 .{' '}
         {ocultosPorCargo > 0
           ? `${ocultosPorCargo} documento${ocultosPorCargo === 1 ? '' : 's'} no le aparece${ocultosPorCargo === 1 ? '' : 'n'} (los ve solo quien tiene acceso).`

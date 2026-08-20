@@ -44,6 +44,9 @@ export const PIEZAS = [
   ['hermano-y-gestion.sql', 'Ser hermano Y llevar la hermandad a la vez'],
   ['permisos-por-hermandad.sql', 'Que los permisos por cargo sean de cada hermandad'],
   ['colores-hermandad.sql', 'Que el área del hermano lleve los colores de su hermandad'],
+  ['eventos-repeticion.sql', 'Que un culto que se repite siga repitiéndose'],
+  ['suscripcion.sql', 'Que la suscripción sea de la hermandad, no del navegador'],
+  ['plantillas-hermandad.sql', 'Que los modelos y la asistencia no se pierdan al cerrar sesión'],
 ]
 
 const CABECERA = `-- =============================================================================

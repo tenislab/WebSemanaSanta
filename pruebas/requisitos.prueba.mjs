@@ -66,6 +66,8 @@ export default async function ({ cargar, caso }) {
   caso('y es el correo', 'correo', m.requisitosPendientes(casi)[0].id)
 
   await avisoDeEjemplo({ cargar, caso })
+
+  await loQueVaEnLaBase({ cargar, caso })
 }
 
 /**
@@ -104,4 +106,47 @@ async function avisoDeEjemplo({ cargar, caso }) {
     const loComprueba = /hayDatosDeEjemplo\(\)/.test(src)
     caso(`${f.split('/').pop()} solo lo dice si lo comprueba`, true, !loDice || loComprueba)
   }
+}
+
+/**
+ * Auditoría 2026-08 · Lo que vive en el navegador y debería vivir en la base.
+ *
+ * Un patrón repetido por toda la aplicación: un dato de LA HERMANDAD guardado
+ * en `localStorage`. Siempre falla igual de mal y siempre en silencio: quien
+ * entra desde otro ordenador ve otra cosa, y nadie entiende por qué.
+ */
+async function loQueVaEnLaBase({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+
+  // La suscripción. Dos caras: la secretaria se topaba con el muro de pago
+  // aunque la hermandad estuviera al corriente, y desde la consola del
+  // navegador dos líneas bastaban para ponerse el pack «Todo» sin pagar.
+  const susc = await readFile('src/lib/suscripcion.ts', 'utf8')
+  caso('la suscripción se trae del servidor', true, /export async function cargarSuscripcionDeLaBase/.test(susc))
+  caso('y el hook la usa', true, /void cargarSuscripcionDeLaBase\(\)/.test(susc))
+  const sql = await readFile('supabase/suscripcion.sql', 'utf8')
+  caso('hay tabla para ella', true, /create table if not exists suscripciones/.test(sql))
+  // Lo importante: SOLO LECTURA desde el navegador. Si se pudiera escribir,
+  // seguiría siendo gratis para quien sepa abrir la consola.
+  caso('se puede leer la propia', true, /for select to authenticated/.test(sql))
+  caso('pero NO escribir', true, /revoke insert, update, delete on suscripciones from anon, authenticated;/.test(sql))
+
+  // Los permisos por cargo, que además mandaban sobre las otras hermandades.
+  const perm = await readFile('supabase/permisos-por-hermandad.sql', 'utf8')
+  caso('los permisos van por hermandad', true, /and pc\.hermandad_id = p\.hermandad_id/.test(perm))
+  caso('y cada hermandad nace con los suyos', true, /sembrar_permisos_de_fabrica/.test(perm))
+
+  // El correo, que se activaba en un portátil y no salía desde ningún otro.
+  const correo = await readFile('src/lib/correo.ts', 'utf8')
+  caso('la config de correo se comparte', true, /cargarAjustesCorreoDeLaBase/.test(correo))
+  // Y cuando la función no está instalada, que lo diga en cristiano.
+  caso('explica si falta desplegar la función', true, /La función de envío no está instalada/.test(correo))
+
+  // El borrado del artículo 17 tiene que llevarse TODO, no solo la ficha.
+  const rgpd = await readFile('src/lib/rgpd.ts', 'utf8')
+  caso('el borrado RGPD se lleva la solicitud de alta', true, /solicitudes_alta'\)\.delete\(\)/.test(rgpd))
+
+  // Y los adjuntos de la copia, paginados: `list()` da 100 y no avisa.
+  const fs = await readFile('src/lib/filestore.ts', 'utf8')
+  caso('los adjuntos se leen paginados', true, /limit: DE_UNA_VEZ, offset: desde/.test(fs))
 }

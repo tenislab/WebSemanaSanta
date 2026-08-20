@@ -97,10 +97,14 @@ export default function Inventario() {
     const notas = String(data.get('notas') ?? '').trim()
     if (!nombre || !categoria) return
 
-    const nextNumero = Math.max(0, ...enseres.map((x) => x.numero)) + 1
     const nuevo: Enser = {
       id: nuevoId(),
-      numero: nextNumero,
+      // Se numera DENTRO del setEnseres de abajo, con la lista más reciente.
+      // Calcularlo aquí usaba la copia del render: dos personas dando de alta a
+      // la vez —o una sola con la tabla aún cargando— sacaban el mismo número
+      // de inventario para dos enseres distintos. Y el número de inventario es
+      // lo que se pega en la etiqueta del enser.
+      numero: 0,
       nombre,
       categoria,
       ubicacion: ubicacion || 'Sin ubicar',
@@ -110,7 +114,7 @@ export default function Inventario() {
       fechaAlta: hoy(),
       notas,
     }
-    setEnseres((prev) => [nuevo, ...prev])
+    setEnseres((prev) => [{ ...nuevo, numero: Math.max(0, ...prev.map((x) => x.numero)) + 1 }, ...prev])
     setJustAddedId(nuevo.id)
     setFormOpen(false)
     setFilter('Todos')

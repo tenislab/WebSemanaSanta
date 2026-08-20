@@ -89,18 +89,29 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
             Domiciliado en tu cuenta {maskIban(hermano.iban)} · cobro previsto el {cuota.fechaCobro}
           </span>
         )}
-        {cuota.domiciliada && !hermano.iban && (
+        {cuota.estado !== 'Pagada' && cuota.domiciliada && !hermano.iban && (
           <span className="recibo-doc__iban recibo-doc__iban--warn">
             Marcada como domiciliada, pero {hermano.nombre.split(' ')[0]} no tiene cuenta bancaria
             registrada
           </span>
         )}
-        {!cuota.domiciliada && hermandad.iban && (
+        {/* YA PAGADA: esto es un justificante, no una petición de cobro.
+            Antes seguía diciendo «puedes transferir a ES47…» debajo de una
+            cuota cobrada hace tres meses. El hermano que lo recibía —o que lo
+            imprimía desde su área— entendía que aún debía algo, y más de uno
+            habría pagado dos veces. */}
+        {cuota.estado === 'Pagada' && (
+          <span className="recibo-doc__iban recibo-doc__iban--ok">
+            Recibí de {hermano.nombre} el importe de este recibo
+            {cuota.fechaPago ? `, el ${cuota.fechaPago}` : ''}.
+          </span>
+        )}
+        {cuota.estado !== 'Pagada' && !cuota.domiciliada && hermandad.iban && (
           <span className="recibo-doc__iban">
             Pago manual · puedes transferir a {maskIban(hermandad.iban)}
           </span>
         )}
-        {!cuota.domiciliada && !hermandad.iban && (
+        {cuota.estado !== 'Pagada' && !cuota.domiciliada && !hermandad.iban && (
           <span className="recibo-doc__iban">Pago manual · previsto el {cuota.fechaCobro}</span>
         )}
       </div>

@@ -171,6 +171,61 @@ export default async function ({ cargar, caso }) {
   caso('a quien entra nuevo sí se le pone el año en curso', 2026, trasAlta.censo[0].antiguedad)
   caso('y se le deduce «Nuevo»', 'Nuevo', trasAlta.censo[0].estado)
 
+  // --- La columna «Baja» con Sí/No importaba el censo AL REVÉS ---
+  //
+  // Hay dos maneras de escribir esa columna y significan lo contrario:
+  //   «Activo: Sí»  →  sigue        «Baja: Sí»  →  se fue
+  // La lectura de siempre metía «sí» en la lista de activos, así que con una
+  // hoja titulada «Baja» importaba a los que se habían ido como ACTIVOS y
+  // rechazaba a los que seguían. El censo entraba del revés y no había forma
+  // de notarlo hasta que alguien echara cuentas.
+  caso('con cabecera «Baja», un sí es una baja', 'Baja', m.estadoDe('Sí', true))
+  caso('y un no es que sigue', 'Activo', m.estadoDe('No', true))
+  caso('con cabecera «Activo», al revés', 'Activo', m.estadoDe('Sí', false))
+  // Un valor con nombre propio manda sobre el sí/no: quien escribe «Activo»
+  // está diciendo la situación, no respondiendo a una pregunta.
+  caso('«Activo» escrito manda sobre la cabecera', 'Activo', m.estadoDe('Activo', true))
+  caso('reconoce las cabeceras negativas', true, m.cabeceraEsNegativa('Baja'))
+  caso('y «Fallecido» también', true, m.cabeceraEsNegativa('Fallecido'))
+  caso('«Activo» no es negativa', false, m.cabeceraEsNegativa('Activo'))
+
+  // De punta a punta, con la hoja entera.
+  const cabBaja = ['Nombre', 'DNI', 'Baja']
+  const hojaBaja = m.ensayar(
+    [cabBaja, ['Se fue', '10000001A', 'Sí'], ['Sigue aquí', '10000002B', 'No']],
+    m.proponerEmparejado(cabBaja), [], 2026,
+  )
+  const trasBaja = m.aplicar(hojaBaja, [], { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, (() => { let n = 0; return () => `n${++n}` })())
+  caso('el que se fue entra de baja', 'Baja', trasBaja.censo.find((h) => h.nombre === 'Se fue')?.estado)
+  caso('y el que sigue, activo', 'Activo', trasBaja.censo.find((h) => h.nombre === 'Sigue aquí')?.estado)
+  // Y a las bajas les toca el número 0, no uno del censo.
+  caso('la baja no ocupa número', 0, trasBaja.censo.find((h) => h.nombre === 'Se fue')?.numero)
+
+  // --- La fecha de nacimiento, siempre en ISO ---
+  // Las hojas españolas la traen dd/mm/aaaa y se guardaba tal cual, o sea una
+  // cadena que no es una fecha. La segmentación por edad («los mayores de 65»,
+  // «los menores necesitan tutor») dejaba de encontrar a nadie.
+  caso('dd/mm/aaaa se convierte', '1971-03-14', m.fechaIso('14/03/1971'))
+  caso('con guiones también', '1971-03-14', m.fechaIso('14-03-1971'))
+  caso('con puntos también', '1971-03-14', m.fechaIso('14.03.1971'))
+  caso('en ISO se queda igual', '1971-03-14', m.fechaIso('1971-03-14'))
+  caso('rellena los ceros', '1971-03-04', m.fechaIso('4/3/1971'))
+  // Un 31 de febrero se cuela en cualquier comprobación de rangos.
+  caso('una fecha que no existe se rechaza', null, m.fechaIso('31/02/1990'))
+  caso('y lo que no es fecha, también', null, m.fechaIso('el año pasado'))
+  caso('vacío no da error, da nada', null, m.fechaIso(''))
+
+  const cabNac = ['Nombre', 'DNI', 'Fecha de nacimiento']
+  const conNac = m.ensayar([cabNac, ['Ana', '20000001A', '14/03/1971']], m.proponerEmparejado(cabNac), [], 2026)
+  caso('la importación la guarda en ISO', '1971-03-14', conNac.filas[0].datos.fechaNacimiento)
+  // Y si no se entiende, se avisa en vez de guardar basura.
+  const nacMala = m.ensayar([cabNac, ['Ana', '20000001A', 'por ahí']], m.proponerEmparejado(cabNac), [], 2026)
+  caso('una fecha ilegible se avisa', true, nacMala.filas[0].problemas.some((p) => /fecha de nacimiento/i.test(p)))
+
+  // --- El DNI se guarda limpio ---
+  caso('quita puntos y guiones', '12345678A', m.limpiarDni('12.345.678-A'))
+  caso('y espacios y minúsculas', '12345678A', m.limpiarDni(' 12345678 a '))
+
   // Saltar en vez de actualizar.
   const r2 = m.aplicar(e, censoCompleto, { conLosQueYaEstan: 'saltar', clavePorDefecto: 'c' }, () => 'x')
   caso('con «saltar», no se actualiza a nadie', 0, r2.actualizados)

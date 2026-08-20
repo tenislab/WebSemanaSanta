@@ -190,13 +190,41 @@ export async function enviarCorreo(mensaje: {
       // El cuerpo del error trae el motivo de verdad (dominio sin verificar,
       // clave ausente…). Sin él, todo se leía como «error desconocido».
       const detalle = await leerDetalle(error)
-      return { ok: false, error: detalle ?? error.message }
+      return { ok: false, error: detalle ?? explicarFalloDeEnvio(error) }
     }
     if (data?.error) return { ok: false, error: data.error }
     return { ok: true, enviados: data?.enviados ?? para.length }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudo contactar con el servidor de correo.' }
   }
+}
+
+/**
+ * Traduce el fallo de `functions.invoke` a algo que se pueda arreglar.
+ *
+ * EL CASO REAL: la función `enviar-correo` no está desplegada todavía.
+ * Supabase devuelve entonces un «Failed to send a request to the Edge
+ * Function» o un 404 pelado, que no le dice nada a nadie. La hermandad manda
+ * un comunicado, ve un error incomprensible, y da por hecho que la aplicación
+ * está rota — cuando lo que falta es un paso de instalación de diez minutos.
+ */
+function explicarFalloDeEnvio(error: unknown): string {
+  const crudo = (error as { message?: string })?.message ?? ''
+  const estado = (error as { context?: { status?: number } })?.context?.status
+  const noExiste =
+    estado === 404 ||
+    /not found|failed to send a request|failed to fetch|function not found/i.test(crudo)
+  if (noExiste) {
+    return (
+      'La función de envío no está instalada en Supabase todavía. ' +
+      'Hay que desplegar «enviar-correo» y poner sus dos secretos (RESEND_API_KEY y ' +
+      'CORREO_REMITENTE). Está explicado en docs/CUANDO-TENGA-DOMINIO.md, apartado 6.'
+    )
+  }
+  if (estado === 401 || estado === 403) {
+    return 'La función de envío ha rechazado la petición. Suele ser que falta la clave RESEND_API_KEY en los secretos de Supabase.'
+  }
+  return crudo || 'No se pudo contactar con el servidor de correo.'
 }
 
 /** El mensaje de error que devuelve la función, que es el que de verdad explica qué pasa. */

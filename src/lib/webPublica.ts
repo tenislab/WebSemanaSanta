@@ -1309,7 +1309,41 @@ export function getWebPublica(): WebPublica {
  */
 export function saveWebPublica(web: WebPublica) {
   guardarConAviso(CLAVE_WEB_PUBLICA, web)
-  subirWebAlServidor(web)
+  void subirWebAlServidor(web)
+}
+
+/**
+ * Como `saveWebPublica`, pero ESPERANDO y contando qué ha pasado.
+ *
+ * La versión de arriba se traga el fallo a propósito: se llama en cada tecla
+ * que se escribe en el editor y no puede estar interrumpiendo. Pero al pulsar
+ * «Publicar» hay que saberlo, y sobre todo hay que saberlo cuando el enlace ya
+ * es de otra hermandad: ahí la subida falla SIEMPRE y en silencio, así que la
+ * hermandad daba a publicar, veía su vista previa perfecta, mandaba el enlace
+ * por el grupo de WhatsApp… y ese enlace enseñaba la web de otra gente.
+ */
+export async function publicarWeb(web: WebPublica): Promise<{ ok: boolean; error?: string }> {
+  guardarConAviso(CLAVE_WEB_PUBLICA, web)
+  return subirWebAlServidorContando(web)
+}
+
+/** ¿Está libre este enlace, o ya es de otra hermandad? */
+export async function enlaceLibre(slug: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase || !slug.trim()) return true
+  try {
+    const hermandadId = await hermandadActualId()
+    const { data, error } = await supabase
+      .from('web_publica')
+      .select('hermandad_id')
+      .eq('slug', slug.trim())
+      .limit(1)
+      .maybeSingle()
+    if (error) return true
+    // Libre si no lo tiene nadie, o si ya es nuestro.
+    return !data || (data as { hermandad_id: string }).hermandad_id === hermandadId
+  } catch {
+    return true
+  }
 }
 
 /**
@@ -1317,6 +1351,42 @@ export function saveWebPublica(web: WebPublica) {
  * errores a propósito: esto es un extra, no el guardado de verdad.
  */
 let avisadoDeSubida = false
+
+/**
+ * Sube la web y DEVUELVE el motivo si no ha podido.
+ *
+ * El caso que importa: el enlace (`slug`) tiene un índice único en toda la
+ * base. Si otra hermandad ya usa «hermandad-del-rocio», el upsert choca y
+ * devuelve un error de clave duplicada — que en crudo dice
+ * «duplicate key value violates unique constraint», o sea nada.
+ */
+export async function subirWebAlServidorContando(web: WebPublica): Promise<{ ok: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) return { ok: true }
+  try {
+    const hermandadId = await hermandadActualId()
+    if (!hermandadId) return { ok: false, error: 'No se ha podido saber a qué hermandad pertenece esta sesión.' }
+    const { error } = await supabase
+      .from('web_publica')
+      .upsert(
+        { hermandad_id: hermandadId, slug: web.slug, publicada: web.publicada, datos: web },
+        { onConflict: 'hermandad_id' },
+      )
+    if (error) {
+      const duplicado = /duplicate key|unique constraint|23505/i.test(error.message)
+      return {
+        ok: false,
+        error: duplicado
+          ? `El enlace «${web.slug}» ya lo usa otra hermandad. Elige otro en Ajustes → Enlace de la web.`
+          : `No se ha podido publicar: ${error.message}`,
+      }
+    }
+    avisadoDeSubida = false
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido publicar.' }
+  }
+}
+
 export async function subirWebAlServidor(web: WebPublica): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false
   try {

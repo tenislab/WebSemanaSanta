@@ -5560,3 +5560,7 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
   max-height: 100%;
   object-fit: contain;
 }
+
+/* El «recibí» de un recibo ya cobrado: verde discreto, no rojo de aviso.
+   Es una confirmación, no un problema. */
+.recibo-doc__iban--ok { color: var(--ok-fg); }

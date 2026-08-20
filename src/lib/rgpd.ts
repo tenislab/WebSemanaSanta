@@ -103,7 +103,37 @@ export function exportarDatosHermano(datos: DatosHermano): string {
  */
 export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[] | null> {
   if (isSupabaseConfigured && supabase) {
+    /**
+     * TAMBIÉN LO QUE QUEDA FUERA DE SU FICHA.
+     *
+     * Borrar la fila de `hermanos` no era una supresión: dejaba atrás la
+     * SOLICITUD DE ALTA con la que entró, y esa fila lleva su nombre, su DNI,
+     * su correo, su teléfono y —esto es lo grave— la contraseña que propuso,
+     * escrita en claro.
+     *
+     * O sea que después de ejercer su derecho de supresión del artículo 17,
+     * sus datos seguían en la base. Y no unos cualquiera: los de un censo de
+     * hermandad, que revelan convicciones religiosas y son categoría especial
+     * del artículo 9.
+     *
+     * Se busca por DNI y por correo porque la solicitud es anterior a que
+     * existiera su ficha: no hay ningún identificador que las una.
+     */
+    const { data: ficha } = await supabase
+      .from('hermanos')
+      .select('dni, email')
+      .eq('id', hermanoId)
+      .maybeSingle()
+    const suDni = (ficha as { dni?: string } | null)?.dni?.trim()
+    const suEmail = (ficha as { email?: string } | null)?.email?.trim()
+
     await supabase.from('hermanos').delete().eq('id', hermanoId)
+
+    // Las solicitudes de alta, por los dos caminos. Se hace DESPUÉS de borrar
+    // la ficha: si algo de esto fallara, lo importante ya está hecho.
+    if (suDni) await supabase.from('solicitudes_alta').delete().eq('dni', suDni)
+    if (suEmail) await supabase.from('solicitudes_alta').delete().eq('email', suEmail)
+
     const { data, error } = await supabase.from('hermanos').select('*').order('numero')
     if (error) {
       // OJO: null = «no se pudo releer», NO «el censo está vacío». Devolver []
@@ -126,6 +156,26 @@ export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[] |
   localStorage.setItem(CLAVES_DATOS.cuotas, JSON.stringify(cuotasRest))
   localStorage.setItem(CLAVES_DATOS.papeletas, JSON.stringify(papeletasRest))
   localStorage.setItem(CLAVES_DATOS.incidencias, JSON.stringify(incidenciasRest))
+
+  // Y su solicitud de alta, que lleva el DNI y la contraseña en claro.
+  try {
+    const elBorrado = hermanos.find((h) => h.id === hermanoId)
+    if (elBorrado) {
+      const crudo = localStorage.getItem('cabildo-solicitudes-alta')
+      if (crudo) {
+        const solicitudes = JSON.parse(crudo) as { dni?: string; email?: string }[]
+        const limpio = (v?: string) => (v ?? '').replace(/[\s.-]/g, '').toUpperCase()
+        const quedan = solicitudes.filter(
+          (s) =>
+            limpio(s.dni) !== limpio(elBorrado.dni) &&
+            (s.email ?? '').trim().toLowerCase() !== (elBorrado.email ?? '').trim().toLowerCase(),
+        )
+        localStorage.setItem('cabildo-solicitudes-alta', JSON.stringify(quedan))
+      }
+    }
+  } catch {
+    // Una solicitud que no se pueda leer no debe impedir el borrado del resto.
+  }
 
   return hermanosRest
 }

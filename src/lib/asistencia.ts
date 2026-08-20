@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
+import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 
 /**
  * Asistencia al día de salida (estación de penitencia). Para cada edición
@@ -44,6 +45,22 @@ export function setAsistencia(anio: number, hermanoId: string, registro: Registr
   localStorage.setItem(CLAVE_ASISTENCIA, JSON.stringify(mapa))
   // Avisa a otras pestañas/hooks del mismo navegador.
   window.dispatchEvent(new Event('cabildo-asistencia'))
+  /**
+   * Y a la base de datos. Esto NO es un ajuste que se pueda rehacer: se marca
+   * la madrugada del Viernes Santo, tramo por tramo, desde el móvil del
+   * diputado. Guardado solo en ese móvil, se perdía al cerrar sesión — y
+   * además el resto de la junta no lo veía.
+   */
+  void guardarPlantilla('asistencia', mapa)
+}
+
+/** Trae la asistencia de la hermandad y la deja en la copia local. */
+export async function cargarAsistenciaDeLaBase(): Promise<MapaAsistencia | null> {
+  const m = await traerPlantilla<MapaAsistencia>('asistencia')
+  if (!m || typeof m !== 'object') return null
+  localStorage.setItem(CLAVE_ASISTENCIA, JSON.stringify(m))
+  window.dispatchEvent(new Event('cabildo-asistencia'))
+  return m
 }
 
 export function etiquetaAsistencia(estado: EstadoAsistencia): string {

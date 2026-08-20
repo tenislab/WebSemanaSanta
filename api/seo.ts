@@ -56,6 +56,21 @@ async function webPublicada(host: string): Promise<WebPublica | null> {
   }
 }
 
+/**
+ * ¿Este dominio es el de la propia aplicación?
+ *
+ * Misma regla que en `api/w.ts`: los despliegues de Vercel, el ordenador de
+ * casa y el dominio propio de Gobergo cuando lo haya.
+ */
+function esCasa(host: string): boolean {
+  const h = host.trim().toLowerCase().replace(/:\d+$/, '').replace(/^www\./, '')
+  if (!h || h === 'localhost' || h === '127.0.0.1') return true
+  if (h.endsWith('.vercel.app')) return true
+  const propio = (process.env.DOMINIO_APP ?? process.env.VITE_DOMINIO_APP ?? '')
+    .trim().toLowerCase().replace(/^www\./, '')
+  return !!propio && h === propio
+}
+
 export default async function handler(req: Peticion, res: Respuesta) {
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
   const origen = `https://${host}`
@@ -63,11 +78,31 @@ export default async function handler(req: Peticion, res: Respuesta) {
   const web = await webPublicada(host)
 
   if (!web) {
+    /**
+     * Aquí no vive ninguna hermandad. Puede ser una de dos cosas, y NO se
+     * responde igual:
+     *
+     *   a) El dominio de Gobergo. Es nuestra página de venta y queremos que
+     *      Google la indexe. Devolver `Disallow: /` aquí —que es lo que se
+     *      hacía— le estaba diciendo al buscador que no mirase NADA: ni la
+     *      portada, ni las webs de las hermandades que cuelgan de
+     *      /w/<slug>. O sea, ninguna hermandad sin dominio propio podía
+     *      aparecer en Google. Y la aplicación les vende justo lo contrario.
+     *
+     *   b) Un dominio recién apuntado que nadie ha configurado todavía. Ahí
+     *      sí se cierra: que Google indexe una web a medio hacer cuesta meses
+     *      de quitar.
+     */
     res.setHeader('Content-Type', esRobots ? 'text/plain; charset=utf-8' : 'application/xml; charset=utf-8')
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400')
+    if (!esRobots) {
+      res.send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>\n')
+      return
+    }
     res.send(
-      esRobots
-        ? 'User-agent: *\nDisallow: /\n'
-        : '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>\n',
+      esCasa(host)
+        ? `User-agent: *\nAllow: /\n\nSitemap: ${origen}/sitemap.xml\n`
+        : 'User-agent: *\nDisallow: /\n',
     )
     return
   }

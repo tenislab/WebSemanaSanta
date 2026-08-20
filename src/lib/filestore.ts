@@ -122,8 +122,31 @@ export async function todosLosArchivos(): Promise<{ id: string; blob: File | Blo
     // `list(dir)` devuelve los nombres SIN la carpeta delante, así que el id
     // que sale de aquí es el mismo de siempre y las copias de seguridad
     // hechas antes de repartir por carpetas se siguen restaurando igual.
-    const { data: lista, error } = await cliente.storage.from(BUCKET).list(dir)
-    if (error || !lista) return []
+    /**
+     * PAGINADO. `list()` devuelve como mucho 100 objetos por defecto, y no
+     * avisa de que hay más: simplemente devuelve cien.
+     *
+     * O sea que la copia de seguridad se llevaba 100 adjuntos y el resto se
+     * quedaba fuera EN SILENCIO. Un archivo documental con 400 escaneos daba
+     * una copia con 100 y un mensaje de «Copia descargada» en verde. Eso se
+     * descubre el día que hace falta restaurar, que es el peor día posible.
+     */
+    const lista: { name: string }[] = []
+    const DE_UNA_VEZ = 1000
+    for (let desde = 0; ; desde += DE_UNA_VEZ) {
+      const { data, error } = await cliente.storage
+        .from(BUCKET)
+        .list(dir, { limit: DE_UNA_VEZ, offset: desde })
+      if (error) {
+        // Con lo que llevemos: media copia avisada es mejor que ninguna, y el
+        // que llama ya compara cuántos esperaba.
+        break
+      }
+      if (!data || data.length === 0) break
+      lista.push(...data)
+      if (data.length < DE_UNA_VEZ) break
+    }
+    if (lista.length === 0) return []
     const resultados = await Promise.all(
       lista.map(async (obj) => {
         const { data } = await cliente.storage.from(BUCKET).download(`${dir}/${obj.name}`)
@@ -157,10 +180,16 @@ export async function todosLosArchivos(): Promise<{ id: string; blob: File | Blo
 export async function borrarTodosLosArchivos(): Promise<void> {
   if (isSupabaseConfigured && supabase) {
     const dir = await carpeta()
-    const { data: lista, error } = await supabase.storage.from(BUCKET).list(dir)
-    if (error || !lista || lista.length === 0) return
-    await supabase.storage.from(BUCKET).remove(lista.map((o) => `${dir}/${o.name}`))
-    return
+    // Paginado por el mismo motivo que al leer: `list()` da 100 por defecto.
+    // Aquí el fallo es al revés y también malo: creía haber vaciado la carpeta
+    // y quedaban dentro todos los adjuntos a partir del 101.
+    const cli = supabase
+    for (;;) {
+      const { data, error } = await cli.storage.from(BUCKET).list(dir, { limit: 1000 })
+      if (error || !data || data.length === 0) return
+      await cli.storage.from(BUCKET).remove(data.map((o) => `${dir}/${o.name}`))
+      if (data.length < 1000) return
+    }
   }
 
   const db = await abrirDb()

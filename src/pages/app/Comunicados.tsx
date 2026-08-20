@@ -16,7 +16,7 @@ import {
   type RedSocial,
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
-import { CLAVES_DATOS, leerPersistido, leerDatos } from '../../lib/persistencia'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { getCampana } from '../../lib/campana'
 import { useTramos } from '../../lib/tramos'
@@ -87,7 +87,16 @@ export default function Comunicados() {
   const canales = useLista(CLAVES_CATALOGOS.canalesComunicado, CANALES)
   const segmentos = useLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS)
   const [etiquetas] = useEtiquetas()
-  const hermanos = useMemo(() => leerPersistido<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  /**
+   * `leerDatos` y no `leerPersistido`: con base de datos, lista vacía en vez
+   * de los DOCE HERMANOS DE EJEMPLO.
+   *
+   * Aquí es donde peor sienta. Con `leerPersistido`, quien entraba desde otro
+   * ordenador y mandaba un comunicado se lo mandaba a doce direcciones
+   * inventadas: la pantalla decía «enviado a 12 hermanos» y ni uno solo era de
+   * la hermandad. El alcance mentía y el envío también.
+   */
+  const hermanos = useMemo(() => leerDatos<Hermano>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
 
   /** Si el destinatario es una etiqueta, devuelve los hermanos que la tienen (con su email). */
   function hermanosDeDestinatario(destinatarios: string): Hermano[] {

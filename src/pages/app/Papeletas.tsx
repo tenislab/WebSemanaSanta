@@ -6,7 +6,7 @@ import MenuAcciones from '../../components/MenuAcciones'
 import PapeletaTicket from '../../components/PapeletaTicket'
 import PapeletaModeloRender from '../../components/PapeletaModeloRender'
 import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
-import { getModeloPapeleta, type ModeloPapeleta } from '../../lib/modeloPapeleta'
+import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, METODOS_PAGO_PAPELETA, type MetodoPagoPapeleta, type Papeleta } from '../../data/papeletas'
 import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
@@ -134,6 +134,12 @@ export default function Papeletas() {
   const [ajustesOpen, setAjustesOpen] = useState(false)
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modelo, setModelo] = useState<ModeloPapeleta | null>(() => getModeloPapeleta())
+  // El modelo de la hermandad, no el que hubiera en este navegador.
+  useEffect(() => {
+    void cargarModeloPapeletaDeLaBase().then((m) => {
+      if (m) setModelo(m)
+    })
+  }, [])
   // Salidas de la papeleta: móvil (con QR, para el correo), física (sin QR, para
   // imprimir) o las dos a la vez (se muestran e imprimen ambas).
   const [variantePapeleta, setVariantePapeleta] = useState<'movil' | 'fisica' | 'ambas'>('movil')

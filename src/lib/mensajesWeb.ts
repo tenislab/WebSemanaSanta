@@ -183,7 +183,16 @@ export async function enviarMensajeWeb(
       console.error('No se pudo enviar el mensaje:', error.message)
       return { ok: false, error: 'No se ha podido enviar. Inténtalo de nuevo en un momento.' }
     }
+    // Y NO se guarda copia en el navegador. Quien manda este formulario es un
+    // VISITANTE de la web, no la hermandad: guardárselo en su navegador le
+    // metía el mensaje en «su» buzón. Si además esa persona es hermana y entra
+    // luego en el panel, se encontraba sus propios mensajes mezclados con los
+    // que había recibido la hermandad.
+    return { ok: true }
   }
+
+  // Sin base de datos, el buzón vive en este navegador y aquí sí hay que
+  // dejarlo: es el único sitio donde puede estar.
   localStorage.setItem(CLAVE_MENSAJES_WEB, JSON.stringify([nuevo, ...getMensajesWeb()]))
   return { ok: true }
 }

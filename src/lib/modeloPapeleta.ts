@@ -3,6 +3,7 @@ import type { Papeleta } from '../data/papeletas'
 import { formatCurrency } from './format'
 import { guardarConAviso } from './persistencia'
 import { datosVerificacionDe, urlVerificacion } from './verificacion'
+import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 
 /**
  * Modelo de papeleta personalizado. La hermandad sube la imagen de SU propio
@@ -90,10 +91,25 @@ export function getModeloPapeleta(): ModeloPapeleta | null {
 
 export function saveModeloPapeleta(modelo: ModeloPapeleta) {
   guardarConAviso(CLAVE_STORAGE, modelo)
+  // Y a la base de datos, o se pierde al cerrar sesión: la limpieza del
+  // navegador se lleva todo lo que empieza por `cabildo-`, y esto no estaba en
+  // ninguna otra parte.
+  void guardarPlantilla('modelo_papeleta', modelo)
+}
+
+/** Trae el modelo de la hermandad y lo deja en la copia local. */
+export async function cargarModeloPapeletaDeLaBase(): Promise<ModeloPapeleta | null> {
+  const m = await traerPlantilla<ModeloPapeleta>('modelo_papeleta')
+  if (m && typeof m.imagenDataUrl === 'string' && Array.isArray(m.campos)) {
+    guardarConAviso(CLAVE_STORAGE, m)
+    return m
+  }
+  return null
 }
 
 export function borrarModeloPapeleta() {
   localStorage.removeItem(CLAVE_STORAGE)
+  void guardarPlantilla('modelo_papeleta', null)
 }
 
 /**

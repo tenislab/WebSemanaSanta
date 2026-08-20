@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
+import { isSupabaseConfigured, supabase } from './supabase'
 
 /**
  * Suscripción de la hermandad a la app. Sin suscripción activa, el panel queda
@@ -139,6 +140,44 @@ export function constaLaSuscripcion(): boolean {
  * 'mensual' | 'anual' sin packs) al nuevo: una suscripción antigua activa pasa
  * a considerarse el pack «Todo», para no dejar a nadie fuera tras el cambio.
  */
+/**
+ * La suscripción de la hermandad, traída de la base de datos.
+ *
+ * POR QUÉ NO BASTA CON `getSuscripcion()`. Eso lee `localStorage`, o sea el
+ * navegador de quien mira. Dos problemas de golpe:
+ *
+ *   · La secretaria entra desde el ordenador de la casa de hermandad y se
+ *     encuentra el muro de pago, aunque la hermandad esté al corriente: en SU
+ *     navegador la clave no existe.
+ *   · Y desde la consola del navegador, dos líneas bastan para ponerse el pack
+ *     «Todo» sin pagar.
+ *
+ * Esta la escribe solo el servidor. Se deja copia local para que la pantalla
+ * no parpadee mientras llega, pero la que manda es esta.
+ */
+export async function cargarSuscripcionDeLaBase(): Promise<Suscripcion | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  try {
+    const { data, error } = await supabase.rpc('mi_suscripcion')
+    const fila = (data as Record<string, unknown>[] | null)?.[0]
+    if (error || !fila) return null
+    const s: Suscripcion = {
+      activa: fila.activa === true,
+      pack: (fila.pack as PackId | null) ?? null,
+      periodo: (fila.periodo as Periodo | null) ?? null,
+      desde: (fila.desde as string | null) ?? null,
+    }
+    try {
+      localStorage.setItem(CLAVE_SUSCRIPCION, JSON.stringify(s))
+    } catch {
+      // Sin localStorage se sigue: ya está en memoria.
+    }
+    return s
+  } catch {
+    return null
+  }
+}
+
 export function getSuscripcion(): Suscripcion {
   const raw = leerPersistido<Record<string, unknown>>(CLAVE_SUSCRIPCION, SUSCRIPCION_INICIAL as unknown as Record<string, unknown>)
   const activa = Boolean(raw.activa)
@@ -212,6 +251,12 @@ export function useSuscripcion() {
       setSuscripcion(getSuscripcion())
     }
     window.addEventListener('storage', sincronizar)
+    // Y la de la hermandad, que es la que manda: sin esto, cada miembro de la
+    // junta veía la suscripción de SU navegador y quien entraba por primera
+    // vez desde otro ordenador se topaba con el muro de pago.
+    void cargarSuscripcionDeLaBase().then((r) => {
+      if (r) setSuscripcion(r)
+    })
     return () => window.removeEventListener('storage', sincronizar)
   }, [])
 

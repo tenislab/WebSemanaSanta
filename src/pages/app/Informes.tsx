@@ -6,11 +6,17 @@ import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency, formatDate } from '../../lib/format'
 import { toCsv, descargarArchivo } from '../../lib/csv'
-import { HERMANOS_INICIALES } from '../../data/hermanos'
-import { CUOTAS_INICIALES } from '../../data/cuotas'
-import { PAPELETAS_INICIALES } from '../../data/papeletas'
-import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
-import { ENSERES_INICIALES } from '../../data/enseres'
+import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
+import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
+import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
+import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import { ENSERES_INICIALES, type Enser } from '../../data/enseres'
+import { useSupabaseTable } from '../../lib/supabaseSync'
+import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
+import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
+import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
+import { enserToRow, rowToEnser } from '../../lib/db/enseres'
 import { useTramos, etiquetaTramo, type Tramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
@@ -27,15 +33,33 @@ interface Informe {
   filas: (string | number)[][]
 }
 
-function construirInformes(tramos: Tramo[]): Informe[] {
-  // Los informes se calculan sobre los datos guardados (localStorage), no
-  // sobre los de ejemplo: reflejan las altas, pagos y cambios hechos en la app.
-  const hermanosActuales = leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
-  const cuotasActuales = leerDatos(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+/**
+ * Los informes, calculados sobre los datos QUE SE LE PASAN.
+ *
+ * Antes los leía él mismo del navegador con `leerDatos`. Y esta es la única
+ * página de datos que no montaba `useSupabaseTable`, así que trabajaba con lo
+ * que otra pantalla hubiera dejado espejado — o con nada.
+ *
+ * El destrozo concreto: el ESTADO DE CUENTAS, que es el documento que se lleva
+ * al cabildo general y se entrega en la diócesis, se imprimía con las cuatro
+ * partidas de ingresos y las doce de gastos a 0,00 €. Total ingresos 0,00,
+ * total gastos 0,00, saldo a 31 de diciembre 0,00. Sin un aviso. Y como el
+ * total cuadra consigo mismo, nada delata el error hasta que alguien compara
+ * con el extracto del banco.
+ *
+ * La variante silenciosa era aún más probable: imprimir con la foto de hace un
+ * mes, sin los movimientos posteriores.
+ */
+function construirInformes(
+  tramos: Tramo[],
+  hermanosActuales: Hermano[],
+  cuotasActuales: Cuota[],
+  papeletasTodas: Papeleta[],
+  movimientosActuales: Movimiento[],
+  enseresActuales: Enser[],
+): Informe[] {
   const anioCampana = getCampana().anio
-  const papeletasActuales = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anioCampana)
-  const movimientosActuales = leerDatos(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
-  const enseresActuales = leerDatos(CLAVES_DATOS.enseres, ENSERES_INICIALES)
+  const papeletasActuales = papeletasTodas.filter((p) => p.anio === anioCampana)
 
   const camposPropios = getCamposPropios().filter((c) => c.nombre.trim())
   const hermanoDe = (id: string) => hermanosActuales.find((h) => h.id === id)
@@ -49,6 +73,17 @@ function construirInformes(tramos: Tramo[]): Informe[] {
   const cobrado = cuotasActuales.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
   const pendiente = cuotasActuales.filter((c) => c.estado === 'Pendiente').reduce((s, c) => s + c.importe, 0)
   const devuelto = cuotasActuales.filter((c) => c.estado === 'Devuelta').reduce((s, c) => s + c.importe, 0)
+  /**
+   * «En mora» es dinero que se debe, y no salía en ninguna cifra.
+   *
+   * El informe de recaudación enseñaba Cobrado, Pendiente y Devuelto. Un
+   * recibo que la tesorería pasa a «En mora» dejaba de estar en «Pendiente» y
+   * no entraba en ningún otro sitio: desaparecía de las cuentas. La deuda que
+   * se lleva al cabildo salía más baja de lo que era, justo en los recibos que
+   * más preocupan.
+   */
+  const enMora = cuotasActuales.filter((c) => c.estado === 'En mora').reduce((s, c) => s + c.importe, 0)
+  const porCobrar = pendiente + enMora
   const domiciliadas = cuotasActuales.filter((c) => c.domiciliada).length
 
   const recaudadoPapeletas = papeletasActuales.filter((p) => p.estado !== 'Anulada').reduce((s, p) => s + p.importe, 0)
@@ -116,10 +151,12 @@ function construirInformes(tramos: Tramo[]): Informe[] {
       id: 'cuotas',
       titulo: 'Recaudación de cuotas',
       modulo: 'Cuotas',
-      descripcion: 'Recibos emitidos, cobrados, pendientes y devueltos.',
+      descripcion: 'Recibos emitidos, cobrados, pendientes, en mora y devueltos.',
       resumen: [
         { etiqueta: 'Cobrado', valor: formatCurrency(cobrado) },
         { etiqueta: 'Pendiente', valor: formatCurrency(pendiente) },
+        { etiqueta: 'En mora', valor: formatCurrency(enMora) },
+        { etiqueta: 'Total por cobrar', valor: formatCurrency(porCobrar) },
         { etiqueta: 'Devuelto', valor: formatCurrency(devuelto) },
         { etiqueta: 'Domiciliadas', valor: `${domiciliadas} de ${cuotasActuales.length}` },
       ],
@@ -207,15 +244,23 @@ export default function Informes() {
   const hermandad = useHermandadSettings(fallbackNombre)
 
   const tramos = useTramos()
-  const informes = useMemo(() => construirInformes(tramos), [tramos])
+  // Las mismas tablas que usan Hermanos, Cuotas, Papeletas y Tesorería. Sin
+  // esto, esta pantalla imprimía documentos contables sobre una foto vieja del
+  // navegador, o sobre nada.
+  const [hermanos] = useSupabaseTable<Hermano>('hermanos', CLAVES_DATOS.hermanos, HERMANOS_INICIALES, hermanoToRow, rowToHermano, 'numero')
+  const [cuotas] = useSupabaseTable<Cuota>('cuotas', CLAVES_DATOS.cuotas, CUOTAS_INICIALES, cuotaToRow, rowToCuota)
+  const [papeletas] = useSupabaseTable<Papeleta>('papeletas', CLAVES_DATOS.papeletas, PAPELETAS_INICIALES, papeletaToRow, rowToPapeleta)
+  const [movimientos] = useSupabaseTable<Movimiento>('movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento)
+  const [enseres] = useSupabaseTable<Enser>('enseres', CLAVES_DATOS.enseres, ENSERES_INICIALES, enserToRow, rowToEnser)
+  const informes = useMemo(
+    () => construirInformes(tramos, hermanos, cuotas, papeletas, movimientos, enseres),
+    [tramos, hermanos, cuotas, papeletas, movimientos, enseres],
+  )
   const [selected, setSelected] = useState<Informe | null>(null)
 
   const generadoEl = useMemo(() => formatDate(new Date()), [])
 
-  const movimientosEstado = useMemo(
-    () => leerDatos(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES),
-    [],
-  )
+  const movimientosEstado = movimientos
   const aniosDisponibles = useMemo(() => {
     const anios = new Set(movimientosEstado.map((m) => Number(m.fecha.trim().slice(-4))).filter((a) => !Number.isNaN(a)))
     anios.add(new Date().getFullYear())

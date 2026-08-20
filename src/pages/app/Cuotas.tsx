@@ -14,6 +14,7 @@ import {
   getModeloRecibo,
   saveModeloRecibo,
   borrarModeloRecibo,
+  cargarModeloReciboDeLaBase,
 } from '../../lib/modeloRecibo'
 import type { ModeloPapeleta } from '../../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
@@ -140,6 +141,13 @@ export default function Cuotas() {
   const [fechaRemesa, setFechaRemesa] = useState('')
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modeloRecibo, setModeloRecibo] = useState<ModeloPapeleta | null>(() => getModeloRecibo())
+  // Traído de la hermandad: sin esto, quien entra desde otro ordenador ve el
+  // recibo de fábrica aunque la hermandad tenga el suyo diseñado.
+  useEffect(() => {
+    void cargarModeloReciboDeLaBase().then((m) => {
+      if (m) setModeloRecibo(m)
+    })
+  }, [])
   const [ajustesOpen, setAjustesOpen] = useState(false)
   const [ajustes, setAjustes] = useAjustesCuotas()
 

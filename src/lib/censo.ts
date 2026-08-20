@@ -68,7 +68,19 @@ export function reactivarEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'nume
     .sort((a, b) => a.numero - b.numero)
   // Su sitio es delante del primero que entró DESPUÉS que él.
   const detras = activos.find((h) => h.antiguedad > actual.antiguedad)
-  const suNumero = detras ? detras.numero : activos.length + 1
+  /**
+   * Y si no hay nadie más moderno, al final. AL FINAL DE VERDAD.
+   *
+   * Antes era `activos.length + 1`, que solo coincide con el último número
+   * cuando la numeración no tiene huecos. Y los tiene siempre: cada baja deja
+   * el suyo vacío. Con 300 activos numerados hasta el 512, reincorporar a
+   * alguien le daba el 301 — o sea, por delante de doscientos hermanos MÁS
+   * ANTIGUOS que él, y empujándolos a todos un número.
+   *
+   * En una hermandad eso no es un detalle de listado: la antigüedad es lo que
+   * ordena el cortejo y lo que da prioridad al pedir papeleta.
+   */
+  const suNumero = detras ? detras.numero : Math.max(0, ...activos.map((h) => h.numero)) + 1
   return censo.map((h) => {
     if (h.id === hermanoId) return { ...h, estado: 'Activo' as const, numero: suNumero }
     if (h.estado !== 'Baja' && h.numero >= suNumero) return { ...h, numero: h.numero + 1 }

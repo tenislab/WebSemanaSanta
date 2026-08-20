@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { limpiarDni } from '../../lib/importar'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -222,7 +223,10 @@ export default function Hermanos() {
   }
 
   async function aprobarSolicitud(sol: SolicitudAlta) {
-    if (hermanos.some((h) => h.dni.toUpperCase() === sol.dni.toUpperCase())) {
+    // Limpio, igual que en el alta a mano: si no, el mismo señor con puntos y
+    // sin puntos pasaba el control y entraba dos veces en el censo.
+    const dniSolicitud = limpiarDni(sol.dni)
+    if (hermanos.some((h) => limpiarDni(h.dni) === dniSolicitud)) {
       actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Rechazada' } : s)))
       return
     }
@@ -240,7 +244,7 @@ export default function Hermanos() {
       direccion: 'Sin datos',
       cuotaAlDia: false,
       iban: null,
-      dni: sol.dni,
+      dni: dniSolicitud,
       claveAcceso: sol.clavePropuesta,
       authUserId: null,
       // Si la pidió un hermano para un hijo suyo, el menor queda a su cargo y
@@ -479,12 +483,26 @@ export default function Hermanos() {
     const data = new FormData(form)
     const nombre = String(data.get('nombre') ?? '').trim()
     const email = String(data.get('email') ?? '').trim()
-    const dni = String(data.get('dni') ?? '').trim().toUpperCase()
+    /**
+     * El DNI se guarda SIEMPRE limpio: sin puntos, sin guiones, sin espacios.
+     *
+     * Antes se guardaba tal cual lo escribieran, y eso rompía dos cosas a la
+     * vez, las dos en silencio:
+     *
+     *   - El control de duplicados. «12.345.678-A» y «12345678A» son el mismo
+     *     señor, pero comparados en crudo no coinciden: se daba de alta dos
+     *     veces al mismo hermano, con dos números distintos.
+     *   - Y peor: el hermano no podía entrar en su área. Ahí escribe su DNI
+     *     como lo lleva la tarjeta, y la búsqueda no encontraba la ficha. El
+     *     mensaje que veía era «DNI o contraseña incorrectos», así que probaba
+     *     contraseñas hasta rendirse y llamar a secretaría.
+     */
+    const dni = limpiarDni(String(data.get('dni') ?? ''))
     if (!nombre || !email || !dni) return
     if (guardandoAlta) return
     setGuardandoAlta(true)
 
-    if (hermanos.some((h) => h.dni.toUpperCase() === dni)) {
+    if (hermanos.some((h) => limpiarDni(h.dni) === dni)) {
       setDniError(`Ya hay un hermano registrado con el DNI ${dni}.`)
       // Sin esto el botón se quedaba en «Guardando…» y deshabilitado para
       // siempre: había que cerrar el panel y volver a escribirlo todo.

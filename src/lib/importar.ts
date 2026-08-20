@@ -238,8 +238,50 @@ export interface Ensayo {
 }
 
 /** Un DNI/NIE español bien formado. No se comprueba la letra: hay censos antiguos con erratas y rechazarlos entero sería peor. */
-function limpiarDni(v: string): string {
+export function limpiarDni(v: string): string {
   return v.replace(/[\s.-]/g, '').toUpperCase()
+}
+
+/**
+ * La fecha de nacimiento, siempre en ISO (aaaa-mm-dd).
+ *
+ * Antes se guardaba TAL CUAL venía. Y las hojas españolas la traen en
+ * dd/mm/aaaa, así que el censo se llenaba de «14/03/1971»: una cadena que no
+ * es una fecha para nadie. Consecuencia callada: la segmentación por edad
+ * («mandar a los mayores de 65», «los menores de edad necesitan tutor») no
+ * encontraba a nadie, porque ninguna de esas cadenas se puede comparar.
+ *
+ * Devuelve null si no se entiende, y entonces se avisa en la fila en vez de
+ * guardar basura.
+ */
+export function fechaIso(v: string): string | null {
+  const s = v.trim()
+  if (!s) return null
+  // Ya viene en ISO.
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s)
+  if (iso) return armarFecha(Number(iso[1]), Number(iso[2]), Number(iso[3]))
+  // dd/mm/aaaa, dd-mm-aaaa, dd.mm.aaaa — y con el año de dos cifras.
+  const es = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s)
+  if (es) {
+    let anio = Number(es[3])
+    if (anio < 100) {
+      // Dos cifras: 30 → 2030 no tiene sentido para un nacimiento. El corte en
+      // el año en curso es lo que usan las hojas de cálculo.
+      const dosUltimas = new Date().getFullYear() % 100
+      anio += anio <= dosUltimas ? 2000 : 1900
+    }
+    return armarFecha(anio, Number(es[2]), Number(es[1]))
+  }
+  return null
+}
+
+function armarFecha(anio: number, mes: number, dia: number): string | null {
+  if (anio < 1900 || anio > 2100 || mes < 1 || mes > 12 || dia < 1 || dia > 31) return null
+  // Que la fecha exista de verdad: un 31 de febrero se cuela en cualquier
+  // comprobación de rangos y luego revienta al ordenar por edad.
+  const d = new Date(Date.UTC(anio, mes - 1, dia))
+  if (d.getUTCFullYear() !== anio || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return null
+  return `${String(anio).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
 }
 
 function pareceEmail(v: string): boolean {
@@ -267,13 +309,49 @@ export function anioDe(v: string): number | null {
 }
 
 /** La situación, de lo que venga escrito en la hoja. */
-export function estadoDe(v: string): EstadoHermano | null {
+/**
+ * La situación del hermano, leída de la casilla.
+ *
+ * `cabeceraNegativa` cambia lo que significan «sí» y «no», y NO es un detalle:
+ * hay dos formas de escribir esa columna y significan lo contrario.
+ *
+ *     Activo      Baja
+ *     ------      ----
+ *     Sí          Sí     ← «sí» quiere decir cosas opuestas
+ *
+ * Con una columna titulada «Baja» y valores Sí/No, la lectura de siempre
+ * importaba a los que se habían ido como ACTIVOS —«sí» estaba en la lista de
+ * activos— y rechazaba a los que seguían, porque «no» no se entendía. El censo
+ * entraba justo del revés y no había forma de notarlo hasta que alguien
+ * echara cuentas.
+ */
+export function estadoDe(v: string, cabeceraNegativa = false): EstadoHermano | null {
   const t = normalizar(v)
   if (!t) return null
+
+  if (cabeceraNegativa) {
+    // La columna pregunta «¿está de baja?».
+    if (['si', 'sí', 'x', 'true', 'verdadero', '1', 'baja'].includes(t)) return 'Baja'
+    if (['no', 'false', 'falso', '0'].includes(t)) return 'Activo'
+    // Un valor con nombre propio («Activo», «Nuevo») manda sobre el sí/no:
+    // quien lo ha escrito así estaba diciendo la situación, no respondiendo.
+  }
+
   if (['baja', 'bajas', 'de baja', 'no activo', 'inactivo'].includes(t)) return 'Baja'
   if (['nuevo', 'nueva', 'alta', 'pendiente'].includes(t)) return 'Nuevo'
   if (['activo', 'activa', 'si', 'x', 'alta activa', 'ok'].includes(t)) return 'Activo'
   return null
+}
+
+/**
+ * ¿La columna emparejada como «situación» pregunta al revés?
+ *
+ * Se mira la CABECERA que trae el archivo: si se titula «Baja» o «Fallecido»,
+ * un «sí» ahí significa que esa persona ya no está.
+ */
+export function cabeceraEsNegativa(cabecera: string): boolean {
+  const t = normalizar(cabecera)
+  return ['baja', 'bajas', 'de baja', 'es baja', 'fallecido', 'fallecida', 'borrado', 'inactivo'].includes(t)
 }
 
 /**
@@ -311,6 +389,14 @@ export function ensayar(
     ocupados.add(siguienteLibre)
     return siguienteLibre
   }
+
+  /**
+   * ¿La columna de situación pregunta «¿está de baja?» en vez de «¿está
+   * activo?»? Se sabe por su título, y cambia el significado de cada «sí».
+   */
+  const iEstado = emparejado.estado
+  const situacionAlReves =
+    iEstado !== null && iEstado !== undefined && cabeceraEsNegativa(filas[0]?.[iEstado] ?? '')
 
   const dato = (fila: string[], campo: CampoImportable): string => {
     const i = emparejado[campo]
@@ -363,7 +449,7 @@ export function ensayar(
     if (antiguedad === null) antiguedad = anioEnCurso
 
     const estadoText = dato(fila, 'estado')
-    let estado = estadoDe(estadoText)
+    let estado = estadoDe(estadoText, situacionAlReves)
     if (estadoText && estado === null) problemas.push(`No se entiende la situación «${estadoText}»`)
     if (estado === null) estado = antiguedad >= anioEnCurso ? 'Nuevo' : 'Activo'
 
@@ -408,7 +494,14 @@ export function ensayar(
     if (estadoText) datos.estado = estado
     if (ibanText) datos.iban = ibanText
     const nacimiento = dato(fila, 'fechaNacimiento')
-    if (nacimiento) datos.fechaNacimiento = nacimiento
+    if (nacimiento) {
+      const limpia = fechaIso(nacimiento)
+      if (limpia) datos.fechaNacimiento = limpia
+      // Se avisa en vez de guardar una cadena que no es una fecha. Si se
+      // guardara, la segmentación por edad dejaría de encontrar a esa persona
+      // y nadie sabría por qué.
+      else problemas.push(`No se entiende la fecha de nacimiento «${nacimiento}»`)
+    }
 
     const esError = problemas.length > 0
     const queLePasa: FilaImportada['queLePasa'] = esError ? 'error' : existente ? 'actualiza' : 'nuevo'

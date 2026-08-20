@@ -11,6 +11,10 @@ export function eventoToRow(e: Evento): Record<string, unknown> {
     lugar: e.lugar ?? null,
     descripcion: e.descripcion ?? null,
     tareas: e.tareas,
+    // La repetición NO se mandaba, así que se perdía al recargar: un culto
+    // «todos los primeros viernes» volvía a ser una fecha suelta y desaparecía
+    // del calendario y de la web en cuanto pasaba ese primer viernes.
+    repeticion: e.repeticion ?? null,
   }
 }
 
@@ -23,6 +27,7 @@ export function rowToEvento(r: Record<string, unknown>): Evento {
     hora: (r.hora as string | null) ?? undefined,
     lugar: (r.lugar as string | null) ?? undefined,
     descripcion: (r.descripcion as string | null) ?? undefined,
+    repeticion: (r.repeticion as Evento['repeticion'] | null) ?? undefined,
     tareas: Array.isArray(r.tareas) ? (r.tareas as TareaEvento[]) : [],
   }
 }

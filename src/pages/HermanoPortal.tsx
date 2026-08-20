@@ -11,7 +11,7 @@ import MiSitioCortejo from '../components/MiSitioCortejo'
 import BuzonHermano from '../components/BuzonHermano'
 import CarneHermano from '../components/CarneHermano'
 import MiFamilia from '../components/MiFamilia'
-import { getModeloPapeleta } from '../lib/modeloPapeleta'
+import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
 import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
@@ -238,7 +238,15 @@ export default function HermanoPortal() {
   const tramos = useTramos()
   const campana = useMemo(() => getCampana(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
-  const modeloPapeleta = useMemo(() => getModeloPapeleta(), [])
+  // El modelo con el que la hermandad imprime sus papeletas. Se trae de la
+  // base: en el móvil del hermano no hay nada guardado, así que sin esto veía
+  // siempre la papeleta genérica en vez de la de su hermandad.
+  const [modeloPapeleta, setModeloPapeleta] = useState<ModeloPapeleta | null>(() => getModeloPapeleta())
+  useEffect(() => {
+    void cargarModeloPapeletaDeLaBase().then((m) => {
+      if (m) setModeloPapeleta(m)
+    })
+  }, [])
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
   const [searchParams] = useSearchParams()

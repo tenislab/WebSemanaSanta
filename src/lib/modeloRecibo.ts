@@ -3,6 +3,7 @@ import { metodoDeCuota, type Cuota } from '../data/cuotas'
 import { formatCurrency } from './format'
 import { guardarConAviso } from './persistencia'
 import type { CampoModelo, ModeloPapeleta } from './modeloPapeleta'
+import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 
 /**
  * Modelo de recibo personalizado para las cuotas: la hermandad sube la imagen
@@ -44,10 +45,22 @@ export function getModeloRecibo(): ModeloPapeleta | null {
 
 export function saveModeloRecibo(modelo: ModeloPapeleta) {
   guardarConAviso(CLAVE_STORAGE, modelo)
+  void guardarPlantilla('modelo_recibo', modelo)
+}
+
+/** Trae el modelo de recibo de la hermandad y lo deja en la copia local. */
+export async function cargarModeloReciboDeLaBase(): Promise<ModeloPapeleta | null> {
+  const m = await traerPlantilla<ModeloPapeleta>('modelo_recibo')
+  if (m && typeof m.imagenDataUrl === 'string' && Array.isArray(m.campos)) {
+    guardarConAviso(CLAVE_STORAGE, m)
+    return m
+  }
+  return null
 }
 
 export function borrarModeloRecibo() {
   localStorage.removeItem(CLAVE_STORAGE)
+  void guardarPlantilla('modelo_recibo', null)
 }
 
 export interface DatosRecibo {
