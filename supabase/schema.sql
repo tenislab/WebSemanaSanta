@@ -305,20 +305,15 @@ create table if not exists permisos_cargo (
 );
 
 -- Permisos de fábrica (los mismos que trae la app por defecto; se pueden editar desde /app/personal)
-insert into permisos_cargo (cargo, modulo_id) values
-  ('Hermano Mayor', 'hermanos'), ('Hermano Mayor', 'cortejo'), ('Hermano Mayor', 'cuotas'),
-  ('Hermano Mayor', 'papeletas'), ('Hermano Mayor', 'tesoreria'), ('Hermano Mayor', 'inventario'),
-  ('Hermano Mayor', 'archivo'), ('Hermano Mayor', 'comunicados'), ('Hermano Mayor', 'informes'),
-  ('Hermano Mayor', 'personal'), ('Hermano Mayor', 'configuracion'),
-  ('Secretario/a', 'hermanos'), ('Secretario/a', 'cortejo'), ('Secretario/a', 'papeletas'),
-  ('Secretario/a', 'archivo'), ('Secretario/a', 'comunicados'), ('Secretario/a', 'informes'),
-  ('Tesorero/a', 'tesoreria'), ('Tesorero/a', 'cuotas'), ('Tesorero/a', 'inventario'), ('Tesorero/a', 'informes'),
-  ('Fiscal', 'archivo'), ('Fiscal', 'informes'),
-  ('Mayordomo/Prioste', 'cortejo'), ('Mayordomo/Prioste', 'inventario'), ('Mayordomo/Prioste', 'informes'),
-  ('Diputado/a Mayor de Gobierno', 'hermanos'), ('Diputado/a Mayor de Gobierno', 'cortejo'),
-  ('Diputado/a Mayor de Gobierno', 'papeletas'), ('Diputado/a Mayor de Gobierno', 'informes'),
-  ('Vocal', 'comunicados'), ('Vocal', 'informes')
-on conflict (cargo, modulo_id) do nothing;
+-- Los permisos de fábrica YA NO SE SIEMBRAN AQUÍ.
+--
+-- Antes se metían sin dueño, con la clave (cargo, modulo_id). Eso hacía dos
+-- destrozos: los permisos de una hermandad mandaban sobre las demás, y la
+-- segunda que intentara guardar los suyos chocaba con esa clave.
+--
+-- Ahora los siembra `sembrar_permisos_de_fabrica()` para CADA hermandad al
+-- crearla (ver permisos-por-hermandad.sql), que además es lo que permite que
+-- cada una decida los suyos sin tocar los de nadie.
 
 -- -----------------------------------------------------------------------------
 -- Solicitudes de alta como hermano/a (desde el área del hermano)

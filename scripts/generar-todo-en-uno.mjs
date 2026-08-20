@@ -42,6 +42,8 @@ export const PIEZAS = [
   ['area-hermano.sql', 'Que el área del hermano funcione de verdad'],
   ['correo-hermandad.sql', 'Que la configuración de correo sea de la hermandad'],
   ['hermano-y-gestion.sql', 'Ser hermano Y llevar la hermandad a la vez'],
+  ['permisos-por-hermandad.sql', 'Que los permisos por cargo sean de cada hermandad'],
+  ['colores-hermandad.sql', 'Que el área del hermano lleve los colores de su hermandad'],
 ]
 
 const CABECERA = `-- =============================================================================

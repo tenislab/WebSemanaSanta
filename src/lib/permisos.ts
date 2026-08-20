@@ -96,13 +96,20 @@ export function usePermisosPorCargo(): Record<Cargo, string[]> {
   return permisos
 }
 
-export async function savePermisosPorCargo(permisos: Record<Cargo, string[]>) {
-  // Primero el navegador: `guardarPermisosPorCargoRemoto` no captura errores,
-  // y un fallo suyo dejaba los permisos sin guardar ni siquiera aquí.
+/**
+ * Guarda los permisos por cargo, y DICE si se ha podido.
+ *
+ * Antes se tragaba el error: la pantalla ponía «Permisos guardados» en verde
+ * pasara lo que pasara. Se le quitaba «hermanos» al tesorero, salía el visto
+ * bueno, y al volver a entrar seguía viéndolo. Nadie sabía por qué.
+ */
+export async function savePermisosPorCargo(
+  permisos: Record<Cargo, string[]>,
+): Promise<{ ok: boolean; error?: string }> {
+  // Primero el navegador, para que al menos quede aquí si la red falla.
   localStorage.setItem(STORAGE_KEY, JSON.stringify(permisos))
-  if (isSupabaseConfigured) {
-    await guardarPermisosPorCargoRemoto(permisos)
-  }
+  if (!isSupabaseConfigured) return { ok: true }
+  return guardarPermisosPorCargoRemoto(permisos)
 }
 
 /**
@@ -189,5 +196,20 @@ export function useCargoDeLaSesion(): Cargo | null {
       cancelado = true
     }
   }, [])
+  return cargo
+}
+
+
+/**
+ * El cargo, escrito para una persona.
+ *
+ * `'__desconocido__'` es una marca interna que significa «no sabemos qué es
+ * esta cuenta, así que sin permisos». Salió tal cual en la barra lateral,
+ * debajo del nombre del Hermano Mayor recién registrado: «Jaime Rivas ·
+ * __desconocido__». Eso no se le enseña a nadie.
+ */
+export function cargoEnCristiano(cargo: Cargo | null, correo?: string | null): string {
+  if (cargo === null) return 'Titular de la hermandad'
+  if (cargo === ('__desconocido__' as Cargo)) return correo || 'Sin cargo asignado'
   return cargo
 }

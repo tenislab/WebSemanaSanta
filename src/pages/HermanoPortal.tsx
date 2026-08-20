@@ -37,6 +37,7 @@ import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
 import { conRenovacion } from '../lib/renovarPapeleta'
 import { contactoDelHermanoToRow } from '../lib/db/hermanos'
 import { hayRecuperacionEnMarcha, olvidarRecuperacion } from '../lib/recuperacionClave'
+import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
 import CalendarioMes from '../components/CalendarioMes'
 import { claseTipo, fechaLarga } from '../lib/calendario'
 import { EVENTOS_INICIALES, type Aparicion, type Evento, type TipoEvento } from '../data/eventos'
@@ -67,7 +68,7 @@ import {
   type IconoHermandad,
 } from '../lib/hermandades'
 import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
-import { fijarHermandadDeLaPagina, hermandadesPublicas } from '../lib/multiHermandad'
+import { fijarHermandadDeLaPagina, hermandadesPublicas, type HermandadPublica } from '../lib/multiHermandad'
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
@@ -157,6 +158,12 @@ export default function HermanoPortal() {
    */
   const ubicacion = useLocation()
   const echadoDelPanel = (ubicacion.state as { motivo?: string } | null)?.motivo === 'cuenta-de-hermano'
+
+  // Qué es esta cuenta. Puede ser las dos cosas a la vez, que es lo normal.
+  const [papelesAqui, setPapelesAqui] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: false })
+  useEffect(() => {
+    void papelesDeLaCuenta().then(setPapelesAqui)
+  }, [])
 
   const hermandadPrincipal = useHermandadSettings()
   const nombrePrincipal = hermandadPrincipal.nombreLegal || 'Tu hermandad (modo demo)'
@@ -359,7 +366,7 @@ export default function HermanoPortal() {
   // Supabase, así que el hermano tiene que decir cuál es la suya ANTES de
   // escribir el DNI: el mismo DNI puede estar en dos hermandades (alguien que
   // es hermano de dos) y sin esto no se sabría a cuál entra.
-  const [hermandadesReales, setHermandadesReales] = useState<{ id: string; nombre: string }[]>([])
+  const [hermandadesReales, setHermandadesReales] = useState<HermandadPublica[]>([])
   useEffect(() => {
     if (!usarSupabase) return
     let cancelado = false
@@ -1103,17 +1110,24 @@ export default function HermanoPortal() {
   // ===================== Pantalla de identificación =====================
   if (!hermanoActivo) {
     return (
-      <div className="portal" style={estiloTema(hermandadElegida?.color ?? '#caa24a')}>
+      <div className="portal" style={estiloTema(hermandadElegida?.color ?? '#6A1A23')}>
         <PortalHead
           hermandad={hermandadElegida?.nombre ?? 'Gobergo'}
-          logo={null}
+          logo={hermandadElegida?.logoDataUrl ?? null}
           color={hermandadElegida?.color}
           icono={hermandadElegida?.icono}
         />
         <main className="portal__stage">
           <aside className="portal__aside" style={{ ['--portal-accent' as string]: hermandadElegida?.color ?? colorActivo }}>
             <div className="portal__aside-badge">
-              <LogoMark size={40} />
+              {/* El escudo de SU hermandad si lo ha subido. La marca de Gobergo
+                  solo mientras no ha elegido ninguna: a partir de ahí, el
+                  hermano tiene que ver lo suyo, no lo nuestro. */}
+              {hermandadElegida?.logoDataUrl ? (
+                <img src={hermandadElegida.logoDataUrl} alt="" className="portal__aside-escudo" />
+              ) : (
+                <LogoMark size={40} claro />
+              )}
             </div>
             <h2 className="portal__aside-title">Tu hermandad, en tu bolsillo</h2>
             <p className="portal__aside-sub">Entra en tu área personal y gestiona todo sin pasar por secretaría.</p>
@@ -1129,9 +1143,20 @@ export default function HermanoPortal() {
               <div className="banner-inline banner-inline--warn" role="status">
                 <span>
                   <b>Esta cuenta es de hermano/a, no de gestión.</b> Por eso te hemos traído aquí, a
-                  tu área. Si además llevas la hermandad, sal de esta sesión y entra con la cuenta
-                  de secretaría.
+                  tu área. Si llevas algún cargo en la hermandad y no puedes entrar al panel, pídele
+                  a secretaría que te dé de alta como personal: no hace falta otra cuenta.
                 </span>
+              </div>
+            )}
+
+            {/* Y al revés: quien SÍ gestiona y ha venido a su área tiene que
+                poder volver sin cerrar sesión. Casi todo el que lleva una
+                hermandad es además hermano, así que este camino se hace todos
+                los días. */}
+            {papelesAqui.gestiona && !poniendoClaveNueva && (
+              <div className="banner-inline" role="status">
+                <span>Estás en tu área personal.</span>
+                <Link to="/app" className="btn btn-ghost btn-sm">Ir al panel de gestión</Link>
               </div>
             )}
 

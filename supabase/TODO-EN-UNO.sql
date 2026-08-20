@@ -40,6 +40,8 @@
 --   15. area-hermano.sql           Que el área del hermano funcione de verdad
 --   16. correo-hermandad.sql       Que la configuración de correo sea de la hermandad
 --   17. hermano-y-gestion.sql      Ser hermano Y llevar la hermandad a la vez
+--   18. permisos-por-hermandad.sql Que los permisos por cargo sean de cada hermandad
+--   19. colores-hermandad.sql      Que el área del hermano lleve los colores de su hermandad
 --
 -- -----------------------------------------------------------------------------
 -- LO ÚNICO QUE HAY QUE LEER ANTES
@@ -371,20 +373,15 @@ create table if not exists permisos_cargo (
 );
 
 -- Permisos de fábrica (los mismos que trae la app por defecto; se pueden editar desde /app/personal)
-insert into permisos_cargo (cargo, modulo_id) values
-  ('Hermano Mayor', 'hermanos'), ('Hermano Mayor', 'cortejo'), ('Hermano Mayor', 'cuotas'),
-  ('Hermano Mayor', 'papeletas'), ('Hermano Mayor', 'tesoreria'), ('Hermano Mayor', 'inventario'),
-  ('Hermano Mayor', 'archivo'), ('Hermano Mayor', 'comunicados'), ('Hermano Mayor', 'informes'),
-  ('Hermano Mayor', 'personal'), ('Hermano Mayor', 'configuracion'),
-  ('Secretario/a', 'hermanos'), ('Secretario/a', 'cortejo'), ('Secretario/a', 'papeletas'),
-  ('Secretario/a', 'archivo'), ('Secretario/a', 'comunicados'), ('Secretario/a', 'informes'),
-  ('Tesorero/a', 'tesoreria'), ('Tesorero/a', 'cuotas'), ('Tesorero/a', 'inventario'), ('Tesorero/a', 'informes'),
-  ('Fiscal', 'archivo'), ('Fiscal', 'informes'),
-  ('Mayordomo/Prioste', 'cortejo'), ('Mayordomo/Prioste', 'inventario'), ('Mayordomo/Prioste', 'informes'),
-  ('Diputado/a Mayor de Gobierno', 'hermanos'), ('Diputado/a Mayor de Gobierno', 'cortejo'),
-  ('Diputado/a Mayor de Gobierno', 'papeletas'), ('Diputado/a Mayor de Gobierno', 'informes'),
-  ('Vocal', 'comunicados'), ('Vocal', 'informes')
-on conflict (cargo, modulo_id) do nothing;
+-- Los permisos de fábrica YA NO SE SIEMBRAN AQUÍ.
+--
+-- Antes se metían sin dueño, con la clave (cargo, modulo_id). Eso hacía dos
+-- destrozos: los permisos de una hermandad mandaban sobre las demás, y la
+-- segunda que intentara guardar los suyos chocaba con esa clave.
+--
+-- Ahora los siembra `sembrar_permisos_de_fabrica()` para CADA hermandad al
+-- crearla (ver permisos-por-hermandad.sql), que además es lo que permite que
+-- cada una decida los suyos sin tocar los de nadie.
 
 -- -----------------------------------------------------------------------------
 -- Solicitudes de alta como hermano/a (desde el área del hermano)
@@ -1660,7 +1657,7 @@ begin
   end loop;
 end $$;
 
-create or replace function crear_hermandad(p_nombre text) returns uuid
+create or replace function crear_hermandad_base(p_nombre text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
   nueva uuid;
@@ -1732,7 +1729,7 @@ begin
 
   return nueva;
 end $$;
-grant execute on function crear_hermandad(text) to authenticated;
+grant execute on function crear_hermandad_base(text) to authenticated;
 
 
 -- --- Y esta NO la puede llamar nadie desde fuera ----------------------------
@@ -1770,7 +1767,7 @@ revoke execute on function adoptar_datos_sin_hermandad(uuid) from anon, authenti
 -- hermandad para el correo que se le diga, así que en manos de cualquiera
 -- sería una forma de colarse. El editor SQL de Supabase funciona porque va con
 -- permisos de administrador, no con los del navegador.
-create or replace function crear_hermandad_manual(p_email text, p_nombre text) returns uuid
+create or replace function crear_hermandad_manual_base(p_email text, p_nombre text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
   uid uuid;
@@ -1822,8 +1819,8 @@ begin
 end $$;
 
 -- Postgres da permiso de ejecución a todo el mundo por defecto. Aquí NO.
-revoke execute on function crear_hermandad_manual(text, text) from public;
-revoke execute on function crear_hermandad_manual(text, text) from anon, authenticated;
+revoke execute on function crear_hermandad_manual_base(text, text) from public;
+revoke execute on function crear_hermandad_manual_base(text, text) from anon, authenticated;
 
 
 -- -----------------------------------------------------------------------------
@@ -1876,6 +1873,11 @@ grant execute on function hermandad_de_la_web(text) to anon, authenticated;
 
 -- Para que el área del hermano pueda ofrecer «elige tu hermandad» antes de
 -- pedir el DNI. Solo el nombre y el id: nada de datos de nadie.
+-- `drop` antes de `create`: más adelante (colores-hermandad.sql) esta función
+-- pasa a devolver también los colores de marca, y Postgres no deja cambiar el
+-- tipo devuelto con un simple `create or replace`. Sin este drop, volver a
+-- ejecutar el SQL entero fallaba aquí.
+drop function if exists hermandades_publicas();
 create or replace function hermandades_publicas() returns table (id uuid, nombre text)
 language sql stable security definer set search_path = public as $$
   select id, nombre from hermandades where activa order by nombre
@@ -2504,3 +2506,196 @@ comment on function auth_es_hermano() is
   'no está en titulares ni es personal activo. Quien es hermano Y gestiona entra como '
   'personal, que abre más. Antes bastaba con tener ficha, y eso dejaba al Hermano Mayor '
   'con el panel vacío el día que vinculaba la suya.';
+
+-- =============================================================================
+--   PERMISOS-POR-HERMANDAD.SQL — Que los permisos por cargo sean de cada hermandad
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — que los permisos por cargo sean de CADA hermandad
+-- ============================================================================
+--
+-- TRES FALLOS EN LA MISMA TABLA, y el primero es el gordo.
+--
+-- 1) LOS PERMISOS DE UNA HERMANDAD MANDABAN SOBRE LAS DEMÁS
+--
+--    `modulo_permitido()` unía `personal` con `permisos_cargo` SOLO por el
+--    nombre del cargo, sin mirar de quién eran esas filas:
+--
+--        join permisos_cargo pc on pc.cargo = p.cargo
+--
+--    Así que si una hermandad decidía que su Tesorero/a no entrara en
+--    «hermanos», se lo quitaba también al tesorero de TODAS las demás. Y al
+--    revés: dárselo a uno era dárselo a todos.
+--
+-- 2) Y NO SE PODÍAN GUARDAR
+--
+--    La clave primaria era `(cargo, modulo_id)`, sin la hermandad. Las filas
+--    de fábrica que siembra el propio esquema entran sin dueño, así que la
+--    segunda hermandad que intentara guardar chocaba con esa clave. En
+--    pantalla salía «Permisos guardados» en verde y no se guardaba nada.
+--
+-- 3) Y AL ENTRAR NO HABÍA NINGUNO
+--
+--    Una hermandad nueva no tenía filas propias, así que su junta se quedaba
+--    sin acceso a nada hasta que alguien pasara por Configuración.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+-- --- 1. La columna, y la clave primaria de verdad ---------------------------
+
+alter table permisos_cargo add column if not exists hermandad_id uuid
+  references hermandades(id) on delete cascade;
+
+do $$
+begin
+  -- Las filas de fábrica, sembradas por schema.sql sin dueño, ya no valen:
+  -- cada hermandad tiene ahora las suyas. Se van para no chocar con la clave
+  -- nueva ni colarse en el permiso de nadie.
+  delete from permisos_cargo where hermandad_id is null;
+
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'permisos_cargo_pkey'
+       and conrelid = 'permisos_cargo'::regclass
+       and array_length(conkey, 1) = 2
+  ) then
+    alter table permisos_cargo drop constraint permisos_cargo_pkey;
+    alter table permisos_cargo add primary key (hermandad_id, cargo, modulo_id);
+  end if;
+end $$;
+
+alter table permisos_cargo alter column hermandad_id set default hermandad_actual();
+create index if not exists permisos_cargo_hermandad_idx on permisos_cargo (hermandad_id);
+
+-- --- 2. La comprobación, mirando de quién son los permisos -------------------
+
+create or replace function modulo_permitido(p_modulo text) returns boolean
+  language sql stable security definer set search_path = public as $$
+    select
+      es_titular()
+      or exists (
+        select 1 from personal p
+        join permisos_cargo pc
+          on pc.cargo = p.cargo
+         -- ESTA LÍNEA es el arreglo: los permisos de una hermandad solo valen
+         -- dentro de ella.
+         and pc.hermandad_id = p.hermandad_id
+        where p.auth_user_id = auth.uid() and p.activo and pc.modulo_id = p_modulo
+      )
+  $$;
+grant execute on function modulo_permitido(text) to authenticated;
+
+-- --- 3. Los de fábrica, para cada hermandad ---------------------------------
+
+/**
+ * Siembra los permisos de fábrica de UNA hermandad.
+ *
+ * Se llama al crearla y también se puede llamar a mano para las que ya
+ * existían. `on conflict do nothing`: lo que la hermandad haya cambiado se
+ * respeta, esto solo rellena lo que falte.
+ */
+create or replace function sembrar_permisos_de_fabrica(p_hermandad_id uuid) returns void
+  language sql security definer set search_path = public as $$
+    insert into permisos_cargo (hermandad_id, cargo, modulo_id)
+    select p_hermandad_id, cargo, modulo_id from (values
+      ('Hermano Mayor','hermanos'),('Hermano Mayor','cortejo'),('Hermano Mayor','cuotas'),
+      ('Hermano Mayor','papeletas'),('Hermano Mayor','tesoreria'),('Hermano Mayor','inventario'),
+      ('Hermano Mayor','archivo'),('Hermano Mayor','comunicados'),('Hermano Mayor','informes'),
+      ('Hermano Mayor','personal'),('Hermano Mayor','configuracion'),
+      ('Secretario/a','hermanos'),('Secretario/a','cortejo'),('Secretario/a','papeletas'),
+      ('Secretario/a','archivo'),('Secretario/a','comunicados'),('Secretario/a','informes'),
+      ('Tesorero/a','tesoreria'),('Tesorero/a','cuotas'),('Tesorero/a','inventario'),('Tesorero/a','informes'),
+      ('Fiscal','archivo'),('Fiscal','informes'),
+      ('Mayordomo/Prioste','cortejo'),('Mayordomo/Prioste','inventario'),('Mayordomo/Prioste','informes'),
+      ('Diputado/a Mayor de Gobierno','hermanos'),('Diputado/a Mayor de Gobierno','cortejo'),
+      ('Diputado/a Mayor de Gobierno','papeletas'),('Diputado/a Mayor de Gobierno','informes'),
+      ('Vocal','comunicados'),('Vocal','informes')
+    ) as f(cargo, modulo_id)
+    on conflict do nothing
+  $$;
+revoke execute on function sembrar_permisos_de_fabrica(uuid) from public;
+revoke execute on function sembrar_permisos_de_fabrica(uuid) from anon, authenticated;
+
+-- Las hermandades que ya existen se quedaron sin permisos al borrar los de
+-- fábrica ahí arriba. Se les siembran los suyos.
+do $$
+declare h uuid;
+begin
+  for h in select id from hermandades loop
+    perform sembrar_permisos_de_fabrica(h);
+  end loop;
+end $$;
+
+-- --- 4. Y que toda hermandad nueva nazca con los suyos ----------------------
+--
+-- Se envuelve `crear_hermandad` en vez de reescribirla: así este fichero se
+-- puede ejecutar suelto sin arrastrar la definición entera de la otra, que
+-- vive en multi-hermandad.sql y cambia por su cuenta.
+create or replace function crear_hermandad(p_nombre text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare nueva uuid;
+begin
+  nueva := crear_hermandad_base(p_nombre);
+  perform sembrar_permisos_de_fabrica(nueva);
+  return nueva;
+end $$;
+grant execute on function crear_hermandad(text) to authenticated;
+
+-- Y la de dar de alta a mano desde el editor SQL, igual.
+create or replace function crear_hermandad_manual(p_email text, p_nombre text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare nueva uuid;
+begin
+  nueva := crear_hermandad_manual_base(p_email, p_nombre);
+  perform sembrar_permisos_de_fabrica(nueva);
+  return nueva;
+end $$;
+revoke execute on function crear_hermandad_manual(text, text) from public;
+revoke execute on function crear_hermandad_manual(text, text) from anon, authenticated;
+
+-- =============================================================================
+--   COLORES-HERMANDAD.SQL — Que el área del hermano lleve los colores de su hermandad
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — que el área del hermano se vista con los colores de SU hermandad
+-- ============================================================================
+--
+-- El área del hermano salía siempre con el mismo dorado, hubiera elegido la
+-- hermandad que hubiera elegido. Y cada hermandad tiene sus colores: son los
+-- de su escudo, los de su túnica, los que su gente reconoce.
+--
+-- Los colores de marca no son un dato reservado —están en su web pública, en
+-- su cartel y en su escudo— así que se pueden dar sin sesión, igual que el
+-- nombre. Lo que NO sale de aquí es nada más: ni correo, ni IBAN, ni CIF.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+-- `drop` antes de `create`: cambia el tipo de la tabla que devuelve, y Postgres
+-- no deja hacer eso con un simple `create or replace`.
+drop function if exists hermandades_publicas();
+
+create or replace function hermandades_publicas()
+returns table (id uuid, nombre text, color_primario text, color_secundario text, logo_data_url text)
+language sql stable security definer set search_path = public as $$
+  select
+    h.id,
+    h.nombre,
+    -- Los de fábrica si esa hermandad todavía no ha puesto los suyos, para que
+    -- el área nunca se quede sin color.
+    coalesce(nullif(s.color_primario, ''), '#6A1A23'),
+    coalesce(nullif(s.color_secundario, ''), '#C5A059'),
+    s.logo_data_url
+  from hermandades h
+  left join hermandad_settings s on s.hermandad_id = h.id
+  where h.activa
+  order by h.nombre
+$$;
+grant execute on function hermandades_publicas() to anon, authenticated;

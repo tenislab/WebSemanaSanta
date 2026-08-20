@@ -76,6 +76,8 @@ export default async function ({ cargar, caso }) {
   caso('sin tramos ni opciones, ninguno', 0, m.etiquetasQueSonAutomaticas([], []).length)
 
   await cargoPorCuenta({ cargar, caso })
+
+  await unaCuentaDosPuertas({ cargar, caso })
 }
 
 /**
@@ -125,4 +127,43 @@ async function cargoPorCuenta({ cargar, caso }) {
   const perm = await readFile('src/lib/permisos.ts', 'utf8')
   caso('empieza cerrado mientras se resuelve', true,
     /useState<Cargo \| null>\('__desconocido__' as Cargo\)/.test(perm))
+}
+
+/**
+ * Ser hermano Y llevar la hermandad, con UNA sola cuenta.
+ *
+ * En una hermandad casi todo el que gestiona es además hermano. Antes había
+ * que elegir: o entrabas al panel o entrabas a tu área. El aviso llegaba a
+ * decir «sal de esta sesión y entra con la cuenta de secretaría», o sea, ten
+ * dos cuentas. Eso no es una hermandad, es un apaño.
+ */
+async function unaCuentaDosPuertas({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+
+  // Los dos papeles por separado, no un «es hermano» de sí o no: con un solo
+  // dato hay que elegir uno y cerrarle el otro.
+  const lib = await readFile('src/lib/multiHermandad.ts', 'utf8')
+  caso('se distinguen los dos papeles', true, /esHermano: boolean/.test(lib) && /gestiona: boolean/.test(lib))
+  caso('«solo hermano» es hermano Y no gestiona', true, /p\.esHermano && !p\.gestiona/.test(lib))
+  // Ante un fallo de red no se echa a nadie del panel.
+  caso('ante la duda no cierra el panel', true, /esHermano: false, gestiona: true/.test(lib))
+
+  // Desde el panel, su área.
+  const shell = await readFile('src/components/AppShell.tsx', 'utf8')
+  caso('el panel ofrece «Mi área de hermano»', true, /Mi área de hermano/.test(shell))
+  caso('y solo si tiene ficha', true, /papeles\.esHermano && \(/.test(shell))
+
+  // Desde su área, el panel.
+  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  caso('el área ofrece volver al panel', true, /Ir al panel de gestión/.test(portal))
+  caso('y solo si gestiona', true, /papelesAqui\.gestiona && !poniendoClaveNueva/.test(portal))
+  // Y ya no se le manda a tener dos cuentas.
+  caso('ya no dice «entra con la cuenta de secretaría»', false, /entra con la cuenta\s*\n?\s*de secretaría/.test(portal))
+
+  // Y en la base de datos, que es donde de verdad se decide.
+  const sql = await readFile('supabase/hermano-y-gestion.sql', 'utf8')
+  caso('la base sabe que gestionar manda sobre ser hermano', true,
+    /not exists \(select 1 from titulares where auth_user_id = auth\.uid\(\)\)/.test(sql))
+  caso('y cuenta el personal activo', true,
+    /not exists \(select 1 from personal where auth_user_id = auth\.uid\(\) and activo\)/.test(sql))
 }

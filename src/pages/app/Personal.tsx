@@ -31,6 +31,7 @@ export default function Personal() {
     if (!permisosTocado) setPermisos(permisosRemotos)
   }, [permisosRemotos, permisosTocado])
   const [permisosSaved, setPermisosSaved] = useState(false)
+  const [permisosError, setPermisosError] = useState<string | null>(null)
 
   const stats = useMemo(() => {
     const total = personal.length
@@ -135,7 +136,15 @@ export default function Personal() {
   }
 
   async function handleSavePermisos() {
-    await savePermisosPorCargo(permisos)
+    const r = await savePermisosPorCargo(permisos)
+    // El verde solo si de verdad se ha guardado. Antes salía siempre: se le
+    // quitaba «hermanos» al tesorero, aparecía el visto bueno, y al volver a
+    // entrar seguía viéndolo. Nadie sabía por qué.
+    if (!r.ok) {
+      setPermisosError(r.error ?? 'No se han podido guardar los permisos.')
+      return
+    }
+    setPermisosError(null)
     setPermisosTocado(false)
     setPermisosSaved(true)
     setTimeout(() => setPermisosSaved(false), 3000)
@@ -278,6 +287,7 @@ export default function Personal() {
         </div>
         <div className="settings-actions">
           {permisosSaved && <span className="alert-item alert-item--ok">Permisos guardados</span>}
+          {permisosError && <span className="alert-item alert-item--alerta">{permisosError}</span>}
           <button type="button" className="btn btn-primary" onClick={handleSavePermisos}>
             Guardar permisos
           </button>

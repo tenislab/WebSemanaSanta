@@ -94,11 +94,29 @@ export function olvidarHermandad(): void {
  * la suya antes de escribir el DNI. No devuelve ningún dato de nadie: es una
  * lista de nombres, la misma que hay en cualquier guía de hermandades.
  */
-export async function hermandadesPublicas(): Promise<{ id: string; nombre: string }[]> {
+export interface HermandadPublica {
+  id: string
+  nombre: string
+  /** Color de marca de la hermandad. Los suyos, no los de Gobergo. */
+  colorPrimario: string
+  colorSecundario: string
+  logoDataUrl: string | null
+}
+
+export async function hermandadesPublicas(): Promise<HermandadPublica[]> {
   if (!isSupabaseConfigured || !supabase) return []
   const { data, error } = await supabase.rpc('hermandades_publicas')
   if (error || !Array.isArray(data)) return []
-  return data as { id: string; nombre: string }[]
+  return (data as Record<string, string | null>[]).map((h) => ({
+    id: String(h.id),
+    nombre: String(h.nombre ?? ''),
+    // Los de Gobergo si la hermandad todavía no ha puesto los suyos. La
+    // función del servidor ya los rellena, pero una lista guardada por una
+    // versión anterior puede no traerlos.
+    colorPrimario: h.color_primario || '#6A1A23',
+    colorSecundario: h.color_secundario || '#C5A059',
+    logoDataUrl: h.logo_data_url ?? null,
+  }))
 }
 
 /* ---------------------------------------------------------------------------
@@ -217,16 +235,22 @@ export function ajustarEspejoALaHermandad(hermandadId: string | null): void {
 export async function soyTitular(): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return true
   try {
-    const { data } = await supabase.auth.getUser()
-    const uid = data.user?.id
-    if (!uid) return false
-    const { data: filas, error } = await supabase
-      .from('titulares')
-      .select('auth_user_id')
-      .eq('auth_user_id', uid)
-      .maybeSingle()
+    // POR RPC Y NO CONSULTANDO LA TABLA. `titulares` tiene una política que se
+    // llama `titulares_nadie` y hace exactamente eso: nadie la lee desde el
+    // navegador, ni siquiera para mirarse a sí mismo. Es correcto —esa tabla
+    // dice quién manda en cada hermandad— pero significa que preguntar
+    // «¿estoy yo ahí?» con un select devuelve vacío SIEMPRE.
+    //
+    // Y vacío se interpretaba como «no es titular», así que al Hermano Mayor
+    // recién registrado le salía el panel con Inicio y Seguridad y nada más,
+    // y su nombre con un «__desconocido__» debajo. La aplicación entera vacía
+    // para quien acababa de crear la hermandad.
+    //
+    // `es_titular()` es SECURITY DEFINER: mira la tabla por dentro, saltándose
+    // la política, y solo devuelve un sí o un no sobre QUIEN PREGUNTA.
+    const { data, error } = await supabase.rpc('es_titular')
     if (error) return false
-    return Boolean(filas)
+    return data === true
   } catch {
     return false
   }
@@ -246,32 +270,55 @@ export async function authUserIdActual(): Promise<string | undefined> {
 
 
 /**
- * ¿Esta cuenta es SOLO de hermano?
+ * Qué es esta cuenta: hermano, gestión, o LAS DOS COSAS.
  *
- * «Solo» es la palabra importante. En una hermandad casi todo el que gestiona
- * es además hermano: el Hermano Mayor lo es, la secretaria lo es, el tesorero
- * paga su cuota y saca su papeleta como cualquiera. A esos NO se les puede
- * echar del panel.
+ * Las dos cosas es lo normal, no la excepción. El Hermano Mayor es hermano y
+ * lleva la hermandad. La secretaria igual. El tesorero paga su cuota y saca su
+ * papeleta como cualquiera.
  *
- * Se pregunta a la base de datos y no al metadata de la sesión por dos motivos:
- * el metadata lo puede reescribir el propio usuario, y además solo sabe decir
- * «es hermano», no «es solo hermano», que es lo que hay que saber aquí.
+ * Por eso esto devuelve los dos papeles por separado en vez de un «es hermano»
+ * de sí o no: con un solo dato hay que elegir uno y cerrarle el otro, que es
+ * justo lo que no queremos.
  */
-export async function soloEsHermano(): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase) return false
+export interface PapelesDeLaCuenta {
+  /** Tiene ficha en el censo: puede entrar en su área del hermano. */
+  esHermano: boolean
+  /** Es titular o personal activo: puede entrar en el panel. */
+  gestiona: boolean
+}
+
+const SIN_PAPELES: PapelesDeLaCuenta = { esHermano: false, gestiona: false }
+
+export async function papelesDeLaCuenta(): Promise<PapelesDeLaCuenta> {
+  if (!isSupabaseConfigured || !supabase) return SIN_PAPELES
   try {
     const { data } = await supabase.auth.getUser()
     const uid = data.user?.id
-    if (!uid) return false
+    if (!uid) return SIN_PAPELES
     const [hermano, titular, personal] = await Promise.all([
       supabase.from('hermanos').select('id').eq('auth_user_id', uid).limit(1).maybeSingle(),
-      supabase.from('titulares').select('auth_user_id').eq('auth_user_id', uid).limit(1).maybeSingle(),
+      // Por RPC: la tabla `titulares` no se puede leer desde el navegador
+      // (política `titulares_nadie`). Ver el comentario de `soyTitular`.
+      supabase.rpc('es_titular'),
       supabase.from('personal').select('id').eq('auth_user_id', uid).eq('activo', true).limit(1).maybeSingle(),
     ])
-    return Boolean(hermano.data) && !titular.data && !personal.data
+    return {
+      esHermano: Boolean(hermano.data),
+      gestiona: titular.data === true || Boolean(personal.data),
+    }
   } catch {
-    // Ante la duda NO se echa a nadie del panel: las políticas de la base de
-    // datos siguen mandando y no dejarán ver lo que no toque.
-    return false
+    // Ante la duda NO se echa a nadie de ningún sitio: las políticas de la base
+    // de datos siguen mandando y no dejarán ver lo que no toque.
+    return { esHermano: false, gestiona: true }
   }
+}
+
+/**
+ * ¿Hay que echar a esta cuenta del panel?
+ *
+ * Solo si es hermano y NO gestiona. Quien hace las dos cosas se queda.
+ */
+export async function soloEsHermano(): Promise<boolean> {
+  const p = await papelesDeLaCuenta()
+  return p.esHermano && !p.gestiona
 }

@@ -20,15 +20,32 @@ export async function fetchPermisosPorCargoRemoto(
 }
 
 /** Reemplaza por completo los permisos por cargo en Supabase (tabla pequeña, ~30 filas: más simple que diferenciar). */
-export async function guardarPermisosPorCargoRemoto(permisos: Record<Cargo, string[]>) {
-  if (!supabase) return
+/**
+ * Reemplaza los permisos por cargo de ESTA hermandad.
+ *
+ * Devuelve el error si lo hubo, en vez de tragárselo. Antes solo lo escribía
+ * en la consola y la pantalla ponía «Permisos guardados» en verde pasara lo
+ * que pasara: se cambiaban los permisos del tesorero, salía el visto bueno, y
+ * al volver estaban como antes.
+ *
+ * El `delete` no necesita filtrar por hermandad: la frontera de la base de
+ * datos ya impide tocar filas de otra. Pero se deja el `in(CARGOS)` porque
+ * acota lo que se borra a los cargos conocidos, no a la tabla entera.
+ */
+export async function guardarPermisosPorCargoRemoto(
+  permisos: Record<Cargo, string[]>,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: true }
   const filas = CARGOS.flatMap((cargo) => (permisos[cargo] ?? []).map((moduloId) => ({ cargo, modulo_id: moduloId })))
-  // Como el resto de guardados remotos: se avisa por consola y no se deja
-  // caer la excepción, que reventaría el guardado local de quien nos llama.
   try {
-    await supabase.from('permisos_cargo').delete().in('cargo', CARGOS)
-    if (filas.length > 0) await supabase.from('permisos_cargo').insert(filas)
+    const { error: borrado } = await supabase.from('permisos_cargo').delete().in('cargo', CARGOS)
+    if (borrado) return { ok: false, error: borrado.message }
+    if (filas.length > 0) {
+      const { error: alta } = await supabase.from('permisos_cargo').insert(filas)
+      if (alta) return { ok: false, error: alta.message }
+    }
+    return { ok: true }
   } catch (err) {
-    console.error('No se pudieron guardar los permisos en Supabase:', err)
+    return { ok: false, error: err instanceof Error ? err.message : 'no se pudo guardar' }
   }
 }

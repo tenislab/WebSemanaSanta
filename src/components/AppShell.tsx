@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import BarraDeshacer from './BarraDeshacer'
+import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
 import Logo, { LogoMark } from './Logo'
 import AltaHermandad from './AltaHermandad'
 import { altaPendiente } from '../lib/altaHermandad'
@@ -8,7 +9,7 @@ import { getHermandadSettings, useHermandadSettings } from '../lib/hermandadSett
 import ThemeToggle from './ThemeToggle'
 import PaletaComandos, { type DestinoPaleta } from './PaletaComandos'
 import { useAuth } from '../context/AuthContext'
-import { useCargoDeLaSesion, puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
+import { useCargoDeLaSesion, puedeVerModulo, usePermisosSincronizados, cargoEnCristiano } from '../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
 
@@ -145,6 +146,11 @@ export default function AppShell() {
   const { user, signOut } = useAuth()
   // Aviso cuando un guardado no llega a la base de datos (ver supabaseSync).
   const [errorSync, setErrorSync] = useState<string | null>(null)
+  // Si esta cuenta tiene además ficha en el censo, se le ofrece su área.
+  const [papeles, setPapeles] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: true })
+  useEffect(() => {
+    void papelesDeLaCuenta().then(setPapeles)
+  }, [])
   useEffect(() => {
     function alFallar(e: Event) {
       const detalle = (e as CustomEvent<{ tabla: string }>).detail
@@ -256,7 +262,8 @@ export default function AppShell() {
       <a className="saltar-al-contenido" href="#contenido">Saltar al contenido</a>
       <aside className={`app-side${drawerOpen ? ' app-side--open' : ''}`}>
         <div className="app-side__brand">
-          <LogoMark size={30} />
+          {/* La barra lateral es granate oscura: la G va en marfil o se pierde. */}
+          <LogoMark size={30} claro />
           <span>
             <b>{hermandad}</b>
             <small>Panel de gestión</small>
@@ -287,7 +294,7 @@ export default function AppShell() {
           <span className="app-avatar">{initialsOf(nombre)}</span>
           <span className="app-side__who">
             <b>{nombre}</b>
-            <small>{cargo ?? user?.email}</small>
+            <small>{cargoEnCristiano(cargo, user?.email)}</small>
           </span>
         </div>
       </aside>
@@ -318,6 +325,14 @@ export default function AppShell() {
             <kbd>Ctrl</kbd><kbd>K</kbd>
           </button>
           <div className="app-topbar__right">
+            {/* Quien además es hermano —el Hermano Mayor, la secretaria, el
+                tesorero: casi todos— tiene que poder ver SU papeleta y SUS
+                cuotas sin cerrar sesión ni tener una segunda cuenta. */}
+            {papeles.esHermano && (
+              <Link to="/hermano" className="btn btn-ghost btn-sm" title="Tus cuotas, tu papeleta y tus datos">
+                Mi área de hermano
+              </Link>
+            )}
             <ThemeToggle />
             <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
               Cerrar sesión

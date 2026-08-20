@@ -403,7 +403,7 @@ begin
   end loop;
 end $$;
 
-create or replace function crear_hermandad(p_nombre text) returns uuid
+create or replace function crear_hermandad_base(p_nombre text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
   nueva uuid;
@@ -475,7 +475,7 @@ begin
 
   return nueva;
 end $$;
-grant execute on function crear_hermandad(text) to authenticated;
+grant execute on function crear_hermandad_base(text) to authenticated;
 
 
 -- --- Y esta NO la puede llamar nadie desde fuera ----------------------------
@@ -513,7 +513,7 @@ revoke execute on function adoptar_datos_sin_hermandad(uuid) from anon, authenti
 -- hermandad para el correo que se le diga, así que en manos de cualquiera
 -- sería una forma de colarse. El editor SQL de Supabase funciona porque va con
 -- permisos de administrador, no con los del navegador.
-create or replace function crear_hermandad_manual(p_email text, p_nombre text) returns uuid
+create or replace function crear_hermandad_manual_base(p_email text, p_nombre text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
   uid uuid;
@@ -565,8 +565,8 @@ begin
 end $$;
 
 -- Postgres da permiso de ejecución a todo el mundo por defecto. Aquí NO.
-revoke execute on function crear_hermandad_manual(text, text) from public;
-revoke execute on function crear_hermandad_manual(text, text) from anon, authenticated;
+revoke execute on function crear_hermandad_manual_base(text, text) from public;
+revoke execute on function crear_hermandad_manual_base(text, text) from anon, authenticated;
 
 
 -- -----------------------------------------------------------------------------
@@ -619,6 +619,11 @@ grant execute on function hermandad_de_la_web(text) to anon, authenticated;
 
 -- Para que el área del hermano pueda ofrecer «elige tu hermandad» antes de
 -- pedir el DNI. Solo el nombre y el id: nada de datos de nadie.
+-- `drop` antes de `create`: más adelante (colores-hermandad.sql) esta función
+-- pasa a devolver también los colores de marca, y Postgres no deja cambiar el
+-- tipo devuelto con un simple `create or replace`. Sin este drop, volver a
+-- ejecutar el SQL entero fallaba aquí.
+drop function if exists hermandades_publicas();
 create or replace function hermandades_publicas() returns table (id uuid, nombre text)
 language sql stable security definer set search_path = public as $$
   select id, nombre from hermandades where activa order by nombre

@@ -42,6 +42,8 @@ export interface HermandadDirectorio {
   color: string
   /** Símbolo del escudo; sin él se usa un círculo con las iniciales. */
   icono?: IconoHermandad
+  /** Escudo de la hermandad, si lo ha subido. */
+  logoDataUrl?: string | null
   telefono: string
   email: string
   /** Teléfono del Bizum de la hermandad, al que los hermanos pagan sus papeletas. */
@@ -279,7 +281,7 @@ export interface DatosHermandadPrincipal {
  */
 export function directorioCompleto(
   principal: DatosHermandadPrincipal,
-  reales: { id: string; nombre: string }[] = [],
+  reales: { id: string; nombre: string; colorPrimario?: string; logoDataUrl?: string | null }[] = [],
 ): HermandadDirectorio[] {
   // Con la base de datos conectada, la lista son las hermandades dadas de alta
   // de verdad: todas comparten un mismo Supabase y cada hermano tiene que
@@ -294,7 +296,12 @@ export function directorioCompleto(
       id: h.id,
       nombre: h.nombre,
       ciudad: '',
-      color: '#caa24a',
+      // El color de SU hermandad. Antes era un mostaza fijo igual para todas,
+      // así que el área del hermano se veía idéntica eligieras la que
+      // eligieras. Cada hermandad tiene sus colores: los de su escudo, los de
+      // su túnica, los que su gente reconoce.
+      color: h.colorPrimario || '#6A1A23',
+      logoDataUrl: h.logoDataUrl ?? null,
       telefono: '',
       email: '',
       bizum: '',

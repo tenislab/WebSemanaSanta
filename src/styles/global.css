@@ -237,20 +237,35 @@ h1, h2, h3,
    Marca / logo
    ========================================================================= */
 .brand-link { text-decoration: none; display: inline-flex; }
-.brand { display: inline-flex; align-items: center; gap: 0.6rem; }
+.brand { display: inline-flex; align-items: center; gap: 0.55rem; }
+
+/* La marca va SIN caja de fondo: el arco dorado ya tiene su propia silueta y
+   meterlo dentro de un cuadrado granate le quitaba el aire que lo hace
+   reconocible. El dibujo lleva sus colores dentro, así que se ve igual sobre
+   fondo claro, sobre fondo oscuro y en un papel impreso. */
 .logo-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
-  background: var(--morado-700);
-  color: var(--oro-300);
   flex: none;
 }
-.logo-mark svg { width: 62%; height: 62%; }
+.logo-mark svg { width: 100%; height: 100%; }
+
+.brand-texto { display: inline-flex; flex-direction: column; gap: 0.12em; line-height: 1; }
 .brand-name { color: var(--text); font-weight: 600; letter-spacing: 0; line-height: 1; }
+.brand-lema {
+  color: var(--oro-700);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  line-height: 1;
+}
 .brand--light .brand-name { color: var(--marfil-100); }
-.brand--light .logo-mark { background: rgba(243, 237, 226, 0.1); box-shadow: inset 0 0 0 1px rgba(214, 188, 138, 0.4); }
+.brand--light .brand-lema { color: var(--oro-300); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .brand-lema { color: var(--oro-300); }
+}
+:root[data-theme='dark'] .brand-lema { color: var(--oro-300); }
 
 /* theme toggle */
 .theme-toggle {
@@ -5535,4 +5550,13 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
      pulgar. Sin animación de entrada, porque la de arriba lleva dentro el
      `translateX(-50%)` que aquí ya no se usa y la dejaría descentrada. */
   .deshacer { left: 0.6rem; right: 0.6rem; transform: none; max-width: none; animation: none; }
+}
+
+/* El escudo de la hermandad dentro de la insignia del área del hermano.
+   `contain` y no `cover`: un escudo recortado por los bordes es peor que uno
+   pequeño, y los escudos cofrades rara vez son cuadrados. */
+.portal__aside-escudo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
