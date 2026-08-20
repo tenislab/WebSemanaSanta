@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
+import { hermandadActualId } from './multiHermandad'
 
 /**
  * Mandar correo de verdad (P7).
@@ -43,15 +44,60 @@ export function saveAjustesCorreo(a: AjustesCorreo) {
   localStorage.setItem(CLAVE_CORREO, JSON.stringify(a))
 }
 
+/**
+ * Trae la configuración de correo de la HERMANDAD y la deja en la copia local.
+ *
+ * EL FALLO QUE ARREGLA. Esto vivía solo en el navegador de quien lo activó. El
+ * secretario lo encendía en su portátil; al día siguiente la tesorera, desde
+ * el ordenador de la casa de hermandad, marcaba cuotas como pagadas y no salía
+ * ni un aviso: en ESE navegador la configuración no existe, así que se leía la
+ * de fábrica —apagado— y la lista de destinatarios salía vacía. Sin error y
+ * sin mensaje. Y en su pantalla tampoco aparecía activado, con lo que no había
+ * forma de sospechar que lo estaba en otro sitio.
+ */
+export async function cargarAjustesCorreoDeLaBase(): Promise<AjustesCorreo | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  try {
+    const { data, error } = await supabase.from('hermandad_settings').select('correo').maybeSingle()
+    const guardado = (data as { correo: Partial<AjustesCorreo> | null } | null)?.correo
+    if (error || !guardado) return null
+    const completo: AjustesCorreo = {
+      ...CORREO_INICIAL,
+      ...guardado,
+      avisaDe: { ...CORREO_INICIAL.avisaDe, ...(guardado.avisaDe ?? {}) },
+    }
+    localStorage.setItem(CLAVE_CORREO, JSON.stringify(completo))
+    return completo
+  } catch {
+    return null
+  }
+}
+
+/** Guarda la configuración donde la vea toda la junta, no solo este navegador. */
+export async function guardarAjustesCorreoEnLaBase(a: AjustesCorreo): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return true
+  const hermandadId = await hermandadActualId()
+  if (!hermandadId) return false
+  const { error } = await supabase
+    .from('hermandad_settings')
+    .upsert({ hermandad_id: hermandadId, correo: a }, { onConflict: 'hermandad_id' })
+  return !error
+}
+
 export function useAjustesCorreo(): [AjustesCorreo, (a: AjustesCorreo) => void] {
   const [ajustes, setAjustes] = useState<AjustesCorreo>(() => getAjustesCorreo())
   useEscuchaOtrasPestanas(CLAVE_CORREO, () => setAjustes(getAjustesCorreo()))
   useEffect(() => {
     setAjustes(getAjustesCorreo())
+    // Y lo que diga la hermandad, que manda sobre lo que hubiera aquí.
+    void cargarAjustesCorreoDeLaBase().then((r) => {
+      if (r) setAjustes(r)
+    })
   }, [])
   function guardar(a: AjustesCorreo) {
     setAjustes(a)
     saveAjustesCorreo(a)
+    void guardarAjustesCorreoEnLaBase(a)
   }
   return [ajustes, guardar]
 }
@@ -73,6 +119,16 @@ export interface ResultadoEnvio {
  * llama casi siempre está haciendo otra cosa más importante (emitir cuotas,
  * mandar un comunicado) y un fallo de correo no puede tumbar eso.
  */
+/**
+ * Cuántas direcciones acepta el servidor de una vez.
+ *
+ * Tiene que ser el mismo número que `MAXIMO_DESTINATARIOS` en
+ * `supabase/functions/enviar-correo/index.ts`. Es a propósito y no un capricho:
+ * un envío gigante que falla a medias es imposible de rehacer sin escribir dos
+ * veces a media hermandad.
+ */
+export const POR_TANDA = 50
+
 export async function enviarCorreo(mensaje: {
   para: string[]
   asunto: string
@@ -88,6 +144,43 @@ export async function enviarCorreo(mensaje: {
   }
   const para = mensaje.para.map((d) => d.trim()).filter((d) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d))
   if (para.length === 0) return { ok: false, error: 'Ninguno de los destinatarios tiene un correo válido.' }
+
+  /**
+   * MÁS DE 50: se trocea aquí.
+   *
+   * El servidor corta en 50 y devuelve un 400. Como una hermandad de 612
+   * hermanos manda a los 612 de una vez, el comunicado NO LE LLEGABA A NADIE
+   * —ni al primero— y encima el comunicado ya se había guardado como
+   * «Enviado», así que el botón de mandarlo desaparecía. Un envío fallido que
+   * la pantalla daba por hecho.
+   *
+   * Las tandas van una detrás de otra a propósito, no todas a la vez: mandar
+   * doce peticiones en paralelo es la forma más rápida de que el proveedor te
+   * tome por spam el primer día.
+   */
+  if (para.length > POR_TANDA) {
+    let enviados = 0
+    const fallos: string[] = []
+    for (let i = 0; i < para.length; i += POR_TANDA) {
+      const tanda = para.slice(i, i + POR_TANDA)
+      const r = await enviarCorreo({ ...mensaje, para: tanda })
+      if (r.ok) enviados += r.enviados ?? tanda.length
+      else fallos.push(r.error ?? 'error desconocido')
+    }
+    if (enviados === 0) {
+      return { ok: false, error: fallos[0] ?? 'No se pudo mandar ninguna tanda.' }
+    }
+    // Si algunas salieron y otras no, se dice: «se ha enviado» a secas sería
+    // mentira y nadie sabría a quién hay que volver a escribirle.
+    if (fallos.length > 0) {
+      return {
+        ok: true,
+        enviados,
+        error: `Salieron ${enviados} de ${para.length}. El resto falló: ${fallos[0]}`,
+      }
+    }
+    return { ok: true, enviados }
+  }
 
   try {
     const { data, error } = await supabase.functions.invoke('enviar-correo', {

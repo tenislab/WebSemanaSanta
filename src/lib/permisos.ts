@@ -3,6 +3,8 @@ import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { isSupabaseConfigured } from './supabase'
 import { fetchPermisosPorCargoRemoto, guardarPermisosPorCargoRemoto } from './db/permisos'
 import { CARGOS, type Cargo } from '../data/documentos'
+import { authUserIdActual, soyTitular } from './multiHermandad'
+import { getPersonal } from './personal'
 
 export interface Modulo {
   id: string
@@ -126,14 +128,66 @@ export function puedeVerModulo(cargo: Cargo | undefined | null, moduloId: string
 }
 
 /**
- * ¿Es una cuenta de personal (con cargo) o el titular? Se decide por la lista
- * real de personal, no por lo que diga el metadata de la sesión, que el propio
- * usuario puede reescribir con `auth.updateUser`.
+ * ¿Es una cuenta de personal (con cargo) o el titular?
+ *
+ * SE DECIDE POR EL IDENTIFICADOR DE LA CUENTA (`auth_user_id`), que es lo
+ * único que el usuario no puede tocar. Antes se buscaba por
+ * `user_metadata.personalId`, y ahí estaba el agujero: ese campo SOLO se
+ * escribe en el acceso de demostración. Cuando el Hermano Mayor daba de alta
+ * al tesorero de verdad, el registro no lo guardaba, así que al entrar:
+ *
+ *     personalId → undefined → cargoDeCuenta(undefined) → null → TITULAR
+ *
+ * Y `null` significa «el que manda». Resultado: todo el personal con cuenta de
+ * verdad entraba con el panel entero abierto. La persona a la que le habías
+ * dado solo Tesorería veía el censo completo, con DNI, teléfonos, direcciones
+ * y datos de salud. Eso no es un permiso de más: es categoría especial del
+ * RGPD delante de quien no debía.
+ *
+ * `esTitular` viene de la base de datos (tabla `titulares`). Sin él no se
+ * puede distinguir «el titular, que no está en personal» de «una cuenta que no
+ * hemos podido identificar», y ante la duda hay que cerrar, no abrir.
  */
-export function cargoDeCuenta(personalId: string | undefined, personal: { id: string; cargo: Cargo; activo: boolean }[]): Cargo | null {
-  if (!personalId) return null
-  const miembro = personal.find((m) => m.id === personalId)
-  // Un id de personal que ya no existe (o está desactivado) NO es el titular:
-  // se queda sin permisos hasta que alguien lo arregle.
-  return miembro && miembro.activo ? miembro.cargo : ('__desconocido__' as Cargo)
+export function cargoDeCuenta(
+  authUserId: string | undefined,
+  personal: { cargo: Cargo; activo: boolean; authUserId: string | null }[],
+  esTitular = false,
+): Cargo | null {
+  if (!authUserId) return esTitular ? null : ('__desconocido__' as Cargo)
+  const miembro = personal.find((m) => m.authUserId === authUserId)
+  if (miembro) {
+    // Desactivado NO es el titular: se queda sin permisos hasta que alguien lo
+    // arregle. Devolver `null` aquí volvería a abrir el panel entero.
+    return miembro.activo ? miembro.cargo : ('__desconocido__' as Cargo)
+  }
+  // No está en personal. O es el titular, o es una cuenta que no sabemos qué
+  // es. Solo lo primero abre la puerta.
+  return esTitular ? null : ('__desconocido__' as Cargo)
+}
+
+
+/**
+ * El cargo de quien está dentro, resuelto bien: por el identificador de su
+ * cuenta contra la tabla de personal, y preguntando a la base si es titular.
+ *
+ * Se usa desde el marco y desde las pantallas que enseñan cosas distintas
+ * según el cargo. Mientras la respuesta no ha llegado se devuelve
+ * `'__desconocido__'`, o sea SIN permisos: si empezara abierto, habría un
+ * instante en cada carga en el que el tesorero ve el censo entero.
+ */
+export function useCargoDeLaSesion(): Cargo | null {
+  const [cargo, setCargo] = useState<Cargo | null>('__desconocido__' as Cargo)
+  useEffect(() => {
+    let cancelado = false
+    async function resolver() {
+      const [uid, titular] = await Promise.all([authUserIdActual(), soyTitular()])
+      if (cancelado) return
+      setCargo(cargoDeCuenta(uid, getPersonal(), titular))
+    }
+    void resolver()
+    return () => {
+      cancelado = true
+    }
+  }, [])
+  return cargo
 }

@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import MenuAcciones from '../../components/MenuAcciones'
@@ -6,8 +7,7 @@ import Recibo from '../../components/Recibo'
 import ReciboModeloRender from '../../components/ReciboModeloRender'
 import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
 import HermanoPicker from '../../components/HermanoPicker'
-import { cargoDeCuenta } from '../../lib/permisos'
-import { getPersonal } from '../../lib/personal'
+import { useCargoDeLaSesion } from '../../lib/permisos'
 import { hermanosAsignables } from '../../lib/asignables'
 import {
   CLAVES_DATO_RECIBO,
@@ -28,10 +28,11 @@ import {
   type EstadoCuota,
   type MetodoCobro,
 } from '../../data/cuotas'
-import { getConceptosCuota } from '../../lib/conceptosCuota'
+import { useConceptosCuota } from '../../lib/conceptosCuota'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
-import { formatCurrency } from '../../lib/format'
+import { formatCurrency, formatDate } from '../../lib/format'
+import { hayDatosDeEjemplo } from '../../lib/demo'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
 import { conApunteDeCobro, origenDeCuota, sinApunteDeCobro } from '../../lib/apuntes'
@@ -100,6 +101,14 @@ function isoLocal(d: Date): string {
 }
 
 export default function Cuotas() {
+  // Antes de mandar nada, traer de la base la configuración de correo de
+  // la hermandad y lo que cada hermano tenga apagado. Sin esto, quien
+  // entra desde otro ordenador trabaja con la de fábrica: no sale ningún
+  // aviso, o se le escribe a quien pidió que no. Los dos en silencio.
+  useEffect(() => {
+    void prepararAvisos()
+  }, [])
+
   const { user } = useAuth()
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useHermandadSettings(fallbackNombre)
@@ -125,7 +134,7 @@ export default function Cuotas() {
   // La mora solo la ponen/quitan el tesorero, el secretario o el titular
   // (quien no tiene cargo asignado es el titular, con acceso completo).
   // Contra la lista real de personal, no contra el metadata (reescribible).
-  const cargo = cargoDeCuenta(user?.user_metadata?.personalId as string | undefined, getPersonal()) as string | null
+  const cargo = useCargoDeLaSesion() as string | null
   const puedeMora = !cargo || cargo === 'Tesorero/a' || cargo === 'Secretario/a'
   const [remesaOpen, setRemesaOpen] = useState(false)
   const [fechaRemesa, setFechaRemesa] = useState('')
@@ -140,18 +149,39 @@ export default function Cuotas() {
   const [, setMovimientos] = useSupabaseTable<Movimiento>(
     'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
   )
-  const conceptosCuota = useMemo(() => getConceptosCuota(), [])
+  const conceptosCuota = useConceptosCuota()
 
   // --- Salto de año (emisión anual del ejercicio) ---
   // El ejercicio en curso sigue al año de la campaña, para que toda la app hable
   // del mismo año. El concepto «anual» es el primero del catálogo (normalmente
   // «Cuota anual»); es el que se emite a todo el censo cada ejercicio.
   const conceptoAnual = conceptosCuota[0]
+  /**
+   * ¿Ha llegado el catálogo de cuotas de ESTA hermandad?
+   *
+   * Antes daba igual: si no había nada se caía en el de ejemplo («Cuota anual»,
+   * 60 €) y la pantalla seguía como si tal cosa. Como ningún recibo de la
+   * hermandad se llama «Cuota anual», salía el aviso «hay N hermanos sin la
+   * cuota anual de este año, emítela a todo el censo de una vez» con N = censo
+   * entero. Quien le hacía caso emitía recibos duplicados a todo el mundo, a 60
+   * € en vez de a los 45 € suyos. Si además se domiciliaban, el banco cargaba
+   * 60 € a cada hermano que ya había pagado.
+   *
+   * Mientras no haya catálogo no se puede decir nada de lo que falta: lo
+   * honesto es no ofrecer la emisión y decir por qué.
+   */
+  const catalogoListo = conceptosCuota.length > 0
   const ejercicioEnCurso = useMemo(() => getCampana().anio, [])
   const ultimoEmitido = useMemo(() => ultimoEjercicio(cuotas), [cuotas])
   const [emisionOpen, setEmisionOpen] = useState(false)
   const [ejercicioEmision, setEjercicioEmision] = useState(ejercicioEnCurso)
-  const [conceptoEmision, setConceptoEmision] = useState(conceptoAnual?.nombre ?? 'Cuota anual')
+  const [conceptoEmision, setConceptoEmision] = useState('')
+  // El catálogo llega después del primer pintado. Si el concepto se fijara solo
+  // al montar, se quedaría con el valor de entonces —vacío, o el de ejemplo— y
+  // la emisión se haría con un nombre que no es de la hermandad.
+  useEffect(() => {
+    if (!conceptoEmision && conceptoAnual) setConceptoEmision(conceptoAnual.nombre)
+  }, [conceptoAnual, conceptoEmision])
   const [metodoEmision, setMetodoEmision] = useState<MetodoCobro>('Domiciliación')
   // Un año a medio teclear («2», «202») emitiría cuotas de un ejercicio absurdo.
   const ejercicioValido = ejercicioEmision >= 2000 && ejercicioEmision <= 2100
@@ -166,8 +196,9 @@ export default function Cuotas() {
   )
   // ¿Toca un ejercicio nuevo? Hay hermanos activos sin la cuota anual del año en curso.
   const hayNuevoEjercicio =
+    catalogoListo &&
     (ultimoEmitido == null || ultimoEmitido < ejercicioEnCurso) &&
-    hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual?.nombre ?? 'Cuota anual').length > 0
+    hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual!.nombre).length > 0
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
@@ -376,11 +407,25 @@ export default function Cuotas() {
     () =>
       cuotas.filter((c) => {
         if (c.estado !== 'Pendiente' || !c.domiciliada || !hermanoDe(c.hermanoId)?.iban) return false
+        // Ya salió en un fichero descargado: no puede volver a entrar sola.
+        // Mandar dos veces el mismo recibo al banco son dos cargos al hermano,
+        // y el segundo vuelve devuelto y con comisión.
+        if (c.remesadaEl) return false
         const cobro = parseFechaEs(c.fechaCobro)
         // Si la fecha no se puede interpretar, se incluye (no se pierde el recibo).
         return !cobro || cobro <= limiteRemesa
       }),
     [cuotas, hermanoDe, limiteRemesa],
+  )
+
+  /** Pendientes que ya viajaron en un fichero descargado y por eso no entran. */
+  const yaRemesados = useMemo(
+    () => cuotas.filter((c) => c.remesadaEl && c.estado === 'Pendiente'),
+    [cuotas],
+  )
+  const ultimaRemesa = useMemo(
+    () => { const fechas = yaRemesados.map((c) => c.remesadaEl!).sort(); return fechas.length ? fechas[fechas.length - 1] : null },
+    [yaRemesados],
   )
 
   const acreedor = useMemo(
@@ -420,7 +465,34 @@ export default function Cuotas() {
     })
     const xml = buildSepaXml(acreedor, recibos, new Date(`${fechaRemesa}T00:00:00`), new Date())
     descargarArchivo(`remesa-sepa-${fechaRemesa}.xml`, xml, 'application/xml;charset=utf-8;')
+    // Queda apuntado en cada recibo que ya viajó en un fichero. Antes no
+    // quedaba rastro de ninguna clase: el recibo seguía «Pendiente» y
+    // domiciliado, así que a la semana siguiente entraba otra vez en la remesa
+    // y el hermano recibía el segundo cargo.
+    const hoy = isoLocal(new Date())
+    const enLaRemesa = new Set(recibosRemesables.map((c) => c.id))
+    setCuotas((prev) => prev.map((c) => (enLaRemesa.has(c.id) ? { ...c, remesadaEl: hoy } : c)))
     setRemesaOpen(false)
+  }
+
+  /**
+   * Soltar los recibos de la última remesa para poder volver a incluirlos.
+   *
+   * Hace falta porque descargar un fichero no significa haberlo mandado: se
+   * descarga, se ve que la fecha estaba mal, se borra y se rehace. Sin esta
+   * salida, esos recibos se quedarían fuera de toda remesa para siempre y
+   * nadie entendería por qué no se les cobra.
+   */
+  function soltarRemesados() {
+    const sueltos = cuotas.filter((c) => c.remesadaEl && c.estado === 'Pendiente')
+    if (sueltos.length === 0) return
+    if (!window.confirm(
+      `Vas a devolver ${sueltos.length} recibo${sueltos.length === 1 ? '' : 's'} a la remesa. ` +
+      'Hazlo solo si el fichero anterior NO llegó a mandarse al banco: si ya se mandó, ' +
+      'volverías a cobrarles.',
+    )) return
+    const ids = new Set(sueltos.map((c) => c.id))
+    setCuotas((prev) => prev.map((c) => (ids.has(c.id) ? { ...c, remesadaEl: undefined } : c)))
   }
 
   function abrirNuevaCuota() {
@@ -547,12 +619,29 @@ export default function Cuotas() {
         </div>
       )}
 
+      {/* Lo que ya salió en un fichero no vuelve a entrar solo. Se dice, con
+          cuántos y de cuándo, y con la salida por si el fichero no se llegó a
+          mandar: si no, esos recibos se quedarían fuera para siempre y nadie
+          entendería por qué a esa gente no se le cobra. */}
+      {yaRemesados.length > 0 && (
+        <div className="banner-inline">
+          <span>
+            <b>{yaRemesados.length} recibo{yaRemesados.length === 1 ? '' : 's'} ya {yaRemesados.length === 1 ? 'está' : 'están'} en una remesa</b>
+            {ultimaRemesa ? ` descargada el ${formatDate(new Date(`${ultimaRemesa}T00:00:00`))}` : ''}, así que no
+            {yaRemesados.length === 1 ? ' vuelve' : ' vuelven'} a entrar en la siguiente. Si aquel fichero no llegó a mandarse al banco, devuélve{yaRemesados.length === 1 ? 'lo' : 'los'}.
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={soltarRemesados}>
+            Volver a incluir{yaRemesados.length === 1 ? 'lo' : 'los'}
+          </button>
+        </div>
+      )}
+
       {hayNuevoEjercicio && (
         <div className="banner-inline banner-inline--accent cuotas-nuevo-ejercicio">
           <span>
             <b>Nuevo ejercicio {ejercicioEnCurso}.</b> Hay{' '}
-            {hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual?.nombre ?? 'Cuota anual').length} hermanos
-            sin la {conceptoAnual?.nombre ?? 'cuota anual'} de este año. Emítela a todo el censo de una vez.
+            {hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual!.nombre).length} hermanos
+            sin la {conceptoAnual!.nombre} de este año. Emítela a todo el censo de una vez.
           </span>
           <button className="btn btn-primary btn-sm" onClick={abrirEmision}>
             Emitir cuotas de {ejercicioEnCurso}
@@ -935,9 +1024,18 @@ export default function Cuotas() {
             <button className="btn btn-ghost" onClick={exportarRemesaCsv}>
               Solo CSV
             </button>
-            <button className="btn btn-outline" onClick={simularCobro} title="Marca la remesa como cobrada, sin pasarela real">
-              Simular cobro
-            </button>
+            {/* SOLO en modo demostración. Con una hermandad de verdad detrás,
+                este botón daba por cobrada una remesa entera sin que hubiera
+                entrado un euro: los recibos quedaban «Pagada», sin apunte en
+                Tesorería, y encima devolvía una parte al azar. La contabilidad
+                quedaba diciendo que se había cobrado algo que no se cobró, y
+                deshacerlo es recibo por recibo. En una pantalla de trabajo,
+                al lado de «Descargar XML», es un accidente esperando. */}
+            {hayDatosDeEjemplo() && (
+              <button className="btn btn-outline" onClick={simularCobro} title="Solo para probar: marca la remesa como cobrada sin que haya pasarela">
+                Simular cobro
+              </button>
+            )}
             <button className="btn btn-primary" onClick={descargarSepaXml} disabled={!!avisoAcreedor || !fechaRemesa}>
               Descargar XML SEPA
             </button>
@@ -988,8 +1086,19 @@ export default function Cuotas() {
           <p className="form-hint">
             El XML es un fichero de adeudo directo SEPA CORE (pain.008.001.02) real, listo para
             subir a la banca online. El «Solo CSV» es un listado de trabajo para revisar antes de
-            enviarlo. <b>Simular cobro</b> marca la remesa como pagada (sin pasarela real, para
-            probar el ciclo completo); una pequeña parte se devuelve, como en la vida real.
+            enviarlo.{' '}
+            {hayDatosDeEjemplo() && (
+              <>
+                <b>Simular cobro</b> marca la remesa como pagada (sin pasarela real, para probar el
+                ciclo completo); una pequeña parte se devuelve, como en la vida real. Solo aparece
+                mientras estáis probando.
+              </>
+            )}
+          </p>
+          <p className="form-hint">
+            Al descargar el XML, estos recibos quedan marcados como remesados y no vuelven a entrar
+            en la siguiente remesa. Si al final no mandáis el fichero, podéis devolverlos desde el
+            aviso que sale en la pantalla de cuotas.
           </p>
         </div>
       </Drawer>
@@ -1005,7 +1114,7 @@ export default function Cuotas() {
             <button className="btn btn-ghost" onClick={() => setEmisionOpen(false)}>
               Cancelar
             </button>
-            <button className="btn btn-primary" onClick={confirmarEmision} disabled={pendientesDeEmitir.length === 0 || !ejercicioValido}>
+            <button className="btn btn-primary" onClick={confirmarEmision} disabled={!catalogoListo || pendientesDeEmitir.length === 0 || !ejercicioValido}>
               Emitir {pendientesDeEmitir.length} cuota{pendientesDeEmitir.length === 1 ? '' : 's'}
             </button>
           </>

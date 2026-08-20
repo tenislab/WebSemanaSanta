@@ -106,8 +106,29 @@ export function renovacionDeHermano(
   papeletas: Papeleta[],
   campana: Campana,
 ): RenovacionHermano {
+  /**
+   * Su sitio del año pasado, si de verdad salió.
+   *
+   * EL FILTRO DE ESTADO NO SOBRA. Antes solo se miraba que hubiera papeleta
+   * con tramo, sin importar cómo acabó. Así, a quien anularon la papeleta el
+   * año anterior —«no llegó a pagar»— le salía este año «Por renovar», con la
+   * columna «Sitio 2026» diciendo su tramo y el botón «Renovar Cristo — Cirio
+   * 1º tramo». O sea: la hermandad le guardaba el sitio y la prioridad a quien
+   * no salió y no pagó, delante de los que sí.
+   *
+   * `participoEnCampana`, aquí al lado, SÍ excluía las anuladas: las dos
+   * funciones daban respuestas distintas sobre si el hermano había salido.
+   * Ahora usan el mismo criterio.
+   */
   const sitioAnterior =
-    papeletas.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio - 1 && p.tramoId !== null) ?? null
+    papeletas.find(
+      (p) =>
+        p.hermanoId === hermanoId &&
+        p.anio === campana.anio - 1 &&
+        p.tramoId !== null &&
+        p.estado !== 'Anulada' &&
+        p.estado !== 'Renuncia',
+    ) ?? null
   const papeletaActual =
     papeletas.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada') ?? null
 

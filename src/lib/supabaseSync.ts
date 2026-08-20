@@ -23,6 +23,24 @@ type Actualizador<T> = T[] | ((prev: T[]) => T[])
  * última vez que esta página se cargó en este navegador, en vez de quedarse
  * con los datos de ejemplo para siempre.
  */
+/**
+ * Avisar de que una tabla no se ha podido traer.
+ *
+ * Se reutiliza la misma señal que el fallo al guardar: el marco de la
+ * aplicación ya la escucha y pinta la banda de aviso. Que no se pueda LEER es
+ * igual de grave que que no se pueda escribir, y hasta ahora solo se contaba
+ * lo segundo: la pantalla se quedaba vacía o con lo que hubiera en el
+ * navegador, sin decir nada, y la secretaría se ponía a trabajar encima.
+ */
+function avisarDeFallo(tabla: string, motivo: string) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent('cabildo-sync-error', {
+      detail: { tabla, fallos: [`no se pudo cargar «${tabla}»: ${motivo}`] },
+    }),
+  )
+}
+
 function espejarEnLocal(claveLocal: string, items: unknown[]) {
   try {
     localStorage.setItem(claveLocal, JSON.stringify(items))
@@ -50,7 +68,26 @@ export function useSupabaseTable<T extends { id: string }>(
   toRow: (item: T) => Record<string, unknown>,
   fromRow: (row: Record<string, unknown>) => T,
   orderBy?: string,
+  opciones?: {
+    /**
+     * No dejar copia en el navegador ni escuchar la de otras pestañas.
+     *
+     * Lo usa el ÁREA DEL HERMANO, y hace falta porque el hermano y el panel
+     * montan el mismo hook con la misma clave local, pero ven cosas muy
+     * distintas: las políticas de Supabase solo le dejan ver SU ficha.
+     *
+     * Sin esto pasaba lo siguiente, en el ordenador de la casa de hermandad:
+     * la secretaria con el panel abierto en Hermanos, y en otra pestaña un
+     * hermano entrando en su área. La consulta del hermano devolvía 1 fila y
+     * espejaba `cabildo-hermanos` con esa única fila; el evento de
+     * almacenamiento llegaba a la pestaña del panel y la secretaria veía cómo
+     * sus 400 hermanos se convertían en 1 delante de sus ojos. Y la copia
+     * quedaba así aunque cerrara la pestaña.
+     */
+    sinEspejo?: boolean
+  },
 ) {
+  const sinEspejo = opciones?.sinEspejo ?? false
   // Modo local efectivo: sin Supabase configurado, o en modo demostración
   // (aunque Supabase esté configurado pero en pausa). En demo leemos siempre
   // los datos de ejemplo del navegador, sin consultar Supabase, para que el
@@ -61,6 +98,21 @@ export function useSupabaseTable<T extends { id: string }>(
     local ? leerPersistido(claveLocal, inicial) : [],
   )
   const cargado = useRef(local)
+
+  /**
+   * De dónde se tira cuando la consulta falla.
+   *
+   * NUNCA de `inicial` con base de datos conectada, y este matiz costaba caro:
+   * `inicial` son HERMANOS_INICIALES / CUOTAS_INICIALES, o sea los doce
+   * hermanos de la demostración con nombre y apellidos que no existen. Bastaba
+   * con crear la hermandad, entrar por primera vez (la copia local se acaba de
+   * borrar) y que esa primera consulta fallara —el proyecto de Supabase
+   * despertando de la pausa, sin ir más lejos— para que el panel enseñara un
+   * censo inventado. La tesorera, creyendo que era el suyo, corregía una ficha.
+   */
+  function deReserva(): T[] {
+    return leerPersistido<T[]>(claveLocal, isSupabaseConfigured ? [] : inicial)
+  }
 
   useEffect(() => {
     if (local || !supabase) return
@@ -73,22 +125,28 @@ export function useSupabaseTable<T extends { id: string }>(
       query.then(({ data, error }) => {
         if (cancelado) return
         if (error) {
-          // Supabase no responde (p. ej. proyecto en pausa): en vez de dejar la
-          // tabla vacía, se usa la copia local para que la página siga viéndose.
+          // Supabase no responde (proyecto en pausa, token caducado): se tira de
+          // la copia de este navegador para que la página siga viéndose.
           console.error(`No se pudo cargar "${tabla}":`, error.message)
-          setItemsState(leerPersistido(claveLocal, inicial))
+          setItemsState(deReserva())
+          // Y NO se marca como cargado. Es lo importante de todo esto: con
+          // `cargado` puesto, el primer cambio que hiciera la secretaria
+          // dispararía `sincronizar`, que compara la lista de antes con la de
+          // después y BORRA en Supabase lo que ya no aparece. Comparar contra
+          // una lista que nunca vino de la base es borrar el censo entero.
+          avisarDeFallo(tabla, error.message)
         } else {
           const traidos = (data ?? []).map(fromRow)
           setItemsState(traidos)
-          espejarEnLocal(claveLocal, traidos)
+          if (!sinEspejo) espejarEnLocal(claveLocal, traidos)
+          cargado.current = true
         }
-        cargado.current = true
       }, (err) => {
-        // Rechazo de red (fetch fallido) al consultar Supabase: misma reserva local.
+        // Rechazo de red (fetch fallido) al consultar Supabase: mismo criterio.
         if (cancelado) return
         console.error(`No se pudo cargar "${tabla}" (red):`, err)
-        setItemsState(leerPersistido(claveLocal, inicial))
-        cargado.current = true
+        setItemsState(deReserva())
+        avisarDeFallo(tabla, 'sin conexión')
       })
     }
 
@@ -110,6 +168,10 @@ export function useSupabaseTable<T extends { id: string }>(
   // abierta, o al revés) entra aquí sin recargar. Se usa `setItemsState` y no
   // `setItems` a propósito: la otra pestaña ya lo mandó a Supabase.
   useEscuchaOtrasPestanas(claveLocal, (crudo) => {
+    // El área del hermano no escucha: lo que ve el panel es el censo entero y
+    // lo que ve él es su ficha. Dejarle oír al panel le llenaría la pantalla
+    // con los datos de los demás.
+    if (sinEspejo) return
     setItemsState((actual) => {
       try {
         return JSON.stringify(actual) === crudo ? actual : (JSON.parse(crudo) as T[])
@@ -124,8 +186,8 @@ export function useSupabaseTable<T extends { id: string }>(
       const next = typeof actualizador === 'function' ? (actualizador as (p: T[]) => T[])(prev) : actualizador
       if (!local && supabase) {
         if (cargado.current) sincronizar(tabla, prev, next, toRow)
-        espejarEnLocal(claveLocal, next)
-      } else {
+        if (!sinEspejo) espejarEnLocal(claveLocal, next)
+      } else if (!sinEspejo) {
         espejarEnLocal(claveLocal, next)
       }
       return next

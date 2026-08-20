@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import BarraDeshacer from './BarraDeshacer'
 import Logo, { LogoMark } from './Logo'
 import AltaHermandad from './AltaHermandad'
 import { altaPendiente } from '../lib/altaHermandad'
@@ -7,8 +8,7 @@ import { getHermandadSettings, useHermandadSettings } from '../lib/hermandadSett
 import ThemeToggle from './ThemeToggle'
 import PaletaComandos, { type DestinoPaleta } from './PaletaComandos'
 import { useAuth } from '../context/AuthContext'
-import { cargoDeCuenta, puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
-import { getPersonal } from '../lib/personal'
+import { useCargoDeLaSesion, puedeVerModulo, usePermisosSincronizados } from '../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
 
@@ -174,11 +174,7 @@ export default function AppShell() {
    * (`auth.updateUser({ data: { cargo: null } })`) y borrarlo abría el panel
    * entero. El metadata solo se usa para saber QUÉ cuenta de personal es.
    */
-  const cargo = useMemo(() => {
-    const personalId = user?.user_metadata?.personalId as string | undefined
-    return cargoDeCuenta(personalId, getPersonal())
-    // `permisosVersion` no entra aquí: el cargo no cambia con los permisos.
-  }, [user])
+  const cargo = useCargoDeLaSesion()
   // Trae los permisos reales de Supabase en cuanto cargan (no solo los que hubiera en este navegador).
   const permisosVersion = usePermisosSincronizados()
 
@@ -347,6 +343,11 @@ export default function AppShell() {
               se redirige a Inicio, de modo que la sección simplemente no aparece. */}
           {accesoBloqueado ? <Navigate to="/app" replace /> : <Outlet />}
         </main>
+
+        {/* Una sola para toda la aplicación: la usan todas las pantallas que
+            borran algo. Va fuera de <main> porque no es contenido de la
+            página, es un aviso sobre lo que se acaba de hacer. */}
+        <BarraDeshacer />
       </div>
     </div>
   )

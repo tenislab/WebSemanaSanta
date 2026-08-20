@@ -5452,3 +5452,87 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
 }
 .registro-lista__item:last-child { border-bottom: 0; }
 .registro-lista__item small { color: var(--text-muted); font-size: 0.8rem; }
+
+/* --- A4 · La barra de deshacer ------------------------------------------- */
+/* En claro va oscura, que es lo que hace que se lea como un aviso y no como
+   otra tarjeta más de la página. En oscuro se sube un peldaño sobre el fondo,
+   porque una barra negra sobre fondo negro no se ve. */
+:root {
+  --deshacer-bg: #23272f;
+  --deshacer-fg: #f4f5f7;
+  --deshacer-accion: #8fc0ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --deshacer-bg: #3a3f49;
+    --deshacer-fg: #f4f5f7;
+    --deshacer-accion: var(--oro-300);
+  }
+}
+:root[data-theme='dark'] {
+  --deshacer-bg: #3a3f49;
+  --deshacer-fg: #f4f5f7;
+  --deshacer-accion: var(--oro-300);
+}
+
+/* Abajo y centrada: donde no tapa el contenido que se está mirando y donde el
+   ojo la encuentra sin buscarla. En el móvil ocupa el ancho, porque a media
+   pantalla el botón queda demasiado pequeño para acertar con el pulgar. */
+.deshacer {
+  position: fixed; z-index: 120;
+  left: 50%; bottom: 1.25rem; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 0.85rem;
+  max-width: min(94vw, 34rem);
+  padding: 0.7rem 0.75rem 0.7rem 1.05rem;
+  border-radius: 12px;
+  background: var(--deshacer-bg);
+  color: var(--deshacer-fg);
+  box-shadow: 0 14px 38px -12px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  animation: deshacer-entra 0.18s ease-out;
+}
+@keyframes deshacer-entra {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deshacer { animation: none; }
+}
+
+.deshacer__texto {
+  font-size: 0.9rem; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.deshacer__btn {
+  flex: 0 0 auto;
+  border: 0; border-radius: 8px; cursor: pointer;
+  padding: 0.4rem 0.8rem;
+  background: transparent; color: var(--deshacer-accion);
+  font: inherit; font-size: 0.88rem; font-weight: 700;
+}
+.deshacer__btn:hover { background: rgba(255, 255, 255, 0.12); }
+.deshacer__cerrar {
+  flex: 0 0 auto;
+  border: 0; border-radius: 8px; cursor: pointer;
+  width: 28px; height: 28px; line-height: 1;
+  background: transparent; color: inherit; opacity: 0.65;
+  font: inherit; font-size: 0.85rem;
+}
+.deshacer__cerrar:hover { opacity: 1; background: rgba(255, 255, 255, 0.12); }
+.deshacer__btn:focus-visible,
+.deshacer__cerrar:focus-visible { outline: 2px solid var(--deshacer-accion); outline-offset: 2px; }
+
+/* El tiempo que queda, vaciándose. Va pegada al borde de abajo. */
+.deshacer__tiempo {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--deshacer-accion);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+
+@media (max-width: 40rem) {
+  /* A lo ancho: a media pantalla el botón queda demasiado pequeño para el
+     pulgar. Sin animación de entrada, porque la de arriba lleva dentro el
+     `translateX(-50%)` que aquí ya no se usa y la dejaría descentrada. */
+  .deshacer { left: 0.6rem; right: 0.6rem; transform: none; max-width: none; animation: none; }
+}

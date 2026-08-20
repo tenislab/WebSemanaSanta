@@ -1,52 +1,66 @@
 -- =============================================================================
 --
---   CABILDO — TODO EL SQL, EN UN SOLO ARCHIVO
+--   GOBERGO — TODO EL SQL, EN UN SOLO ARCHIVO
 --
 -- =============================================================================
 --
--- CÓMO SE USA:
+--   GENERADO. No lo edites a mano: se sobrescribe.
+--   Se toca el fichero suelto y se vuelve a generar con
+--       node scripts/generar-todo-en-uno.mjs
+--
+-- -----------------------------------------------------------------------------
+-- CÓMO SE USA
+-- -----------------------------------------------------------------------------
 --
 --   1. Abre tu proyecto en supabase.com
 --   2. Menú izquierdo → SQL Editor → New query
 --   3. Copia ESTE ARCHIVO ENTERO, pégalo y dale a RUN
 --
 -- Tarda unos segundos. Es seguro volver a ejecutarlo: todo está escrito para
--- no romperse si ya existía (usa "if not exists" y "drop policy if exists").
+-- no romperse si ya existía.
 --
 -- -----------------------------------------------------------------------------
 -- QUÉ CREA, POR ORDEN
 -- -----------------------------------------------------------------------------
 --
---   1. schema.sql           Todas las tablas
---   2. rls-cargos.sql       Permisos por cargo de la junta
---   3. rls-endurecer.sql    ⚠️  EL IMPORTANTE (ver abajo)
---   4. hermano-auth.sql     Acceso del hermano a su propia ficha
---   5. web-publica.sql      La web pública
---   6. mensajes-web.sql     Buzón de los formularios de la web
---   7. storage-archivo.sql  Adjuntos del archivo documental
+--    1. schema.sql                 Todas las tablas
+--    2. rls-cargos.sql             Permisos por cargo de la junta
+--    3. rls-endurecer.sql          EL IMPORTANTE: cierra la escritura a quien se registre
+--    4. hermano-auth.sql           Acceso del hermano a su propia ficha
+--    5. web-publica.sql            La web pública
+--    6. mensajes-web.sql           Buzón de los formularios de la web
+--    7. storage-archivo.sql        Adjuntos del archivo documental
+--    8. add-provincia.sql          La provincia en la ficha de la hermandad
+--    9. multi-hermandad.sql        TODAS las hermandades en una base, sin verse entre ellas
+--   10. apuntes-automaticos.sql    Que los cobros lleguen solos a Tesorería
+--   11. registro-actividad.sql     Quién hizo qué (RGPD, artículo 32)
+--   12. remesas.sql                Que una remesa SEPA no se cobre dos veces
+--   13. comunicados-segmento.sql   Guardar a quién iba dirigido un comunicado
+--   14. acceso-hermano.sql         Cerrar el barrido de DNI en el acceso del hermano
+--   15. area-hermano.sql           Que el área del hermano funcione de verdad
+--   16. correo-hermandad.sql       Que la configuración de correo sea de la hermandad
 --
 -- -----------------------------------------------------------------------------
--- ⚠️  LO ÚNICO QUE HAY QUE LEER ANTES
+-- LO ÚNICO QUE HAY QUE LEER ANTES
 -- -----------------------------------------------------------------------------
 --
--- El bloque 3 (rls-endurecer) es el que impide que cualquiera que se registre
--- en /registro obtenga permiso de escritura sobre TODA la base de datos.
+-- `rls-endurecer.sql` es el que impide que cualquiera que se registre en
+-- /registro obtenga permiso de escritura sobre TODA la base de datos.
 --
--- El bloque 8 (multi-hermandad) es el que hace que en esta misma base de datos
--- quepan TODAS las hermandades sin que ninguna vea nada de las demás. Es el
--- más importante de todos y tiene que ir el último.
+-- `multi-hermandad.sql` es el que hace que en esta misma base quepan TODAS
+-- las hermandades sin que ninguna vea nada de las demás. Va después de las
+-- tablas, porque separa lo que ellas han creado, y antes de todo lo que
+-- necesita la columna `hermandad_id` que él añade.
 --
--- YA NO HAY QUE DARSE DE ALTA A MANO COMO TITULAR. Antes había que copiar el
--- identificador de la cuenta y escribir un `insert` a mano; ahora, la primera
--- vez que entras, la aplicación crea tu hermandad y te deja como titular sola.
--- Tú solo tienes que registrarte en la aplicación con tu correo.
+-- NO HAY QUE DARSE DE ALTA A MANO COMO TITULAR. La primera vez que entras, la
+-- aplicación crea tu hermandad y te deja como titular sola. Tú solo tienes que
+-- registrarte con tu correo.
 --
 -- =============================================================================
 
 
-
 -- =============================================================================
---   BLOQUE 1 de 8  ·  schema.sql
+--   SCHEMA.SQL — Todas las tablas
 -- =============================================================================
 
 -- =============================================================================
@@ -124,7 +138,27 @@ create table if not exists hermanos (
   motivo_baja text,
   created_at timestamptz not null default now()
 );
-create unique index if not exists hermanos_numero_activo_uniq on hermanos (numero) where numero > 0;
+-- El número de hermano es único... MIENTRAS HAYA UNA SOLA HERMANDAD.
+--
+-- Con varias, cada una tiene su nº 1, y el índice bueno es
+-- (hermandad_id, numero): lo crea `multi-hermandad.sql`, que además borra este.
+--
+-- Por eso va dentro de una comprobación. `create unique index if not exists`
+-- solo se salta la creación si ya existe un índice CON ESE NOMBRE, y en una
+-- base que ya es multi-hermandad ese nombre no existe (lo borró
+-- multi-hermandad). Así que al volver a ejecutar el SQL entero —cosa que se
+-- supone que se puede hacer sin miedo— intentaba crearlo de nuevo y se
+-- estrellaba con «Key (numero)=(1) is duplicated», que es justo lo NORMAL
+-- cuando hay dos hermandades dentro.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'hermanos' and column_name = 'hermandad_id'
+  ) then
+    create unique index if not exists hermanos_numero_activo_uniq on hermanos (numero) where numero > 0;
+  end if;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- Cortejo: cuerpos/tramos
@@ -656,9 +690,8 @@ create policy "eventos_staff_all" on eventos for all to authenticated
 drop policy if exists "eventos_hermano_select" on eventos;
 create policy "eventos_hermano_select" on eventos for select to authenticated using (true);
 
-
 -- =============================================================================
---   BLOQUE 2 de 8  ·  rls-cargos.sql
+--   RLS-CARGOS.SQL — Permisos por cargo de la junta
 -- =============================================================================
 
 -- Refuerza la RLS por cargo del personal. Seguro de ejecutar sobre una base
@@ -848,9 +881,8 @@ drop policy if exists "papeletas_staff_delete" on papeletas;
 create policy "papeletas_staff_delete" on papeletas for delete to authenticated
   using (not auth_es_hermano() and (modulo_permitido('papeletas') or modulo_permitido('cortejo')));
 
-
 -- =============================================================================
---   BLOQUE 3 de 8  ·  rls-endurecer.sql
+--   RLS-ENDURECER.SQL — EL IMPORTANTE: cierra la escritura a quien se registre
 -- =============================================================================
 
 -- ============================================================================
@@ -930,24 +962,25 @@ create or replace function auth_es_personal() returns boolean
 grant execute on function auth_es_personal() to authenticated;
 
 -- ============================================================================
---  >>> PASO-TITULAR <<<  —  YA NO HACE FALTA HACER NADA AQUÍ
+--  Después de ejecutar esto, HAY QUE dar de alta al titular.
 --
---  Aquí antes había que dar de alta al titular a mano, copiando de Supabase el
---  identificador de la cuenta y escribiendo un `insert`. Era fácil equivocarse
---  (pegar el nombre de usuario en vez del identificador, por ejemplo) y
---  mientras tanto no se podía entrar al panel.
+--  Se hace con esto, poniendo el correo con el que se registró y el nombre de
+--  la hermandad:
 --
---  El bloque 8 trae `crear_hermandad()`, y la aplicación la llama la primera
---  vez que entras: te crea tu hermandad, te deja como titular y prepara su
---  ficha de ajustes, todo de una vez. No hay nada que copiar.
+--      select crear_hermandad_manual('titular@sudominio.es', 'Hdad. de Triana');
 --
---  Si te registras y no ves nada, no es esto: mira que hayas ejecutado el
---  archivo ENTERO, hasta el bloque 8.
+--  NO uses «insert into titulares (auth_user_id) values ('<uuid>')», que es lo
+--  que ponía aquí antes. Esa fila entra SIN hermandad, y una fila de titular
+--  sin hermandad hacía que al entrar se le metiera en la hermandad de otra
+--  gente —la primera que hubiera en la tabla— con su censo delante. Con una
+--  sola hermandad en la base no se notaba; con varias, es una fuga.
+--
+--  Sin este paso, ni siquiera el titular podrá escribir: es a propósito.
+--  Vale más quedarse fuera un minuto que dejar la puerta abierta.
 -- ============================================================================
 
-
 -- =============================================================================
---   BLOQUE 4 de 8  ·  hermano-auth.sql
+--   HERMANO-AUTH.SQL — Acceso del hermano a su propia ficha
 -- =============================================================================
 
 -- Login real del hermano con Supabase Auth + RLS por hermano/personal.
@@ -1064,9 +1097,8 @@ create policy "papeletas_propio_update" on papeletas for update to authenticated
 -- nuevo se queda sin poder entrar hasta confirmar un correo que hoy no se
 -- envía (falta configurar un SMTP propio, pendiente en el plan de mejoras).
 
-
 -- =============================================================================
---   BLOQUE 5 de 8  ·  web-publica.sql
+--   WEB-PUBLICA.SQL — La web pública
 -- =============================================================================
 
 -- ============================================================================
@@ -1121,9 +1153,8 @@ drop trigger if exists web_publica_touch on web_publica;
 create trigger web_publica_touch before update on web_publica
   for each row execute function web_publica_touch();
 
-
 -- =============================================================================
---   BLOQUE 6 de 8  ·  mensajes-web.sql
+--   MENSAJES-WEB.SQL — Buzón de los formularios de la web
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -1189,9 +1220,8 @@ create policy "el personal borra del buzon"
   to authenticated
   using (not auth_es_hermano());
 
-
 -- =============================================================================
---   BLOQUE 7 de 8  ·  storage-archivo.sql
+--   STORAGE-ARCHIVO.SQL — Adjuntos del archivo documental
 -- =============================================================================
 
 -- Bucket de Supabase Storage para los adjuntos del Archivo documental
@@ -1212,40 +1242,16 @@ create policy "documentos_authenticated_all" on storage.objects
   using (bucket_id = 'documentos')
   with check (bucket_id = 'documentos');
 
-
 -- =============================================================================
---
---   FIN. Si ha salido "Success" sin errores, la base de datos está lista.
---
--- =============================================================================
---
--- LO SIGUIENTE:
---
---   1. Project Settings → API → copia "Project URL" y "anon public"
---   2. Pégalas en el archivo .env del proyecto:
---
---        VITE_SUPABASE_URL=https://xxxxx.supabase.co
---        VITE_SUPABASE_ANON_KEY=eyJhbGci...
---
---   3. npm run dev
---   4. Regístrate en la aplicación con tu correo. Al entrar por primera vez
---      se crea tu hermandad sola y quedas como titular.
---   5. En la app: Configuración → Puesta en marcha.
---      El aviso "Los datos solo están en este navegador" debe haber
---      desaparecido.
---
--- 🚫 La clave "service_role" NO se usa nunca en esta aplicación.
---
+--   ADD-PROVINCIA.SQL — La provincia en la ficha de la hermandad
 -- =============================================================================
 
-
+-- Añade el campo Provincia a los datos de la hermandad, para el Estado de
+-- Cuentas anual. Seguro de ejecutar sobre una base ya en uso.
+alter table hermandad_settings add column if not exists provincia text not null default '';
 
 -- =============================================================================
---   BLOQUE 8 de 8  ·  multi-hermandad.sql
---
---   El que hace que en esta base de datos quepan TODAS las hermandades sin que
---   ninguna vea nada de las demás. Va el último porque cambia cosas que los
---   bloques anteriores acaban de crear.
+--   MULTI-HERMANDAD.SQL — TODAS las hermandades en una base, sin verse entre ellas
 -- =============================================================================
 
 -- =============================================================================
@@ -1686,8 +1692,20 @@ begin
     -- ya está creada y se une a ELLA. Sin esto, cada miembro de la junta se
     -- fabricaría una hermandad distinta al entrar y se perderían de vista unos
     -- a otros, cada uno con un trozo de lo que era una sola casa.
-    select t.hermandad_id into nueva
-      from titulares t where t.hermandad_id is not null limit 1;
+    --
+    -- OJO CON EL `limit 1`: ese select no filtra por nada. Cuando la base
+    -- tenía UNA sola hermandad —la mudanza, que es para lo que se escribió—
+    -- devolvía la única que había y era correcto. Con varias hermandades
+    -- dentro devuelve UNA CUALQUIERA, normalmente la más antigua: un titular
+    -- dado de alta a mano acababa metido en la hermandad de otra gente, viendo
+    -- su censo, y encima arrastraba hacia allí las filas sin dueño.
+    --
+    -- Por eso ahora solo se hace si de verdad estamos en el caso de la
+    -- mudanza. Con dos o más hermandades, se le crea la suya.
+    if (select count(*) from hermandades) <= 1 then
+      select t.hermandad_id into nueva
+        from titulares t where t.hermandad_id is not null limit 1;
+    end if;
   end if;
 
   if nueva is null then
@@ -1714,6 +1732,26 @@ begin
   return nueva;
 end $$;
 grant execute on function crear_hermandad(text) to authenticated;
+
+
+-- --- Y esta NO la puede llamar nadie desde fuera ----------------------------
+--
+-- `adoptar_datos_sin_hermandad` es SECURITY DEFINER: se salta las políticas a
+-- propósito, porque tiene que tocar filas que todavía no son de nadie. Sin
+-- estos `revoke`, Postgres se la concede a PUBLIC por defecto y PostgREST la
+-- publica como cualquier otra: desde la consola del navegador, con la sesión
+-- de CUALQUIER hermandad, bastaba con
+--
+--     supabase.rpc('adoptar_datos_sin_hermandad', { p_hermandad_id: '<el mío>' })
+--
+-- para adjudicarse todas las filas sin dueño de la base entera y verlas en su
+-- propio panel. `crear_hermandad_manual` ya llevaba sus revoke; aquí se
+-- olvidaron.
+--
+-- Las funciones que la necesitan (`crear_hermandad`, `crear_hermandad_manual`)
+-- también son SECURITY DEFINER y la llaman por dentro, así que les da igual.
+revoke execute on function adoptar_datos_sin_hermandad(uuid) from public;
+revoke execute on function adoptar_datos_sin_hermandad(uuid) from anon, authenticated;
 
 
 -- --- La misma alta, pero desde el editor SQL --------------------------------
@@ -1756,7 +1794,12 @@ begin
 
   select true into ya_era_titular from titulares where auth_user_id = uid;
   if ya_era_titular then
-    select t.hermandad_id into nueva from titulares t where t.hermandad_id is not null limit 1;
+    -- Igual que en `crear_hermandad`: ese `limit 1` solo vale para la mudanza
+    -- de un proyecto de UNA hermandad. Con varias dentro, metía al recién
+    -- nombrado en la hermandad de otra gente.
+    if (select count(*) from hermandades) <= 1 then
+      select t.hermandad_id into nueva from titulares t where t.hermandad_id is not null limit 1;
+    end if;
   end if;
 
   if nueva is null then
@@ -1856,3 +1899,542 @@ grant execute on function hermandades_publicas() to anon, authenticated;
 --                     where c.table_name = t.table_name and c.column_name = 'hermandad_id');
 --
 -- =============================================================================
+
+-- =============================================================================
+--   APUNTES-AUTOMATICOS.SQL — Que los cobros lleguen solos a Tesorería
+-- =============================================================================
+
+-- =============================================================================
+--   EL COBRO QUE SE APUNTA SOLO EN TESORERÍA
+-- =============================================================================
+--
+-- Hasta ahora, marcar una cuota o una papeleta como pagada no dejaba rastro en
+-- Tesorería: el dinero entraba en la hermandad y el libro de cuentas no se
+-- enteraba. El saldo y el Estado de Cuentas solo reflejaban lo que alguien
+-- hubiera escrito a mano, así que nunca cuadraban.
+--
+-- `origen` dice de dónde salió cada movimiento:
+--
+--     cuota:<id>      el cobro de un recibo
+--     papeleta:<id>   el cobro de una papeleta de sitio
+--     (vacío)         lo escribió alguien a mano en Tesorería
+--
+-- Sirve para tres cosas, y las tres importan:
+--
+--   1. No apuntar dos veces lo mismo si se marca pagada otra vez.
+--   2. Poder retirar el apunte si el cobro se deshace (un recibo devuelto).
+--   3. Saber, de un vistazo, qué línea del libro corresponde a qué recibo.
+--
+-- Ejecutar DESPUÉS de TODO-EN-UNO.sql. Es seguro repetirlo.
+-- =============================================================================
+
+alter table movimientos add column if not exists origen text;
+
+-- Único POR HERMANDAD: dos hermandades pueden tener cada una su cuota con el
+-- mismo identificador de origen sin pisarse. Y solo donde hay origen: los
+-- movimientos escritos a mano no tienen, y son la mayoría.
+create unique index if not exists movimientos_origen_por_hermandad
+  on movimientos (hermandad_id, origen) where origen is not null;
+
+-- =============================================================================
+--   REGISTRO-ACTIVIDAD.SQL — Quién hizo qué (RGPD, artículo 32)
+-- =============================================================================
+
+-- =============================================================================
+--   QUIÉN HIZO QUÉ
+-- =============================================================================
+--
+-- Una junta de hermandad se renueva cada pocos años y hereda un censo que no
+-- ha montado. Cuando algo no cuadra —un hermano de baja que no debería
+-- estarlo, un IBAN cambiado, una papeleta anulada— la primera pregunta es
+-- siempre la misma: quién lo hizo y cuándo. Hasta ahora no había forma de
+-- saberlo.
+--
+-- Y no es solo comodidad. Un censo de hermandad es categoría especial del
+-- RGPD, y el artículo 32 pide poder demostrar quién accede y modifica.
+--
+-- QUÉ SE GUARDA: quién, qué, sobre quién, y cuándo. NO se guarda el contenido
+-- del cambio. Apuntar «el IBAN pasó de X a Y» duplicaría datos bancarios en
+-- una segunda tabla que nadie vigila, y para responder a la pregunta que se
+-- hace de verdad basta con saber quién lo tocó y cuándo.
+--
+-- Ejecutar DESPUÉS de TODO-EN-UNO.sql.
+-- =============================================================================
+
+create table if not exists registro_actividad (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid references hermandades(id) on delete cascade,
+  -- Quién: la cuenta, y su nombre tal como era ENTONCES. Se guarda el nombre
+  -- copiado a propósito: si esa persona deja la junta y se borra su ficha, el
+  -- registro tiene que seguir diciendo quién fue.
+  autor_id uuid,
+  autor_nombre text not null default '',
+  -- Qué pasó, en una palabra: 'baja', 'alta', 'iban', 'papeleta_anulada'…
+  accion text not null,
+  -- Sobre qué o quién. El nombre también copiado, por lo mismo de arriba.
+  sobre_tipo text not null default '',
+  sobre_id text,
+  sobre_nombre text not null default '',
+  -- Una frase para leerlo sin tener que interpretar nada.
+  detalle text not null default '',
+  cuando timestamptz not null default now()
+);
+
+alter table registro_actividad enable row level security;
+alter table registro_actividad alter column hermandad_id set default hermandad_actual();
+create index if not exists registro_actividad_hermandad_idx on registro_actividad (hermandad_id, cuando desc);
+
+-- La frontera, igual que el resto: nadie ve el registro de otra hermandad.
+drop policy if exists "solo_mi_hermandad" on registro_actividad;
+create policy "solo_mi_hermandad" on registro_actividad as restrictive for all to public
+  using (hermandad_id = hermandad_actual())
+  with check (hermandad_id = hermandad_actual());
+
+-- Lo lee y lo escribe el personal. Los hermanos no: su área es lo suyo, no
+-- quién ha tocado el censo.
+drop policy if exists "registro_personal" on registro_actividad;
+create policy "registro_personal" on registro_actividad for select to authenticated
+  using (not auth_es_hermano());
+drop policy if exists "registro_apuntar" on registro_actividad;
+create policy "registro_apuntar" on registro_actividad for insert to authenticated
+  with check (not auth_es_hermano());
+
+-- NO se puede modificar ni borrar. Nadie, ni el titular.
+--
+-- Es lo que hace que sirva para algo: un registro que puede reescribir quien
+-- tiene algo que ocultar no prueba nada. No se crea política de update ni de
+-- delete, así que la restrictiva de arriba deja las dos cerradas.
+
+-- =============================================================================
+--   REMESAS.SQL — Que una remesa SEPA no se cobre dos veces
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — el rastro de las remesas SEPA
+-- ============================================================================
+--
+-- QUÉ ARREGLA (auditoría de agosto de 2026)
+--
+-- Descargar el fichero XML de la remesa no dejaba NINGÚN rastro en los
+-- recibos. Seguían «Pendiente» y domiciliados, así que la semana siguiente el
+-- tesorero abría «Preparar remesa» y ahí estaban otra vez, los mismos.
+--
+-- Dos ficheros al banco con los mismos recibos son DOS CARGOS al mismo
+-- hermano. El segundo vuelve devuelto, con su comisión, y con la llamada del
+-- hermano preguntando por qué se le ha cobrado dos veces la cuota.
+--
+-- Con esta columna, al descargar el fichero cada recibo queda marcado con la
+-- fecha, y no vuelve a entrar en una remesa por su cuenta. Si el fichero no se
+-- llegó a mandar, la propia pantalla ofrece devolverlos.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+alter table cuotas add column if not exists remesada_el date;
+
+comment on column cuotas.remesada_el is
+  'Fecha en la que este recibo salió dentro de un fichero de remesa SEPA descargado. '
+  'Vacío = todavía no ha ido en ninguna. Sirve para que no se cobre dos veces.';
+
+-- Para poder listar rápido «los que ya van en una remesa» sin leer la tabla
+-- entera. Parcial: los que no se han remesado (la mayoría) no ocupan índice.
+create index if not exists cuotas_remesada_el_idx
+  on cuotas (hermandad_id, remesada_el)
+  where remesada_el is not null;
+
+-- =============================================================================
+--   COMUNICADOS-SEGMENTO.SQL — Guardar a quién iba dirigido un comunicado
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — guardar a quién iba dirigido un comunicado
+-- ============================================================================
+--
+-- QUÉ ARREGLA (auditoría de agosto de 2026)
+--
+-- Un comunicado con segmentación avanzada («Activos · con cuota pendiente»)
+-- guardaba solo esa etiqueta legible. A la hora de avisar, la aplicación
+-- intentaba adivinar a quién se refería LEYENDO ESE TEXTO: reconocía las que
+-- empiezan por «Etiqueta: » y cualquiera que dijera «todos», y nada más.
+--
+-- «Activos · con cuota pendiente» no encaja en ninguna de las dos, así que la
+-- lista de destinatarios salía VACÍA. Ni buzón, ni correo, ni nada. Y el
+-- comunicado quedaba guardado como «Enviado», con su fecha y con un alcance de
+-- 84 personas que no habían recibido absolutamente nada.
+--
+-- Con esta columna se guardan los criterios de verdad y se vuelven a resolver.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+alter table comunicados add column if not exists criterios jsonb;
+
+comment on column comunicados.criterios is
+  'Criterios del segmento con el que se compuso el comunicado (estado, cuota, edad, '
+  'etiqueta, campos propios). Vacío = destinatario simple, resuelto por su etiqueta. '
+  'Sin esto no hay forma de saber a quién iba dirigido.';
+
+-- =============================================================================
+--   ACCESO-HERMANO.SQL — Cerrar el barrido de DNI en el acceso del hermano
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — cerrar el barrido de DNI en el acceso del hermano
+-- ============================================================================
+--
+-- QUÉ ARREGLA (auditoría de agosto de 2026)
+--
+-- `resolver_email_hermano(hermandad, dni)` está concedida a `anon`, y tiene
+-- que estarlo: el hermano escribe su DNI ANTES de tener sesión, y hace falta
+-- traducirlo a un correo para poder abrirle sesión.
+--
+-- El problema no es que exista, es que no tenía freno. Desde cualquier
+-- navegador, sin identificarse:
+--
+--     const { data: hs } = await supabase.rpc('hermandades_publicas')
+--     await supabase.rpc('resolver_email_hermano',
+--                        { p_hermandad_id: hs[0].id, p_dni: '12345678Z' })
+--
+-- Si devuelve un correo, esa persona es hermana de esa hermandad. Si devuelve
+-- null, no lo es. En bucle, eso es un padrón.
+--
+-- Y NO es un dato cualquiera: pertenecer a una hermandad revela convicciones
+-- religiosas, que el RGPD trata como CATEGORÍA ESPECIAL (artículo 9), el nivel
+-- más alto de protección que existe. Publicar quién pertenece a cuál, aunque
+-- sea de uno en uno, es exactamente lo que ese artículo prohíbe.
+--
+-- CÓMO SE CIERRA
+--
+-- Con un tope por hermandad y ventana de tiempo. Un hermano de verdad prueba
+-- una o dos veces; quien barre necesita miles. El límite se nota enseguida
+-- para el segundo y no molesta al primero.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+-- --- El registro de intentos -------------------------------------------------
+--
+-- No se guarda el DNI en claro: no hace falta para contar, y una tabla con
+-- DNI de gente que ni siquiera es hermana no debería existir. Se guarda su
+-- huella, que sirve para no contar diez veces el mismo dedazo.
+create table if not exists intentos_acceso (
+  id bigserial primary key,
+  hermandad_id uuid not null references hermandades(id) on delete cascade,
+  huella_dni text not null,
+  cuando timestamptz not null default now()
+);
+
+create index if not exists intentos_acceso_ventana_idx
+  on intentos_acceso (hermandad_id, cuando desc);
+
+alter table intentos_acceso enable row level security;
+
+-- Nadie la lee ni la escribe desde fuera. La escribe la función, que es
+-- SECURITY DEFINER y se salta las políticas a propósito. Sin ninguna política,
+-- una tabla con RLS activo está cerrada a cal y canto, que es lo que se quiere.
+revoke all on intentos_acceso from anon, authenticated;
+
+-- --- La función, ahora con freno --------------------------------------------
+create or replace function resolver_email_hermano(p_hermandad_id uuid, p_dni text)
+returns text
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_dni text;
+  v_huella text;
+  v_recientes int;
+  v_email text;
+begin
+  -- Se quitan también los PUNTOS. La versión anterior solo quitaba espacios y
+  -- guiones, así que quien escribía su DNI como lo lleva la tarjeta —
+  -- «12.345.678-A», que es como lo escribe medio mundo— no entraba: se
+  -- comparaba «12.345.678A» contra «12345678A» y no casaba. Y el mensaje que
+  -- veía era «DNI o contraseña incorrectos».
+  v_dni := upper(regexp_replace(coalesce(p_dni, ''), '[^A-Za-z0-9]', '', 'g'));
+  if v_dni = '' or p_hermandad_id is null then
+    return null;
+  end if;
+  -- `md5` es de Postgres de serie: no hace falta ninguna extensión, y aquí no
+  -- está guardando un secreto. Solo sirve para contar sin dejar escritos los
+  -- DNI de gente que ni siquiera es hermana. Lleva dentro el id de la
+  -- hermandad para que la misma huella no valga en dos sitios.
+  v_huella := md5(v_dni || ':' || p_hermandad_id::text);
+
+  -- Cuántos DNI DISTINTOS se han probado contra esta hermandad en la última
+  -- media hora. Se cuentan distintos a propósito: quien se equivoca al teclear
+  -- el suyo y lo repite cinco veces no es el que preocupa.
+  select count(distinct huella_dni) into v_recientes
+    from intentos_acceso
+   where hermandad_id = p_hermandad_id
+     and cuando > now() - interval '30 minutes';
+
+  if v_recientes >= 25 then
+    -- Se avisa en vez de devolver null: un hermano legítimo que llega justo
+    -- después de un barrido tiene derecho a saber por qué no le funciona.
+    raise exception 'Demasiados intentos de acceso en esta hermandad. Espera unos minutos y vuelve a probar.'
+      using errcode = 'P0001';
+  end if;
+
+  insert into intentos_acceso (hermandad_id, huella_dni) values (p_hermandad_id, v_huella);
+
+  -- La limpieza va aquí, aprovechando el viaje: sin esto la tabla crece para
+  -- siempre y haría falta una tarea programada, que es una pieza más que
+  -- mantener. Se borra lo de hace más de un día, no lo de hace media hora,
+  -- para poder mirar un barrido después de que haya pasado.
+  delete from intentos_acceso where cuando < now() - interval '1 day';
+
+  select email into v_email from hermanos
+   where hermandad_id = p_hermandad_id
+     -- Y lo mismo del lado guardado: en el censo importado hay DNI escritos
+     -- de las dos maneras, y los dos son el mismo señor.
+     and upper(regexp_replace(dni, '[^A-Za-z0-9]', '', 'g')) = v_dni
+     and estado <> 'Baja'
+     and email <> ''
+   limit 1;
+
+  return v_email;
+end $$;
+
+grant execute on function resolver_email_hermano(uuid, text) to anon, authenticated;
+
+-- =============================================================================
+--   AREA-HERMANO.SQL — Que el área del hermano funcione de verdad
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — que el área del hermano funcione de verdad
+-- ============================================================================
+--
+-- Cuatro hallazgos de la auditoría de agosto de 2026. Todos tienen la misma
+-- pinta desde fuera: el hermano hace algo, la pantalla le dice que ha salido
+-- bien, y no ha pasado nada.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- 0. Antes de nada: que `hermano_propio_id()` no se muerda la cola
+-- ----------------------------------------------------------------------------
+--
+-- Esa función hace `select id from hermanos where auth_user_id = auth.uid()`.
+-- Usada desde una política sobre OTRA tabla (cuotas, papeletas) va perfecta.
+-- Usada desde una política sobre `hermanos` —que es lo que hace falta abajo
+-- para que un tutor vea la ficha de su hijo— Postgres tiene que evaluar la
+-- política de `hermanos` para resolver ese select, y para eso vuelve a llamar
+-- a la función… y así hasta `stack depth limit exceeded`.
+--
+-- No es un error teórico: la primera versión de este fichero lo hacía, y lo
+-- que reventaba no era solo la consulta del tutor, era CUALQUIER lectura de
+-- `hermanos` hecha por un hermano. El área entera dejaba de cargar.
+--
+-- Con SECURITY DEFINER la función se salta las políticas al mirar su propia
+-- fila, que es exactamente lo que necesita, y deja de haber ciclo. No abre
+-- nada: sigue devolviendo solo el id de quien pregunta.
+create or replace function hermano_propio_id() returns uuid
+  language sql stable security definer set search_path = public as $$
+    select id from hermanos where auth_user_id = auth.uid()
+  $$;
+grant execute on function hermano_propio_id() to authenticated;
+
+
+-- ----------------------------------------------------------------------------
+-- 1. «Ya he hecho el Bizum» no llegaba a tesorería
+-- ----------------------------------------------------------------------------
+--
+-- El hermano abre un recibo pendiente, pulsa «Ya he enviado el Bizum», y la
+-- pantalla cambia a «Pago avisado por Bizum» con la fecha. Pero de las
+-- políticas de `cuotas` el hermano solo tenía SELECT: no había ninguna de
+-- UPDATE que se cumpliera para él.
+--
+-- Y Postgres NO da error en ese caso: actualiza cero filas y contesta que todo
+-- ha ido bien. Así que el aviso se veía en su móvil, no llegaba a la base de
+-- datos, y en Tesorería no aparecía nadie esperando confirmación. El hermano
+-- creía haber avisado; la hermandad, que no había pagado.
+--
+-- Se le deja actualizar SU propia fila. No hace falta acotar más por columnas:
+-- lo único que la aplicación le deja tocar ahí es el aviso de pago, y el
+-- importe o el estado los sigue decidiendo la tesorería al confirmarlo.
+drop policy if exists "cuotas_propio_aviso_pago" on cuotas;
+create policy "cuotas_propio_aviso_pago" on cuotas for update to authenticated
+  using (auth_es_hermano() and hermano_id = hermano_propio_id())
+  with check (auth_es_hermano() and hermano_id = hermano_propio_id());
+
+
+-- ----------------------------------------------------------------------------
+-- 2. Papeletas con números ya usados por otro hermano
+-- ----------------------------------------------------------------------------
+--
+-- Al renovar desde su área, el número de la papeleta se calculaba en el móvil
+-- del hermano como «el mayor que veo + 1». Pero él SOLO VE LAS SUYAS. Con 350
+-- papeletas emitidas, Manuel —que el año pasado tuvo la 137— generaba la 138,
+-- que ya era de otro. Dos papeletas con el mismo número, dos personas en el
+-- mismo puesto y ningún aviso: la tabla no tenía nada que lo impidiera.
+--
+-- Se arregla por los dos lados: una función que da el número de verdad
+-- (mirando TODAS las papeletas de la hermandad, saltándose las políticas a
+-- propósito) y un índice único que impide el duplicado aunque algo falle.
+
+create or replace function siguiente_numero_papeleta(p_anio int)
+returns int
+language sql volatile security definer set search_path = public as $$
+  select coalesce(max(numero), 0) + 1
+  from papeletas
+  where hermandad_id = hermandad_actual() and anio = p_anio
+$$;
+-- Solo con sesión: `hermandad_actual()` no significa nada sin ella.
+revoke execute on function siguiente_numero_papeleta(int) from public, anon;
+grant execute on function siguiente_numero_papeleta(int) to authenticated;
+
+-- La red de debajo. Si dos personas piden a la vez, una de las dos se lleva un
+-- error visible en vez de colarse en silencio.
+--
+-- Se limpian antes los duplicados que ya hubiera, si no el índice no se puede
+-- crear: al repetido más nuevo se le da un número libre al final.
+do $$
+declare r record;
+begin
+  for r in
+    select id, hermandad_id, anio from (
+      select id, hermandad_id, anio,
+             row_number() over (partition by hermandad_id, anio, numero order by fecha_solicitud, id) as n
+      from papeletas where hermandad_id is not null
+    ) t where t.n > 1
+  loop
+    update papeletas set numero = (
+      select coalesce(max(numero), 0) + 1 from papeletas
+      where hermandad_id = r.hermandad_id and anio = r.anio
+    ) where id = r.id;
+    raise notice 'Papeleta % tenía un número repetido; se le ha dado uno libre.', r.id;
+  end loop;
+end $$;
+
+create unique index if not exists papeletas_numero_unico
+  on papeletas (hermandad_id, anio, numero)
+  where hermandad_id is not null;
+
+
+-- ----------------------------------------------------------------------------
+-- 3. El buzón del hermano solo existía en el navegador de secretaría
+-- ----------------------------------------------------------------------------
+--
+-- «Mi buzón» leía una clave del navegador. La secretaría mandaba la
+-- convocatoria de cabildo desde su ordenador y el aviso se escribía ALLÍ; el
+-- hermano abría su área en el móvil y leía «No tienes ningún aviso. Aquí te
+-- llegará lo que te mande la hermandad». Siempre vacío, para todos.
+create table if not exists avisos_hermano (
+  id uuid primary key default gen_random_uuid(),
+  -- `default hermandad_actual()` NO SOBRA. Sin él, la aplicación inserta sin
+  -- hermandad, la fila entra con nulo, y la política —que exige que coincida
+  -- con la hermandad de quien escribe— la rechaza. O sea: la secretaría no
+  -- podía dejar ni un aviso. Las tablas del resto lo llevan porque se lo pone
+  -- el bucle de `multi-hermandad.sql`; esta es nueva y hay que ponérselo aquí.
+  hermandad_id uuid not null default hermandad_actual() references hermandades(id) on delete cascade,
+  hermano_id uuid not null references hermanos(id) on delete cascade,
+  fecha timestamptz not null default now(),
+  titulo text,
+  texto text not null,
+  tipo text not null default 'ficha',
+  leido boolean not null default false
+);
+create index if not exists avisos_hermano_suyos_idx on avisos_hermano (hermano_id, fecha desc);
+
+alter table avisos_hermano enable row level security;
+
+-- El personal escribe y lee los de su hermandad.
+drop policy if exists "avisos_personal_all" on avisos_hermano;
+create policy "avisos_personal_all" on avisos_hermano for all to authenticated
+  using (not auth_es_hermano() and hermandad_id = hermandad_actual())
+  with check (not auth_es_hermano() and hermandad_id = hermandad_actual());
+
+-- El hermano lee los suyos…
+drop policy if exists "avisos_propio_select" on avisos_hermano;
+create policy "avisos_propio_select" on avisos_hermano for select to authenticated
+  using (auth_es_hermano() and hermano_id = hermano_propio_id());
+-- …y los marca como leídos. Nada más: no puede escribirse avisos a sí mismo.
+drop policy if exists "avisos_propio_leido" on avisos_hermano;
+create policy "avisos_propio_leido" on avisos_hermano for update to authenticated
+  using (auth_es_hermano() and hermano_id = hermano_propio_id())
+  with check (auth_es_hermano() and hermano_id = hermano_propio_id());
+
+
+-- ----------------------------------------------------------------------------
+-- 4. Lo que el hermano apaga en su móvil no lo veía quien manda el correo
+-- ----------------------------------------------------------------------------
+--
+-- Las preferencias de avisos se guardaban en el navegador DEL HERMANO. Cuando
+-- la tesorera marcaba un recibo como pagado desde el ordenador de la casa de
+-- hermandad, se leían las preferencias DE ESE ordenador, donde ese hermano no
+-- tiene ninguna. Resultado: se le escribía igual, después de haberle ofrecido
+-- un interruptor para no recibirlo. Eso no es un detalle: es haberle prometido
+-- algo y no cumplirlo.
+--
+-- Van en la propia ficha, que es de donde se leen los destinatarios.
+alter table hermanos add column if not exists avisos_preferencias jsonb;
+
+comment on column hermanos.avisos_preferencias is
+  'Qué avisos quiere recibir por correo este hermano: {"cuota":true,"papeleta":false,...}. '
+  'Vacío = los quiere todos. Los de tipo "importante" (baja, cambio de cuenta bancaria) '
+  'no se pueden apagar y no se guardan aquí.';
+
+
+-- ----------------------------------------------------------------------------
+-- 5. El hijo a cargo se perdía al aprobar el alta
+-- ----------------------------------------------------------------------------
+--
+-- Un hermano pedía desde su área el alta de su hija menor, la secretaría la
+-- aprobaba, y el vínculo se descartaba en silencio al guardar: la columna no
+-- existía. «Mi familia» salía siempre vacía y la solicitud se quedaba pendiente
+-- para siempre.
+alter table hermanos add column if not exists tutor_id uuid references hermanos(id) on delete set null;
+create index if not exists hermanos_tutor_idx on hermanos (tutor_id) where tutor_id is not null;
+
+-- Y que el tutor pueda ver la ficha de quien tiene a cargo.
+drop policy if exists "hermanos_a_mi_cargo_select" on hermanos;
+create policy "hermanos_a_mi_cargo_select" on hermanos for select to authenticated
+  using (auth_es_hermano() and tutor_id = hermano_propio_id());
+
+-- =============================================================================
+--   CORREO-HERMANDAD.SQL — Que la configuración de correo sea de la hermandad
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — que la configuración de correo sea de la HERMANDAD, no del portátil
+-- ============================================================================
+--
+-- QUÉ ARREGLA (auditoría de agosto de 2026)
+--
+-- «Configuración → Correo» (si está activo, a dónde se responde, y de qué
+-- avisar) se guardaba SOLO en el navegador de quien lo activó.
+--
+--   El secretario lo activa en su portátil. Al día siguiente la tesorera,
+--   desde el ordenador de la casa de hermandad, marca cuotas como pagadas. En
+--   ESE navegador la configuración no existe, así que se lee la de fábrica
+--   —correo apagado— y no sale ningún aviso. Sin error, sin mensaje: la lista
+--   de destinatarios sale vacía y todo parece haber ido bien.
+--
+--   Y en su pantalla de Configuración tampoco aparece activado, así que ni
+--   siquiera puede sospechar que lo está en otro sitio.
+--
+-- Va donde va el resto de la ficha de la hermandad, que es lo que ya se
+-- comparte entre todos los que entran.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+alter table hermandad_settings add column if not exists correo jsonb;
+
+comment on column hermandad_settings.correo is
+  'Configuración de envío de correo de la hermandad: '
+  '{"activo":true,"responderA":"secretaria@...","avisaDe":{"comunicados":true,...}}. '
+  'Vacío = sin configurar. Antes vivía en el navegador de quien la activó, así que '
+  'desde cualquier otro ordenador no salía ningún aviso y nadie se enteraba.';

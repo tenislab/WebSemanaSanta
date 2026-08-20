@@ -17,11 +17,10 @@ import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
 import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
 import { useHermandadSettings } from '../lib/hermandadSettings'
 import {
-  getTramos,
+  useTramos,
   etiquetaTramo,
   cuerposPresentes,
   getPrecioBase,
-  precioDeTramo,
 } from '../lib/tramos'
 import { repartoCompleto, repartoPorTramo, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
 import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
@@ -35,6 +34,8 @@ import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
 import { useAvisosHermano } from '../lib/avisosHermano'
 import { useAjustesCuotas } from '../lib/ajustesCuotas'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
+import { conRenovacion } from '../lib/renovarPapeleta'
+import { contactoDelHermanoToRow } from '../lib/db/hermanos'
 import CalendarioMes from '../components/CalendarioMes'
 import { claseTipo, fechaLarga } from '../lib/calendario'
 import { EVENTOS_INICIALES, type Aparicion, type Evento, type TipoEvento } from '../data/eventos'
@@ -194,6 +195,20 @@ export default function HermanoPortal() {
   // (si no, con Supabase dormido no se podría entrar como hermano).
   const { configured: usarSupabase } = useAuth()
 
+  /**
+   * SIN ESPEJO, todas.
+   *
+   * El área del hermano monta los mismos hooks que el panel, con las mismas
+   * claves locales, pero las políticas de Supabase solo le dejan ver SU ficha,
+   * SUS papeletas y SUS cuotas. Dejar que eso se guarde en el navegador hacía
+   * un estropicio bien visible: en el ordenador de la casa de hermandad, con
+   * la secretaria en Hermanos y un hermano entrando en otra pestaña, la
+   * consulta del hermano devolvía 1 fila, espejaba `cabildo-hermanos` con esa
+   * única fila, y la pestaña del panel —que escucha esa clave— cambiaba sola:
+   * la secretaria veía sus 400 hermanos convertirse en 1. Y la copia se
+   * quedaba así aunque cerrara la pestaña del hermano.
+   */
+  const sinEspejo = { sinEspejo: true }
   const [hermanos, setHermanos] = useSupabaseTable<Hermano>(
     'hermanos',
     CLAVES_DATOS.hermanos,
@@ -201,6 +216,7 @@ export default function HermanoPortal() {
     hermanoToRow,
     rowToHermano,
     'numero',
+    sinEspejo,
   )
   const [papeletas, setPapeletas] = useSupabaseTable<Papeleta>(
     'papeletas',
@@ -208,6 +224,8 @@ export default function HermanoPortal() {
     PAPELETAS_INICIALES,
     papeletaToRow,
     rowToPapeleta,
+    undefined,
+    sinEspejo,
   )
   const [cuotas, setCuotas] = useSupabaseTable<Cuota>(
     'cuotas',
@@ -215,6 +233,8 @@ export default function HermanoPortal() {
     CUOTAS_INICIALES,
     cuotaToRow,
     rowToCuota,
+    undefined,
+    sinEspejo,
   )
 
   // El calendario de la hermandad, para enseñárselo al hermano. Solo lectura.
@@ -224,6 +244,8 @@ export default function HermanoPortal() {
     EVENTOS_INICIALES,
     eventoToRow,
     rowToEvento,
+    undefined,
+    sinEspejo,
   )
   const [diaCalendario, setDiaCalendario] = useState<{ fecha: string; delDia: Aparicion[] } | null>(null)
 
@@ -236,7 +258,7 @@ export default function HermanoPortal() {
   const papeletasMuestra = useTablaPorHermandad<Papeleta>('cabildo-papeletas', () => [])
 
   const [ajustesCuotas] = useAjustesCuotas()
-  const tramos = useMemo(() => getTramos(), [])
+  const tramos = useTramos()
   const campana = useMemo(() => getCampana(), [])
   const precioBase = useMemo(() => getPrecioBase(), [])
   const modeloPapeleta = useMemo(() => getModeloPapeleta(), [])
@@ -270,6 +292,7 @@ export default function HermanoPortal() {
   const [errorSolicitud, setErrorSolicitud] = useState<string | null>(null)
 
   const [datosGuardados, setDatosGuardados] = useState(false)
+  const [datosError, setDatosError] = useState<string | null>(null)
   const [bajaMuestraSolicitada, setBajaMuestraSolicitada] = useState(false)
   const [bajaOpen, setBajaOpen] = useState(false)
   const [motivoBaja, setMotivoBaja] = useState('')
@@ -733,7 +756,7 @@ export default function HermanoPortal() {
   }
 
   // ---- Datos personales editables ----
-  function guardarDatos(e: FormEvent<HTMLFormElement>) {
+  async function guardarDatos(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!sesion) return
     const data = new FormData(e.currentTarget)
@@ -742,11 +765,33 @@ export default function HermanoPortal() {
 
     if (esPrincipal && hermanoPrincipal) {
       const direccion = String(data.get('direccion') ?? '').trim()
+      /**
+       * SOLO SUS TRES CAMPOS, escritos a mano contra la base de datos.
+       *
+       * No se usa `setHermanos` para esto: ese circuito manda la fila ENTERA
+       * con los valores que este móvil cargó al entrar, y ese móvil no se
+       * refresca nunca. Un hermano que a las 10:10 cambiaba su teléfono
+       * deshacía la corrección de IBAN, la etiqueta y la cuota al día que la
+       * secretaría le había puesto a las 10:05. Con una baja tramitada a media
+       * mañana era peor: volvía a estar activo.
+       */
+      if (usarSupabase && supabase) {
+        const { error } = await supabase
+          .from('hermanos')
+          .update(contactoDelHermanoToRow({ email, telefono, direccion }))
+          .eq('id', hermanoPrincipal.id)
+        if (error) {
+          setDatosError('No se han podido guardar tus datos. Inténtalo de nuevo en unos segundos.')
+          return
+        }
+      }
+      // Y en la copia de pantalla, para que se vea el cambio al momento.
       setHermanos((prev) => prev.map((h) => (h.id === hermanoPrincipal.id ? { ...h, email, telefono, direccion } : h)))
     } else if (hermanoMuestra) {
       const [, setCenso] = censosMuestra[sesion.hermandadId]
       setCenso((prev) => prev.map((h) => (h.id === hermanoMuestra.id ? { ...h, email, telefono } : h)))
     }
+    setDatosError(null)
     setDatosGuardados(true)
     setTimeout(() => setDatosGuardados(false), 2500)
   }
@@ -865,31 +910,29 @@ export default function HermanoPortal() {
     return Math.max(0, ...papeletas.map((p) => p.numero)) + 1
   }
 
+  /**
+   * Renovar su sitio. La cuenta la lleva `conRenovacion`, compartida con
+   * secretaría.
+   *
+   * Antes esto estaba escrito aquí a mano y cogía `sitioAnterior.importe`, o
+   * sea lo que costó el AÑO PASADO. Si la hermandad subía el tramo de 18 € a
+   * 20 €, quien renovaba desde su móvil pagaba 18 y quien llamaba a secretaría
+   * pagaba 20, los dos en el mismo tramo. Nadie se enteraba hasta cuadrar caja.
+   */
   function renovarSitio() {
     if (bloqueoPapeleta || !hermanoPrincipal || !renovacion?.sitioAnterior?.tramoId) return
-    const tramoAnterior = tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)
     const tramoId = renovacion.sitioAnterior.tramoId
-    const importe = renovacion.sitioAnterior.importe || precioDeTramo(tramoAnterior, precioBase)
-    setPapeletas((prev) => {
-      // Reutilizamos la papeleta del año si ya existe, para no crear una fila duplicada.
-      const actual = prev.find((p) => p.hermanoId === hermanoPrincipal.id && p.anio === campana.anio && p.estado !== 'Anulada')
-      if (actual) {
-        return prev.map((p) =>
-          p.id === actual.id ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null } : p,
-        )
-      }
-      const nueva: Papeleta = {
-        id: nuevoId(),
-        numero: nextNumeroPapeleta(),
+    setPapeletas((prev) =>
+      conRenovacion(prev, {
         hermanoId: hermanoPrincipal.id,
-        anio: campana.anio,
         tramoId,
-        importe,
-        estado: 'Asignada',
-        fechaSolicitud: hoy(),
-      }
-      return [nueva, ...prev]
-    })
+        anio: campana.anio,
+        tramos,
+        precioBase,
+        nuevoId,
+        hoy,
+      }),
+    )
   }
 
   function noRenovar() {
@@ -1632,8 +1675,14 @@ export default function HermanoPortal() {
                 {!bloqueoPapeleta && renovacion.estado === 'Por renovar' && renovacion.sitioAnterior?.tramoId && (
                   <>
                     <p className="portal__lead">
+                      {/* El `!` de aquí tumbaba el área entera. Si los tramos
+                          todavía no han llegado —o el de su papeleta ya no
+                          existe porque lo han quitado— el `find` no devuelve
+                          nada y `etiquetaTramo` reventaba con un TypeError: el
+                          hermano se encontraba su área EN BLANCO, sin ningún
+                          mensaje, y no había nada que pudiera hacer. */}
                       El año pasado saliste en{' '}
-                      <b>{etiquetaTramo(tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)!)}</b>. La renovación
+                      <b>{etiquetaTramo(tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)) || 'tu tramo'}</b>. La renovación
                       está {ventanaAbiertaPara(campana, true) ? 'abierta' : 'cerrada'}
                       {ventanaAbiertaPara(campana, true)
                         ? ` hasta el ${formatDate(new Date(`${campana.fechaLimiteRenovacion}T00:00:00`))}`
@@ -1926,6 +1975,10 @@ export default function HermanoPortal() {
             <div className="assign-box__row">
               <button type="submit" className="btn btn-primary">Guardar mis datos</button>
               {datosGuardados && <span className="alert-item alert-item--ok">Datos actualizados.</span>}
+              {/* Antes, si el guardado fallaba, la pantalla decía «Datos
+                  actualizados» igualmente y el hermano se iba tan tranquilo
+                  con su teléfono viejo en el censo. */}
+              {datosError && <span className="alert-item alert-item--alerta">{datosError}</span>}
             </div>
           </form>
         </section>

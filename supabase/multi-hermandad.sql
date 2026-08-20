@@ -436,8 +436,20 @@ begin
     -- ya está creada y se une a ELLA. Sin esto, cada miembro de la junta se
     -- fabricaría una hermandad distinta al entrar y se perderían de vista unos
     -- a otros, cada uno con un trozo de lo que era una sola casa.
-    select t.hermandad_id into nueva
-      from titulares t where t.hermandad_id is not null limit 1;
+    --
+    -- OJO CON EL `limit 1`: ese select no filtra por nada. Cuando la base
+    -- tenía UNA sola hermandad —la mudanza, que es para lo que se escribió—
+    -- devolvía la única que había y era correcto. Con varias hermandades
+    -- dentro devuelve UNA CUALQUIERA, normalmente la más antigua: un titular
+    -- dado de alta a mano acababa metido en la hermandad de otra gente, viendo
+    -- su censo, y encima arrastraba hacia allí las filas sin dueño.
+    --
+    -- Por eso ahora solo se hace si de verdad estamos en el caso de la
+    -- mudanza. Con dos o más hermandades, se le crea la suya.
+    if (select count(*) from hermandades) <= 1 then
+      select t.hermandad_id into nueva
+        from titulares t where t.hermandad_id is not null limit 1;
+    end if;
   end if;
 
   if nueva is null then
@@ -464,6 +476,26 @@ begin
   return nueva;
 end $$;
 grant execute on function crear_hermandad(text) to authenticated;
+
+
+-- --- Y esta NO la puede llamar nadie desde fuera ----------------------------
+--
+-- `adoptar_datos_sin_hermandad` es SECURITY DEFINER: se salta las políticas a
+-- propósito, porque tiene que tocar filas que todavía no son de nadie. Sin
+-- estos `revoke`, Postgres se la concede a PUBLIC por defecto y PostgREST la
+-- publica como cualquier otra: desde la consola del navegador, con la sesión
+-- de CUALQUIER hermandad, bastaba con
+--
+--     supabase.rpc('adoptar_datos_sin_hermandad', { p_hermandad_id: '<el mío>' })
+--
+-- para adjudicarse todas las filas sin dueño de la base entera y verlas en su
+-- propio panel. `crear_hermandad_manual` ya llevaba sus revoke; aquí se
+-- olvidaron.
+--
+-- Las funciones que la necesitan (`crear_hermandad`, `crear_hermandad_manual`)
+-- también son SECURITY DEFINER y la llaman por dentro, así que les da igual.
+revoke execute on function adoptar_datos_sin_hermandad(uuid) from public;
+revoke execute on function adoptar_datos_sin_hermandad(uuid) from anon, authenticated;
 
 
 -- --- La misma alta, pero desde el editor SQL --------------------------------
@@ -506,7 +538,12 @@ begin
 
   select true into ya_era_titular from titulares where auth_user_id = uid;
   if ya_era_titular then
-    select t.hermandad_id into nueva from titulares t where t.hermandad_id is not null limit 1;
+    -- Igual que en `crear_hermandad`: ese `limit 1` solo vale para la mudanza
+    -- de un proyecto de UNA hermandad. Con varias dentro, metía al recién
+    -- nombrado en la hermandad de otra gente.
+    if (select count(*) from hermandades) <= 1 then
+      select t.hermandad_id into nueva from titulares t where t.hermandad_id is not null limit 1;
+    end if;
   end if;
 
   if nueva is null then

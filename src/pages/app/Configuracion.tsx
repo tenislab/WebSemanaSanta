@@ -33,10 +33,14 @@ import { CATEGORIAS_ENSER } from '../../data/enseres'
 import { CANALES, SEGMENTOS } from '../../data/comunicados'
 import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
 import { nuevoId } from '../../lib/supabaseSync'
-import { crearCopia, esCopiaValida, restaurarCopia, resumirCopia } from '../../lib/backup'
+import { crearCopia, esCopiaValida, restaurarCopia, resumirCopia, sePuedeRestaurar } from '../../lib/backup'
 import { descargarArchivo } from '../../lib/csv'
 import AvisoFalta from '../../components/AvisoFalta'
 import { contextoActual, requisito, requisitos } from '../../lib/requisitos'
+import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
+import { getCampana } from '../../lib/campana'
+import type { Papeleta } from '../../data/papeletas'
 import {
   correoDePrueba, correoDisponible, enviarCorreo, useAjustesCorreo, type AjustesCorreo,
 } from '../../lib/correo'
@@ -151,6 +155,17 @@ export default function Configuracion() {
     if (!tramosTocado) setTramos(tramosRemotos)
   }, [tramosRemotos, tramosTocado])
   const [tramosSaved, setTramosSaved] = useState(false)
+  /**
+   * Las papeletas de la campaña activa, solo para poder avisar antes de quitar
+   * un tramo que tiene gente dentro. Se lee del espejo del navegador y no de
+   * la tabla remota a propósito: es un aviso, no un dato de trabajo, y montar
+   * aquí otra suscripción a `papeletas` por esto sería caro. Si la lista viene
+   * vacía se pierde el aviso, pero Cortejo las recoge igualmente después.
+   */
+  const papeletasDelAnio = useMemo(
+    () => leerDatos<Papeleta>(CLAVES_DATOS.papeletas, []).filter((p) => p.anio === getCampana().anio),
+    [],
+  )
   const [precioBase, setPrecioBase] = useState<number>(() => getPrecioBase())
   const [copiaEstado, setCopiaEstado] = useState<string | null>(null)
   const backupRef = useRef<HTMLInputElement>(null)
@@ -241,7 +256,14 @@ export default function Configuracion() {
       const fecha = new Date().toISOString().slice(0, 10)
       const slug = (settings.nombreLegal || 'hermandad').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       descargarArchivo(`copia-cabildo-${slug}-${fecha}.json`, JSON.stringify(copia), 'application/json;charset=utf-8;')
-      setCopiaEstado('Copia descargada.')
+      // Si alguna tabla no se pudo traer, se dice. Una copia a la que le falta
+      // algo y no lo cuenta se descubre el día que hace falta, que ya es tarde.
+      const fallos = copia.fallos ?? []
+      setCopiaEstado(
+        fallos.length > 0
+          ? `Copia descargada, pero NO se pudo traer: ${fallos.join(', ')}. Vuelve a intentarlo.`
+          : 'Copia descargada.',
+      )
     } catch {
       setCopiaEstado('No se pudo crear la copia.')
     }
@@ -334,7 +356,36 @@ export default function Configuracion() {
   }
 
   function removeTramo(id: string) {
+    const posicion = tramos.findIndex((t) => t.id === id)
+    const tramo = tramos[posicion]
+    /**
+     * Si hay gente dentro, se pregunta. Y se dice cuánta.
+     *
+     * Quitar un tramo con papeletas dentro hacía desaparecer a esos hermanos
+     * del cortejo sin ningún aviso: no entraban en ningún reparto, no salían
+     * en «Pendientes» ni entre las anuladas, y su ficha seguía diciendo
+     * «Renovada». Ocho personas con su papeleta ya cobrada, fuera de la
+     * procesión, y nadie se enteraba hasta el día de la salida.
+     *
+     * Ahora Cortejo además las recoge y las enseña para recolocarlas, pero
+     * mejor avisar antes que arreglarlo después.
+     */
+    const dentro = papeletasDelAnio.filter((p) => p.tramoId === id).length
+    if (dentro > 0) {
+      const quienes = dentro === 1 ? 'un hermano tiene' : `${dentro} hermanos tienen`
+      if (!window.confirm(
+        `En «${tramo?.nombre ?? 'este tramo'}» ${quienes} su papeleta de este año.\n\n` +
+        'Si lo quitas, se quedan sin sitio en el cortejo y habrá que recolocarlos a mano ' +
+        'desde Cortejo. ¿Continuar?',
+      )) return
+    }
     setTramos((prev) => prev.filter((t) => t.id !== id))
+    if (tramo) {
+      ofrecerDeshacer(`Tramo «${tramo.nombre}» quitado`, () => {
+        setTramos((prev) => reinsertar(prev, tramo, posicion))
+        setTramosTocado(true)
+      })
+    }
     setTramosTocado(true)
     setTramosSaved(false)
   }
@@ -385,7 +436,15 @@ export default function Configuracion() {
   }
 
   function removeOpcion(id: string) {
+    const posicion = opciones.findIndex((o) => o.id === id)
+    const opcion = opciones[posicion]
     setOpciones((prev) => prev.filter((o) => o.id !== id))
+    if (opcion) {
+      ofrecerDeshacer(`Papeleta «${opcion.nombre}» quitada`, () => {
+        setOpciones((prev) => reinsertar(prev, opcion, posicion))
+        setOpcionesTocado(true)
+      })
+    }
     setOpcionesTocado(true)
     setOpcionesSaved(false)
   }
@@ -424,7 +483,15 @@ export default function Configuracion() {
   }
 
   function removeConceptoCuota(id: string) {
+    const posicion = conceptosCuota.findIndex((c) => c.id === id)
+    const concepto = conceptosCuota[posicion]
     setConceptosCuota((prev) => prev.filter((c) => c.id !== id))
+    if (concepto) {
+      ofrecerDeshacer(`Cuota «${concepto.nombre}» quitada del catálogo`, () => {
+        setConceptosCuota((prev) => reinsertar(prev, concepto, posicion))
+        setCatalogosTocado(true)
+      })
+    }
     setCatalogosTocado(true)
     setCatalogosSaved(false)
   }
@@ -1131,11 +1198,21 @@ export default function Configuracion() {
           <h2 className="settings-card__title">Copia de seguridad</h2>
         </div>
         <p className="form-hint">
-          Mientras no conectamos la base de datos en la nube, todos los datos viven en este
-          navegador. Descarga una copia (un solo archivo, con hermanos, cuotas, papeletas,
-          tesorería, documentos y sus adjuntos) para no perderla al cambiar de ordenador o limpiar
-          el navegador, y restaúrala en otro equipo cuando quieras.
+          {sePuedeRestaurar()
+            ? 'Todos los datos viven en este navegador. Descarga una copia (un solo archivo, con hermanos, cuotas, papeletas, tesorería, documentos y sus adjuntos) para no perderla al cambiar de ordenador o limpiar el navegador, y restáurala en otro equipo cuando quieras.'
+            : 'Descarga un archivo con todo lo que tenéis en la base de datos —hermanos, cuotas, papeletas, tesorería, documentos y sus adjuntos— para guardarlo fuera. Si al traer algo falla, se dice aquí mismo.'}
         </p>
+        {/* Con base de datos conectada, restaurar desde aquí no restaura: se
+            escribiría en el navegador y la base de datos lo sobreescribiría al
+            recargar. Antes el botón estaba, decía «Copia restaurada» y no
+            había hecho nada. */}
+        {!sePuedeRestaurar() && (
+          <p className="form-hint form-hint--alerta">
+            <b>Restaurar está desactivado</b> porque los datos están en la base de datos, no en este
+            navegador: lo que se escribiera aquí lo sobreescribiría la base de datos al recargar. La
+            copia que descargues sigue valiendo; volcarla es una operación que hacemos nosotros.
+          </p>
+        )}
         <div className="settings-actions">
           {copiaEstado && <span className="alert-item alert-item--ok">{copiaEstado}</span>}
           <input
@@ -1145,7 +1222,13 @@ export default function Configuracion() {
             style={{ display: 'none' }}
             onChange={restaurarDesdeArchivo}
           />
-          <button type="button" className="btn btn-ghost" onClick={() => backupRef.current?.click()}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={!sePuedeRestaurar()}
+            title={sePuedeRestaurar() ? undefined : 'No disponible con la base de datos conectada'}
+            onClick={() => backupRef.current?.click()}
+          >
             Restaurar copia
           </button>
           <button type="button" className="btn btn-primary" onClick={descargarCopia}>
@@ -1204,6 +1287,26 @@ function CamposPropiosCard() {
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
     setCampos(arr)
   }
+  /**
+   * Quitar un campo propio es lo más caro de esta pantalla, aunque no lo
+   * parezca. Lo que cada hermano tenga apuntado ahí (su talla de túnica, su
+   * número de llave) se guarda contra el IDENTIFICADOR del campo. Volver a
+   * crearlo a mano da un identificador nuevo, así que aparece vacío y lo
+   * anterior se queda dentro de la ficha sin que nadie pueda verlo.
+   *
+   * Deshaciendo vuelve el mismo campo, con su mismo identificador, y los
+   * valores reaparecen.
+   */
+  function quitarCampo(id: string) {
+    const posicion = campos.findIndex((x) => x.id === id)
+    const campo = campos[posicion]
+    setCampos(campos.filter((x) => x.id !== id))
+    if (campo) {
+      ofrecerDeshacer(`Campo «${campo.nombre.trim() || 'sin nombre'}» quitado de la ficha`, () => {
+        setCampos(reinsertar(campos.filter((x) => x.id !== id), campo, posicion))
+      })
+    }
+  }
 
   return (
     <section className="settings-card">
@@ -1242,7 +1345,7 @@ function CamposPropiosCard() {
             <button
               type="button"
               className="btn btn-ghost btn-sm rgpd-borrar"
-              onClick={() => setCampos(campos.filter((x) => x.id !== c.id))}
+              onClick={() => quitarCampo(c.id)}
             >
               Quitar
             </button>

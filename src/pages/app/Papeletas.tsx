@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import MenuAcciones from '../../components/MenuAcciones'
@@ -16,7 +17,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatDate, formatCurrency } from '../../lib/format'
 import {
-  getTramos,
+  useTramos,
   tramosDeCuerpo,
   etiquetaTramo,
   esAutomatico,
@@ -26,7 +27,7 @@ import {
   precioDeTramo,
   type Tramo,
 } from '../../lib/tramos'
-import { getOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
+import { useOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../../lib/cortejo'
 import {
   getCampana,
@@ -46,6 +47,7 @@ import { conApunteDeCobro, origenDePapeleta, sinApunteDeCobro } from '../../lib/
 import { apuntar } from '../../lib/registroActividad'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
+import { conRenovacion } from '../../lib/renovarPapeleta'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -77,19 +79,27 @@ interface ItemImpresion {
 }
 
 export default function Papeletas() {
+  // Antes de mandar nada, traer de la base la configuración de correo de
+  // la hermandad y lo que cada hermano tenga apagado. Sin esto, quien
+  // entra desde otro ordenador trabaja con la de fábrica: no sale ningún
+  // aviso, o se le escribe a quien pidió que no. Los dos en silencio.
+  useEffect(() => {
+    void prepararAvisos()
+  }, [])
+
   const { user } = useAuth()
   // Quién está haciendo los cambios, para el registro de actividad.
   const quienSoy =
     (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Alguien de la junta'
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useHermandadSettings(fallbackNombre)
-  const tramos = useMemo(() => getTramos(), [])
+  const tramos = useTramos()
   const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   // El libro de cuentas: cobrar una papeleta deja su apunte aquí.
   const [, setMovimientos] = useSupabaseTable<Movimiento>(
     'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
   )
-  const opcionesPersonalizadas = useMemo(() => getOpcionesPapeleta(), [])
+  const opcionesPersonalizadas = useOpcionesPapeleta()
   const precioBase = useMemo(() => getPrecioBase(), [])
   const [ajustes, setAjustes] = useAjustesCuotas()
 
@@ -255,26 +265,26 @@ export default function Papeletas() {
    * de esta campaña (doble clic, o una renuncia previa que se rectifica), la
    * actualiza en vez de crear una segunda fila duplicada.
    */
-  function renovar(hermanoId: string, tramoId: string, importe: number) {
-    setPapeletas((prev) => {
-      const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
-      if (actual) {
-        return prev.map((p) =>
-          p.id === actual.id ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe } : p,
-        )
-      }
-      const nueva: Papeleta = {
-        id: nuevoId(),
-        numero: siguienteNumero(prev),
+  /**
+   * Renovar el sitio de un hermano. La cuenta la lleva `conRenovacion`, la
+   * misma que usa el área del hermano: escrito dos veces, se separaba.
+   *
+   * Ya no recibe el importe: lo calcula ella con el precio de HOY. Que quien
+   * llama pudiera pasar el que quisiera es justo lo que dejaba que las dos
+   * vías cobraran distinto.
+   */
+  function renovar(hermanoId: string, tramoId: string) {
+    setPapeletas((prev) =>
+      conRenovacion(prev, {
         hermanoId,
-        anio: campana.anio,
         tramoId,
-        importe,
-        estado: 'Asignada',
-        fechaSolicitud: hoy(),
-      }
-      return [nueva, ...prev]
-    })
+        anio: campana.anio,
+        tramos,
+        precioBase,
+        nuevoId,
+        hoy,
+      }),
+    )
     avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null)
   }
 
@@ -389,9 +399,28 @@ export default function Papeletas() {
     setPapeletas((prev) => prev.map((p) => (p.id === id ? { ...p, ...cambios } : p)))
   }
 
-  /** Registra el cobro de la papeleta con el método elegido (emitida → pagada). */
+  /**
+   * Registra el cobro de la papeleta con el método elegido (emitida → pagada).
+   *
+   * «EXENTO» NO ES UN COBRO. Es lo contrario: se le da su sitio a alguien sin
+   * cobrarle —un hermano mayor, una situación difícil, un cargo—. Antes se
+   * trataba como los demás métodos, así que apuntaba en Tesorería un ingreso
+   * de 18 € en la cuenta bancaria que nadie había pagado, y el contador de
+   * «Recaudado» de la campaña también lo sumaba. La hermandad cuadraba caja
+   * contra un dinero que no existe.
+   *
+   * La papeleta queda «Pagada» —porque para el cortejo lo está: puede salir— a
+   * importe cero, y no se apunta nada en el libro.
+   */
   function registrarPago(id: string, metodo: MetodoPagoPapeleta) {
-    actualizarPapeleta(id, { estado: 'Pagada', metodoPago: metodo, fechaPago: hoy() })
+    const exento = metodo === 'Exento'
+    actualizarPapeleta(id, {
+      estado: 'Pagada',
+      metodoPago: metodo,
+      fechaPago: hoy(),
+      ...(exento ? { importe: 0 } : {}),
+    })
+    if (exento) return
     // Y al libro de cuentas. Esto es lo que faltaba: se cobraba la papeleta y
     // Tesorería no lo veía, así que la recaudación de la campaña no aparecía
     // por ninguna parte en el balance.
@@ -504,6 +533,24 @@ export default function Papeletas() {
       const opcion = tramoId ? null : `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
       const actual = prev.find((p) => p.hermanoId === s.hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
+        /**
+         * SI YA ESTÁ COBRADA O ENTREGADA, NO SE TOCA.
+         *
+         * Este es el caso, y pasa: el hermano pide su sitio desde su área y
+         * queda una solicitud pendiente. Antes de que nadie la mire, ese mismo
+         * hermano pasa por el mostrador y la secretaría le emite la papeleta y
+         * le cobra en efectivo, con su apunte en el libro. Días después alguien
+         * abre el buzón —la solicitud sigue ahí, nadie la cerró— y pulsa
+         * «Aceptar y emitir».
+         *
+         * Antes, eso devolvía la papeleta a «Asignada» con el importe
+         * recalculado: el hermano volvía a figurar como que no ha pagado, con
+         * el apunte del cobro ya hecho en Tesorería y sin nada que lo ate. Se
+         * le reclamaba otra vez un dinero que ya había dado.
+         *
+         * Ahora se deja como está y solo se cierra la solicitud.
+         */
+        if (actual.estado === 'Pagada' || actual.estado === 'Entregada') return prev
         return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId, estado: 'Asignada', importe } : p))
       }
       const nueva: Papeleta = {
@@ -852,7 +899,7 @@ export default function Papeletas() {
                         // anterior: si la hermandad sube el precio del tramo,
                         // quien renovaba seguía pagando el viejo y dos hermanos
                         // del mismo tramo pagaban cantidades distintas.
-                        onClick={() => renovar(h.id, r.sitioAnterior!.tramoId!, precioDeTramo(tramoAnterior, precioBase))}
+                        onClick={() => renovar(h.id, r.sitioAnterior!.tramoId!)}
                       >
                         Renovar {etiquetaTramo(tramoAnterior)}
                       </button>

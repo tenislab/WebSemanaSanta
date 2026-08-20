@@ -25,6 +25,7 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
 import { claseTipo, fechaLarga, iso } from '../../lib/calendario'
+import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
 
 export default function Eventos() {
   const [eventos, setEventos] = useSupabaseTable<Evento>(
@@ -206,13 +207,35 @@ export default function Eventos() {
   function borrarTarea(eventoId: string, tareaId: string) {
     const evento = eventos.find((e) => e.id === eventoId)
     if (!evento) return
+    const posicion = evento.tareas.findIndex((t) => t.id === tareaId)
+    const tarea = evento.tareas[posicion]
     aplicarEvento(eventoId, { tareas: evento.tareas.filter((t) => t.id !== tareaId) })
+    // Sin confirmación a propósito: preguntar por cada tarea de una lista de
+    // veinte cansa hasta que se pulsa «sí» sin leer. Lo que hace falta no es
+    // un obstáculo delante, es poder volver atrás después.
+    if (tarea) {
+      ofrecerDeshacer(`Tarea «${tarea.titulo}» eliminada`, () => {
+        const ahora = eventos.find((e) => e.id === eventoId)
+        if (!ahora) return
+        aplicarEvento(eventoId, { tareas: reinsertar(ahora.tareas, tarea, posicion) })
+      })
+    }
   }
 
   function borrarEvento(id: string) {
     if (!window.confirm('¿Borrar este evento y sus tareas?')) return
+    const posicion = eventos.findIndex((e) => e.id === id)
+    const evento = eventos[posicion]
     setEventos((prev) => prev.filter((e) => e.id !== id))
     setSeleccionado(null)
+    // Un evento se lleva por delante sus tareas y a quién estaba asignada cada
+    // una. La confirmación de arriba avisa; esto es lo que lo arregla cuando
+    // aun así se ha pulsado.
+    if (evento) {
+      ofrecerDeshacer(`Evento «${evento.titulo}» eliminado`, () => {
+        setEventos((prev) => reinsertar(prev, evento, posicion))
+      })
+    }
   }
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {

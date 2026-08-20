@@ -227,7 +227,18 @@ export default function Archivo() {
     }
   }
 
+  /**
+   * Este es el único borrado de la aplicación que NO se puede deshacer, y por
+   * eso es el único que pregunta de verdad: `borrarArchivo` se lleva los bytes
+   * del fichero, no una fila de una lista. Devolverlo pediría tenerlo guardado
+   * en algún sitio, y ese sitio es justamente el que se acaba de vaciar.
+   *
+   * Antes se iba con un clic y sin preguntar nada. Un acta escaneada que solo
+   * existía ahí no vuelve.
+   */
   async function eliminarArchivoAdjunto(doc: Documento) {
+    const como = doc.archivoNombre ? `«${doc.archivoNombre}»` : 'este archivo'
+    if (!window.confirm(`Se va a borrar ${como} y esto no se puede deshacer. ¿Seguro?`)) return
     await borrarArchivo(doc.id)
     setDocumentos((prev) =>
       prev.map((d) => (d.id === doc.id ? { ...d, archivoNombre: null, archivoTipo: null, archivoTamano: null } : d)),

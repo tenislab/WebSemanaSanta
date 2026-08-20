@@ -206,8 +206,17 @@ export interface FilaImportada {
   queLePasa: QueLePasa
   /** Los motivos por los que no se puede importar. Vacío si va bien. */
   problemas: string[]
-  /** Lo que se crearía o se cambiaría. */
+  /**
+   * SOLO lo que el archivo trae de verdad. Lo que no venga en una columna no
+   * está aquí, y por eso actualizar a alguien no le puede borrar nada.
+   */
   datos: Partial<Hermano>
+  /**
+   * Lo deducido para poder dar de alta a quien viene nuevo: si el archivo no
+   * dice desde cuándo es hermano ni en qué situación está, hay que poner algo.
+   * A quien YA ESTÁ en el censo no se le aplica nunca.
+   */
+  paraAlta: { antiguedad: number; estado: Hermano['estado'] }
   /** Si actualiza, a quién. */
   idExistente?: string
   /** La fila tal cual venía, para poder devolvérsela a la hermandad corregible. */
@@ -359,16 +368,45 @@ export function ensayar(
     if (estado === null) estado = antiguedad >= anioEnCurso ? 'Nuevo' : 'Activo'
 
     const existente = dni ? porDni.get(dni) : undefined
+
+    /**
+     * Lo que se le va a escribir a este hermano.
+     *
+     * LA REGLA, que antes no se cumplía: aquí solo puede entrar lo que el
+     * ARCHIVO trae de verdad. Lo de arriba (`antiguedad`, `estado`) lleva
+     * valores deducidos para poder dar de alta a los que vienen nuevos, y esos
+     * valores no son suyos: son un relleno.
+     *
+     * EL DESTROZO QUE HACÍA. Secretaría sacaba de otro programa una hoja
+     * sencilla, «Nombre;DNI», para repasar los nombres. Como esa hoja no trae
+     * columna de antigüedad, `antiguedad` valía el año en curso y `estado` se
+     * deducía «Nuevo». Al aplicar, ambos pisaban lo real: Ana Sánchez, hermana
+     * desde 1991, se quedaba con antigüedad 2026 y estado «Nuevo». El resumen
+     * decía «X actualizados» y nada más. En una hermandad la antigüedad es la
+     * que ordena el cortejo y da la prioridad de papeleta: se perdía el censo
+     * histórico entero de una tacada, sin un solo aviso.
+     *
+     * Con el IBAN era todavía más callado: `iban: dato(...) || null` metía
+     * `null` cuando la hoja no traía cuenta bancaria, y `null` no es cadena
+     * vacía, así que pasaba el filtro de `aplicar` y borraba la domiciliación
+     * de todo el censo. El siguiente recibo no se podía cobrar.
+     */
     const datos: Partial<Hermano> = {
       nombre,
       dni,
-      estado,
-      antiguedad,
       email,
       telefono: dato(fila, 'telefono'),
       direccion: dato(fila, 'direccion'),
-      iban: dato(fila, 'iban') || null,
     }
+    // LA REGLA: una casilla EN BLANCO no dice nada. No basta con que la
+    // columna exista; hace falta que esa fila traiga algo escrito. Media hoja
+    // exportada de otro programa tiene la columna «Antigüedad» con la mitad de
+    // las celdas vacías, y eso no es una orden de poner a esa gente de alta
+    // este año: es que ese dato no lo tienen.
+    const ibanText = dato(fila, 'iban')
+    if (antText) datos.antiguedad = antiguedad
+    if (estadoText) datos.estado = estado
+    if (ibanText) datos.iban = ibanText
     const nacimiento = dato(fila, 'fechaNacimiento')
     if (nacimiento) datos.fechaNacimiento = nacimiento
 
@@ -397,6 +435,7 @@ export function ensayar(
       queLePasa,
       problemas,
       datos,
+      paraAlta: { antiguedad, estado },
       idExistente: existente?.id,
       original: fila,
     })
@@ -473,13 +512,16 @@ export function aplicar(
       actualizados += 1
       continue
     }
-    const numero = fila.datos.estado === 'Baja' ? 0 : pedir(fila.datos.numero)
+    // Para un alta sí valen los valores deducidos: si el archivo no dice desde
+    // cuándo es hermano hay que poner algo, y ese algo es este año.
+    const estadoAlta = fila.datos.estado ?? fila.paraAlta.estado
+    const numero = estadoAlta === 'Baja' ? 0 : pedir(fila.datos.numero)
     censo.push({
       id: nuevoId(),
       numero,
       nombre: fila.datos.nombre ?? '',
-      estado: fila.datos.estado ?? 'Activo',
-      antiguedad: fila.datos.antiguedad ?? new Date().getFullYear(),
+      estado: estadoAlta,
+      antiguedad: fila.datos.antiguedad ?? fila.paraAlta.antiguedad,
       email: fila.datos.email ?? '',
       telefono: fila.datos.telefono ?? '',
       direccion: fila.datos.direccion ?? '',

@@ -74,4 +74,55 @@ export default async function ({ cargar, caso }) {
   const cuales = m.etiquetasQueSonAutomaticas(tramos, opciones)
   caso('los roles configurados', 'Acólito,Costalero,Mantilla', cuales.join(','))
   caso('sin tramos ni opciones, ninguno', 0, m.etiquetasQueSonAutomaticas([], []).length)
+
+  await cargoPorCuenta({ cargar, caso })
+}
+
+/**
+ * Auditoría 2026-08 · Todo el personal entraba como titular.
+ *
+ * El cargo se buscaba por `user_metadata.personalId`, un campo que SOLO se
+ * escribe en el acceso de demostración. Con una cuenta de verdad venía vacío,
+ * y vacío significaba «el que manda»: quien tenía acceso solo a Tesorería veía
+ * el censo entero, con DNI, teléfonos, direcciones y notas de salud.
+ */
+async function cargoPorCuenta({ cargar, caso }) {
+  const m = await cargar('src/lib/permisos.ts')
+  const personal = [
+    { cargo: 'Tesorero/a', activo: true, authUserId: 'uid-tesorero' },
+    { cargo: 'Secretario/a', activo: false, authUserId: 'uid-exsecretaria' },
+  ]
+
+  caso('el tesorero entra como tesorero', 'Tesorero/a', m.cargoDeCuenta('uid-tesorero', personal, false))
+  // Y no como titular, que es lo que pasaba antes.
+  caso('y NO como titular', true, m.cargoDeCuenta('uid-tesorero', personal, false) !== null)
+
+  // El titular sí: null significa «sin límites».
+  caso('el titular manda', null, m.cargoDeCuenta('uid-titular', personal, true))
+
+  // Desactivado no es titular: se queda fuera hasta que alguien lo arregle.
+  caso('a quien le quitaron el acceso, sin permisos', '__desconocido__',
+    m.cargoDeCuenta('uid-exsecretaria', personal, false))
+
+  // ANTE LA DUDA, CERRAR. Una cuenta que no está en personal y no es titular
+  // no puede acabar con el panel abierto.
+  caso('una cuenta desconocida se queda fuera', '__desconocido__',
+    m.cargoDeCuenta('uid-vete-a-saber', personal, false))
+  caso('y sin identificar tampoco abre', '__desconocido__',
+    m.cargoDeCuenta(undefined, personal, false))
+  // Salvo que sea el titular, claro.
+  caso('salvo que conste como titular', null, m.cargoDeCuenta(undefined, personal, true))
+
+  // Y que las pantallas usen el hook, no el metadata.
+  const { readFile } = await import('node:fs/promises')
+  for (const f of ['src/components/AppShell.tsx', 'src/pages/app/Cuotas.tsx', 'src/pages/app/DashboardHome.tsx']) {
+    const src = await readFile(f, 'utf8')
+    caso(`${f.split('/').pop()} usa el hook`, true, /useCargoDeLaSesion\(\)/.test(src))
+    caso(`${f.split('/').pop()} ya no mira el metadata`, false, /user_metadata\?\.personalId/.test(src))
+  }
+  // Mientras la respuesta no llega, sin permisos: si empezara abierto habría
+  // un instante en cada carga en el que el tesorero ve el censo.
+  const perm = await readFile('src/lib/permisos.ts', 'utf8')
+  caso('empieza cerrado mientras se resuelve', true,
+    /useState<Cargo \| null>\('__desconocido__' as Cargo\)/.test(perm))
 }

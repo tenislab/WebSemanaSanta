@@ -7,6 +7,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { personalToRow, rowToPersonal } from '../../lib/db/personal'
 import { supabaseAlta, isSupabaseConfigured } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
+import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
 
 export default function Personal() {
   const { user } = useAuth()
@@ -107,8 +108,18 @@ export default function Personal() {
   }
 
   function eliminar(id: string) {
+    const posicion = personal.findIndex((p) => p.id === id)
+    const quien = personal[posicion]
     setPersonal(personal.filter((p) => p.id !== id))
     setSelected(null)
+    // «Eliminar acceso» está al lado de «Desactivar acceso» y se parecen. El
+    // de al lado es reversible con un clic; este dejaba a la secretaria fuera
+    // sin manera de volver.
+    if (quien) {
+      ofrecerDeshacer(`Acceso de ${quien.nombre} eliminado`, () => {
+        setPersonal((prev) => reinsertar(prev, quien, posicion))
+      })
+    }
   }
 
   function togglePermiso(cargo: Cargo, moduloId: string) {

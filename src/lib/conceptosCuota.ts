@@ -23,9 +23,27 @@ export const CONCEPTOS_CUOTA_INICIALES: ConceptoCuotaConfig[] = [
   { id: 'cc3', nombre: 'Cuota extraordinaria', importe: 25 },
 ]
 
+/**
+ * El catálogo de cuotas que tenga guardado este navegador.
+ *
+ * CON BASE DE DATOS DEVUELVE LISTA VACÍA cuando no hay nada guardado, y eso es
+ * a propósito. Caer en `CONCEPTOS_CUOTA_INICIALES` («Cuota anual», 60 €) era
+ * el camino a una remesa entera mal cobrada:
+ *
+ *   1. La hermandad tiene su «Cuota ordinaria» de 45 € y ya ha emitido 2026.
+ *   2. El tesorero entra desde otro ordenador. Su navegador está limpio, así
+ *      que Cuotas le ofrece «Cuota anual — 60 €», que no es suya.
+ *   3. Como ningún recibo de la hermandad se llama «Cuota anual», la propia
+ *      aplicación le avisa: «hay N hermanos sin la cuota anual de este año».
+ *   4. Pulsa «Emitir» y salen recibos duplicados a TODO el censo, a 60 €.
+ *   5. Si se domicilian, el banco carga 60 € a cada hermano que ya pagó 45.
+ *
+ * Y el aviso que le empujaba a hacerlo lo escribía la aplicación.
+ */
 export function getConceptosCuota(): ConceptoCuotaConfig[] {
-  const valores = leerPersistido<ConceptoCuotaConfig[]>(STORAGE_KEY, CONCEPTOS_CUOTA_INICIALES)
-  return Array.isArray(valores) && valores.length > 0 ? valores : CONCEPTOS_CUOTA_INICIALES
+  const valores = leerPersistido<ConceptoCuotaConfig[]>(STORAGE_KEY, [])
+  if (Array.isArray(valores) && valores.length > 0) return valores
+  return isSupabaseConfigured ? [] : CONCEPTOS_CUOTA_INICIALES
 }
 
 function rowToConcepto(r: Record<string, unknown>): ConceptoCuotaConfig {

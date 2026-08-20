@@ -73,7 +73,27 @@ create table if not exists hermanos (
   motivo_baja text,
   created_at timestamptz not null default now()
 );
-create unique index if not exists hermanos_numero_activo_uniq on hermanos (numero) where numero > 0;
+-- El número de hermano es único... MIENTRAS HAYA UNA SOLA HERMANDAD.
+--
+-- Con varias, cada una tiene su nº 1, y el índice bueno es
+-- (hermandad_id, numero): lo crea `multi-hermandad.sql`, que además borra este.
+--
+-- Por eso va dentro de una comprobación. `create unique index if not exists`
+-- solo se salta la creación si ya existe un índice CON ESE NOMBRE, y en una
+-- base que ya es multi-hermandad ese nombre no existe (lo borró
+-- multi-hermandad). Así que al volver a ejecutar el SQL entero —cosa que se
+-- supone que se puede hacer sin miedo— intentaba crearlo de nuevo y se
+-- estrellaba con «Key (numero)=(1) is duplicated», que es justo lo NORMAL
+-- cuando hay dos hermandades dentro.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'hermanos' and column_name = 'hermandad_id'
+  ) then
+    create unique index if not exists hermanos_numero_activo_uniq on hermanos (numero) where numero > 0;
+  end if;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- Cortejo: cuerpos/tramos

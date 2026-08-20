@@ -29,6 +29,16 @@ export interface Cuota {
   /** Método de cobro. Si falta (datos antiguos), se deduce de `domiciliada`. */
   metodoCobro?: MetodoCobro
   fechaPago?: string
+  /**
+   * Cuándo se descargó este recibo dentro de un fichero de remesa SEPA
+   * (aaaa-mm-dd). Vacío = todavía no se ha remesado.
+   *
+   * Sin esto, descargar el XML no dejaba ningún rastro: el recibo seguía
+   * «Pendiente» y «domiciliada», así que a la semana siguiente entraba otra vez
+   * en la remesa. Dos ficheros al banco con los mismos recibos son dos cargos
+   * al mismo hermano, y el segundo se devuelve con comisión.
+   */
+  remesadaEl?: string
   /** Correo del cargo que ha PROPUESTO la mora (cuando hace falta confirmación de dos cargos). */
   moraPropuestaPor?: string
   /** Nombre visible de quien propuso la mora. */

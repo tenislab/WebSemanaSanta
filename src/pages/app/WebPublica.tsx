@@ -76,9 +76,11 @@ import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml } from '../../lib/seoW
 import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
 import { comprimirImagen, leerArchivo } from '../../lib/imagen'
 import {
-  TIPOS_MENSAJE, actualizarMensajeWeb, borrarMensajeWeb, resumenMensaje, sinLeer, useMensajesWeb,
+  TIPOS_MENSAJE, actualizarMensajeWeb, borrarMensajeWeb, devolverMensajeWeb, getMensajesWeb,
+  resumenMensaje, sinLeer, useMensajesWeb,
   type MensajeWeb,
 } from '../../lib/mensajesWeb'
+import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
 
 /**
  * La copia pequeña para la rejilla de la galería. 520 px de lado basta y sobra
@@ -1872,9 +1874,20 @@ function BuzonWebTab() {
   }
 
   async function borrar(id: string) {
+    const posicion = mensajes.findIndex((m) => m.id === id)
+    const mensaje = mensajes[posicion]
     guardar(mensajes.filter((m) => m.id !== id))
     setAbierto((prev) => (prev && prev.id === id ? null : prev))
     await borrarMensajeWeb(id)
+    // Detrás de cada uno de estos hay alguien de fuera que ha escrito y ha
+    // dejado su teléfono. Borrado por error no da ningún aviso: ese contacto
+    // simplemente deja de existir y nadie sabe que existió.
+    if (mensaje) {
+      ofrecerDeshacer(`Mensaje de ${mensaje.nombre || 'la web'} borrado`, () => {
+        guardar(reinsertar(getMensajesWeb().filter((m) => m.id !== id), mensaje, posicion))
+        void devolverMensajeWeb(mensaje, posicion)
+      })
+    }
   }
 
   function abrir(m: MensajeWeb) {

@@ -18,8 +18,7 @@ import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
 import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
-import { cargoDeCuenta } from '../../lib/permisos'
-import { getPersonal } from '../../lib/personal'
+import { useCargoDeLaSesion } from '../../lib/permisos'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
 import { formatCurrency } from '../../lib/format'
 import { puedeVerModulo } from '../../lib/permisos'
@@ -72,7 +71,7 @@ export default function DashboardHome() {
   const nombre = (user?.user_metadata?.nombre as string | undefined)?.split(' ')[0]
   // Contra la lista real de personal, no contra el metadata (que el usuario
   // puede reescribir). Ver lib/permisos.ts.
-  const cargo = cargoDeCuenta(user?.user_metadata?.personalId as string | undefined, getPersonal())
+  const cargo = useCargoDeLaSesion()
   const { suscripcion } = useSuscripcion()
 
   // El Inicio lee de la BASE DE DATOS, igual que el resto de pantallas.

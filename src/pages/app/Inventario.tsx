@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
-import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
+import { CLAVES_CATALOGOS, useLista } from '../../lib/catalogos'
 import {
   CATEGORIAS_ENSER,
   ENSERES_INICIALES,
@@ -35,7 +35,7 @@ export default function Inventario() {
     rowToEnser,
   )
   const [query, setQuery] = useState('')
-  const categorias = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasEnser, CATEGORIAS_ENSER), [])
+  const categorias = useLista(CLAVES_CATALOGOS.categoriasEnser, CATEGORIAS_ENSER)
   const [filter, setFilter] = useState<'Todos' | CategoriaEnser>('Todos')
   const [selected, setSelected] = useState<Enser | null>(null)
   const [formOpen, setFormOpen] = useState(false)

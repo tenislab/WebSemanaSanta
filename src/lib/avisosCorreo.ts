@@ -23,8 +23,8 @@
  * tumbar el guardado de una cuota: el dato es lo importante, el aviso es un
  * extra.
  */
-import { enviarCorreo, getAjustesCorreo } from './correo'
-import { getPreferenciasAvisos, quiereAviso, type TipoAviso } from './avisosHermano'
+import { cargarAjustesCorreoDeLaBase, enviarCorreo, getAjustesCorreo } from './correo'
+import { cargarPreferenciasDeLaBase, getPreferenciasAvisos, quiereAviso, type TipoAviso } from './avisosHermano'
 import { getHermandadSettings } from './hermandadSettings'
 
 /** Quien recibe: lo mínimo que hace falta saber de un hermano para escribirle. */
@@ -38,8 +38,13 @@ function correoValido(e: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e.trim())
 }
 
-/** El interruptor de Configuración que manda sobre cada tipo de aviso. */
-const INTERRUPTOR: Record<TipoAviso, 'comunicados' | 'cuotas' | 'papeletas' | 'ficha'> = {
+/**
+ * El interruptor de Configuración que manda sobre cada tipo de aviso.
+ *
+ * `importante` no está aquí a propósito: no tiene interruptor. Ver el comentario
+ * de `TipoAviso`.
+ */
+const INTERRUPTOR: Record<Exclude<TipoAviso, 'importante'>, 'comunicados' | 'cuotas' | 'papeletas' | 'ficha'> = {
   comunicado: 'comunicados',
   cuota: 'cuotas',
   papeleta: 'papeletas',
@@ -56,13 +61,30 @@ const INTERRUPTOR: Record<TipoAviso, 'comunicados' | 'cuotas' | 'papeletas' | 'f
  * `enviarCorreo`, que es quien lo usa. Separarlo así deja esta parte —la que
  * decide a quién se le escribe, que es la delicada— probada de verdad.
  */
+/**
+ * Deja al día, en este navegador, lo que hace falta para decidir a quién se
+ * escribe: la configuración de correo de la hermandad y lo que cada hermano
+ * haya apagado.
+ *
+ * Lo llaman al montar las pantallas que mandan avisos (Cuotas, Papeletas,
+ * Comunicados, Hermanos). Sin esto, quien entra desde otro ordenador trabaja
+ * con la configuración de fábrica: correo apagado y preferencias vacías. En un
+ * caso no sale ningún aviso; en el otro se le escribe a quien había pedido que
+ * no. Los dos en silencio.
+ */
+export async function prepararAvisos(): Promise<void> {
+  await Promise.all([cargarAjustesCorreoDeLaBase(), cargarPreferenciasDeLaBase()])
+}
+
 export function destinatariosDe(
   gente: DestinatarioAviso[],
   tipo: TipoAviso,
   ajustes = getAjustesCorreo(),
 ): DestinatarioAviso[] {
   if (!ajustes.activo) return []
-  if (!ajustes.avisaDe[INTERRUPTOR[tipo]]) return []
+  // Los importantes solo dependen de que el correo esté encendido: no hay
+  // interruptor que los pueda dejar fuera.
+  if (tipo !== 'importante' && !ajustes.avisaDe[INTERRUPTOR[tipo]]) return []
   return gente.filter(
     (h) => correoValido(h.email ?? '') && quiereAviso(getPreferenciasAvisos(h.id), tipo),
   )

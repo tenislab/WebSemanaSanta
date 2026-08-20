@@ -29,8 +29,17 @@ export const OPCIONES_INICIALES: OpcionPapeleta[] = [
   { id: 'op2', nombre: 'Mantilla', importe: 15 },
 ]
 
+/**
+ * Las papeletas sueltas (mantilla, simbólica…) que tenga este navegador.
+ *
+ * Con base de datos y sin nada guardado devuelve lista vacía, por el mismo
+ * motivo que el catálogo de cuotas: estas opciones llevan IMPORTE, y ofrecer
+ * los de ejemplo a una hermandad de verdad es cobrar lo que no es.
+ */
 export function getOpcionesPapeleta(): OpcionPapeleta[] {
-  return leerPersistido(STORAGE_KEY, OPCIONES_INICIALES)
+  const valores = leerPersistido<OpcionPapeleta[]>(STORAGE_KEY, [])
+  if (Array.isArray(valores) && valores.length > 0) return valores
+  return isSupabaseConfigured ? [] : OPCIONES_INICIALES
 }
 
 function rowToOpcion(r: Record<string, unknown>): OpcionPapeleta {

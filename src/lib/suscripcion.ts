@@ -113,6 +113,28 @@ export const CLAVE_SUSCRIPCION = 'cabildo-suscripcion'
 export const SUSCRIPCION_INICIAL: Suscripcion = { activa: false, pack: null, periodo: null, desde: null }
 
 /**
+ * ¿Este navegador SABE algo de la suscripción de la hermandad?
+ *
+ * No es lo mismo «no tiene contratada la web» que «no me consta»: la
+ * suscripción vive en el navegador de quien la contrató, así que un visitante
+ * de fuera, o un hermano en su móvil, no tiene ni la clave. Confundir las dos
+ * cosas es lo que hacía que la web pública no la pudiera ver nadie que no
+ * fuera la propia hermandad.
+ *
+ * Quien no tiene la clave no es que no haya pagado: es que no le consta. Y a
+ * quien no le consta no se le puede cerrar la puerta.
+ */
+export function constaLaSuscripcion(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_SUSCRIPCION) !== null
+  } catch {
+    // Sin localStorage (navegación privada de algunos navegadores, o un
+    // servidor sin ventana). Tampoco consta.
+    return false
+  }
+}
+
+/**
  * Lee la suscripción, migrando el formato antiguo (que guardaba `plan`:
  * 'mensual' | 'anual' sin packs) al nuevo: una suscripción antigua activa pasa
  * a considerarse el pack «Todo», para no dejar a nadie fuera tras el cambio.

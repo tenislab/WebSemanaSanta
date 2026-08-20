@@ -11,7 +11,7 @@ import { CUOTAS_INICIALES } from '../../data/cuotas'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES } from '../../data/movimientos'
 import { ENSERES_INICIALES } from '../../data/enseres'
-import { getTramos, etiquetaTramo } from '../../lib/tramos'
+import { useTramos, etiquetaTramo, type Tramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
@@ -27,7 +27,7 @@ interface Informe {
   filas: (string | number)[][]
 }
 
-function construirInformes(): Informe[] {
+function construirInformes(tramos: Tramo[]): Informe[] {
   // Los informes se calculan sobre los datos guardados (localStorage), no
   // sobre los de ejemplo: reflejan las altas, pagos y cambios hechos en la app.
   const hermanosActuales = leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
@@ -39,7 +39,6 @@ function construirInformes(): Informe[] {
 
   const camposPropios = getCamposPropios().filter((c) => c.nombre.trim())
   const hermanoDe = (id: string) => hermanosActuales.find((h) => h.id === id)
-  const tramos = getTramos()
 
   const activos = hermanosActuales.filter((h) => h.estado === 'Activo').length
   const nuevos = hermanosActuales.filter((h) => h.estado === 'Nuevo').length
@@ -207,7 +206,8 @@ export default function Informes() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useHermandadSettings(fallbackNombre)
 
-  const informes = useMemo(() => construirInformes(), [])
+  const tramos = useTramos()
+  const informes = useMemo(() => construirInformes(tramos), [tramos])
   const [selected, setSelected] = useState<Informe | null>(null)
 
   const generadoEl = useMemo(() => formatDate(new Date()), [])

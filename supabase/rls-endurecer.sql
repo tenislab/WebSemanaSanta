@@ -75,11 +75,19 @@ create or replace function auth_es_personal() returns boolean
 grant execute on function auth_es_personal() to authenticated;
 
 -- ============================================================================
---  Después de ejecutar esto, HAY QUE dar de alta al titular. Con el id de la
---  cuenta con la que se creó la hermandad (Authentication → Users en Supabase):
+--  Después de ejecutar esto, HAY QUE dar de alta al titular.
 --
---      insert into titulares (auth_user_id) values ('<uuid-del-titular>');
+--  Se hace con esto, poniendo el correo con el que se registró y el nombre de
+--  la hermandad:
 --
---  Sin ese insert, ni siquiera el titular podrá escribir: es a propósito.
+--      select crear_hermandad_manual('titular@sudominio.es', 'Hdad. de Triana');
+--
+--  NO uses «insert into titulares (auth_user_id) values ('<uuid>')», que es lo
+--  que ponía aquí antes. Esa fila entra SIN hermandad, y una fila de titular
+--  sin hermandad hacía que al entrar se le metiera en la hermandad de otra
+--  gente —la primera que hubiera en la tabla— con su censo delante. Con una
+--  sola hermandad en la base no se notaba; con varias, es una fuga.
+--
+--  Sin este paso, ni siquiera el titular podrá escribir: es a propósito.
 --  Vale más quedarse fuera un minuto que dejar la puerta abierta.
 -- ============================================================================

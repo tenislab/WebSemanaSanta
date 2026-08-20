@@ -1,4 +1,5 @@
 import { borrarTodosLosArchivos, guardarArchivo, todosLosArchivos } from './filestore'
+import { supabase, isSupabaseConfigured } from './supabase'
 
 /**
  * Copia de seguridad completa de una hermandad: mientras no hay base de datos
@@ -11,9 +12,43 @@ import { borrarTodosLosArchivos, guardarArchivo, todosLosArchivos } from './file
  */
 
 const PREFIJO = 'cabildo-'
-// La sesión de demostración no se incluye: la copia son datos de la hermandad,
-// no de quién está conectado.
-const EXCLUIR = new Set(['cabildo-demo-user'])
+/**
+ * Lo que NUNCA viaja en una copia.
+ *
+ * No son datos de la hermandad, son estado de ESTE navegador, y restaurarlos
+ * en otro sitio hace estropicios callados:
+ *
+ *   - `cabildo-demo-user`: quién está conectado. La copia son los datos, no
+ *     la sesión.
+ *   - `cabildo-hermandad-espejada`: de qué hermandad es la copia local. Si
+ *     entra una copia hecha en otro equipo, al siguiente inicio de sesión no
+ *     coincide con la hermandad de verdad y se borra TODO el espejo.
+ *   - `cabildo-demo-modo`: la marca del modo demostración. Restaurar una copia
+ *     hecha en modo demostración dejaba la aplicación sin hablar con Supabase
+ *     y sin decirlo: la secretaría trabajaba contra un censo de mentira.
+ */
+const EXCLUIR = new Set(['cabildo-demo-user', 'cabildo-hermandad-espejada', 'cabildo-demo-modo'])
+
+/**
+ * Las tablas de la hermandad, tal como las nombra la base de datos.
+ *
+ * Con Supabase conectado la copia se hace de AQUÍ, no del navegador. El motivo
+ * es que `localStorage` solo tiene lo que se haya ido mirando: quien entra,
+ * pasa por Inicio y le da a «Descargar copia» se llevaba un archivo sin el
+ * archivo documental, sin el inventario y sin los eventos, porque no había
+ * abierto esos módulos. Y el archivo no decía en ninguna parte que le faltara
+ * la mitad. Una copia de seguridad incompleta es peor que no tenerla, porque
+ * se descubre el día que hace falta.
+ *
+ * Es la misma lista que lleva `hermandad_id` en `multi-hermandad.sql`, así que
+ * las políticas de acceso ya se encargan de que solo salgan las filas propias.
+ */
+export const TABLAS_COPIA = [
+  'hermanos', 'tramos', 'cuotas', 'papeletas', 'movimientos', 'incidencias',
+  'enseres', 'documentos', 'comunicados', 'cuentas_sociales', 'permisos_cargo',
+  'solicitudes_alta', 'conceptos_cuota', 'opciones_papeleta', 'catalogos',
+  'eventos', 'personal', 'hermandad_settings', 'web_publica', 'mensajes_web',
+] as const
 
 export interface ArchivoCopia {
   id: string
@@ -27,6 +62,14 @@ export interface CopiaSeguridad {
   version: number
   exportadoEl: string
   datos: Record<string, unknown>
+  /**
+   * Las filas tal cual las tiene la base de datos, una lista por tabla. Solo
+   * está cuando la copia se hizo con Supabase conectado; es entonces la parte
+   * de verdad y `datos` pasa a ser un añadido (ajustes de este navegador).
+   */
+  tablas?: Record<string, unknown[]>
+  /** Qué tablas no se pudieron traer, y por qué. Una copia a medias LO DICE. */
+  fallos?: string[]
   archivos: ArchivoCopia[]
 }
 
@@ -74,6 +117,29 @@ function base64AFile(a: ArchivoCopia): File {
 }
 
 /** Construye el objeto de copia (datos + archivos adjuntos en base64). */
+/**
+ * Trae de la base de datos todas las filas de la hermandad, tabla por tabla.
+ *
+ * Si alguna falla NO se calla: se apunta en `fallos` y sale en pantalla. Una
+ * copia de seguridad a la que le falta algo tiene que decirlo, porque el día
+ * que se necesita ya es tarde para enterarse.
+ */
+async function traerTablas(): Promise<{ tablas: Record<string, unknown[]>; fallos: string[] }> {
+  const tablas: Record<string, unknown[]> = {}
+  const fallos: string[] = []
+  if (!supabase) return { tablas, fallos }
+  for (const nombre of TABLAS_COPIA) {
+    try {
+      const { data, error } = await supabase.from(nombre).select('*')
+      if (error) fallos.push(`${nombre}: ${error.message}`)
+      else tablas[nombre] = data ?? []
+    } catch (e) {
+      fallos.push(`${nombre}: ${e instanceof Error ? e.message : 'no se pudo consultar'}`)
+    }
+  }
+  return { tablas, fallos }
+}
+
 export async function crearCopia(): Promise<CopiaSeguridad> {
   const archivos = await todosLosArchivos()
   const archivosB64 = await Promise.all(
@@ -84,11 +150,13 @@ export async function crearCopia(): Promise<CopiaSeguridad> {
       base64: await blobABase64(blob),
     })),
   )
+  const deLaBase = isSupabaseConfigured ? await traerTablas() : null
   return {
     app: 'cabildo',
     version: VERSION_COPIA,
     exportadoEl: new Date().toISOString(),
     datos: leerDatosLocales(),
+    ...(deLaBase ? { tablas: deLaBase.tablas, fallos: deLaBase.fallos } : {}),
     archivos: archivosB64,
   }
 }
@@ -137,10 +205,42 @@ export function esCopiaValida(obj: unknown): obj is CopiaSeguridad {
 }
 
 /**
+ * ¿Se puede restaurar una copia en este momento?
+ *
+ * NO cuando hay base de datos conectada, y esto no es una limitación menor:
+ * `restaurarCopia` escribe en el navegador, y con Supabase conectado el
+ * navegador es solo un espejo. Al recargar, cada pantalla vuelve a leer de la
+ * base de datos y sobreescribe lo restaurado.
+ *
+ * O sea: salía el aviso «esto sustituirá TODOS los datos actuales», se
+ * aceptaba, decía «Copia restaurada. Recargando…», recargaba… y estaba todo
+ * exactamente igual que antes. Un botón que dice que ha hecho algo y no lo ha
+ * hecho es peor que no tenerlo: quien lo pulsa se queda tranquilo.
+ *
+ * Restaurar de verdad contra la base de datos (vaciar cada tabla y volver a
+ * meter las filas, dentro de la hermandad y sin romper lo que apunta a lo que)
+ * es una operación seria y va aparte. Mientras tanto, esto lo dice claro.
+ */
+export function sePuedeRestaurar(): boolean {
+  return !isSupabaseConfigured
+}
+
+/**
  * Restaura una copia: borra los datos actuales de la hermandad y los sustituye
  * por los de la copia (localStorage + archivos adjuntos). No toca la sesión.
+ *
+ * Solo tiene sentido sin base de datos conectada; ver `sePuedeRestaurar`.
  */
 export async function restaurarCopia(copia: CopiaSeguridad): Promise<void> {
+  // Cinturón además del tirante: aunque el botón esté desactivado, quien
+  // llegue aquí por otro camino no puede acabar creyendo que ha restaurado.
+  if (!sePuedeRestaurar()) {
+    throw new Error(
+      'Con la base de datos conectada no se puede restaurar desde aquí: lo que se escribiera en este ' +
+        'navegador lo volvería a sobreescribir la base de datos en cuanto se recargara. La copia sigue ' +
+        'siendo válida; para volcarla hay que hacerlo contra la base de datos.',
+    )
+  }
   // Primero se prepara TODO en memoria y se guarda una copia de lo que hay.
   // Antes se borraba el almacenamiento y luego se escribía: si a mitad no
   // cabía (las copias llevan fotos y PDF en base64), quedaban los datos viejos

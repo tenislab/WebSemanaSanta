@@ -10,7 +10,7 @@ import {
   type Movimiento,
   type TipoMovimiento,
 } from '../../data/movimientos'
-import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
+import { CLAVES_CATALOGOS, useLista } from '../../lib/catalogos'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
@@ -37,9 +37,9 @@ export default function Tesoreria() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useHermandadSettings(fallbackNombre)
 
-  const categoriasIngreso = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasIngreso, CATEGORIAS_INGRESO), [])
-  const categoriasGasto = useMemo(() => getLista(CLAVES_CATALOGOS.categoriasGasto, CATEGORIAS_GASTO), [])
-  const cuentas = useMemo(() => getLista(CLAVES_CATALOGOS.cuentasTesoreria, CUENTAS_POR_DEFECTO), [])
+  const categoriasIngreso = useLista(CLAVES_CATALOGOS.categoriasIngreso, CATEGORIAS_INGRESO)
+  const categoriasGasto = useLista(CLAVES_CATALOGOS.categoriasGasto, CATEGORIAS_GASTO)
+  const cuentas = useLista(CLAVES_CATALOGOS.cuentasTesoreria, CUENTAS_POR_DEFECTO)
 
   const [movimientos, setMovimientos] = useSupabaseTable<Movimiento>(
     'movimientos',

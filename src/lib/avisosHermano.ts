@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
 import { nuevoId } from './supabaseSync'
+import { supabase, isSupabaseConfigured } from './supabase'
 import type { Hermano } from '../data/hermanos'
 
 /**
@@ -14,7 +15,25 @@ import type { Hermano } from '../data/hermanos'
  * De qué va el aviso. Sirve para el icono, y para que el hermano pueda decir
  * qué quiere recibir y qué no.
  */
-export type TipoAviso = 'ficha' | 'comunicado' | 'cuota' | 'papeleta'
+/**
+ * Los tipos de aviso.
+ *
+ * `importante` es distinto de los demás Y NO SE PUEDE APAGAR: son los dos
+ * avisos que el propio código llamaba imprescindibles y que, sin embargo, no
+ * salían nunca:
+ *
+ *   - La BAJA en la hermandad. A partir de ese momento el hermano deja de
+ *     tener acceso a su área, así que el aviso de dentro no lo va a leer
+ *     jamás. El correo no es un extra: es la única forma de enterarse.
+ *   - El CAMBIO DE CUENTA BANCARIA. Un cambio de IBAN que el hermano no ha
+ *     pedido es lo primero que hay que poder detectar; avisarle es lo que
+ *     convierte un error (o algo peor) en algo que se descubre el mismo día.
+ *
+ * Los dos iban por el interruptor `ficha`, que viene APAGADO de fábrica
+ * porque los cambios de ficha son muchos y menores. Resultado: una hermandad
+ * recién configurada no mandaba ninguno de los dos y no había forma de saberlo.
+ */
+export type TipoAviso = 'ficha' | 'comunicado' | 'cuota' | 'papeleta' | 'importante'
 
 export interface AvisoHermano {
   id: string
@@ -41,18 +60,66 @@ const CLAVE_PREFS = 'cabildo-avisos-preferencias'
 /** Qué avisos quiere recibir cada hermano. Lo que no está, se recibe. */
 export type PreferenciasAvisos = Partial<Record<TipoAviso, boolean>>
 
+/**
+ * Qué avisos quiere este hermano.
+ *
+ * Se lee de la copia local, que es lo único que se puede hacer sin esperar: es
+ * una función síncrona y la usa `destinatariosDe` en mitad de un envío. Lo que
+ * la mantiene al día es `cargarPreferenciasDeLaBase`, que la trae de la ficha
+ * del hermano en cuanto se abre la pantalla que la necesita.
+ *
+ * EL FALLO QUE ESTO ARREGLA: antes vivía SOLO en el navegador. El hermano
+ * apagaba «Mis cuotas» en su móvil, y cuando la tesorera marcaba su recibo como
+ * pagado desde el ordenador de la casa de hermandad se leían las preferencias
+ * DE ESE ordenador, donde ese hermano no tiene ninguna. Se le escribía igual,
+ * después de haberle ofrecido un interruptor para no recibirlo.
+ */
 export function getPreferenciasAvisos(hermanoId: string): PreferenciasAvisos {
   const todas = leerPersistido<Record<string, PreferenciasAvisos>>(CLAVE_PREFS, {})
   return todas[hermanoId] ?? {}
 }
 
-export function savePreferenciasAvisos(hermanoId: string, prefs: PreferenciasAvisos) {
+function guardarPrefsEnLocal(hermanoId: string, prefs: PreferenciasAvisos) {
   const todas = leerPersistido<Record<string, PreferenciasAvisos>>(CLAVE_PREFS, {})
   localStorage.setItem(CLAVE_PREFS, JSON.stringify({ ...todas, [hermanoId]: prefs }))
 }
 
+/** Guarda lo que el hermano elige. En su ficha, para que lo vea todo el mundo. */
+export async function savePreferenciasAvisos(hermanoId: string, prefs: PreferenciasAvisos) {
+  guardarPrefsEnLocal(hermanoId, prefs)
+  if (!isSupabaseConfigured || !supabase) return
+  await supabase.from('hermanos').update({ avisos_preferencias: prefs }).eq('id', hermanoId)
+}
+
+/**
+ * Trae de la base de datos las preferencias de toda esta gente y las deja en la
+ * copia local, para que `getPreferenciasAvisos` las encuentre.
+ *
+ * Se llama desde las pantallas que van a mandar avisos (Cuotas, Papeletas,
+ * Comunicados, Hermanos) al montar: así la tesorera, aunque nunca haya abierto
+ * el móvil de nadie, respeta lo que cada uno apagó.
+ */
+export async function cargarPreferenciasDeLaBase(): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return
+  const { data, error } = await supabase.from('hermanos').select('id, avisos_preferencias')
+  if (error || !data) return
+  const todas = leerPersistido<Record<string, PreferenciasAvisos>>(CLAVE_PREFS, {})
+  for (const fila of data as { id: string; avisos_preferencias: PreferenciasAvisos | null }[]) {
+    if (fila.avisos_preferencias) todas[fila.id] = fila.avisos_preferencias
+  }
+  try {
+    localStorage.setItem(CLAVE_PREFS, JSON.stringify(todas))
+  } catch {
+    // Sin espacio: se seguirá con lo que hubiera. No es motivo para romper nada.
+  }
+}
+
 /** ¿Quiere este hermano este tipo de aviso? Por defecto, sí. */
 export function quiereAviso(prefs: PreferenciasAvisos, tipo: TipoAviso | undefined): boolean {
+  // Los importantes tampoco los puede apagar el hermano: van sobre su propia
+  // cuenta bancaria y sobre su permanencia en la hermandad. No es
+  // publicidad de la que uno se da de baja.
+  if (tipo === 'importante') return true
   return prefs[tipo ?? 'ficha'] !== false
 }
 

@@ -9,10 +9,10 @@ import { useAsistencias, registroDe } from '../../lib/asistencia'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { INCIDENCIAS_INICIALES, TIPOS_INCIDENCIA_POR_DEFECTO, type Incidencia, type TipoIncidencia } from '../../data/incidencias'
-import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
+import { CLAVES_CATALOGOS, useLista } from '../../lib/catalogos'
 import {
   etiquetaTramo,
-  getTramos,
+  useTramos,
   tramosDeCuerpo,
   cuerposPresentes as cuerposDeTramos,
   getPrecioBase,
@@ -73,7 +73,7 @@ export default function Cortejo() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const registrador = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Secretaría'
   const hermandad = useHermandadSettings(fallbackNombre)
-  const tramos = useMemo(() => getTramos(), [])
+  const tramos = useTramos()
   const campana = useMemo(() => getCampana(), [])
   const edicionActual = campana.anio
 
@@ -140,9 +140,37 @@ export default function Cortejo() {
     [papeletas],
   )
 
+  /**
+   * Papeletas activas cuyo tramo YA NO EXISTE.
+   *
+   * Pasa cuando alguien quita un tramo en Configuración teniendo papeletas
+   * dentro. Antes esos hermanos se evaporaban: no entraban en ningún reparto
+   * (`repartoDeCuerpo` solo reparte sobre tramos que existen), no salían en
+   * «Pendientes» (esa lista solo recoge las 'Solicitada' SIN tramo) ni entre
+   * las anuladas. En Papeletas su fila seguía diciendo «Renovada» tan
+   * tranquila. Ocho personas con su papeleta cobrada, fuera del cortejo, y
+   * nadie se enteraba hasta el día de la salida.
+   *
+   * Aquí se recogen y se enseñan aparte para recolocarlas.
+   */
+  const huerfanas = useMemo(() => {
+    // Mientras la lista de tramos no ha llegado de la base de datos, TODAS las
+    // papeletas parecerían huérfanas y saldría un aviso falso alarmante.
+    if (tramos.length === 0) return []
+    const existentes = new Set(tramos.map((t) => t.id))
+    return papeletas.filter(
+      (p) =>
+        p.anio === edicionActual &&
+        p.tramoId !== null &&
+        !existentes.has(p.tramoId) &&
+        p.estado !== 'Anulada' &&
+        p.estado !== 'Renuncia',
+    )
+  }, [papeletas, tramos, edicionActual])
+
   const cuerposPresentes = useMemo(() => cuerposDeTramos(tramos), [tramos])
   const precioBase = useMemo(() => getPrecioBase(), [])
-  const tiposIncidencia = useMemo(() => getLista(CLAVES_CATALOGOS.tiposIncidencia, TIPOS_INCIDENCIA_POR_DEFECTO), [])
+  const tiposIncidencia = useLista(CLAVES_CATALOGOS.tiposIncidencia, TIPOS_INCIDENCIA_POR_DEFECTO)
 
   const stats = useMemo(() => {
     let cubiertos = 0
@@ -177,6 +205,13 @@ export default function Cortejo() {
       const h = hermanoDe(p.hermanoId)
       if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Pendiente' })
     })
+    // Las que apuntan a un tramo que ya no existe salen aquí, igual que las
+    // pendientes: es la única manera de que alguien las vea y las recoloque.
+    // Antes se caían del listado y de todos los repartos, en silencio.
+    huerfanas.forEach((p) => {
+      const h = hermanoDe(p.hermanoId)
+      if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Pendiente' })
+    })
     papeletas
       .filter((p) => p.estado === 'Anulada')
       .forEach((p) => {
@@ -184,7 +219,7 @@ export default function Cortejo() {
         if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Baja' })
       })
     return out
-  }, [tramos, repartos, pendientes, papeletas, hermanoDe])
+  }, [tramos, repartos, pendientes, huerfanas, papeletas, hermanoDe])
 
   function pasaFiltros(tramo: Tramo | null, filaEstado: FilaEstado, textoBusqueda: string) {
     if (cuerpoFiltro !== 'Todos' && tramo?.cuerpo !== cuerpoFiltro) return false
@@ -309,9 +344,44 @@ export default function Cortejo() {
         (p) => p.hermanoId === hermanoId && p.anio === edicionActual && p.estado !== 'Anulada',
       )
       if (existente) {
+        /**
+         * Al moverlo de tramo hay que rehacer DOS cosas más, no solo el tramo:
+         *
+         * EL IMPORTE. Un hermano con papeleta de «Cirio 1º tramo» (18 €) al
+         * que se le asigna «Cruz de guía» (22 €) se quedaba a 18 €: la
+         * papeleta impresa y el cobro decían 18 € por un puesto que la
+         * hermandad tiene a 22. Y al revés, se le cobraban 22 € por un cirio
+         * de 18.
+         *
+         * LA OPCIÓN. Quien tenía papeleta personalizada («Mantilla», sin
+         * tramo) y pasaba a un tramo se quedaba con las dos cosas a la vez:
+         * salía en el cortejo Y como mantilla, y el documento impreso decía
+         * ambas. Se limpia, como hace la renovación.
+         */
+        const nuevoImporte = precioDeTramo(tramo, precioBase)
+        // Si ya estaba cobrada por otro importe, se avisa en vez de cambiarlo
+        // en silencio: eso es dinero que ya entró y hay que decidir qué hacer.
+        if (
+          (existente.estado === 'Pagada' || existente.estado === 'Entregada') &&
+          existente.importe !== nuevoImporte
+        ) {
+          const sigue = window.confirm(
+            `Esta papeleta ya está cobrada por ${existente.importe} € y el nuevo tramo vale ${nuevoImporte} €.\n\n` +
+              'Se cambia de tramo pero NO se toca el importe cobrado: la diferencia la arregláis vosotros ' +
+              'en el mostrador. ¿Continuar?',
+          )
+          if (!sigue) return prev
+          return prev.map((p) => (p.id === existente.id ? { ...p, tramoId: tramo.id, opcion: null } : p))
+        }
         return prev.map((p) =>
           p.id === existente.id
-            ? { ...p, tramoId: tramo.id, estado: p.estado === 'Solicitada' || p.estado === 'Renuncia' ? 'Asignada' : p.estado }
+            ? {
+                ...p,
+                tramoId: tramo.id,
+                opcion: null,
+                importe: nuevoImporte,
+                estado: p.estado === 'Solicitada' || p.estado === 'Renuncia' ? 'Asignada' : p.estado,
+              }
             : p,
         )
       }

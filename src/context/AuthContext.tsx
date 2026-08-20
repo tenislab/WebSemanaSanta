@@ -142,9 +142,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelado = false
     let sub: { subscription: { unsubscribe: () => void } } | null = null
+    /**
+     * Quién estaba dentro la última vez que pasamos por aquí.
+     *
+     * Hace falta porque una sesión puede cambiar de persona SIN pasar por una
+     * sesión nula. Pasa así: la secretaria de la hermandad A está dentro del
+     * panel, en el ordenador de la casa de hermandad. El presidente de la
+     * hermandad B abre en ese mismo navegador el enlace de «confirma tu
+     * correo». Supabase canjea el token y avisa con la sesión de B, sin emitir
+     * antes un cierre de sesión.
+     *
+     * Como `olvidarHermandad()` solo se llamaba al cerrar sesión, la hermandad
+     * recordada seguía siendo la de A: B entraba viendo el censo de A.
+     */
+    let ultimoUsuario: string | null = null
 
     async function sincronizarSesion(session: { user: Parameters<typeof mapSupabaseUser>[0] } | null) {
       setRealUser(session ? mapSupabaseUser(session.user) : null)
+
+      // Ha entrado OTRA persona sin que la anterior cerrara: se olvida todo lo
+      // de la anterior ANTES de averiguar nada de esta.
+      const usuarioAhora = session?.user?.id ?? null
+      if (usuarioAhora !== ultimoUsuario && ultimoUsuario !== null) {
+        olvidarHermandad()
+        ajustarEspejoALaHermandad(null)
+      }
+      ultimoUsuario = usuarioAhora
+
       if (!session || !supabase) {
         setMfaPendiente(false)
         olvidarHermandad()

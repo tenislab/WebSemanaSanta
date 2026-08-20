@@ -1,9 +1,10 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { prepararAvisos } from '../../lib/avisosCorreo'
 import Drawer from '../../components/Drawer'
 import AvisoFalta from '../../components/AvisoFalta'
 import { requisito } from '../../lib/requisitos'
 import EditorSegmento from '../../components/EditorSegmento'
-import { CLAVES_CATALOGOS, getLista } from '../../lib/catalogos'
+import { CLAVES_CATALOGOS, useLista } from '../../lib/catalogos'
 import {
   CANALES,
   COMUNICADOS_INICIALES,
@@ -18,8 +19,8 @@ import { formatDate } from '../../lib/format'
 import { CLAVES_DATOS, leerPersistido, leerDatos } from '../../lib/persistencia'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { getCampana } from '../../lib/campana'
-import { getTramos } from '../../lib/tramos'
-import { getOpcionesPapeleta } from '../../lib/opcionesPapeleta'
+import { useTramos } from '../../lib/tramos'
+import { useOpcionesPapeleta } from '../../lib/opcionesPapeleta'
 import { etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
@@ -67,6 +68,14 @@ const INICIAL_RED: Record<RedSocial, string> = {
 }
 
 export default function Comunicados() {
+  // Antes de mandar nada, traer de la base la configuración de correo de
+  // la hermandad y lo que cada hermano tenga apagado. Sin esto, quien
+  // entra desde otro ordenador trabaja con la de fábrica: no sale ningún
+  // aviso, o se le escribe a quien pidió que no. Los dos en silencio.
+  useEffect(() => {
+    void prepararAvisos()
+  }, [])
+
   const [comunicados, setComunicados] = useSupabaseTable<Comunicado>(
     'comunicados',
     CLAVES_DATOS.comunicados,
@@ -75,8 +84,8 @@ export default function Comunicados() {
     rowToComunicado,
   )
   const [cuentas, setCuentas] = useCuentasSociales()
-  const canales = useMemo(() => getLista(CLAVES_CATALOGOS.canalesComunicado, CANALES), [])
-  const segmentos = useMemo(() => getLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS), [])
+  const canales = useLista(CLAVES_CATALOGOS.canalesComunicado, CANALES)
+  const segmentos = useLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS)
   const [etiquetas] = useEtiquetas()
   const hermanos = useMemo(() => leerPersistido<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
 
@@ -95,10 +104,25 @@ export default function Comunicados() {
    * «Todos los hermanos», al censo activo entero. Un segmento que no sepamos
    * resolver no avisa a nadie, en vez de avisar a todos por si acaso.
    */
-  function hermanosAAvisar(destinatarios: string): Hermano[] {
-    const porEtiqueta = hermanosDeDestinatario(destinatarios)
+  /**
+   * A quién le llega este comunicado.
+   *
+   * Se mira PRIMERO `criterios`, que es la verdad: los criterios exactos con
+   * los que se compuso el segmento. Antes solo se guardaba la etiqueta legible
+   * y aquí se intentaba adivinar el destinatario leyendo ese texto — se
+   * reconocía «Etiqueta: X» y cualquier cosa con la palabra «todos», y nada
+   * más. Un segmento como «Activos · con cuota pendiente» no encajaba en
+   * ninguna de las dos y devolvía lista VACÍA: 84 hermanos sin buzón, sin
+   * correo y sin nada, con el comunicado guardado como «Enviado».
+   *
+   * Lo de la etiqueta y lo de «todos» se conservan para los comunicados que ya
+   * estaban guardados antes de que existiera `criterios`.
+   */
+  function hermanosAAvisar(c: Pick<Comunicado, 'destinatarios' | 'criterios'>): Hermano[] {
+    if (c.criterios) return filtrarSegmento(hermanos, c.criterios, rolesPorHermano)
+    const porEtiqueta = hermanosDeDestinatario(c.destinatarios)
     if (porEtiqueta.length > 0) return porEtiqueta
-    if (/todos/i.test(destinatarios)) return hermanos.filter((h) => h.estado !== 'Baja')
+    if (/todos/i.test(c.destinatarios)) return hermanos.filter((h) => h.estado !== 'Baja')
     return []
   }
 
@@ -119,14 +143,19 @@ export default function Comunicados() {
    esto, «mandar solo a los costaleros de este año» —que es el caso para el que
    se inventaron— no encontraría a nadie.
    */
+  // Tramos y opciones se traen de la base de datos, no de la foto que hubiera
+  // en el navegador: con la foto, «mandar solo a los costaleros» buscaba los
+  // roles de los tramos de EJEMPLO y no encontraba a ninguno de los de verdad.
+  const tramosReales = useTramos()
+  const opcionesReales = useOpcionesPapeleta()
   const rolesPorHermano = useMemo(() => {
     const anio = getCampana().anio
     const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
-    return indiceRoles(papeletas, getTramos(), getOpcionesPapeleta(), anio)
-  }, [])
+    return indiceRoles(papeletas, tramosReales, opcionesReales, anio)
+  }, [tramosReales, opcionesReales])
   const rolesDisponibles = useMemo(
-    () => etiquetasQueSonAutomaticas(getTramos(), getOpcionesPapeleta()),
-    [],
+    () => etiquetasQueSonAutomaticas(tramosReales, opcionesReales),
+    [tramosReales, opcionesReales],
   )
   /** Todo por lo que se puede mandar: el catálogo de la hermandad y los roles de la papeleta. */
   const etiquetasParaEnviar = useMemo(
@@ -191,15 +220,18 @@ export default function Comunicados() {
 
   async function enviarAhora(c: Comunicado) {
     const hoy = new Date().toISOString().slice(0, 10)
-    const destinatariosHermanos = hermanosDeDestinatario(c.destinatarios)
-    const alcance = destinatariosHermanos.length > 0 ? destinatariosHermanos.length : c.alcance
-    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance }
+    // Al buzón de cada hermano en su área, SIEMPRE. Es lo que no depende de que
+    // haya proveedor de correo contratado.
+    const reciben = hermanosAAvisar(c)
+
+    // El alcance sale de a quién se le ha escrito DE VERDAD. Antes se calculaba
+    // aparte con `hermanosDeDestinatario`, que no sabe resolver un segmento, así
+    // que un comunicado que no había llegado a nadie podía quedar registrado
+    // con 84 personas alcanzadas.
+    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance: reciben.length }
     setComunicados((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)))
     setSelected(actualizado)
 
-    // Al buzón de cada hermano en su área, SIEMPRE. Es lo que no depende de que
-    // haya proveedor de correo contratado.
-    const reciben = hermanosAAvisar(c.destinatarios)
     agregarAvisoAVarios(reciben.map((h) => h.id), c.cuerpo, 'comunicado', c.titulo)
 
     // Y por correo, si la hermandad lo tiene conectado y encendido para los
@@ -252,8 +284,24 @@ export default function Comunicados() {
 
     const hoy = new Date().toISOString().slice(0, 10)
     const nextNumero = Math.max(0, ...comunicados.map((c) => c.numero)) + 1
-    const alcanceEtiqueta = segmentarAvanzado ? segmentoHermanos.length : hermanosDeDestinatario(destinatarios).length
-    const alcance = estado === 'Enviado' && alcanceEtiqueta > 0 ? alcanceEtiqueta : null
+    // Los criterios se guardan, no solo su etiqueta: es lo único que permite
+    // volver a resolver a quién iba dirigido.
+    const criteriosGuardados = segmentarAvanzado ? criterios : null
+    const reciben = hermanosAAvisar({ destinatarios, criterios: criteriosGuardados })
+
+    // Si va a salir AHORA y no hay a quién, no se guarda como enviado: eso
+    // dejaba un comunicado «Enviado» con su fecha y su alcance sin que nadie
+    // hubiera recibido nada, y sin manera de volver a intentarlo porque el
+    // botón de mandar solo sale en los borradores.
+    if (estado === 'Enviado' && reciben.length === 0) {
+      setEnvioCorreo({
+        estado: 'error',
+        texto: 'Ese destinatario no corresponde a ningún hermano. Guárdalo como borrador y revisa el segmento.',
+      })
+      return
+    }
+
+    const alcance = estado === 'Enviado' ? reciben.length : null
     // Un comunicado por cada canal elegido (así cada uno aparece en su canal).
     const nuevos: Comunicado[] = canalesSel.map((canal, idx) => ({
       id: nuevoId(),
@@ -263,6 +311,7 @@ export default function Comunicados() {
       canal,
       redes: canal === 'Redes sociales' ? redes : null,
       destinatarios,
+      criterios: criteriosGuardados,
       estado,
       fechaCreacion: hoy,
       fechaProgramada,
@@ -272,7 +321,19 @@ export default function Comunicados() {
     }))
     setComunicados((prev) => [...nuevos, ...prev])
     if (estado === 'Enviado') {
-      agregarAvisoAVarios(hermanosAAvisar(destinatarios).map((h) => h.id), cuerpo, 'comunicado', titulo)
+      /**
+       * Y AQUÍ SE MANDA EL CORREO, que es lo que faltaba.
+       *
+       * Elegir «Enviar ahora» en el formulario solo llenaba el buzón; el
+       * correo únicamente salía si se guardaba como borrador y luego se pulsaba
+       * el botón «Enviar ahora» de la ficha. Las dos cosas se llaman igual en
+       * pantalla y hacían cosas distintas: quien usaba la primera creía haber
+       * mandado un correo que no salió nunca.
+       *
+       * Se llama a la misma rutina que el botón, para que no puedan volver a
+       * separarse.
+       */
+      void enviarAhora(nuevos[0])
     }
     setJustAddedId(nuevos[0].id)
     setFormOpen(false)

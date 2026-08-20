@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { guardarConAviso, leerPersistido } from './persistencia'
 import { isSupabaseConfigured, supabase } from './supabase'
 import { hermandadActualId } from './multiHermandad'
+import type { HermandadSettings } from './hermandadSettings'
 
 /**
  * Web pública de la hermandad, creada y personalizada desde la propia app.
@@ -1363,6 +1364,48 @@ export async function subirWebAlServidor(web: WebPublica): Promise<boolean> {
  * Devuelve también de qué hermandad es, que es lo que necesitan los
  * formularios de esa página para saber a quién mandan lo que se escriba.
  */
+/**
+ * Los datos de la hermandad que SÍ se pueden enseñar en su web pública.
+ *
+ * EL FALLO QUE ARREGLA. La web pública usaba `useHermandadSettings()`, que
+ * arranca leyendo `cabildo-hermandad-settings` del navegador. En un ordenador
+ * donde alguien de la hermandad A hubiera entrado antes al panel, esa clave
+ * tenía SUS datos: nombre, dirección, logo, IBAN, Bizum y CIF. Al abrir
+ * después la web de la hermandad B, la consulta se hacía sin sesión, las
+ * políticas devolvían cero filas, se salía por el `if (!data) return`… y se
+ * quedaba con lo de A. La sección de donativos de B pedía dinero AL IBAN DE A.
+ *
+ * Esta función pregunta al servidor por el slug de la web que se está viendo.
+ * Y devuelve solo lo publicable: ni IBAN, ni Bizum, ni CIF. Que esos campos no
+ * lleguen es parte del arreglo, no un descuido: si no llegan, no se pueden
+ * enseñar por equivocación.
+ */
+export async function ajustesDeLaWeb(slug: string): Promise<Partial<HermandadSettings> | null> {
+  if (!isSupabaseConfigured || !supabase || !slug.trim()) return null
+  try {
+    const { data, error } = await supabase.rpc('hermandad_de_la_web', { p_slug: slug })
+    const fila = (data as Record<string, string | null>[] | null)?.[0]
+    if (error || !fila) return null
+    return {
+      nombreLegal: fila.nombre_legal ?? '',
+      direccion: fila.direccion ?? '',
+      codigoPostal: fila.codigo_postal ?? '',
+      ciudad: fila.ciudad ?? '',
+      provincia: fila.provincia ?? '',
+      telefono: fila.telefono ?? '',
+      email: fila.email ?? '',
+      logoDataUrl: fila.logo_data_url ?? null,
+      // A propósito vacíos: los datos de cobro de la web salen de lo que la
+      // hermandad escriba en SU editor, no de la ficha de nadie.
+      iban: '',
+      bizumTelefono: '',
+      cif: '',
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function cargarWebPorSlug(
   slug: string,
 ): Promise<{ web: WebPublica; hermandadId: string | null } | null> {

@@ -29,7 +29,12 @@ export interface HermandadSettings {
 
 const STORAGE_KEY = 'cabildo-hermandad-settings'
 
-const EMPTY: HermandadSettings = {
+/**
+ * La ficha en blanco. Se exporta porque la web pública la necesita como base:
+ * ahí los datos vienen del servidor, por el slug de la web, y solo son los
+ * publicables — sobre esta ficha vacía se pegan encima.
+ */
+export const AJUSTES_VACIOS: HermandadSettings = {
   nombreLegal: '',
   cif: '',
   direccion: '',
@@ -97,11 +102,11 @@ function settingsToRow(s: HermandadSettings): Record<string, unknown> {
 export function getHermandadSettings(fallbackNombre?: string): HermandadSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return { ...EMPTY, ...(JSON.parse(raw) as Partial<HermandadSettings>) }
+    if (raw) return { ...AJUSTES_VACIOS, ...(JSON.parse(raw) as Partial<HermandadSettings>) }
   } catch {
     // localStorage no disponible o datos corruptos: seguimos con los valores por defecto
   }
-  return { ...EMPTY, nombreLegal: fallbackNombre ?? '' }
+  return { ...AJUSTES_VACIOS, nombreLegal: fallbackNombre ?? '' }
 }
 
 /** Como `getHermandadSettings`, pero con Supabase conectado trae la fila real en cuanto llega. */

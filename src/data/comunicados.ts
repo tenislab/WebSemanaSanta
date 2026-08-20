@@ -1,3 +1,4 @@
+import type { CriteriosSegmento } from '../lib/segmentacion'
 /** Canal de envío; la hermandad activa los suyos en Configuración. */
 export type Canal = string
 export type EstadoComunicado = 'Borrador' | 'Programado' | 'Enviado'
@@ -17,7 +18,20 @@ export interface Comunicado {
   canal: Canal
   /** Redes elegidas para publicar; solo tiene sentido cuando canal === 'Redes sociales'. */
   redes: RedSocial[] | null
+  /** El texto legible: «Todos los hermanos», «Activos · con cuota pendiente»… */
   destinatarios: string
+  /**
+   * Los criterios del segmento, cuando se mandó con segmentación avanzada.
+   *
+   * HACE FALTA GUARDARLOS. Antes solo se guardaba la etiqueta legible, y a la
+   * hora de avisar se intentaba adivinar a quién se refería mirando el texto:
+   * se reconocía «Etiqueta: X» y cualquier cosa que dijera «todos», y nada más.
+   * Un segmento como «Activos · con cuota pendiente» no encajaba en ninguna de
+   * las dos, así que la lista de destinatarios salía VACÍA: ni buzón, ni
+   * correo, ni nada — y el comunicado se guardaba como «Enviado» con un
+   * alcance de 84 personas que no había recibido ninguna.
+   */
+  criterios?: CriteriosSegmento | null
   estado: EstadoComunicado
   fechaCreacion: string
   fechaProgramada: string | null

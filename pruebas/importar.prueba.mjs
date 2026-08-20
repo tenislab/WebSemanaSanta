@@ -76,12 +76,17 @@ export default async function ({ cargar, caso }) {
   caso('avisa de que falta el nombre', true, e.filas[2].problemas.some((p) => /nombre/i.test(p)))
   caso('avisa de que falta el DNI', true, e.filas[3].problemas.some((p) => /DNI/i.test(p)))
   caso('avisa del correo mal', true, e.filas[4].problemas.some((p) => /correo/i.test(p)))
-  // Sin año, el que corre; y el estado se deduce.
+  // Sin año, el que corre; y el estado se deduce. Eso vive en `paraAlta`, no
+  // en `datos`: son valores de relleno para poder dar de alta a quien viene
+  // nuevo, y a quien YA ESTÁ no se le pueden aplicar nunca.
   const sinAnio = m.ensayar([cab, ['Nuevo Hermano', '33333333D', '', '']], empN, [], 2026)
-  caso('sin año, el año en curso', 2026, sinAnio.filas[0].datos.antiguedad)
-  caso('y entonces es «Nuevo»', 'Nuevo', sinAnio.filas[0].datos.estado)
+  caso('sin año, el año en curso', 2026, sinAnio.filas[0].paraAlta.antiguedad)
+  caso('y entonces es «Nuevo»', 'Nuevo', sinAnio.filas[0].paraAlta.estado)
+  // Y la casilla vacía NO se escribe: no es una orden, es un dato que no tienen.
+  caso('la casilla vacía no se escribe', undefined, sinAnio.filas[0].datos.antiguedad)
   const viejo = m.ensayar([cab, ['Antiguo', '44444444E', '', '1990']], empN, [], 2026)
-  caso('con año antiguo, es «Activo»', 'Activo', viejo.filas[0].datos.estado)
+  caso('con año antiguo, es «Activo»', 'Activo', viejo.filas[0].paraAlta.estado)
+  caso('y con el año escrito, sí se guarda', 1990, viejo.filas[0].datos.antiguedad)
 
   // --- Duplicados DENTRO del archivo ---
   const dup = m.ensayar(
@@ -113,6 +118,58 @@ export default async function ({ cargar, caso }) {
   caso('lo que no trae el archivo no se borra', '600 000 000', r.censo[0].telefono)
   // Renumerar el censo entero por un Excel es un estropicio.
   caso('el número de quien ya estaba no se toca', 89, r.censo[0].numero)
+
+  // --- El destrozo de la hoja de dos columnas (auditoría 2026-08, CRÍTICO) ---
+  //
+  // Secretaría saca de otro programa una hoja sencilla, «Nombre;DNI», para
+  // repasar los nombres. Esa hoja no trae antigüedad, ni situación, ni cuenta
+  // bancaria. Antes de esto, al aplicarla:
+  //
+  //   - Ana, hermana desde 1991, se quedaba con antigüedad 2026.
+  //   - Y con estado «Nuevo», porque se deducía de esa antigüedad inventada.
+  //   - Y sin IBAN, porque `iban: dato(...) || null` metía null y null pisaba.
+  //
+  // En una hermandad la antigüedad ordena el cortejo y da la prioridad de
+  // papeleta: se perdía el censo histórico de una tacada. Y sin IBAN el
+  // siguiente recibo no se puede cobrar. El resumen decía «1 actualizado».
+  const conIban = [{
+    id: 'h1', numero: 89, nombre: 'Ana Sánchez', estado: 'Activo', antiguedad: 1991,
+    email: 'vieja@correo.es', telefono: '600 000 000', direccion: 'C/ Vieja', cuotaAlDia: true,
+    iban: 'ES9121000418450200051332', dni: '12345678A', claveAcceso: 'x', authUserId: null,
+  }]
+  const cabCorta = ['Nombre', 'DNI']
+  const hojaCorta = m.ensayar(
+    [cabCorta, ['Ana Sánchez del Río', '12.345.678-A']],
+    m.proponerEmparejado(cabCorta),
+    conIban,
+    2026,
+  )
+  caso('la hoja corta actualiza a Ana', 1, hojaCorta.actualizados)
+  const tras = m.aplicar(hojaCorta, conIban, { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, () => 'x')
+  caso('NO le borra la antigüedad', 1991, tras.censo[0].antiguedad)
+  caso('NO la convierte en «Nuevo»', 'Activo', tras.censo[0].estado)
+  caso('NO le borra el IBAN', 'ES9121000418450200051332', tras.censo[0].iban)
+  caso('pero sí actualiza lo que la hoja SÍ trae', 'Ana Sánchez del Río', tras.censo[0].nombre)
+
+  // Y cuando la hoja SÍ trae esas columnas, se escriben: el arreglo no puede
+  // ser «no tocar nunca nada», que sería el error contrario.
+  const cabLarga = ['Nombre', 'DNI', 'Antigüedad', 'Estado', 'IBAN']
+  const hojaLarga = m.ensayar(
+    [cabLarga, ['Ana Sánchez', '12345678A', '1985', 'Baja', 'ES7620770024003102575766']],
+    m.proponerEmparejado(cabLarga),
+    conIban,
+    2026,
+  )
+  const tras2 = m.aplicar(hojaLarga, conIban, { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, () => 'x')
+  caso('con columna de antigüedad, sí se escribe', 1985, tras2.censo[0].antiguedad)
+  caso('con columna de estado, sí se escribe', 'Baja', tras2.censo[0].estado)
+  caso('con columna de IBAN, sí se escribe', 'ES7620770024003102575766', tras2.censo[0].iban)
+
+  // Un alta que viene en la hoja corta sí necesita valores: hay que poner algo.
+  const alta = m.ensayar([cabCorta, ['Luis Nuevo', '99999999Z']], m.proponerEmparejado(cabCorta), [], 2026)
+  const trasAlta = m.aplicar(alta, [], { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, () => 'n1')
+  caso('a quien entra nuevo sí se le pone el año en curso', 2026, trasAlta.censo[0].antiguedad)
+  caso('y se le deduce «Nuevo»', 'Nuevo', trasAlta.censo[0].estado)
 
   // Saltar en vez de actualizar.
   const r2 = m.aplicar(e, censoCompleto, { conLosQueYaEstan: 'saltar', clavePorDefecto: 'c' }, () => 'x')

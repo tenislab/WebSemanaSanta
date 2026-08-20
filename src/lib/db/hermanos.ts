@@ -30,6 +30,29 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
   }
 }
 
+/**
+ * Los ÚNICOS campos que un hermano puede cambiar de su propia ficha.
+ *
+ * EL DESTROZO QUE EVITA. El área del hermano guardaba con el mismo circuito
+ * que el panel, y ese manda `hermanoToRow` ENTERO: número, estado, cuota al
+ * día, IBAN, contraseña, etiquetas, baja solicitada… con los valores que su
+ * navegador cargó al iniciar sesión, que en su móvil no se refresca nunca.
+ *
+ *   10:00  Manuel entra en su área.
+ *   10:05  La secretaría le corrige el IBAN, le pone la etiqueta «Diputado de
+ *          tramo» y le marca la cuota al día.
+ *   10:10  Manuel, sin recargar, cambia su teléfono y guarda.
+ *
+ * Y las tres cosas de las 10:05 se deshacían. Con una baja tramitada a media
+ * mañana pasaba lo mismo: el hermano volvía a estar activo por haber tocado su
+ * número de teléfono.
+ *
+ * Mandando solo estos tres campos, lo que él no puede tocar no viaja siquiera.
+ */
+export function contactoDelHermanoToRow(h: Pick<Hermano, 'email' | 'telefono' | 'direccion'>): Record<string, unknown> {
+  return { email: h.email, telefono: h.telefono, direccion: h.direccion }
+}
+
 export function rowToHermano(r: Record<string, unknown>): Hermano {
   return {
     id: r.id as string,

@@ -75,6 +75,27 @@ const TRAMOS_POR_DEFECTO: Tramo[] = [
   { id: 't8', nombre: 'Presidencia', cuerpo: 'Virgen', capacidad: 8, tipo: 'Presidencia', reparto: 'solicitud' },
 ]
 
+/**
+ * Los tramos que tenga guardados este navegador.
+ *
+ * OJO CON LO QUE DEVUELVE CUANDO NO HAY NADA. Antes caía siempre en
+ * `TRAMOS_POR_DEFECTO`, que son los tramos de la hermandad de MENTIRA (ids
+ * 't1'…'t8', «Cristo / Virgen / Único»). Eso es lo correcto sin base de datos,
+ * porque entonces la aplicación es una demostración; con base de datos
+ * conectada es un desastre silencioso:
+ *
+ *   - El área del hermano se quedaba EN BLANCO. Su papeleta apunta a un tramo
+ *     con identificador de verdad, que no está entre 't1'…'t8', así que el
+ *     `find` devolvía nada y la pantalla reventaba al pintar su sitio.
+ *   - Cortejo y Papeletas enseñaban a la secretaría los tramos de ejemplo como
+ *     si fueran los suyos, con sus capacidades y sus precios inventados.
+ *   - El hermano leía «Sin sitio» teniendo sitio, y su papeleta salía impresa
+ *     sin tramo ni puesto.
+ *
+ * Con Supabase conectado se devuelve la lista vacía, que es la verdad —«aún no
+ * han llegado»— y deja que `useTramos` los traiga. Una lista vacía se nota; la
+ * de otra hermandad, no.
+ */
 export function getTramos(): Tramo[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -83,9 +104,9 @@ export function getTramos(): Tramo[] {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed
     }
   } catch {
-    // localStorage no disponible o datos corruptos: seguimos con los valores por defecto
+    // localStorage no disponible o datos corruptos: seguimos abajo.
   }
-  return TRAMOS_POR_DEFECTO
+  return isSupabaseConfigured ? [] : TRAMOS_POR_DEFECTO
 }
 
 /** Como `getTramos`, pero con Supabase conectado trae la lista real en cuanto llega. */
@@ -216,7 +237,17 @@ export function aforoDeCuerpo(cuerpo: Cuerpo, tramos: Tramo[]): number {
 }
 
 /** Nombre completo para mostrar, con el cuerpo delante salvo que sea único. */
-export function etiquetaTramo(tramo: Tramo): string {
+/**
+ * Cómo se llama un tramo para una persona: «Virgen — Cirio 2º tramo».
+ *
+ * Acepta que no haya tramo y devuelve cadena vacía. Esto no es prudencia de
+ * más: `tramos.find(...)` puede no encontrarlo porque la lista aún no ha
+ * llegado de la base de datos, o porque han quitado ese tramo y quedan
+ * papeletas apuntando a él. Antes se llamaba con un `!` delante y reventaba
+ * con un TypeError que dejaba EN BLANCO el área del hermano.
+ */
+export function etiquetaTramo(tramo: Tramo | undefined | null): string {
+  if (!tramo) return ''
   return tramo.cuerpo === 'Único' ? tramo.nombre : `${tramo.cuerpo} — ${tramo.nombre}`
 }
 

@@ -133,6 +133,24 @@ export async function borrarMensajeWeb(id: string) {
 }
 
 /**
+ * Devolver al buzón un mensaje recién borrado (A4 · deshacer).
+ *
+ * Lo que hay detrás es una persona de fuera que ha escrito a la hermandad y ha
+ * dejado su teléfono. Borrarlo sin querer no da un error: simplemente ese
+ * contacto ya no existe y nadie sabe que existió. Se vuelve a insertar con su
+ * mismo identificador, así que no se duplica si el borrado no había llegado a
+ * la base de datos.
+ */
+export async function devolverMensajeWeb(mensaje: MensajeWeb, posicion: number) {
+  const lista = getMensajesWeb().filter((m) => m.id !== mensaje.id)
+  lista.splice(Math.min(Math.max(posicion, 0), lista.length), 0, mensaje)
+  localStorage.setItem(CLAVE_MENSAJES_WEB, JSON.stringify(lista))
+  if (isSupabaseConfigured && supabase) {
+    await supabase.from('mensajes_web').upsert(mensajeToRow(mensaje))
+  }
+}
+
+/**
  * Lo que manda quien visita la web. Como no ha iniciado sesión, va por la
  * inserción anónima de `mensajes_web` (igual que las solicitudes de alta): no
  * puede leer el buzón, solo dejar algo en él.

@@ -204,3 +204,42 @@ export function ajustarEspejoALaHermandad(hermandadId: string | null): void {
     // Sin localStorage no hay copia que tirar.
   }
 }
+
+
+/**
+ * ¿La cuenta de esta sesión lleva la hermandad (está en `titulares`)?
+ *
+ * Hace falta para no confundir «el titular, que no aparece en la tabla de
+ * personal» con «una cuenta que no sabemos identificar». Antes esa duda se
+ * resolvía abriendo el panel entero, que es exactamente al revés de lo que hay
+ * que hacer.
+ */
+export async function soyTitular(): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return true
+  try {
+    const { data } = await supabase.auth.getUser()
+    const uid = data.user?.id
+    if (!uid) return false
+    const { data: filas, error } = await supabase
+      .from('titulares')
+      .select('auth_user_id')
+      .eq('auth_user_id', uid)
+      .maybeSingle()
+    if (error) return false
+    return Boolean(filas)
+  } catch {
+    return false
+  }
+}
+
+
+/** El identificador de la cuenta de esta sesión, o null si no hay ninguna. */
+export async function authUserIdActual(): Promise<string | undefined> {
+  if (!isSupabaseConfigured || !supabase) return undefined
+  try {
+    const { data } = await supabase.auth.getUser()
+    return data.user?.id
+  } catch {
+    return undefined
+  }
+}

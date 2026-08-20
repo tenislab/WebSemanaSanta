@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import MenuAcciones from '../../components/MenuAcciones'
@@ -6,8 +7,8 @@ import CamposPropiosForm from '../../components/CamposPropios'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
-import { getOpcionesPapeleta } from '../../lib/opcionesPapeleta'
-import { getTramos, etiquetaTramo } from '../../lib/tramos'
+import { useOpcionesPapeleta } from '../../lib/opcionesPapeleta'
+import { useTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
@@ -90,6 +91,14 @@ function estadoClass(estado: EstadoHermano) {
 }
 
 export default function Hermanos() {
+  // Antes de mandar nada, traer de la base la configuración de correo de
+  // la hermandad y lo que cada hermano tenga apagado. Sin esto, quien
+  // entra desde otro ordenador trabaja con la de fábrica: no sale ningún
+  // aviso, o se le escribe a quien pidió que no. Los dos en silencio.
+  useEffect(() => {
+    void prepararAvisos()
+  }, [])
+
   const { user } = useAuth()
   // Quién está haciendo los cambios, para el registro de actividad. Se copia
   // el nombre tal como es AHORA: si esta persona deja la junta y se borra su
@@ -146,8 +155,8 @@ export default function Hermanos() {
     setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: true }))
   }
   // Los tramos y las opciones, que son de donde salen los roles automáticos.
-  const tramosRoles = useMemo(() => getTramos(), [])
-  const opcionesRoles = useMemo(() => getOpcionesPapeleta(), [])
+  const tramosRoles = useTramos()
+  const opcionesRoles = useOpcionesPapeleta()
   /**
    * Las etiquetas que salen SOLAS de la papeleta de cada uno (costalero,
    * acólito, mantilla). Se calculan una vez y se reparten por índice: en un
@@ -557,7 +566,10 @@ export default function Hermanos() {
       // que el hermano no ha pedido es lo primero que hay que poder detectar.
       avisarPorCorreo(
         [{ id: selected.id, nombre: selected.nombre, email: selected.email }],
-        'ficha',
+        // «importante», no «ficha»: el interruptor de ficha viene apagado de
+        // fábrica, así que este aviso —el que permite detectar un cambio de
+        // cuenta que el hermano no ha pedido— no salía NUNCA.
+        'importante',
         'Han cambiado tu cuenta bancaria',
         [texto, 'Si no lo has pedido tú, avisa a la secretaría cuanto antes.'],
       )
@@ -624,7 +636,10 @@ export default function Hermanos() {
     // correo no es un extra, es la única forma de enterarse.
     avisarPorCorreo(
       [{ id: objetivo.id, nombre: objetivo.nombre, email: objetivo.email }],
-      'ficha',
+      // «importante»: desde este momento no puede entrar en su área, así que
+      // el aviso de dentro no lo va a leer. Iba por el interruptor de ficha,
+      // apagado de fábrica, y no salía.
+      'importante',
       'Tu baja en la hermandad',
       [texto, 'Si crees que es un error, ponte en contacto con la secretaría.'],
     )

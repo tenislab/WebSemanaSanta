@@ -71,4 +71,127 @@ export default async function ({ cargar, caso }) {
   const buscadas = dir.buscarHermandades('esperanza', principal)
   caso('buscar por nombre encuentra', true, buscadas.every((h) => /esperanza/i.test(h.nombre + h.ciudad)))
   caso('buscar algo que no existe no devuelve nada', 0, dir.buscarHermandades('zzzz', principal).length)
+
+  await aislamientoAuditoria({ cargar, caso })
+
+  await areaHermanoAuditoria({ cargar, caso })
+}
+
+/**
+ * Auditoría 2026-08 · Que una hermandad no vea nada de otra.
+ *
+ * Seis hallazgos con la misma raíz: el navegador guarda cosas que son de UNA
+ * hermandad y luego las enseña en el sitio de otra.
+ */
+async function aislamientoAuditoria({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+
+  // --- El área del hermano no puede pisar el censo del panel ---
+  // La secretaria con Hermanos abierto y un hermano entrando en otra pestaña:
+  // la consulta del hermano devuelve 1 fila (solo ve la suya), espejaba la
+  // clave común, y el panel se quedaba con un censo de una persona.
+  const sync = await readFile('src/lib/supabaseSync.ts', 'utf8')
+  caso('el hook admite no dejar copia', true, /sinEspejo\?: boolean/.test(sync))
+  caso('y sin copia no escucha a otras pestañas', true, /if \(sinEspejo\) return/.test(sync))
+  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  caso('el área del hermano no deja copia', true, /const sinEspejo = \{ sinEspejo: true \}/.test(portal))
+  // Las cuatro tablas que monta, no solo una.
+  caso('en las cuatro tablas', 4, (portal.match(/\n\s+sinEspejo,\n/g) ?? []).length)
+
+  // --- Un fallo de red no puede llenar el panel de datos de ejemplo ---
+  caso('la reserva nunca son los ejemplos', true, /isSupabaseConfigured \? \[\] : inicial/.test(sync))
+  // Y lo más importante: no marcarlo como cargado, o el primer cambio
+  // dispararía `sincronizar`, que borra en Supabase lo que no aparece en la
+  // lista. Comparar contra una lista que nunca vino de la base es borrar todo.
+  caso('un fallo no marca la tabla como cargada', true,
+    /cargado\.current = true\n\s+\}\n\s+\}, \(err\)/.test(sync))
+  caso('y se avisa de que no se pudo cargar', true, /function avisarDeFallo/.test(sync))
+
+  // --- La web pública no puede enseñar el IBAN de otra hermandad ---
+  const sitio = await readFile('src/pages/SitioPublico.tsx', 'utf8')
+  caso('los datos vienen del servidor por slug', true, /ajustesDeLaWeb\(web\.slug\)/.test(sitio))
+  const web = await readFile('src/lib/webPublica.ts', 'utf8')
+  caso('y la función pregunta por el slug', true, /rpc\('hermandad_de_la_web'/.test(web))
+  // Que NO devuelva IBAN ni Bizum es parte del arreglo: si no llegan, no se
+  // pueden enseñar por equivocación.
+  caso('sin IBAN', true, /iban: '',/.test(web))
+  caso('sin Bizum', true, /bizumTelefono: '',/.test(web))
+
+  // --- Cambiar de usuario sin cerrar sesión ---
+  const auth = await readFile('src/context/AuthContext.tsx', 'utf8')
+  caso('se olvida al cambiar de persona', true,
+    /usuarioAhora !== ultimoUsuario && ultimoUsuario !== null/.test(auth))
+
+  // --- Y el SQL ---
+  const sql = await readFile('supabase/multi-hermandad.sql', 'utf8')
+  // Cualquiera podía adjudicarse todas las filas sin dueño de la base entera.
+  caso('adoptar_datos_sin_hermandad está cerrada', true,
+    /revoke execute on function adoptar_datos_sin_hermandad\(uuid\) from public;/.test(sql))
+  caso('también a anon y authenticated', true,
+    /revoke execute on function adoptar_datos_sin_hermandad\(uuid\) from anon, authenticated;/.test(sql))
+  // El `limit 1` sin filtro metía a un titular nuevo en la hermandad de otros.
+  caso('la mudanza solo con una hermandad', 2, (sql.match(/count\(\*\) from hermandades\) <= 1/g) ?? []).length)
+
+  // El barrido de DNI: pertenecer a una hermandad revela convicciones
+  // religiosas, que el RGPD trata como categoría especial (artículo 9).
+  const acceso = await readFile('supabase/acceso-hermano.sql', 'utf8')
+  caso('el acceso por DNI tiene tope', true, /if v_recientes >= 25 then/.test(acceso))
+  caso('cuenta DNI distintos, no repeticiones', true, /count\(distinct huella_dni\)/.test(acceso))
+  caso('y no guarda ningún DNI en claro', true, /md5\(v_dni/.test(acceso))
+  caso('la tabla de intentos está cerrada', true, /revoke all on intentos_acceso from anon, authenticated;/.test(acceso))
+
+  // Y la guía ya no manda hacer el insert que causaba el problema.
+  const endurecer = await readFile('supabase/rls-endurecer.sql', 'utf8')
+  caso('la guía usa crear_hermandad_manual', true, /select crear_hermandad_manual\(/.test(endurecer))
+}
+
+/**
+ * Auditoría 2026-08 · El área del hermano.
+ *
+ * Todos tienen la misma pinta desde fuera: el hermano hace algo, la pantalla
+ * le dice que ha salido bien, y no ha pasado nada.
+ */
+async function areaHermanoAuditoria({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const sql = await readFile('supabase/area-hermano.sql', 'utf8')
+
+  // La recursión: `hermano_propio_id()` lee de `hermanos`, así que usada desde
+  // una política SOBRE `hermanos` se llamaba a sí misma hasta reventar. Y no
+  // reventaba solo la consulta del tutor: CUALQUIER lectura del área.
+  caso('hermano_propio_id no se muerde la cola', true,
+    /create or replace function hermano_propio_id\(\) returns uuid\n\s+language sql stable security definer/.test(sql))
+
+  // El aviso de «ya he pagado» no llegaba: no había política de UPDATE, y
+  // Postgres no da error, actualiza cero filas y dice que todo bien.
+  caso('el hermano puede avisar de su pago', true, /create policy "cuotas_propio_aviso_pago" on cuotas for update/.test(sql))
+
+  // El número de papeleta se calculaba en su móvil, donde solo ve las suyas.
+  caso('el número de papeleta lo da el servidor', true, /function siguiente_numero_papeleta\(p_anio int\)/.test(sql))
+  caso('mirando todas las de la hermandad', true, /where hermandad_id = hermandad_actual\(\) and anio = p_anio/.test(sql))
+  caso('y hay índice único que impide el duplicado', true, /create unique index if not exists papeletas_numero_unico/.test(sql))
+  // Con duplicados ya dentro, el índice no se puede crear: hay que limpiarlos.
+  caso('se limpian los duplicados que ya hubiera', true, /row_number\(\) over \(partition by hermandad_id, anio, numero/.test(sql))
+
+  // El buzón vivía en el navegador de secretaría: en el móvil siempre vacío.
+  caso('el buzón es una tabla de verdad', true, /create table if not exists avisos_hermano/.test(sql))
+  // Sin el default, la fila entra sin hermandad y su propia política la
+  // rechaza: la secretaría no podía dejar ni un aviso.
+  caso('con hermandad por defecto', true, /hermandad_id uuid not null default hermandad_actual\(\)/.test(sql))
+  caso('el hermano lee los suyos', true, /create policy "avisos_propio_select"/.test(sql))
+  caso('y no puede escribirse avisos', false, /create policy "avisos_propio_insert"/.test(sql))
+
+  // Las preferencias de avisos vivían en el móvil del hermano, así que quien
+  // mandaba el correo desde otro ordenador no las veía y le escribía igual.
+  caso('las preferencias van en su ficha', true, /add column if not exists avisos_preferencias jsonb/.test(sql))
+
+  // El hijo a cargo se descartaba al guardar: la columna no existía.
+  caso('el tutor se guarda', true, /add column if not exists tutor_id uuid references hermanos\(id\)/.test(sql))
+  caso('y el tutor ve a quien tiene a cargo', true, /create policy "hermanos_a_mi_cargo_select"/.test(sql))
+
+  // Y en la aplicación: el hermano solo escribe SUS tres campos.
+  const db = await readFile('src/lib/db/hermanos.ts', 'utf8')
+  caso('hay un mapeo de solo contacto', true, /export function contactoDelHermanoToRow/.test(db))
+  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  caso('el área lo usa para guardar', true, /\.update\(contactoDelHermanoToRow\(/.test(portal))
+  caso('y si falla, lo dice', true, /No se han podido guardar tus datos/.test(portal))
 }

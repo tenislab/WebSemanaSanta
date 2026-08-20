@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   PAREJAS_TIPOGRAFICAS,
+  ajustesDeLaWeb,
   cargarWebPorSlug,
   getWebPublica,
   marcaDeAgua,
@@ -13,8 +14,8 @@ import {
   type Titular,
   type WebPublica,
 } from '../lib/webPublica'
-import { useHermandadSettings, type HermandadSettings } from '../lib/hermandadSettings'
-import { getSuscripcion, tieneCapacidad } from '../lib/suscripcion'
+import { AJUSTES_VACIOS, useHermandadSettings, type HermandadSettings } from '../lib/hermandadSettings'
+import { constaLaSuscripcion, getSuscripcion, tieneCapacidad } from '../lib/suscripcion'
 import { haySesionAbierta } from '../lib/sesion'
 import { LogoMark } from '../components/Logo'
 import SitioContenido, { AvisoFotos, FotoConMarca, Galeria, Parrafos, PieSitio, TarjetaNoticia } from '../components/SitioContenido'
@@ -85,13 +86,64 @@ export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPub
 
   const guardadaAqui = getWebPublica()
   const web = traida ?? guardadaAqui
-  const hermandad = useHermandadSettings()
+
+  /**
+   * Los datos de la hermandad, PREGUNTADOS POR EL SLUG de esta web.
+   *
+   * `useHermandadSettings()` no sirve aquí: arranca leyendo la copia del
+   * navegador, y en un ordenador donde antes hubiera entrado alguien de otra
+   * hermandad esa copia lleva SUS datos —nombre, dirección, logo, IBAN y
+   * Bizum—. Como la consulta se hace sin sesión y no devuelve nada, se quedaba
+   * con lo de la otra: la sección de donativos de una hermandad llegó a pedir
+   * dinero al IBAN de otra.
+   *
+   * Se sigue usando el hook como reserva SIN base de datos, que es cuando la
+   * aplicación funciona entera contra el navegador y esa copia sí es la suya.
+   */
+  const guardadosAqui = useHermandadSettings()
+  const [ajustesWeb, setAjustesWeb] = useState<Partial<HermandadSettings> | null>(null)
+  useEffect(() => {
+    if (!isSupabaseConfigured || !web.slug) return
+    let cancelado = false
+    ajustesDeLaWeb(web.slug).then((r) => {
+      if (!cancelado) setAjustesWeb(r)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [web.slug])
+  const hermandad = useMemo(
+    () => (isSupabaseConfigured ? { ...AJUSTES_VACIOS, ...(ajustesWeb ?? {}) } : guardadosAqui),
+    [ajustesWeb, guardadosAqui],
+  )
   // Los próximos cultos salen del módulo de Eventos, para no copiarlos a mano.
   const cultosCalendario = useMemo(() => cultosDelCalendario(), [])
-  // La web pública solo se sirve si la hermandad tiene un pack que incluya la
-  // capacidad «web». La vista previa del panel (?preview=1) no se filtra: quien
-  // llega ahí ya está dentro del módulo Web, que su propio pack le habilita.
-  const conWeb = tieneCapacidad(getSuscripcion(), 'web')
+  /**
+   * La suscripción NO puede filtrar a un visitante de fuera.
+   *
+   * EL FALLO QUE ARREGLA ESTO: `getSuscripcion()` lee la clave
+   * `cabildo-suscripcion` del navegador de quien mira. La hermandad la tiene
+   * en el suyo, así que veía su web perfecta y daba por hecho que estaba
+   * publicada. Cualquier otra persona —una ventana de incógnito, el móvil de
+   * un hermano, quien abría el enlace desde WhatsApp— no tiene esa clave, se
+   * caía en la suscripción de fábrica (`activa: false`) y se encontraba con
+   * «Esta web no está disponible. La hermandad no tiene contratada la web
+   * pública en su suscripción».
+   *
+   * O sea: la web pública no la podía ver NADIE de fuera, que es exactamente
+   * para lo que existe. Y la hermandad no tenía forma de enterarse.
+   *
+   * Mientras el pack contratado no venga del servidor —hoy solo vive en el
+   * navegador de quien lo contrató— la única lectura honesta es: si a este
+   * navegador NO le consta la suscripción, no se le puede cerrar la puerta,
+   * porque no saber no es lo mismo que no haber pagado. Para el visitante
+   * manda `publicada`, que sí llega de la base de datos y sí está protegido
+   * por las políticas de acceso.
+   *
+   * Así la hermandad que de verdad no tiene el pack sigue viendo el aviso en
+   * su propio panel —ahí sí consta— y el de fuera ve la web.
+   */
+  const conWeb = !constaLaSuscripcion() || tieneCapacidad(getSuscripcion(), 'web')
 
   if (!preview && !conWeb) {
     return (
