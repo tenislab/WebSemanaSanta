@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import Landing from './Landing'
 import SitioPublico from './SitioPublico'
 import { cargarWebPorDominio, type WebPublica } from '../lib/webPublica'
@@ -12,7 +13,7 @@ import { LogoMark } from '../components/Logo'
  *
  * Depende del dominio por el que se haya entrado, y esa es toda la gracia:
  *
- *   cabildo.es              → la página de Gobergo (vender la aplicación)
+ *   gobergo.es              → la página de Gobergo (vender la aplicación)
  *   hermandaddetriana.es    → la web DE ESA HERMANDAD
  *
  * Cuando una hermandad compra su dominio y lo apunta aquí, quien lo escriba
@@ -25,7 +26,14 @@ import { LogoMark } from '../components/Logo'
  * lo único que hay que hacer.
  */
 
-export default function Raiz() {
+/**
+ * `soloWeb` marca las rutas que solo tienen sentido dentro de la web de una
+ * hermandad: `/noticias`, `/n/…`, `/t/…`. Si se llega a ellas por un dominio
+ * que no es de ninguna hermandad —el de Gobergo, por ejemplo— no hay noticia
+ * que enseñar, y plantar ahí la página de venta sería mentir sobre lo que se
+ * ha pedido. Se manda a la portada.
+ */
+export default function Raiz({ soloWeb = false }: { soloWeb?: boolean } = {}) {
   const host = typeof window !== 'undefined' ? window.location.hostname : ''
   // En casa no se pregunta nada: se pinta la página de Gobergo al momento. Sin
   // esto, cada visita a la página de venta esperaría una consulta a la base de
@@ -65,5 +73,6 @@ export default function Raiz() {
   // configurado todavía— se enseña la página de Gobergo, que al menos explica
   // qué es esto en vez de dar un error.
   if (web) return <SitioPublico webPorDominio={web} />
+  if (soloWeb) return <Navigate to="/" replace />
   return <Landing />
 }

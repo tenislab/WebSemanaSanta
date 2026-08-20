@@ -43,6 +43,7 @@ import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
 import { conApunteDeCobro, origenDePapeleta, sinApunteDeCobro } from '../../lib/apuntes'
+import { apuntar } from '../../lib/registroActividad'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 
@@ -77,6 +78,9 @@ interface ItemImpresion {
 
 export default function Papeletas() {
   const { user } = useAuth()
+  // Quién está haciendo los cambios, para el registro de actividad.
+  const quienSoy =
+    (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Alguien de la junta'
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useHermandadSettings(fallbackNombre)
   const tramos = useMemo(() => getTramos(), [])
@@ -418,6 +422,15 @@ export default function Papeletas() {
     // Anulada deja de ser un ingreso: fuera su apunte, o el saldo contaría un
     // dinero que se devolvió.
     setMovimientos((prev) => sinApunteDeCobro(prev, origenDePapeleta(id)))
+    // Anular una papeleta es de lo primero que se pregunta en un cabildo
+    // cuando alguien se queda sin sitio: quién la anuló, cuándo y por qué.
+    const anulada = papeletas.find((x) => x.id === id)
+    apuntar({
+      autorNombre: quienSoy, accion: 'papeleta_anulada', sobreTipo: 'papeleta',
+      sobreId: id,
+      sobreNombre: hermanos.find((h) => h.id === anulada?.hermanoId)?.nombre ?? '',
+      detalle: `Anuló la papeleta de ${hermanos.find((h) => h.id === anulada?.hermanoId)?.nombre ?? 'un hermano'}: ${motivo.trim() || 'sin motivo'}`,
+    })
   }
 
   // ---- Impresión masiva: un único PDF con una papeleta por página ----

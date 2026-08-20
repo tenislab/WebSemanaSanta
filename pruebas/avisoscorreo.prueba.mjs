@@ -45,7 +45,25 @@ export default async function ({ cargar, caso }) {
   caso('apagar las cuotas no apaga las papeletas', true, m.destinatariosDe(gente, 'papeleta', encendido).some((h) => h.id === 'h1'))
   av.savePreferenciasAvisos('h1', {})
 
-  // 6. El cuerpo del correo: sin HTML colado por el texto de nadie.
+  // 6. El color de la hermandad, que acaba dentro de un atributo `style`.
+  //    Sale de lo que escriban en Configuración, así que si se metiera tal
+  //    cual, quien pueda editar los ajustes podría colar lo que quisiera en el
+  //    correo que reciben mil hermanos.
+  const hex = (v) => m.cuerpoCorreo('T', ['p']).html
+  localStorage.setItem('cabildo-hermandad-settings', JSON.stringify({ nombreLegal: 'Hdad. X', colorPrimario: '#123456' }))
+  caso('el color de la hermandad se usa', true, hex().includes('#123456'))
+  localStorage.setItem('cabildo-hermandad-settings', JSON.stringify({ nombreLegal: 'Hdad. X', colorPrimario: 'red;}</style><script>alert(1)</script>' }))
+  caso('un color inventado no se cuela', false, hex().includes('<script>'))
+  caso('y se usa el de siempre', true, hex().includes('#6A1A23'))
+  localStorage.setItem('cabildo-hermandad-settings', JSON.stringify({ nombreLegal: 'Hdad. X', colorPrimario: '#abc' }))
+  caso('un color de tres cifras vale', true, hex().includes('#abc'))
+  localStorage.removeItem('cabildo-hermandad-settings')
+
+  // 7. Sin imágenes: el logo va como texto en la base de datos y Gmail bloquea
+  //    ese formato, así que se vería un hueco roto en cada correo.
+  caso('el correo no lleva imágenes', false, /<img/i.test(m.cuerpoCorreo('T', ['p']).html))
+
+  // 8. El cuerpo del correo: sin HTML colado por el texto de nadie.
   const cuerpo = m.cuerpoCorreo('Título <script>', ['Cuerpo & "cosas"'], 'Pie')
   caso('el título no cuela etiquetas', false, cuerpo.html.includes('<script>'))
   caso('el ampersand va escapado', true, cuerpo.html.includes('&amp;'))

@@ -1,4 +1,5 @@
 import { CLAVES_DATOS } from './persistencia'
+import { isSupabaseConfigured } from './supabase'
 
 /**
  * Modo demostración con dos puntos de partida, para probar la app sin base de
@@ -151,4 +152,21 @@ export function limpiarModoDemo() {
   } catch {
     // nada que hacer
   }
+}
+
+
+/**
+ * ¿Lo que se está viendo son datos de ejemplo?
+ *
+ * Hace falta porque media aplicación lo daba por hecho. Cinco pantallas
+ * ponían «datos de ejemplo mientras conectamos la base de datos» pasara lo que
+ * pasara, así que una hermandad con su censo de verdad dentro leía eso encima
+ * de sus 800 hermanos.
+ *
+ * Y en los documentos impresos era peor: el pie de un recibo decía «datos de
+ * ejemplo, sin validez fiscal» por defecto. Ese papel se le entrega a un
+ * hermano en mano, y lo que ponía era que no valía para nada.
+ */
+export function hayDatosDeEjemplo(): boolean {
+  return !isSupabaseConfigured || modoDemoActivo()
 }

@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cabildo — migración de agosto de 2026
+-- Gobergo — migración de agosto de 2026
 -- =============================================================================
 -- Para bases de datos YA creadas con una versión anterior de schema.sql.
 -- Si vas a crear la base desde cero, no hace falta: schema.sql ya lo incluye.

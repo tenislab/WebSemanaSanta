@@ -12,6 +12,7 @@ import { formatCurrency } from '../../lib/format'
 import { CLAVES_DATOS } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { enserToRow, rowToEnser } from '../../lib/db/enseres'
+import { hayDatosDeEjemplo } from '../../lib/demo'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { year: 'numeric' })
@@ -125,7 +126,7 @@ export default function Inventario() {
           <p className="eyebrow">Inventario</p>
           <h1>Enseres y patrimonio</h1>
           <p className="dash-head__lead">
-            {stats.total} piezas registradas · datos de ejemplo mientras conectamos la base de datos.
+            {stats.total} piezas registradas{hayDatosDeEjemplo() ? ' · datos de ejemplo mientras conectamos la base de datos' : ''}
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setFormOpen(true)}>

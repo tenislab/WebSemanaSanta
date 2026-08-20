@@ -17,6 +17,7 @@ import { formatCurrency } from '../../lib/format'
 import { CLAVES_DATOS } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
+import { hayDatosDeEjemplo } from '../../lib/demo'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -143,7 +144,7 @@ export default function Tesoreria() {
           <p className="eyebrow">Tesorería</p>
           <h1>Caja, ingresos y gastos</h1>
           <p className="dash-head__lead">
-            {movimientos.length} movimientos · datos de ejemplo mientras conectamos la base de datos.
+            {movimientos.length} movimientos{hayDatosDeEjemplo() ? ' · datos de ejemplo mientras conectamos la base de datos' : ''}
           </p>
         </div>
         <button className="btn btn-primary" onClick={abrirNuevo}>

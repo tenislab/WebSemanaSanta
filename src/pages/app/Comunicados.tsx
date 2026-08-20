@@ -33,11 +33,8 @@ import {
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import { agregarAvisoAVarios, getPreferenciasAvisos, quiereAviso } from '../../lib/avisosHermano'
 import { correoDisponible, enviarCorreo, getAjustesCorreo } from '../../lib/correo'
-
-/** Para meter texto de la hermandad dentro del HTML del correo sin romperlo. */
-function escaparHtml(t: string): string {
-  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+import { cuerpoCorreo } from '../../lib/avisosCorreo'
+import { hayDatosDeEjemplo } from '../../lib/demo'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -216,14 +213,12 @@ export default function Comunicados() {
       .filter((e) => e && e.includes('@'))
     if (direcciones.length === 0) return
     setEnvioCorreo({ estado: 'enviando' })
-    const r = await enviarCorreo({
-      para: direcciones,
-      asunto: c.titulo,
-      texto: c.cuerpo,
-      html: `<div style="font-family:system-ui,sans-serif;line-height:1.6;max-width:34rem">` +
-        `<h2 style="margin:0 0 0.6rem">${escaparHtml(c.titulo)}</h2>` +
-        `<div>${escaparHtml(c.cuerpo).replace(/\n/g, '<br>')}</div></div>`,
-    })
+    // El mismo membrete que los demás avisos: la banda con el color y el
+    // nombre de la hermandad. Antes esta pantalla se montaba su propio HTML a
+    // mano, así que el comunicado —que es el correo que MÁS se manda— era el
+    // único que llegaba sin identificar de quién era.
+    const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
+    const r = await enviarCorreo({ para: direcciones, asunto: c.titulo, texto, html })
     setEnvioCorreo(
       r.ok
         ? { estado: 'hecho', texto: `Enviado por correo a ${r.enviados} hermanos.` }
@@ -294,7 +289,7 @@ export default function Comunicados() {
           <p className="eyebrow">Comunicados</p>
           <h1>Avisos y difusión</h1>
           <p className="dash-head__lead">
-            {stats.total} comunicados · datos de ejemplo mientras conectamos la base de datos.
+            {stats.total} comunicados{hayDatosDeEjemplo() ? ' · datos de ejemplo mientras conectamos la base de datos' : ''}
           </p>
         </div>
         <button className="btn btn-primary" onClick={abrirNuevo}>

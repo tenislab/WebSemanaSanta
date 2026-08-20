@@ -3,6 +3,7 @@ import type { Hermano } from '../data/hermanos'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import type { Cuota } from '../data/cuotas'
 import { formatCurrency, maskIban } from '../lib/format'
+import { hayDatosDeEjemplo } from '../lib/demo'
 
 function estadoPillClass(estado: Cuota['estado']) {
   if (estado === 'Pagada') return 'pill--ok'
@@ -105,7 +106,9 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
       </div>
 
       <p className="recibo-doc__note">
-        {hermandad.textoPieDocumentos || 'Documento generado por Gobergo · datos de ejemplo, sin validez fiscal'}
+        {hermandad.textoPieDocumentos || (hayDatosDeEjemplo()
+            ? 'Documento generado por Gobergo · datos de ejemplo, sin validez fiscal'
+            : 'Documento generado por Gobergo')}
       </p>
     </div>
   )

@@ -6,6 +6,7 @@ import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
 import { FormularioAlta, FormularioContacto, FormularioDonativo, FormularioLoteria } from './FormulariosWeb'
 import { diasHasta as diasHastaFecha, getCampana, ventanaAbierta } from '../lib/campana'
+import { baseDeRutas } from '../lib/seoWeb'
 
 /**
  * Deja el foco dentro de una caja mientras esté abierta (el menú de móvil, el
@@ -732,21 +733,22 @@ function Redes({ web, interactivo }: { web: WebPublica; interactivo: boolean }) 
 export function BloqueTitular({
   titular: t,
   vuelto,
-  slugWeb,
+  baseWeb,
   marca,
   interactivo,
 }: {
   titular: Titular
   /** La foto a la derecha en vez de a la izquierda. */
   vuelto?: boolean
-  slugWeb: string
+  /** De dónde cuelgan las páginas de esta web: '' con dominio propio, '/w/<slug>' si no. */
+  baseWeb: string
   /** Texto de la marca de agua; vacío = sin marca. */
   marca: string
   interactivo: boolean
 }) {
   const parrafos = (t.parrafos ?? []).filter((p) => p.texto.trim() || p.subtitulo.trim())
   const conFicha = titularConFicha(t)
-  const enlace = `/w/${slugWeb}/t/${slugTitular(t)}`
+  const enlace = `${baseWeb}/t/${slugTitular(t)}`
   // En la portada se asoma el arranque de su historia; el resto vive en la
   // ficha, para que la sección no se convierta en un muro de texto.
   const asomo = parrafos.find((p) => p.texto.trim())?.texto ?? ''
@@ -814,15 +816,16 @@ function recorta(texto: string, max: number): string {
 export function TarjetaNoticia({
   noticia: n,
   interactivo,
-  slugWeb,
+  baseWeb,
   grande = false,
 }: {
   noticia: Noticia
   interactivo: boolean
-  slugWeb: string
+  /** De dónde cuelgan las páginas de esta web: '' con dominio propio, '/w/<slug>' si no. */
+  baseWeb: string
   grande?: boolean
 }) {
-  const enlace = `/w/${slugWeb}/n/${slugNoticia(n)}`
+  const enlace = `${baseWeb}/n/${slugNoticia(n)}`
   const tieneCuerpo = (n.parrafos ?? []).some((p) => p.texto.trim())
   return (
     <article className={`sitio__noticia${grande ? ' sitio__noticia--grande' : ''}`}>
@@ -1103,7 +1106,7 @@ function Seccion({
               // Alternos: la foto salta de un lado al otro en cada titular,
               // que es lo que rompe la columna centrada de siempre.
               vuelto={i % 2 === 1}
-              slugWeb={web.slug}
+              baseWeb={baseDeRutas(web)}
               marca={marcaDeAgua(web, hermandad.nombreLegal ?? '')}
               interactivo={interactivo}
             />
@@ -1283,18 +1286,18 @@ function Seccion({
       <section id="actualidad" {...props}>
         {/* En la web pública, sin la coletilla "(noticias)" del editor. */}
         <h2>{titulo('Actualidad')}</h2>
-        <TarjetaNoticia noticia={primera} interactivo={interactivo} slugWeb={web.slug} grande />
+        <TarjetaNoticia noticia={primera} interactivo={interactivo} baseWeb={baseDeRutas(web)} grande />
         {resto.length > 0 && (
           <div className="sitio__noticias">
             {resto.map((n) => (
-              <TarjetaNoticia key={n.id} noticia={n} interactivo={interactivo} slugWeb={web.slug} />
+              <TarjetaNoticia key={n.id} noticia={n} interactivo={interactivo} baseWeb={baseDeRutas(web)} />
             ))}
           </div>
         )}
         {hayMas && (
           <p className="sitio__cta">
             <a
-              href={interactivo ? `/w/${web.slug}/noticias` : undefined}
+              href={interactivo ? `${baseDeRutas(web)}/noticias` : undefined}
               className="sitio-btn sitio-btn--sm"
             >
               Ver todas las noticias ({todas.length})

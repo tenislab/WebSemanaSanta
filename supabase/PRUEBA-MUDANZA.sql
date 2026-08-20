@@ -2,7 +2,7 @@
 --   PRUEBA: MUDANZA DESDE EL PROYECTO DE UNA SOLA HERMANDAD
 -- =============================================================================
 --
--- Quien ya usaba Cabildo antes del multi-hermandad tiene dos cosas que la
+-- Quien ya usaba Gobergo antes del multi-hermandad tiene dos cosas que la
 -- migración podría romper, y las dos en silencio:
 --
 --   1. Una fila en `titulares` escrita a mano (así se hacía antes). Como la

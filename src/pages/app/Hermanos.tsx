@@ -28,6 +28,7 @@ import { useHermandadSettings } from '../../lib/hermandadSettings'
 import EditorSegmento from '../../components/EditorSegmento'
 import InformeImpreso from '../../components/InformeImpreso'
 import { etiquetaSegmento, filtrarSegmento, limpiarCriterios, mismosCriterios, type CriteriosSegmento } from '../../lib/segmentacion'
+import { hayDatosDeEjemplo } from '../../lib/demo'
 
 /**
  * En el censo, «sin sesgo» significa enseñarlo ENTERO, bajas incluidas. No
@@ -49,6 +50,8 @@ const SIN_SESGO: CriteriosSegmento = {
 }
 import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
+import { apuntar } from '../../lib/registroActividad'
+import { useAuth } from '../../context/AuthContext'
 
 /**
  * Con Supabase conectado, crea además una cuenta real de acceso (mismo
@@ -87,6 +90,12 @@ function estadoClass(estado: EstadoHermano) {
 }
 
 export default function Hermanos() {
+  const { user } = useAuth()
+  // Quién está haciendo los cambios, para el registro de actividad. Se copia
+  // el nombre tal como es AHORA: si esta persona deja la junta y se borra su
+  // ficha, el registro tiene que seguir diciendo quién fue.
+  const quienSoy =
+    (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Alguien de la junta'
   const [hermanos, setHermanos] = useSupabaseTable<Hermano>(
     'hermanos',
     CLAVES_DATOS.hermanos,
@@ -537,6 +546,13 @@ export default function Hermanos() {
     if ((selected.iban ?? null) !== nuevoIban) {
       const texto = 'La secretaría ha actualizado tu cuenta bancaria.'
       agregarAvisoHermano(selected.id, texto)
+      apuntar({
+        autorNombre: quienSoy, accion: 'iban', sobreTipo: 'hermano',
+        sobreId: selected.id, sobreNombre: selected.nombre,
+        // El IBAN NO se apunta: duplicaría datos bancarios en una segunda
+        // tabla que nadie vigila. Con saber quién lo tocó y cuándo basta.
+        detalle: `Cambió la cuenta bancaria de ${selected.nombre}`,
+      })
       // Este en concreto conviene que salga por correo: un cambio de cuenta
       // que el hermano no ha pedido es lo primero que hay que poder detectar.
       avisarPorCorreo(
@@ -562,6 +578,12 @@ export default function Hermanos() {
       direccion: contacto.direccion.trim() || 'Sin datos',
     }
     const cambio = avisarCambiosHermano(selected, nuevo)
+    if (cambio) {
+      apuntar({
+        autorNombre: quienSoy, accion: 'ficha', sobreTipo: 'hermano',
+        sobreId: nuevo.id, sobreNombre: nuevo.nombre, detalle: cambio.replace('La secretaría ha', 'Cambió'),
+      })
+    }
     // Y por correo, si la hermandad tiene encendido «avisar de cambios en la
     // ficha». Viene apagado de fábrica a propósito: son muchos y menores.
     if (cambio) {
@@ -592,6 +614,11 @@ export default function Hermanos() {
     setHermanos((prev) => darDeBajaEnCenso(prev, hermanoId))
     const texto = 'La secretaría ha tramitado tu baja en la hermandad.'
     agregarAvisoHermano(hermanoId, texto)
+    apuntar({
+      autorNombre: quienSoy, accion: 'baja', sobreTipo: 'hermano',
+      sobreId: objetivo.id, sobreNombre: objetivo.nombre,
+      detalle: `Tramitó la baja de ${objetivo.nombre} (nº ${objetivo.numero})`,
+    })
     // Por correo también: a partir de aquí deja de tener acceso a su área, así
     // que el aviso de dentro no lo va a leer. Es el único caso en el que el
     // correo no es un extra, es la única forma de enterarse.
@@ -668,8 +695,7 @@ export default function Hermanos() {
           <p className="eyebrow">Hermanos</p>
           <h1>Censo de la hermandad</h1>
           <p className="dash-head__lead">
-            {stats.total} hermanos registrados · datos de ejemplo mientras conectamos la base de
-            datos.
+            {stats.total} hermanos registrados{hayDatosDeEjemplo() ? ' · datos de ejemplo mientras conectamos la base de datos' : ''}
           </p>
         </div>
         <div className="dash-head__actions">

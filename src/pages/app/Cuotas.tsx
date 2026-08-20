@@ -35,6 +35,7 @@ import { formatCurrency } from '../../lib/format'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
 import { conApunteDeCobro, origenDeCuota, sinApunteDeCobro } from '../../lib/apuntes'
+import { apuntar } from '../../lib/registroActividad'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
@@ -267,6 +268,16 @@ export default function Cuotas() {
     // para siempre y el saldo diría que hay un dinero que no está.
     if (cambios.estado && cambios.estado !== 'Pagada') {
       setMovimientos((prev) => sinApunteDeCobro(prev, origenDeCuota(id)))
+      // Un recibo que deja de estar pagado mueve dinero en el libro: queda
+      // apuntado quién lo hizo.
+      const c = cuotas.find((x) => x.id === id)
+      if (c && c.estado === 'Pagada') {
+        apuntar({
+          autorNombre: miNombre, accion: 'cuota_devuelta', sobreTipo: 'cuota',
+          sobreId: id, sobreNombre: hermanos.find((h) => h.id === c.hermanoId)?.nombre ?? '',
+          detalle: `Marcó como «${cambios.estado}» el recibo de ${c.concepto} de ${hermanos.find((h) => h.id === c.hermanoId)?.nombre ?? 'un hermano'}`,
+        })
+      }
     }
   }
 

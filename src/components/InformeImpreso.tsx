@@ -1,5 +1,6 @@
 import { LogoMark } from './Logo'
 import type { HermandadSettings } from '../lib/hermandadSettings'
+import { hayDatosDeEjemplo } from '../lib/demo'
 
 export default function InformeImpreso({
   hermandad,
@@ -74,7 +75,10 @@ export default function InformeImpreso({
         </tbody>
       </table>
 
-      <p className="recibo-doc__note">Documento generado por Gobergo · datos de ejemplo, sin validez oficial</p>
+      <p className="recibo-doc__note">
+        Documento generado por Gobergo
+        {hayDatosDeEjemplo() && ' · datos de ejemplo, sin validez oficial'}
+      </p>
     </div>
   )
 }

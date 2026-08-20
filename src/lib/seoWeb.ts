@@ -18,6 +18,32 @@ export function baseDeLaWeb(web: WebPublica, origen: string): string {
   return `${origen.replace(/\/+$/, '')}/w/${web.slug}`
 }
 
+/**
+ * El trozo de dirección que va DELANTE de las páginas sueltas de la web.
+ *
+ * Hay dos maneras de llegar a la web de una hermandad y cada una tiene su
+ * dirección:
+ *
+ *   gobergo.es/w/hermandad-de-triana/n/cartel   ← sin dominio propio
+ *   hermandaddetriana.es/n/cartel               ← con su dominio
+ *
+ * Escribir siempre `/w/<slug>/…` funcionaba, pero dejaba a la hermandad con su
+ * dominio comprado enseñando el enlace largo en la barra de direcciones, y
+ * —esto es lo grave— con un `sitemap.xml` que anuncia a Google unas
+ * direcciones y unos enlaces internos que llevan a otras. Google entiende que
+ * son dos páginas distintas con el mismo contenido y reparte el sitio en dos.
+ */
+export function baseDeRutas(web: { slug: string; dominio?: string | null }, host?: string): string {
+  const propio = (web.dominio ?? '')
+    .trim().toLowerCase()
+    .replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[/?#].*$/, '')
+  if (!propio) return `/w/${web.slug}`
+  const h = (host ?? (typeof window !== 'undefined' ? window.location.hostname : ''))
+    .trim().toLowerCase().replace(/^www\./, '').replace(/:\d+$/, '')
+  // Se ha entrado por su dominio: las páginas cuelgan de la raíz.
+  return h && h === propio ? '' : `/w/${web.slug}`
+}
+
 /** Sin dobles barras al pegar la base con la ruta. */
 export function urlAbsoluta(base: string, ruta: string): string {
   if (!ruta || ruta === '/') return base

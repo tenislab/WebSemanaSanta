@@ -77,22 +77,57 @@ function escapar(t: string): string {
 }
 
 /**
+ * El color de la hermandad, solo si de verdad es un color.
+ *
+ * Sale de lo que hayan escrito en Configuración y acaba dentro de un atributo
+ * `style` del correo. Si se metiera tal cual, cualquiera que pueda editar los
+ * ajustes podría escribir ahí lo que quisiera y colarlo en el correo que
+ * reciben mil hermanos. Se comprueba que sea un color de seis o tres cifras y,
+ * si no lo es, se usa el de siempre.
+ */
+function colorSeguro(valor: string | undefined): string {
+  const v = (valor ?? '').trim()
+  return /^#[0-9a-fA-F]{6}$/.test(v) || /^#[0-9a-fA-F]{3}$/.test(v) ? v : '#6A1A23'
+}
+
+/**
  * El cuerpo del correo, con el membrete de la hermandad.
  *
- * Se escribe a mano y sin imágenes externas a propósito: un correo con el logo
- * enlazado desde fuera lo bloquean casi todos los clientes y se ve roto. El
- * nombre de la hermandad en texto se ve siempre y en todas partes.
+ * SIN IMÁGENES, y no por dejadez. El logo de la hermandad está guardado como
+ * texto dentro de la base de datos, y Gmail —que es donde va a caer la mayoría
+ * de esto— bloquea las imágenes en ese formato: se vería un hueco roto en la
+ * cabecera de cada correo, que es peor que no poner nada. Para que se viera
+ * habría que subirlo a una dirección pública y enlazarlo desde ahí, y eso es
+ * otra historia y depende del dominio.
+ *
+ * Lo que sí se puede y se hace: **su color y su nombre**. Eso se ve en todos
+ * los clientes de correo, incluidos los que bloquean todo lo demás, y es lo
+ * que hace que el hermano reconozca de quién es el correo antes de leerlo.
+ *
+ * Todo va con estilos escritos a mano dentro de cada etiqueta porque en un
+ * correo no hay hojas de estilo: la mitad de los clientes las tiran.
  */
 export function cuerpoCorreo(titulo: string, parrafos: string[], pie?: string): { texto: string; html: string } {
-  const hermandad = getHermandadSettings().nombreLegal || 'Tu hermandad'
+  const ajustes = getHermandadSettings()
+  const hermandad = ajustes.nombreLegal || 'Tu hermandad'
+  const color = colorSeguro(ajustes.colorPrimario)
+
   const texto = [titulo, '', ...parrafos, '', pie ?? '', `— ${hermandad}`].filter((l) => l !== undefined).join('\n')
+
   const html =
     `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.6;max-width:34rem;color:#1c1917">` +
-    `<h2 style="margin:0 0 0.8rem;font-size:1.2rem">${escapar(titulo)}</h2>` +
+    // La banda de arriba con el nombre: es lo primero que se ve al abrirlo y
+    // lo que dice de quién es sin tener que leer nada.
+    `<div style="background:${color};color:#ffffff;padding:0.9rem 1.1rem;border-radius:8px 8px 0 0">` +
+    `<span style="font-size:0.95rem;letter-spacing:0.02em">${escapar(hermandad)}</span>` +
+    `</div>` +
+    `<div style="border:1px solid #e7e5e4;border-top:0;border-radius:0 0 8px 8px;padding:1.1rem">` +
+    `<h2 style="margin:0 0 0.8rem;font-size:1.2rem;color:${color}">${escapar(titulo)}</h2>` +
     parrafos.map((p) => `<p style="margin:0 0 0.7rem">${escapar(p).replace(/\n/g, '<br>')}</p>`).join('') +
     (pie ? `<p style="margin:1rem 0 0;font-size:0.9rem;color:#57534e">${escapar(pie)}</p>` : '') +
     `<hr style="border:0;border-top:1px solid #e7e5e4;margin:1.2rem 0 0.6rem">` +
     `<p style="margin:0;font-size:0.85rem;color:#78716c">${escapar(hermandad)}</p>` +
+    `</div>` +
     `</div>`
   return { texto, html }
 }

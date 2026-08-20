@@ -99,9 +99,19 @@ detecte, el certificado HTTPS se genera solo.
 Añade también `www.gobergo.es` redirigiendo al principal, que la gente lo
 escribe.
 
-### Y una variable más, el día que abras al público
+### Y dos variables más
 
 **Settings → Environment Variables:**
+
+```
+VITE_DOMINIO_APP=gobergo.es
+```
+
+Esta es **opcional** y solo sirve para ir más rápido. Al entrar por la puerta
+principal la aplicación tiene que decidir qué enseñar: la página de venta de
+Gobergo, o la web de la hermandad que tenga puesto ese dominio. Diciéndole cuál
+es el tuyo, se salta la consulta. Sin ponerla funciona igual, solo que
+preguntando a la base de datos en cada visita a la portada.
 
 ```
 VITE_SIN_MODO_LOCAL=1
@@ -222,7 +232,56 @@ va a ver la gente en el aviso legal.
 
 ---
 
-## 8 · La comprobación final
+## 8 · El dominio de UNA HERMANDAD (esto es otra cosa)
+
+Lo de arriba es tu dominio, el de Gobergo. Una hermandad puede además comprar
+**el suyo** y que su web se vea ahí. Son dos cosas distintas y conviene no
+confundirlas:
+
+| Dirección | Qué se ve |
+|---|---|
+| `gobergo.es` | la página de venta de Gobergo |
+| `gobergo.es/w/hdad-de-triana` | la web de esa hermandad, dentro de Gobergo |
+| `hermandaddetriana.es` | **la misma web**, en su propio dominio |
+
+### Qué hace la hermandad
+
+Nada técnico: en **Web → Ajustes → Dominio propio** escribe el dominio que ha
+comprado. Hay un botón de comprobación que le dice si ya apunta aquí.
+
+### Qué haces tú (una vez por hermandad)
+
+1. **Vercel → Settings → Domains → Add** → `hermandaddetriana.es`
+2. Le pasas a la hermandad los dos registros que da Vercel, para que los meta
+   en el panel de donde compró el dominio:
+   ```
+   A      @      76.76.21.21
+   CNAME  www    cname.vercel-dns.com
+   ```
+3. Ya está. No hay que dar de alta nada más, ni tocar código, ni desplegar: la
+   aplicación mira qué hermandad tiene puesto ese dominio y sirve su web.
+
+El certificado HTTPS lo genera Vercel solo, en cuanto detecta los registros.
+
+### Lo que cambia para ellos en cuanto apunta
+
+- Su web abre en la raíz: `hermandaddetriana.es`
+- Y sus páginas cuelgan de ahí: `hermandaddetriana.es/n/cartel-2027`,
+  `/t/cristo-de-la-salud`, `/noticias`
+- Al pegar el enlace en el grupo de WhatsApp sale **su** nombre y **su** foto,
+  no los de Gobergo
+- El `sitemap.xml` y el `robots.txt` pasan a ser los suyos
+
+### Lo que NO cambia
+
+El correo. Los avisos a sus hermanos se siguen mandando desde tu dirección
+(`no-responder@gobergo.es`) firmando con el nombre de la hermandad. Que ellos
+manden desde `hola@hermandaddetriana.es` es otra cosa distinta y hoy no está
+hecha: haría falta verificar el dominio de cada hermandad en Resend.
+
+---
+
+## 9 · La comprobación final
 
 Una por una, y en este orden:
 
@@ -237,6 +296,15 @@ Una por una, y en este orden:
 - [ ] Mandas un comunicado de prueba a dos hermanos y les llega
 - [ ] Configuración → Puesta en marcha: sin nada en rojo
 - [ ] `npm run prelanzamiento` pasa las 23 comprobaciones
+
+Y si además has apuntado el dominio de alguna hermandad:
+
+- [ ] `https://sudominio.es` abre **su** web, no la página de venta
+- [ ] `https://sudominio.es/noticias` abre el listado de noticias
+- [ ] Una noticia suya abre en `https://sudominio.es/n/<lo-que-sea>`
+- [ ] Pegas ese enlace en WhatsApp y la vista previa dice el nombre de la
+      hermandad, no «Gobergo»
+- [ ] `https://sudominio.es/robots.txt` nombra su `sitemap.xml`
 
 Si algo del correo falla, el motivo real está siempre en el mismo sitio:
 **Supabase → Logs → Auth**.

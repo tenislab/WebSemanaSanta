@@ -16,6 +16,7 @@ import { CLAVES_DATOS } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
 import { borrarArchivo, formatearTamano, guardarArchivo, leerArchivo } from '../../lib/filestore'
+import { hayDatosDeEjemplo } from '../../lib/demo'
 
 function fmt(iso: string) {
   return formatDate(new Date(`${iso}T00:00:00`))
@@ -241,7 +242,7 @@ export default function Archivo() {
           <p className="eyebrow">Archivo documental</p>
           <h1>Actas, reglas y expedientes</h1>
           <p className="dash-head__lead">
-            {stats.total} documentos · datos de ejemplo mientras conectamos la base de datos.
+            {stats.total} documentos{hayDatosDeEjemplo() ? ' · datos de ejemplo mientras conectamos la base de datos' : ''}
           </p>
         </div>
         <button className="btn btn-primary" onClick={abrirNuevo}>

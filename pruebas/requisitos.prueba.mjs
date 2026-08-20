@@ -64,4 +64,44 @@ export default async function ({ cargar, caso }) {
   }
   caso('con todo puesto, solo queda el correo', 1, m.requisitosPendientes(casi).length)
   caso('y es el correo', 'correo', m.requisitosPendientes(casi)[0].id)
+
+  await avisoDeEjemplo({ cargar, caso })
+}
+
+/**
+ * «Datos de ejemplo» solo cuando de verdad lo son.
+ *
+ * Media aplicación lo daba por hecho: cinco pantallas ponían «datos de ejemplo
+ * mientras conectamos la base de datos» pasara lo que pasara, así que una
+ * hermandad con su censo de verdad dentro leía eso encima de sus 800 hermanos.
+ *
+ * Y en los documentos impresos era peor: el pie de un recibo decía «datos de
+ * ejemplo, sin validez fiscal» POR DEFECTO. Ese papel se entrega en mano, y lo
+ * que ponía era que no valía para nada.
+ */
+async function avisoDeEjemplo({ cargar, caso }) {
+  const m = await cargar('src/lib/demo.ts')
+
+  // En estas pruebas no hay Supabase: es modo demostración de verdad y el
+  // aviso TIENE que salir. Quitarlo aquí sería el error contrario.
+  caso('sin base de datos, sí son datos de ejemplo', true, m.hayDatosDeEjemplo())
+
+  // Y con la marca del modo demo puesta, también.
+  localStorage.setItem('cabildo-demo-modo', 'llena')
+  caso('en modo demostración, también', true, m.hayDatosDeEjemplo())
+  localStorage.removeItem('cabildo-demo-modo')
+
+  // Que ninguna pantalla ni documento lo tenga escrito a fuego.
+  const { readFile } = await import('node:fs/promises')
+  for (const f of [
+    'src/pages/app/Hermanos.tsx', 'src/pages/app/Comunicados.tsx',
+    'src/pages/app/Inventario.tsx', 'src/pages/app/Archivo.tsx',
+    'src/pages/app/Tesoreria.tsx', 'src/components/Recibo.tsx',
+    'src/components/MovimientoJustificante.tsx', 'src/components/InformeImpreso.tsx',
+  ]) {
+    const src = await readFile(f, 'utf8')
+    const loDice = /datos de ejemplo/.test(src)
+    const loComprueba = /hayDatosDeEjemplo\(\)/.test(src)
+    caso(`${f.split('/').pop()} solo lo dice si lo comprueba`, true, !loDice || loComprueba)
+  }
 }

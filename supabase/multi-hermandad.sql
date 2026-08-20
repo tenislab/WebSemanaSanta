@@ -377,7 +377,7 @@ create policy "documentos_mi_hermandad" on storage.objects for all to authentica
 -- ella ni él ni nadie.
 
 -- --- La mudanza desde el proyecto de UNA sola hermandad --------------------
--- Quien ya usaba Cabildo antes de esto tiene datos —hermanos, cuotas, recibos,
+-- Quien ya usaba Gobergo antes de esto tiene datos —hermanos, cuotas, recibos,
 -- su web— guardados sin decir de quién son, porque entonces no hacía falta:
 -- todo lo que había dentro era suyo. Al repartir por hermandades, esas filas
 -- se quedan sin dueño, y una fila sin dueño no la ve nadie nunca más.

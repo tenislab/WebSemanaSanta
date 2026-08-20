@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, type FactorMfa } from '../../context/AuthContext'
+import { NOMBRE_ACCION, cuandoEnCristiano, leerRegistro, type Apunte } from '../../lib/registroActividad'
 
 export default function Seguridad() {
   const { configured, listarFactoresMfa, activarMfa, confirmarMfa, desactivarMfa } = useAuth()
@@ -206,6 +207,69 @@ export default function Seguridad() {
           )}
         </section>
       )}
+
+      <RegistroDeActividad />
     </div>
+  )
+}
+
+/**
+ * Quién hizo qué en esta hermandad.
+ *
+ * Vive en Seguridad y no en un sitio propio a propósito: no es una pantalla
+ * que se abra a diario, es donde se mira cuando hace falta comprobar algo.
+ * Ponerlo en el menú principal le daría una importancia que no tiene el 99%
+ * de los días y quitaría sitio a lo que sí se usa.
+ */
+function RegistroDeActividad() {
+  const [apuntes, setApuntes] = useState<Apunte[]>([])
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => {
+    let cancelado = false
+    leerRegistro(100).then((r) => {
+      if (!cancelado) {
+        setApuntes(r)
+        setCargando(false)
+      }
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [])
+
+  return (
+    <section className="cfg-bloque">
+      <h2>Quién hizo qué</h2>
+      <p className="form-hint">
+        Las bajas, los cambios de cuenta bancaria, las papeletas anuladas y los recibos devueltos,
+        con quién los hizo y cuándo. <b>No se puede borrar ni cambiar</b>, tampoco desde aquí: un
+        registro que se puede reescribir no sirve para comprobar nada.
+      </p>
+
+      {cargando && <p className="form-hint">Cargando…</p>}
+
+      {!cargando && apuntes.length === 0 && (
+        <p className="form-hint">
+          Todavía no hay nada apuntado. Aparecerá aquí en cuanto se den de baja hermanos, se
+          cambien cuentas bancarias o se anulen papeletas.
+        </p>
+      )}
+
+      {apuntes.length > 0 && (
+        <ul className="registro-lista">
+          {apuntes.map((a) => (
+            <li key={a.id} className="registro-lista__item">
+              <div>
+                <b>{a.autorNombre}</b> · {a.detalle}
+              </div>
+              <small>
+                {NOMBRE_ACCION[a.accion] ?? a.accion} · {cuandoEnCristiano(a.cuando)}
+              </small>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

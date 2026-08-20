@@ -70,13 +70,41 @@ async function funcion<T>(nombre: string, args: Record<string, unknown>): Promis
   }
 }
 
+/**
+ * ¿Este dominio es el de la propia aplicación?
+ *
+ * Se repite aquí en vez de traerlo de `src/lib/dominio.ts` porque aquello lee
+ * `import.meta.env`, que en el servidor no existe. Es la misma regla: los
+ * despliegues de Vercel, el ordenador de casa y el dominio propio de Gobergo
+ * cuando lo haya.
+ */
+function esCasa(host: string): boolean {
+  if (host === 'localhost' || host === '127.0.0.1') return true
+  if (host.endsWith('.vercel.app')) return true
+  const propio = (process.env.DOMINIO_APP ?? process.env.VITE_DOMINIO_APP ?? '')
+    .trim().toLowerCase().replace(/^www\./, '')
+  return !!propio && host === propio
+}
+
 export default async function handler(req: Peticion, res: Respuesta) {
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
   const origen = `https://${host}`
   const ruta = new URL(req.url ?? '/', origen)
-  // /w/<slug>[/n/<noticia>|/t/<titular>|/noticias]
   const partes = ruta.pathname.split('/').filter(Boolean)
-  const slug = partes[1] ?? ''
+
+  // Hay dos formas de pedir la misma página y las dos pasan por aquí:
+  //
+  //   /w/<slug>[/n/<noticia>|/t/<titular>|/noticias]   ← sin dominio propio
+  //   /[n/<noticia>|t/<titular>|noticias]              ← con su dominio
+  //
+  // En la segunda no hay slug en la dirección: la hermandad se averigua por el
+  // dominio por el que ha entrado. Sin esto, la hermandad que acaba de conectar
+  // su dominio —justo la que ha pagado por tenerlo— era la única cuya vista
+  // previa de WhatsApp seguía diciendo «Gobergo · Software para hermandades».
+  const enRutaLarga = partes[0] === 'w' && !!partes[1]
+  const slugRuta = enRutaLarga ? partes[1] : ''
+  const tipoPieza = enRutaLarga ? partes[2] : partes[0]
+  const slugPieza = enRutaLarga ? partes[3] : partes[1]
 
   // El HTML de siempre. Si ni siquiera esto se puede pedir, no hay nada que hacer.
   let html: string
@@ -84,23 +112,52 @@ export default async function handler(req: Peticion, res: Respuesta) {
     const r = await fetch(`${origen}/index.html`)
     html = await r.text()
   } catch {
-    res.status(302)
-    res.setHeader('Location', '/')
-    res.send('')
+    // Mandar a la portada solo vale si no estamos YA en la portada: desde que
+    // la raíz también pasa por aquí, ese redirección se llamaría a sí misma y
+    // el navegador daría «demasiadas redirecciones» en vez del error real.
+    if (ruta.pathname !== '/') {
+      res.status(302)
+      res.setHeader('Location', '/')
+      res.send('')
+      return
+    }
+    res.status(503)
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store')
+    res.send('<!doctype html><meta charset="utf-8"><title>No disponible</title><p>La página no está disponible ahora mismo. Vuelve a intentarlo en unos minutos.</p>')
     return
   }
 
-  const filas = await consulta<{ datos: WebPublica; publicada: boolean }>(
-    'web_publica',
-    `slug=eq.${encodeURIComponent(slug)}&publicada=is.true&select=datos,publicada`,
-  )
+  const porSlug = `slug=eq.${encodeURIComponent(slugRuta)}&publicada=is.true&select=datos,publicada`
+  // Por dominio: se acepta con y sin `www.`, porque la hermandad escribe uno u
+  // otro en su web y el visitante teclea el que le da la gana.
+  const hostLimpio = host.trim().toLowerCase().replace(/:\d+$/, '').replace(/^www\./, '')
+  const porDominio =
+    `publicada=is.true&select=datos,publicada&limit=1` +
+    `&or=(datos->>dominio.eq.${encodeURIComponent(hostLimpio)},` +
+    `datos->>dominio.eq.${encodeURIComponent(`www.${hostLimpio}`)})`
+
+  // La puerta principal de Gobergo no se consulta: ahí no vive ninguna
+  // hermandad y ya se sabe. Sin este atajo, cada visita a la portada pagaría
+  // una consulta a la base de datos para enterarse de que no hay nada.
+  const filas = slugRuta
+    ? await consulta<{ datos: WebPublica; publicada: boolean }>('web_publica', porSlug)
+    : hostLimpio && !esCasa(hostLimpio)
+      ? await consulta<{ datos: WebPublica; publicada: boolean }>('web_publica', porDominio)
+      : null
   const web = filas?.[0]?.datos
   if (!web) {
-    // Sin datos se devuelve la página tal cual: la aplicación se apaña sola.
+    // No hay hermandad detrás de esta dirección: puede ser la puerta principal
+    // de Gobergo, o un dominio recién apuntado que todavía no ha configurado
+    // nadie. Se devuelve la página tal cual y la aplicación se apaña sola.
+    // La caché larga es a propósito: así la portada no paga una consulta a la
+    // base de datos por cada visita.
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=600, stale-while-revalidate=86400')
     res.send(html)
     return
   }
+  const slug = web.slug || slugRuta
 
   // Los datos de la hermandad (nombre legal, dirección, logo) salen de una
   // función que devuelve solo los campos que esta página enseña, buscando por
@@ -124,12 +181,14 @@ export default async function handler(req: Peticion, res: Respuesta) {
 
   // La pieza concreta que se está compartiendo, si es una página suelta.
   let pieza: { titulo: string; descripcion: string; imagen: string | null; ruta: string } | undefined
-  if (partes[2] === 'n' && partes[3]) {
-    const n = (web.noticias ?? []).find((x) => (x.slug?.trim() || '') === partes[3] || x.id === partes[3])
-    if (n) pieza = { titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl, ruta: `/n/${partes[3]}` }
-  } else if (partes[2] === 't' && partes[3]) {
-    const t = (web.titulares ?? []).find((x) => (x.slug?.trim() || '') === partes[3] || x.id === partes[3])
-    if (t) pieza = { titulo: t.nombre, descripcion: t.descripcion || t.autoria, imagen: t.fotoDataUrl, ruta: `/t/${partes[3]}` }
+  if (tipoPieza === 'n' && slugPieza) {
+    const n = (web.noticias ?? []).find((x) => (x.slug?.trim() || '') === slugPieza || x.id === slugPieza)
+    if (n) pieza = { titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl, ruta: `/n/${slugPieza}` }
+  } else if (tipoPieza === 't' && slugPieza) {
+    const t = (web.titulares ?? []).find((x) => (x.slug?.trim() || '') === slugPieza || x.id === slugPieza)
+    if (t) pieza = { titulo: t.nombre, descripcion: t.descripcion || t.autoria, imagen: t.fotoDataUrl, ruta: `/t/${slugPieza}` }
+  } else if (tipoPieza === 'noticias') {
+    pieza = { titulo: 'Actualidad', descripcion: '', imagen: null, ruta: '/noticias' }
   }
 
   const base = (web.dominio ?? '').trim() ? `https://${web.dominio!.trim()}` : `${origen}/w/${slug}`
@@ -137,11 +196,11 @@ export default async function handler(req: Peticion, res: Respuesta) {
 
   // Se quitan el título y la descripción genéricos de la aplicación para que no
   // haya dos, y se mete la cabecera de la hermandad justo antes de </head>.
-  const limpio = html
+  const htmlSinCabecera = html
     .replace(/<title>[\s\S]*?<\/title>/i, '')
     .replace(/<meta\s+name=["']description["'][^>]*>/gi, '')
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   // Cache corta: la hermandad cambia su web y quiere verlo hoy, no mañana.
   res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400')
-  res.send(limpio.replace('</head>', `${cabecera}\n</head>`))
+  res.send(htmlSinCabecera.replace('</head>', `${cabecera}\n</head>`))
 }

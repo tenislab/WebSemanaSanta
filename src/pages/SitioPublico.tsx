@@ -23,6 +23,7 @@ import { fijarHermandadDeLaPagina } from '../lib/multiHermandad'
 import { isSupabaseConfigured } from '../lib/supabase'
 import {
   baseDeLaWeb,
+  baseDeRutas,
   datosEstructurados,
   descripcionWeb,
   tituloWeb,
@@ -132,7 +133,7 @@ export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPub
           <LogoMark size={40} />
           <h1>Esa noticia ya no está</h1>
           <p>Puede que se haya quitado de la web.</p>
-          <Link to={`/w/${web.slug}`} className="sitio-btn">Ir a la web</Link>
+          <Link to={baseDeRutas(web) || '/'} className="sitio-btn">Ir a la web</Link>
         </div>
       )
     }
@@ -158,7 +159,7 @@ export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPub
           <LogoMark size={40} />
           <h1>Esa ficha ya no está</h1>
           <p>Puede que se haya quitado de la web.</p>
-          <Link to={`/w/${web.slug}`} className="sitio-btn">Ir a la web</Link>
+          <Link to={baseDeRutas(web) || '/'} className="sitio-btn">Ir a la web</Link>
         </div>
       )
     }
@@ -215,11 +216,11 @@ function MarcoSuelto({
       {/* `sitio__nav--suelta` la deja siempre en una fila: la plantilla
           «Clásica» apila la marca sobre el menú, y aquí no hay menú. */}
       <header className="sitio__nav sitio__nav--suelta">
-        <Link to={`/w/${web.slug}`} className="sitio__brand">
+        <Link to={baseDeRutas(web) || '/'} className="sitio__brand">
           {logo ? <img src={logo} alt="" className="sitio__logo" decoding="async" /> : <LogoMark size={30} />}
           <span className="sitio__brand-texto"><span>{titulo}</span></span>
         </Link>
-        <Link to={`/w/${web.slug}`} className="sitio-btn sitio-btn--sm">Volver a la web</Link>
+        <Link to={baseDeRutas(web) || '/'} className="sitio-btn sitio-btn--sm">Volver a la web</Link>
       </header>
       <main className="sitio__main">{children}</main>
       {/* El mismo pie que la web: si no, la página se quedaba colgando. */}
@@ -339,7 +340,7 @@ function PaginaTitular({
           <ul>
             {otros.map((o) => (
               <li key={o.id}>
-                <Link to={`/w/${web.slug}/t/${slugTitular(o)}`}>
+                <Link to={`${baseDeRutas(web)}/t/${slugTitular(o)}`}>
                   {o.fotoDataUrl && <img src={o.fotoDataUrl} alt="" loading="lazy" decoding="async" />}
                   <span>{o.nombre}</span>
                 </Link>
@@ -360,7 +361,7 @@ function ListadoNoticias({ web, hermandad }: { web: WebPublica; hermandad: Herma
       {noticias.length === 0 && <p>Todavía no hay noticias publicadas.</p>}
       <div className="sitio__noticias">
         {noticias.map((n) => (
-          <TarjetaNoticia key={n.id} noticia={n} interactivo slugWeb={web.slug} />
+          <TarjetaNoticia key={n.id} noticia={n} interactivo baseWeb={baseDeRutas(web)} />
         ))}
       </div>
     </MarcoSuelto>

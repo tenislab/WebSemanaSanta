@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cabildo — esquema de base de datos (Supabase / Postgres)
+-- Gobergo — esquema de base de datos (Supabase / Postgres)
 -- =============================================================================
 -- Pensado para UNA hermandad por proyecto de Supabase (el titular y su
 -- personal comparten este proyecto). RLS: cualquier usuario autenticado

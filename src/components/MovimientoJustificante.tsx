@@ -2,6 +2,7 @@ import { LogoMark } from './Logo'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import type { Movimiento } from '../data/movimientos'
 import { formatCurrency } from '../lib/format'
+import { hayDatosDeEjemplo } from '../lib/demo'
 
 /** El justificante de un movimiento de caja (ingreso o gasto), con los datos de la hermandad configurados en Configuración. */
 export default function MovimientoJustificante({
@@ -70,7 +71,9 @@ export default function MovimientoJustificante({
       </div>
 
       <p className="recibo-doc__note">
-        {hermandad.textoPieDocumentos || 'Documento generado por Gobergo · datos de ejemplo, sin validez fiscal'}
+        {hermandad.textoPieDocumentos || (hayDatosDeEjemplo()
+            ? 'Documento generado por Gobergo · datos de ejemplo, sin validez fiscal'
+            : 'Documento generado por Gobergo')}
       </p>
     </div>
   )

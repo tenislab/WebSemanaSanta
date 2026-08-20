@@ -13,6 +13,22 @@
       "destination": "/api/seo"
     },
     {
+      "source": "/",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/noticias",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/n/:slug",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/t/:slug",
+      "destination": "/api/w"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

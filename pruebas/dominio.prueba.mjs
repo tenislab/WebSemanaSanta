@@ -52,6 +52,7 @@ export default async function ({ cargar, caso }) {
   caso('sin probar no dice nada', '', m.explicarEstado('sinProbar', 'x.es'))
 
   await dominioRaiz({ cargar, caso })
+  await rutasConDominioPropio({ cargar, caso })
 }
 
 /**
@@ -61,7 +62,7 @@ export default async function ({ cargar, caso }) {
  * dominio, apúntalo aquí y tu web se verá ahí», y luego en la raíz enseñaba la
  * página de venta de Gobergo. Justo lo contrario de lo prometido.
  */
-export async function dominioRaiz({ cargar, caso }) {
+async function dominioRaiz({ cargar, caso }) {
   const m = await cargar('src/lib/dominio.ts')
   const esCasa = m.esCasaDeGobergo
 
@@ -84,4 +85,69 @@ export async function dominioRaiz({ cargar, caso }) {
   // Un host vacío (renderizado en servidor, sin navegador) no puede acabar
   // buscando la web de nadie: se queda en casa.
   caso('sin host, casa', true, esCasa(''))
+}
+
+
+/**
+ * Las direcciones de las páginas sueltas, según por dónde se haya entrado.
+ *
+ * EL BUG: la hermandad que conectaba su dominio se quedaba con una web de una
+ * sola página. `/noticias`, `/n/<noticia>` y `/t/<titular>` no existían como
+ * rutas colgando de la raíz, así que caían en el comodín y volvían a la
+ * portada. Y esas son EXACTAMENTE las direcciones que la propia aplicación
+ * anuncia en el `sitemap.xml` y las que se pegan en el grupo de WhatsApp.
+ * Google recibía una lista de enlaces que todos llevaban al mismo sitio.
+ *
+ * Aquí se comprueba la pieza que decide el prefijo. Las rutas se comprueban
+ * abajo leyendo `App.tsx`: no hay navegador donde montarlas.
+ */
+async function rutasConDominioPropio({ cargar, caso }) {
+  const m = await cargar('src/lib/seoWeb.ts')
+  const base = m.baseDeRutas
+
+  // Sin dominio propio, la web vive dentro de Gobergo: enlace largo.
+  caso('sin dominio, el enlace largo', '/w/triana', base({ slug: 'triana', dominio: '' }, 'gobergo.es'))
+  caso('sin dominio, aunque sea nulo', '/w/triana', base({ slug: 'triana', dominio: null }, 'gobergo.es'))
+
+  // Con su dominio Y entrando por él, las páginas cuelgan de la raíz.
+  caso('por su dominio, cuelga de la raíz', '', base({ slug: 'triana', dominio: 'hermandaddetriana.es' }, 'hermandaddetriana.es'))
+  caso('con www da igual', '', base({ slug: 'triana', dominio: 'hermandaddetriana.es' }, 'www.hermandaddetriana.es'))
+  caso('y al revés también', '', base({ slug: 'triana', dominio: 'www.hermandaddetriana.es' }, 'hermandaddetriana.es'))
+  caso('con https delante en el ajuste', '', base({ slug: 'triana', dominio: 'https://hermandaddetriana.es/' }, 'hermandaddetriana.es'))
+  caso('en local, con puerto', '', base({ slug: 'triana', dominio: 'hermandaddetriana.es' }, 'hermandaddetriana.es:5173'))
+
+  // Tiene dominio configurado, pero se ha entrado por Gobergo: enlace largo.
+  // Si no, los enlaces saltarían de un dominio a otro a mitad de visita.
+  caso('con dominio pero entrando por Gobergo, enlace largo', '/w/triana',
+    base({ slug: 'triana', dominio: 'hermandaddetriana.es' }, 'gobergo.es'))
+  caso('ni desde el despliegue de pruebas', '/w/triana',
+    base({ slug: 'triana', dominio: 'hermandaddetriana.es' }, 'web-semana-santa.vercel.app'))
+
+  // Las rutas tienen que existir. Sin esto el prefijo vacío lleva a un 404.
+  const { readFile } = await import('node:fs/promises')
+  const app = await readFile('src/App.tsx', 'utf8')
+  for (const ruta of ['/noticias', '/n/:noticia', '/t/:titular']) {
+    caso(`la ruta ${ruta} existe en la raíz`, true, app.includes(`path="${ruta}"`))
+  }
+
+  // Y el servidor tiene que saber resolver la hermandad por el dominio, o la
+  // vista previa de WhatsApp seguiría diciendo «Gobergo».
+  const w = await readFile('api/w.ts', 'utf8')
+  caso('el servidor busca la web por el dominio', true, /datos->>dominio\.eq\./.test(w))
+  caso('y no depende solo del slug de la ruta', true, /enRutaLarga/.test(w))
+
+  // Y Vercel tiene que mandar esas direcciones a esa función.
+  const vercel = JSON.parse(await readFile('vercel.json', 'utf8'))
+  const aLaFuncion = vercel.rewrites.filter((r) => r.destination === '/api/w').map((r) => r.source)
+  for (const ruta of ['/', '/noticias', '/n/:slug', '/t/:slug']) {
+    caso(`vercel manda ${ruta} a la función`, true, aLaFuncion.includes(ruta))
+  }
+  // El comodín va el último: si se colara antes, se quedaría con todo.
+  const comodin = vercel.rewrites.findIndex((r) => r.source === '/(.*)')
+  caso('el comodín va el último', vercel.rewrites.length - 1, comodin)
+
+  // Desde que la raíz pasa por la función, la vuelta a la portada cuando algo
+  // falla no puede ser incondicional: se llamaría a sí misma y el navegador
+  // daría «demasiadas redirecciones».
+  caso('la función no se redirige a sí misma', true, /ruta\.pathname !== '\/'/.test(w))
 }
