@@ -10,7 +10,7 @@ import { supabase, isSupabaseConfigured, supabaseDisponible, sinModoLocal } from
 import { getPersonal } from '../lib/personal'
 import { limpiarModoDemo } from '../lib/demo'
 import { translateError } from '../lib/erroresAuth'
-import { asegurarHermandad, hermandadActualId, olvidarHermandad } from '../lib/multiHermandad'
+import { ajustarEspejoALaHermandad, asegurarHermandad, hermandadActualId, olvidarHermandad } from '../lib/multiHermandad'
 
 type AuthResult = { error: string | null }
 
@@ -106,10 +106,15 @@ async function enlazarHermandad(usuario: { user_metadata?: Record<string, unknow
   // hermandad y se enlaza con su ficha; si por lo que sea todavía no está
   // enlazada, lo que hay que hacer es arreglar el enlace, no fundar una
   // hermandad nueva con él de titular.
-  if (meta.tipo === 'hermano') return
-  if (await hermandadActualId()) return
-  const nombre = typeof meta.hermandad === 'string' ? meta.hermandad : ''
-  await asegurarHermandad(nombre)
+  if (meta.tipo === 'hermano') {
+    ajustarEspejoALaHermandad(await hermandadActualId())
+    return
+  }
+  const yaTiene = await hermandadActualId()
+  const id = yaTiene ?? (await asegurarHermandad(typeof meta.hermandad === 'string' ? meta.hermandad : ''))
+  // La copia local que haya en este navegador puede ser de OTRA hermandad: de
+  // quien usó este mismo ordenador antes. Se tira si no es de esta.
+  ajustarEspejoALaHermandad(id)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -143,6 +148,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!session || !supabase) {
         setMfaPendiente(false)
         olvidarHermandad()
+        // Sin sesión no se queda copia de nadie: el siguiente que entre en este
+        // ordenador empieza en blanco.
+        ajustarEspejoALaHermandad(null)
         return
       }
 
@@ -325,6 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       async signOut() {
         olvidarHermandad()
+        ajustarEspejoALaHermandad(null)
         if (supabase && !degradado) {
           await supabase.auth.signOut()
           return

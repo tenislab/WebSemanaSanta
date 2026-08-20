@@ -140,3 +140,67 @@ export function getHermandadDeLaPagina(): string | null {
 export async function hermandadDestino(): Promise<string | null> {
   return getHermandadDeLaPagina() ?? (await hermandadActualId())
 }
+
+/* ---------------------------------------------------------------------------
+   La copia local, atada a su hermandad
+   ------------------------------------------------------------------------ */
+
+/** De qué hermandad es lo que hay copiado ahora mismo en este navegador. */
+const CLAVE_ESPEJO = 'cabildo-hermandad-espejada'
+
+/**
+ * Lo que se queda al cambiar de hermandad: preferencias de ESTE navegador y
+ * cosas de la sesión. No son datos de nadie.
+ *
+ * La lista es de lo que se CONSERVA, no de lo que se borra, y es a propósito:
+ * así, cualquier cosa que se guarde en el futuro se borra por defecto. Al
+ * revés —una lista de lo que hay que borrar— bastaría con olvidarse de añadir
+ * una para volver a filtrar datos sin enterarse.
+ */
+const NO_ES_DE_LA_HERMANDAD = new Set([
+  'cabildo-tema',
+  'cabildo-theme',
+  'cabildo-cfg-seccion',
+  'cabildo-web-pestana',
+  'cabildo-alta',
+  'cabildo-demo-modo',
+  'cabildo-demo-user',
+  'cabildo-sync-error',
+  CLAVE_ESPEJO,
+])
+
+/**
+ * Tira la copia local si es de OTRA hermandad.
+ *
+ * Por qué hace falta. La aplicación guarda una copia de los datos en el
+ * navegador para que la pantalla no se quede en blanco mientras llegan de la
+ * red. Esa copia no sabía de quién era, así que en un mismo ordenador —el de
+ * la casa hermandad, sin ir más lejos— quien entraba después veía por un
+ * momento el censo de quien había entrado antes. La base de datos lo impedía
+ * perfectamente; el navegador no.
+ *
+ * Se llama con la hermandad de la sesión recién abierta. Si coincide con la
+ * copiada, no se toca nada (que es el caso normal, y así no se pierde la
+ * ventaja de tener la copia). Si no coincide, o si no hay sesión, se tira
+ * entera y las pantallas la vuelven a pedir a Supabase.
+ */
+export function ajustarEspejoALaHermandad(hermandadId: string | null): void {
+  if (!isSupabaseConfigured) return
+  try {
+    if (hermandadId && localStorage.getItem(CLAVE_ESPEJO) === hermandadId) return
+
+    const aBorrar: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const clave = localStorage.key(i)
+      if (clave && clave.startsWith('cabildo-') && !NO_ES_DE_LA_HERMANDAD.has(clave)) {
+        aBorrar.push(clave)
+      }
+    }
+    aBorrar.forEach((c) => localStorage.removeItem(c))
+
+    if (hermandadId) localStorage.setItem(CLAVE_ESPEJO, hermandadId)
+    else localStorage.removeItem(CLAVE_ESPEJO)
+  } catch {
+    // Sin localStorage no hay copia que tirar.
+  }
+}
