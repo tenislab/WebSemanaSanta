@@ -23,13 +23,31 @@ interface Respuesta {
 const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? ''
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? ''
 
-async function webPublicada(): Promise<WebPublica | null> {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return null
+/**
+ * La web publicada que corresponde a ESTE dominio.
+ *
+ * Antes se pedía «la primera web publicada que haya», que valía cuando cada
+ * hermandad tenía su propia base de datos. Ahora están todas en la misma, así
+ * que eso devolvía una cualquiera: el robots.txt y el sitemap.xml del dominio
+ * de una hermandad podían acabar anunciando las páginas de otra.
+ *
+ * Se busca por el dominio propio que la hermandad tenga configurado en su web.
+ * Si el dominio que pide no es de ninguna —por ejemplo el de la propia
+ * aplicación— no hay web que servir, y eso es correcto: ahí no vive ninguna
+ * hermandad en particular.
+ */
+async function webPublicada(host: string): Promise<WebPublica | null> {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !host) return null
+  const limpio = host.trim().toLowerCase().replace(/^www\./, '')
+  if (!limpio) return null
   try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/web_publica?publicada=is.true&select=datos&limit=1`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } },
-    )
+    const filtro =
+      `publicada=is.true&select=datos&limit=1` +
+      `&or=(datos->>dominio.eq.${encodeURIComponent(limpio)},` +
+      `datos->>dominio.eq.${encodeURIComponent(`www.${limpio}`)})`
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/web_publica?${filtro}`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    })
     if (!r.ok) return null
     const filas = (await r.json()) as { datos: WebPublica }[]
     return filas[0]?.datos ?? null
@@ -42,7 +60,7 @@ export default async function handler(req: Peticion, res: Respuesta) {
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
   const origen = `https://${host}`
   const esRobots = (req.url ?? '').includes('robots')
-  const web = await webPublicada()
+  const web = await webPublicada(host)
 
   if (!web) {
     res.setHeader('Content-Type', esRobots ? 'text/plain; charset=utf-8' : 'application/xml; charset=utf-8')

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
+import { hermandadDestino } from './multiHermandad'
 
 export type EstadoSolicitud = 'Pendiente' | 'Aprobada' | 'Rechazada'
 
@@ -125,7 +126,16 @@ export async function saveSolicitudes(solicitudes: SolicitudAlta[]) {
  */
 export async function crearSolicitudPrincipal(nueva: SolicitudAlta): Promise<{ ok: boolean; error?: string }> {
   if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase.from('solicitudes_alta').insert(solicitudToRow(nueva))
+    // A qué hermandad se pide el alta. Quien lo rellena todavía no es hermano
+    // y no ha iniciado sesión, así que hay que decirlo aquí: la hermandad de
+    // la web que está mirando, o la suya si ya está dentro de su área.
+    const hermandadId = await hermandadDestino()
+    if (!hermandadId) {
+      return { ok: false, error: 'No se ha podido saber a qué hermandad enviar la solicitud. Recarga la página e inténtalo otra vez.' }
+    }
+    const { error } = await supabase
+      .from('solicitudes_alta')
+      .insert({ ...solicitudToRow(nueva), hermandad_id: hermandadId })
     if (error) {
       console.error('No se pudo enviar la solicitud a Supabase:', error.message)
       // Antes se seguía adelante y la pantalla decía «tu solicitud se ha

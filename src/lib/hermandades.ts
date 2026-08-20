@@ -277,7 +277,32 @@ export interface DatosHermandadPrincipal {
  * llevarían a un hermano real a "entrar" o "solicitar el alta" en una
  * hermandad que no existe.
  */
-export function directorioCompleto(principal: DatosHermandadPrincipal): HermandadDirectorio[] {
+export function directorioCompleto(
+  principal: DatosHermandadPrincipal,
+  reales: { id: string; nombre: string }[] = [],
+): HermandadDirectorio[] {
+  // Con la base de datos conectada, la lista son las hermandades dadas de alta
+  // de verdad: todas comparten un mismo Supabase y cada hermano tiene que
+  // poder encontrar la suya. Antes solo salía «la principal», que era la única
+  // que cabía cuando cada hermandad tenía su propia base de datos.
+  if (isSupabaseConfigured) {
+    // Aunque venga vacía. Antes se caía a la entrada de abajo, que se llama
+    // «Tu hermandad (modo demo)»: en producción un hermano vería esa entrada
+    // falsa y entraría —o pediría el alta— en una hermandad que no existe.
+    // Vacía, la pantalla dice que todavía no hay ninguna, que es la verdad.
+    return reales.map((h) => ({
+      id: h.id,
+      nombre: h.nombre,
+      ciudad: '',
+      color: '#caa24a',
+      telefono: '',
+      email: '',
+      bizum: '',
+      iban: '',
+      opcionesPapeleta: [],
+    }))
+  }
+
   return [
     {
       id: ID_HERMANDAD_PRINCIPAL,
@@ -294,9 +319,13 @@ export function directorioCompleto(principal: DatosHermandadPrincipal): Hermanda
   ]
 }
 
-export function buscarHermandades(query: string, principal: DatosHermandadPrincipal): HermandadDirectorio[] {
+export function buscarHermandades(
+  query: string,
+  principal: DatosHermandadPrincipal,
+  reales: { id: string; nombre: string }[] = [],
+): HermandadDirectorio[] {
   const q = query.trim().toLowerCase()
-  const todas = directorioCompleto(principal)
+  const todas = directorioCompleto(principal, reales)
   if (!q) return todas
   return todas.filter((h) => h.nombre.toLowerCase().includes(q) || h.ciudad.toLowerCase().includes(q))
 }

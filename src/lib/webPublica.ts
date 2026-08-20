@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { guardarConAviso, leerPersistido } from './persistencia'
 import { isSupabaseConfigured, supabase } from './supabase'
+import { hermandadActualId } from './multiHermandad'
 
 /**
  * Web pública de la hermandad, creada y personalizada desde la propia app.
@@ -1318,9 +1319,18 @@ let avisadoDeSubida = false
 export async function subirWebAlServidor(web: WebPublica): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false
   try {
+    // El conflicto se resuelve por `hermandad_id`, no por el número de fila:
+    // todas las hermandades comparten tabla y cada una tiene su web, con un
+    // índice único que lo asegura. Pedir la fila 1, como antes, machacaría la
+    // web de otra hermandad.
+    const hermandadId = await hermandadActualId()
+    if (!hermandadId) throw new Error('no se ha podido saber a qué hermandad pertenece esta sesión')
     const { error } = await supabase
       .from('web_publica')
-      .upsert({ id: 1, slug: web.slug, publicada: web.publicada, datos: web }, { onConflict: 'id' })
+      .upsert(
+        { hermandad_id: hermandadId, slug: web.slug, publicada: web.publicada, datos: web },
+        { onConflict: 'hermandad_id' },
+      )
     if (error) throw new Error(error.message)
     avisadoDeSubida = false
     return true
@@ -1333,6 +1343,46 @@ export async function subirWebAlServidor(web: WebPublica): Promise<boolean> {
       console.warn('La web se ha guardado en este navegador, pero no se ha podido subir:', e)
     }
     return false
+  }
+}
+
+/**
+ * Trae de la base de datos la web de la hermandad que tiene ESTE slug.
+ *
+ * Hasta ahora la web pública se pintaba con lo que hubiera en el navegador
+ * (`getWebPublica`), que es lo que ve quien la ha montado. Para cualquier otra
+ * persona —que es todo el mundo— no había nada que enseñar. Con todas las
+ * hermandades en la misma base de datos, esto es lo que hace que la web de una
+ * hermandad se vea desde fuera: se busca por su slug y se pinta lo que venga.
+ *
+ * Las políticas de Supabase solo dejan leer las webs PUBLICADAS, así que una
+ * hermandad que está preparando la suya no se puede espiar poniendo su slug a
+ * mano. La suya propia sí la ve, porque tiene la sesión abierta: es lo que
+ * hace funcionar la vista previa.
+ *
+ * Devuelve también de qué hermandad es, que es lo que necesitan los
+ * formularios de esa página para saber a quién mandan lo que se escriba.
+ */
+export async function cargarWebPorSlug(
+  slug: string,
+): Promise<{ web: WebPublica; hermandadId: string | null } | null> {
+  if (!isSupabaseConfigured || !supabase || !slug.trim()) return null
+  try {
+    const { data, error } = await supabase
+      .from('web_publica')
+      .select('datos, publicada, hermandad_id')
+      .eq('slug', slug)
+      .maybeSingle()
+    if (error || !data) return null
+    const fila = data as { datos: Partial<WebPublica>; publicada: boolean; hermandad_id: string | null }
+    return {
+      // `conDefectos` rellena lo que falte: una web guardada con una versión
+      // anterior de la aplicación no puede dejar la página en blanco.
+      web: { ...conDefectos(fila.datos), publicada: fila.publicada, slug },
+      hermandadId: fila.hermandad_id,
+    }
+  } catch {
+    return null
   }
 }
 

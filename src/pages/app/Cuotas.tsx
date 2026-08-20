@@ -33,6 +33,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { formatCurrency } from '../../lib/format'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
+import { avisarPorCorreo } from '../../lib/avisosCorreo'
 import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
@@ -216,12 +217,21 @@ export default function Cuotas() {
     // entrado ya mi cuota?», que es la más repetida de secretaría.
     const c = cuotas.find((x) => x.id === id)
     if (c) {
-      agregarAvisoHermano(
-        c.hermanoId,
-        `Tu recibo de ${c.concepto} (${formatCurrency(c.importe)}) queda pagado. Gracias.`,
-        'cuota',
-        'Cuota pagada',
-      )
+      const texto = `Tu recibo de ${c.concepto} (${formatCurrency(c.importe)}) queda pagado. Gracias.`
+      agregarAvisoHermano(c.hermanoId, texto, 'cuota', 'Cuota pagada')
+      // Y por correo, si la hermandad lo tiene conectado y este hermano no lo
+      // ha apagado. Va después de guardar: si el correo falla, se entera igual
+      // la próxima vez que entre en su área.
+      const h = hermanos.find((x) => x.id === c.hermanoId)
+      if (h) {
+        avisarPorCorreo(
+          [{ id: h.id, nombre: h.nombre, email: h.email }],
+          'cuota',
+          'Cuota pagada',
+          [texto],
+          'Este aviso lo puedes apagar desde tu área de hermano.',
+        )
+      }
     }
   }
 

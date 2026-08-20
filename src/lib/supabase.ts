@@ -21,6 +21,23 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const isSupabaseConfigured = Boolean(url && anonKey)
 
 /**
+ * Si está a `1`, la aplicación NO se cae al modo local cuando Supabase está
+ * configurado pero no responde: enseña un error y punto.
+ *
+ * Por qué hace falta un interruptor. El modo local de reserva es muy útil
+ * mientras se monta todo: si el proyecto de Supabase está en pausa, la
+ * aplicación sigue funcionando con los datos del navegador y se puede
+ * enseñar. En producción, con hermandades de verdad, eso mismo es un problema:
+ * la secretaría entraría, vería un censo que no es el suyo y pasaría la tarde
+ * dando altas que no existen en ningún sitio. Es mejor decir «esto está caído,
+ * vuelve en un rato» que dejar trabajar en falso.
+ *
+ * Se pone `VITE_SIN_MODO_LOCAL=1` en las variables del despliegue el día que
+ * se abra al público. Mientras tanto, sin definirla, todo sigue como está.
+ */
+export const sinModoLocal = import.meta.env.VITE_SIN_MODO_LOCAL === '1'
+
+/**
  * Cliente principal de Supabase. Es `null` en modo local (sin credenciales).
  * El resto de la app comprueba `isSupabaseConfigured` antes de usarlo.
  */

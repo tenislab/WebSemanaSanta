@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { useEscuchaOtrasPestanas } from './persistencia'
+import { hermandadActualId } from './multiHermandad'
 
 export interface HermandadSettings {
   nombreLegal: string
@@ -89,9 +90,8 @@ function settingsToRow(s: HermandadSettings): Record<string, unknown> {
 /**
  * Datos de la hermandad usados como membrete en los recibos (logo, nombre
  * legal, CIF, dirección, IBAN…). Se guardan en este navegador mientras no
- * hay Supabase; en cuanto se conecta, `useHermandadSettings` los trae de la
- * fila única `hermandad_settings` (id 1) sin que cambie cómo los consume el
- * resto de la app. Esta función de lectura directa sigue existiendo para el
+ * hay Supabase; en cuanto se conecta, `useHermandadSettings` los trae de
+ * `hermandad_settings` sin que cambie cómo los consume el resto de la app. Esta función de lectura directa sigue existiendo para el
  * primer render (sin esperar a la red) y como caché de reserva.
  */
 export function getHermandadSettings(fallbackNombre?: string): HermandadSettings {
@@ -111,10 +111,15 @@ export function useHermandadSettings(fallbackNombre?: string): HermandadSettings
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
     let cancelado = false
+    // Sin `.eq('id', …)`: todas las hermandades comparten tabla y las
+    // políticas de Supabase ya hacen que esta cuenta solo vea su propia fila,
+    // así que lo que llegue aquí es la suya y no hay otra. Antes se pedía la
+    // fila 1 porque solo había una en toda la base; ahora la de cada
+    // hermandad tiene el número que le tocó y pedir la 1 traería la de otra
+    // —o, más probablemente, ninguna.
     supabase
       .from('hermandad_settings')
       .select('*')
-      .eq('id', 1)
       .maybeSingle()
       .then(({ data, error }) => {
         if (cancelado || error || !data) return
@@ -160,9 +165,18 @@ export async function saveHermandadSettings(settings: HermandadSettings): Promis
 
   if (isSupabaseConfigured && supabase) {
     try {
-      // `upsert`, no `update`: en una base recién creada la fila 1 no existe y
-      // el update afectaba a cero filas sin devolver error.
-      const { error } = await supabase.from('hermandad_settings').upsert({ id: 1, ...settingsToRow(settings) })
+      // `upsert`, no `update`: si por lo que sea la fila todavía no existe,
+      // el update afectaría a cero filas sin devolver error y el usuario se
+      // iría creyendo que ha guardado.
+      //
+      // Lo que decide si es alta o modificación es `hermandad_id`, no el
+      // número de fila: cada hermandad tiene la suya y hay un índice único
+      // que lo garantiza.
+      const hermandadId = await hermandadActualId()
+      if (!hermandadId) throw new Error('no se ha podido saber a qué hermandad pertenece esta sesión')
+      const { error } = await supabase
+        .from('hermandad_settings')
+        .upsert({ hermandad_id: hermandadId, ...settingsToRow(settings) }, { onConflict: 'hermandad_id' })
       if (error) throw new Error(error.message)
     } catch (err) {
       console.error('No se pudo sincronizar la configuración de la hermandad:', err)

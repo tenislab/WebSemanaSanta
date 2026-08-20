@@ -96,16 +96,24 @@ const CAMPOS_AVISABLES: { campo: keyof Hermano; etiqueta: string }[] = [
 
 /**
  * Compara la ficha anterior con la nueva y, si cambió algún dato del hermano,
- * le genera un aviso describiendo qué se cambió. Devuelve true si avisó.
+ * le genera un aviso describiendo qué se cambió.
+ *
+ * Devuelve el texto del aviso, o `null` si no había nada que avisar. Devuelve
+ * el texto y no un sí/no para que quien llama pueda mandar además el mismo
+ * mensaje por correo sin volver a componerlo (y sin que este módulo tenga que
+ * saber nada de correos, que acabaría en dos módulos importándose el uno al
+ * otro). Como `null` es falso y un texto es verdadero, quien solo quiera saber
+ * si hubo aviso puede seguir usándolo en un `if` igual que antes.
  */
-export function avisarCambiosHermano(anterior: Hermano, nuevo: Hermano): boolean {
+export function avisarCambiosHermano(anterior: Hermano, nuevo: Hermano): string | null {
   const cambiados = CAMPOS_AVISABLES.filter(({ campo }) => (anterior[campo] ?? '') !== (nuevo[campo] ?? ''))
-  if (cambiados.length === 0) return false
+  if (cambiados.length === 0) return null
   const lista = cambiados.map((c) => c.etiqueta)
   const enumerado =
     lista.length === 1 ? lista[0] : `${lista.slice(0, -1).join(', ')} y ${lista[lista.length - 1]}`
-  agregarAvisoHermano(nuevo.id, `La secretaría ha actualizado tu ${enumerado}.`)
-  return true
+  const texto = `La secretaría ha actualizado tu ${enumerado}.`
+  agregarAvisoHermano(nuevo.id, texto)
+  return texto
 }
 
 /** Hook reactivo con los avisos de un hermano (más nuevos primero). */

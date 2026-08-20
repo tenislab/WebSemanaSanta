@@ -7,6 +7,7 @@ import {
   type PackId,
   type Periodo,
 } from '../lib/suscripcion'
+import { iniciarSuscripcion, stripeConfigurado } from '../lib/pagoSuscripcion'
 
 interface Props {
   nombreHermandad?: string
@@ -17,14 +18,42 @@ interface Props {
 /**
  * Muro de suscripción: se muestra en lugar del panel cuando la hermandad no
  * tiene una suscripción activa. Se elige un pack (qué se desbloquea) y un
- * periodo (mensual/anual). Activarlo enciende la cuenta (sin cobro real por
- * ahora). No hay prueba gratuita.
+ * periodo (mensual/anual). No hay prueba gratuita.
+ *
+ * Si el cobro está conectado (hay claves de Stripe), el botón lleva a la
+ * página de pago de Stripe y la cuenta se enciende cuando el pago se confirma.
+ * Si no lo está, se enciende ahí mismo sin cobrar, que es como se ha podido
+ * probar la aplicación entera hasta ahora. El interruptor es
+ * `stripeConfigurado()`: no hay que tocar este archivo para pasar de un modo
+ * al otro.
  */
 export default function PantallaSuscripcion({ nombreHermandad, onActivar, onSalir }: Props) {
   const [packSel, setPackSel] = useState<PackId>('completo')
   const [periodo, setPeriodo] = useState<Periodo>('mensual')
+  const [yendoAPagar, setYendoAPagar] = useState(false)
+  const [errorPago, setErrorPago] = useState<string | null>(null)
 
   const elegido = PACKS.find((p) => p.id === packSel)!
+  const seCobra = stripeConfigurado()
+
+  async function suscribirse() {
+    if (!seCobra) {
+      onActivar(packSel, periodo)
+      return
+    }
+    setErrorPago(null)
+    setYendoAPagar(true)
+    const r = await iniciarSuscripcion(packSel, periodo)
+    if (r.ok && r.url) {
+      // A Stripe. La tarjeta se teclea allí, nunca aquí.
+      window.location.href = r.url
+      return
+    }
+    // Si no se ha podido abrir el pago, se dice y NO se enciende la cuenta:
+    // encenderla al fallar el cobro sería regalar la suscripción.
+    setYendoAPagar(false)
+    setErrorPago(r.error ?? 'No se ha podido abrir la página de pago. Inténtalo de nuevo.')
+  }
 
   return (
     <div className="paywall paywall--packs">
@@ -86,14 +115,25 @@ export default function PantallaSuscripcion({ nombreHermandad, onActivar, onSali
         <button
           type="button"
           className="btn btn-primary btn-block"
-          onClick={() => onActivar(packSel, periodo)}
+          onClick={suscribirse}
+          disabled={yendoAPagar}
         >
-          Suscribirse a {elegido.nombre} — {precioPack(elegido, periodo)}
-          {etiquetaPeriodo(periodo)}
+          {yendoAPagar ? 'Abriendo el pago…' : (
+            <>
+              Suscribirse a {elegido.nombre} — {precioPack(elegido, periodo)}
+              {etiquetaPeriodo(periodo)}
+            </>
+          )}
         </button>
+        {errorPago && (
+          <p className="paywall__nota paywall__nota--error" role="alert">
+            {errorPago}
+          </p>
+        )}
         <p className="paywall__nota">
-          Precios provisionales. Pago simulado mientras conectamos la pasarela: al pulsar, tu cuenta
-          se activa. Podrás cambiar de pack o cancelar cuando quieras.
+          {seCobra
+            ? 'El pago se hace en Stripe: la tarjeta no pasa por Cabildo. Podrás cambiar de pack o cancelar cuando quieras.'
+            : 'Precios provisionales. Pago simulado mientras conectamos la pasarela: al pulsar, tu cuenta se activa. Podrás cambiar de pack o cancelar cuando quieras.'}
         </p>
         <button type="button" className="btn btn-ghost btn-block" onClick={onSalir}>
           Cerrar sesión

@@ -6,9 +6,10 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { supabase, isSupabaseConfigured, supabaseDisponible } from '../lib/supabase'
+import { supabase, isSupabaseConfigured, supabaseDisponible, sinModoLocal } from '../lib/supabase'
 import { getPersonal } from '../lib/personal'
 import { limpiarModoDemo } from '../lib/demo'
+import { asegurarHermandad, hermandadActualId, olvidarHermandad } from '../lib/multiHermandad'
 
 type AuthResult = { error: string | null }
 
@@ -85,6 +86,31 @@ function buildDemoUser(email: string, hermandad: string, nombre: string): AppUse
   return { id: `demo-${email.trim().toLowerCase()}`, email: email.trim(), user_metadata: { hermandad, nombre } }
 }
 
+/**
+ * Se asegura de que la cuenta que acaba de entrar pertenece a una hermandad.
+ *
+ * Todas las hermandades comparten un proyecto de Supabase, así que una cuenta
+ * suelta —recién registrada— no ve absolutamente nada hasta que tiene la
+ * suya. Aquí es donde se le crea, y se hace al ENTRAR y no al registrarse
+ * porque con la confirmación por correo activada al registrarse todavía no
+ * hay sesión: el nombre viaja en los datos de la cuenta y se usa la primera
+ * vez que entra de verdad.
+ *
+ * A quien ya tiene hermandad no se le toca nada: `hermandadActualId()` la
+ * devuelve de la caché y esto no llega ni a preguntar.
+ */
+async function enlazarHermandad(usuario: { user_metadata?: Record<string, unknown> | null }) {
+  const meta = usuario.user_metadata ?? {}
+  // A un hermano NUNCA se le crea una hermandad. Su cuenta la da de alta su
+  // hermandad y se enlaza con su ficha; si por lo que sea todavía no está
+  // enlazada, lo que hay que hacer es arreglar el enlace, no fundar una
+  // hermandad nueva con él de titular.
+  if (meta.tipo === 'hermano') return
+  if (await hermandadActualId()) return
+  const nombre = typeof meta.hermandad === 'string' ? meta.hermandad : ''
+  await asegurarHermandad(nombre)
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [realUser, setRealUser] = useState<AppUser | null>(null)
   const [demoUser, setDemoUser] = useState<AppUser | null>(null)
@@ -115,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRealUser(session ? mapSupabaseUser(session.user) : null)
       if (!session || !supabase) {
         setMfaPendiente(false)
+        olvidarHermandad()
         return
       }
       // No se toca el estado aquí: dejarlo en su valor previo evita que cada
@@ -130,15 +157,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // consultar el nivel bastaba para saltarse la verificación en dos pasos.
         setMfaPendiente(true)
       }
+
+      // Lo último, y después de resolver el segundo paso a propósito: mientras
+      // `mfaPendiente` sigue sin saberse, la guardia de las rutas no deja ver
+      // el panel y se está mirando un spinner a pantalla completa. Si esta
+      // consulta se atasca —la red va mal, la base de datos tarda— con el
+      // orden contrario la aplicación se quedaba ahí colgada sin poder entrar.
+      await enlazarHermandad(session.user)
     }
 
     async function arrancar() {
       // Antes de nada, comprobar que Supabase responde. Si está pausado o
       // caído, se entra en modo local (degradado) para que la app siga
       // funcionando: mismos accesos de demostración y datos en el navegador.
+      //
+      // Salvo en producción (`VITE_SIN_MODO_LOCAL=1`), donde eso es peor que
+      // no funcionar: la secretaría entraría, vería un censo que no es el suyo
+      // y pasaría la tarde dando altas que no existen en ningún sitio. Ahí se
+      // deja caer con su error y se vuelve en un rato.
       const disponible = await supabaseDisponible()
       if (cancelado || !supabase) return
-      if (!disponible) {
+      if (!disponible && !sinModoLocal) {
         setDegradado(true)
         setDemoUser(readDemoUser())
         setMfaPendiente(false)
@@ -264,6 +303,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
 
       async signOut() {
+        olvidarHermandad()
         if (supabase && !degradado) {
           await supabase.auth.signOut()
           return

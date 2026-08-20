@@ -48,6 +48,7 @@ const SIN_SESGO: CriteriosSegmento = {
   estado: 'Cualquiera', cuota: 'Todos', edad: 'Todos', etiqueta: '', soloConEmail: false, campos: [],
 }
 import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
+import { avisarPorCorreo } from '../../lib/avisosCorreo'
 
 /**
  * Con Supabase conectado, crea además una cuenta real de acceso (mismo
@@ -534,8 +535,16 @@ export default function Hermanos() {
     }
     const nuevoIban = trimmed || null
     if ((selected.iban ?? null) !== nuevoIban) {
-      // Cambio en los datos del hermano: se le avisa (correo simulado).
-      agregarAvisoHermano(selected.id, 'La secretaría ha actualizado tu cuenta bancaria.')
+      const texto = 'La secretaría ha actualizado tu cuenta bancaria.'
+      agregarAvisoHermano(selected.id, texto)
+      // Este en concreto conviene que salga por correo: un cambio de cuenta
+      // que el hermano no ha pedido es lo primero que hay que poder detectar.
+      avisarPorCorreo(
+        [{ id: selected.id, nombre: selected.nombre, email: selected.email }],
+        'ficha',
+        'Han cambiado tu cuenta bancaria',
+        [texto, 'Si no lo has pedido tú, avisa a la secretaría cuanto antes.'],
+      )
     }
     setHermanos((prev) => prev.map((h) => (h.id === selected.id ? { ...h, iban: nuevoIban } : h)))
     setIbanError(null)
@@ -552,7 +561,18 @@ export default function Hermanos() {
       telefono: contacto.telefono.trim() || 'Sin datos',
       direccion: contacto.direccion.trim() || 'Sin datos',
     }
-    avisarCambiosHermano(selected, nuevo)
+    const cambio = avisarCambiosHermano(selected, nuevo)
+    // Y por correo, si la hermandad tiene encendido «avisar de cambios en la
+    // ficha». Viene apagado de fábrica a propósito: son muchos y menores.
+    if (cambio) {
+      avisarPorCorreo(
+        [{ id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email }],
+        'ficha',
+        'Han cambiado datos de tu ficha',
+        [cambio, 'Si no reconoces este cambio, avisa a la secretaría.'],
+        'Este aviso lo puedes apagar desde tu área de hermano.',
+      )
+    }
     setHermanos((prev) => prev.map((h) => (h.id === selected.id ? nuevo : h)))
     setContactoSaved(true)
     setTimeout(() => setContactoSaved(false), 2500)
@@ -570,7 +590,17 @@ export default function Hermanos() {
     // Se recoloca dentro del updater: la lista pudo cambiar (otra pestaña, una
     // recarga desde la base) entre el clic y este momento.
     setHermanos((prev) => darDeBajaEnCenso(prev, hermanoId))
-    agregarAvisoHermano(hermanoId, 'La secretaría ha tramitado tu baja en la hermandad.')
+    const texto = 'La secretaría ha tramitado tu baja en la hermandad.'
+    agregarAvisoHermano(hermanoId, texto)
+    // Por correo también: a partir de aquí deja de tener acceso a su área, así
+    // que el aviso de dentro no lo va a leer. Es el único caso en el que el
+    // correo no es un extra, es la única forma de enterarse.
+    avisarPorCorreo(
+      [{ id: objetivo.id, nombre: objetivo.nombre, email: objetivo.email }],
+      'ficha',
+      'Tu baja en la hermandad',
+      [texto, 'Si crees que es un error, ponte en contacto con la secretaría.'],
+    )
   }
 
   /**

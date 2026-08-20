@@ -50,6 +50,26 @@ async function consulta<T>(tabla: string, filtro: string): Promise<T[] | null> {
   }
 }
 
+/** Una función del servidor de Supabase (RPC), igual de a pelo. */
+async function funcion<T>(nombre: string, args: Record<string, unknown>): Promise<T[] | null> {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${nombre}`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(args),
+    })
+    if (!r.ok) return null
+    return (await r.json()) as T[]
+  } catch {
+    return null
+  }
+}
+
 export default async function handler(req: Peticion, res: Respuesta) {
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
   const origen = `https://${host}`
@@ -82,8 +102,24 @@ export default async function handler(req: Peticion, res: Respuesta) {
     return
   }
 
-  const ajustes = await consulta<HermandadSettings>('hermandad_settings', 'id=eq.1&select=*')
-  const hermandad = (ajustes?.[0] ?? {}) as HermandadSettings
+  // Los datos de la hermandad (nombre legal, dirección, logo) salen de una
+  // función que devuelve solo los campos que esta página enseña, buscando por
+  // el slug de la web. Leer `hermandad_settings` directamente, como antes, no
+  // funcionaba ni funcionará: esa tabla lleva el IBAN y el CIF y no la puede
+  // abrir nadie sin sesión. Además, ahora todas las hermandades comparten
+  // tabla y pedir «la fila 1» traería la de cualquiera.
+  const ajustes = await funcion<Record<string, string | null>>('hermandad_de_la_web', { p_slug: slug })
+  const fila = ajustes?.[0] ?? {}
+  const hermandad = {
+    nombreLegal: fila.nombre_legal ?? '',
+    direccion: fila.direccion ?? '',
+    codigoPostal: fila.codigo_postal ?? '',
+    ciudad: fila.ciudad ?? '',
+    provincia: fila.provincia ?? '',
+    telefono: fila.telefono ?? '',
+    email: fila.email ?? '',
+    logoDataUrl: fila.logo_data_url ?? null,
+  } as HermandadSettings
   const cultos: CultoWeb[] = []
 
   // La pieza concreta que se está compartiendo, si es una página suelta.

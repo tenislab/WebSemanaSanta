@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   PAREJAS_TIPOGRAFICAS,
+  cargarWebPorSlug,
   getWebPublica,
   marcaDeAgua,
   noticiasPublicadas,
@@ -18,6 +19,8 @@ import { haySesionAbierta } from '../lib/sesion'
 import { LogoMark } from '../components/Logo'
 import SitioContenido, { AvisoFotos, FotoConMarca, Galeria, Parrafos, PieSitio, TarjetaNoticia } from '../components/SitioContenido'
 import { cultosDelCalendario } from '../lib/cultosDelCalendario'
+import { fijarHermandadDeLaPagina } from '../lib/multiHermandad'
+import { isSupabaseConfigured } from '../lib/supabase'
 import {
   baseDeLaWeb,
   datosEstructurados,
@@ -38,7 +41,44 @@ export default function SitioPublico() {
   // sesión abierta. Si no, cualquiera podía ver con ?preview=1 una web sin
   // publicar o de una hermandad que no tiene contratado el pack Web.
   const preview = params.get('preview') === '1' && haySesionAbierta()
-  const web = getWebPublica()
+  const [traida, setTraida] = useState<WebPublica | null>(null)
+  // Con la base de datos conectada hay que esperar a que llegue: si no, se
+  // pintaría «esta web no está disponible» un instante antes de recibirla, y
+  // eso es justo lo que ve un rastreador que no espera.
+  const [esperando, setEsperando] = useState(isSupabaseConfigured)
+
+  // La web de ESTA hermandad, buscada por el slug de la dirección.
+  //
+  // Lo guardado en el navegador (`getWebPublica`) es lo que está montando
+  // quien la edita, así que solo sirve para él. Cualquier otra persona ve lo
+  // que venga de la base de datos, que es lo que hace que la web pública sea
+  // pública de verdad. Se sigue usando lo del navegador cuando no hay base de
+  // datos (modo local) y como red de seguridad si la consulta falla.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !slug) {
+      setEsperando(false)
+      return
+    }
+    let cancelado = false
+    setEsperando(true)
+    cargarWebPorSlug(slug).then((r) => {
+      if (cancelado) return
+      if (r) setTraida(r.web)
+      // De qué hermandad es esta página: lo necesitan sus formularios para
+      // saber a qué buzón va lo que escriba el visitante. Se pone SIEMPRE,
+      // también a nulo cuando no se encuentra la web: si solo se pusiera al
+      // encontrarla, alguien que pasa de la web de una hermandad a la de otra
+      // y falla la segunda seguiría escribiendo al buzón de la primera.
+      fijarHermandadDeLaPagina(r?.hermandadId ?? null)
+      setEsperando(false)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [slug])
+
+  const guardadaAqui = getWebPublica()
+  const web = traida ?? guardadaAqui
   const hermandad = useHermandadSettings()
   // Los próximos cultos salen del módulo de Eventos, para no copiarlos a mano.
   const cultosCalendario = useMemo(() => cultosDelCalendario(), [])
@@ -54,6 +94,15 @@ export default function SitioPublico() {
         <h1>Esta web no está disponible</h1>
         <p>La hermandad no tiene contratada la web pública en su suscripción.</p>
         <Link to="/hermano" className="sitio-btn">Área del hermano</Link>
+      </div>
+    )
+  }
+
+  if (esperando) {
+    return (
+      <div className="sitio-noweb" aria-busy="true">
+        <LogoMark size={40} />
+        <p>Cargando…</p>
       </div>
     )
   }

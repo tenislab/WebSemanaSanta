@@ -41,6 +41,7 @@ import { CLAVES_DATOS, leerPersistido } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
+import { avisarPorCorreo } from '../../lib/avisosCorreo'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -355,14 +356,22 @@ export default function Papeletas() {
    */
   function avisarDeSitio(hermanoId: string, tramo: string | null, opcion: string | null) {
     const que = tramo ?? opcion
-    agregarAvisoHermano(
-      hermanoId,
-      que
-        ? `Ya tienes sitio para la estación de penitencia de ${campana.anio}: ${que}.`
-        : `Ya tienes papeleta para la estación de penitencia de ${campana.anio}.`,
-      'papeleta',
-      'Tu papeleta de sitio',
-    )
+    const texto = que
+      ? `Ya tienes sitio para la estación de penitencia de ${campana.anio}: ${que}.`
+      : `Ya tienes papeleta para la estación de penitencia de ${campana.anio}.`
+    agregarAvisoHermano(hermanoId, texto, 'papeleta', 'Tu papeleta de sitio')
+    // Y por correo. Esta es de las que más se agradecen: hasta ahora el
+    // hermano se enteraba de su sitio solo si entraba a mirarlo por su cuenta.
+    const h = hermanos.find((x) => x.id === hermanoId)
+    if (h) {
+      avisarPorCorreo(
+        [{ id: h.id, nombre: h.nombre, email: h.email }],
+        'papeleta',
+        'Tu papeleta de sitio',
+        [texto, 'Puedes verla y descargarla desde tu área de hermano.'],
+        'Este aviso lo puedes apagar desde tu área de hermano.',
+      )
+    }
   }
 
   function actualizarPapeleta(id: string, cambios: Partial<Papeleta>) {

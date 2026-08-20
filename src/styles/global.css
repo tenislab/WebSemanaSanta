@@ -2616,6 +2616,15 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .paywall__plan-precio small { font-size: 0.85rem; font-weight: 500; color: var(--text-muted); }
 .paywall__plan-detalle { font-size: 0.78rem; color: var(--text-muted); }
 .paywall__nota { font-size: 0.78rem; color: var(--text-muted); }
+/* Cuando el pago no se ha podido abrir. Se lee, no se adivina: la cuenta NO
+   se ha activado y hay que decirlo con el mismo color que el resto de errores. */
+.paywall__nota--error {
+  color: var(--err-fg);
+  background: var(--err-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  margin-top: 0.5rem;
+}
 
 /* Muro de suscripción con packs */
 .paywall__card--wide { max-width: 900px; }

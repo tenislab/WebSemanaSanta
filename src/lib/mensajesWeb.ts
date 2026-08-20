@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { nuevoId } from './supabaseSync'
+import { hermandadDestino } from './multiHermandad'
 
 /**
  * Lo que la web pública RECIBE. Hasta ahora la web solo contaba cosas; con
@@ -151,7 +152,15 @@ export async function enviarMensajeWeb(
     atendido: false,
   }
   if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase.from('mensajes_web').insert(mensajeToRow(nuevo))
+    // A qué hermandad va. Sin esto el mensaje se quedaría sin dueño y no lo
+    // leería nadie nunca, así que Supabase lo rechaza de entrada.
+    const hermandadId = await hermandadDestino()
+    if (!hermandadId) {
+      return { ok: false, error: 'No se ha podido saber a qué hermandad enviar el mensaje. Recarga la página e inténtalo otra vez.' }
+    }
+    const { error } = await supabase
+      .from('mensajes_web')
+      .insert({ ...mensajeToRow(nuevo), hermandad_id: hermandadId })
     if (error) {
       console.error('No se pudo enviar el mensaje:', error.message)
       return { ok: false, error: 'No se ha podido enviar. Inténtalo de nuevo en un momento.' }

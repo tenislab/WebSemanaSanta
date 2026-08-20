@@ -65,6 +65,7 @@ import {
   type IconoHermandad,
 } from '../lib/hermandades'
 import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
+import { fijarHermandadDeLaPagina, hermandadesPublicas } from '../lib/multiHermandad'
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
@@ -305,6 +306,22 @@ export default function HermanoPortal() {
       ) ?? null
     : null
 
+  // Las hermandades dadas de alta de verdad. Todas comparten un mismo
+  // Supabase, así que el hermano tiene que decir cuál es la suya ANTES de
+  // escribir el DNI: el mismo DNI puede estar en dos hermandades (alguien que
+  // es hermano de dos) y sin esto no se sabría a cuál entra.
+  const [hermandadesReales, setHermandadesReales] = useState<{ id: string; nombre: string }[]>([])
+  useEffect(() => {
+    if (!usarSupabase) return
+    let cancelado = false
+    hermandadesPublicas().then((lista) => {
+      if (!cancelado) setHermandadesReales(lista)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [usarSupabase])
+
   const datosPrincipalDirectorio = useMemo(
     () => ({
       nombre: nombrePrincipal,
@@ -316,12 +333,16 @@ export default function HermanoPortal() {
     [nombrePrincipal, hermandadPrincipal],
   )
   const opcionesHermandad = useMemo(
-    () => buscarHermandades(queryHermandad, datosPrincipalDirectorio),
-    [queryHermandad, datosPrincipalDirectorio],
+    () => buscarHermandades(queryHermandad, datosPrincipalDirectorio, hermandadesReales),
+    [queryHermandad, datosPrincipalDirectorio, hermandadesReales],
   )
 
   function elegirHermandad(h: HermandadDirectorio) {
     setHermandadElegida(h)
+    // De qué hermandad va esta página. Lo necesita la solicitud de alta, que
+    // la rellena alguien que todavía no es hermano y no ha iniciado sesión:
+    // sin esto no habría forma de saber a qué secretaría mandarla.
+    if (usarSupabase) fijarHermandadDeLaPagina(h.id)
     setPaso('acceso')
     setModoAcceso('login')
     setErrorLogin(null)
@@ -336,6 +357,9 @@ export default function HermanoPortal() {
   function volverABuscar() {
     setPaso('buscar')
     setHermandadElegida(null)
+    // Se deja de apuntar a ninguna: si no, quien vuelve atrás sin elegir otra
+    // seguiría mandando su solicitud a la hermandad que miró antes.
+    if (usarSupabase) fijarHermandadDeLaPagina(null)
     setErrorLogin(null)
     setErrorSolicitud(null)
     setSolicitudEnviada(false)
@@ -347,40 +371,53 @@ export default function HermanoPortal() {
     if (!hermandadElegida) return
     const dni = normaliza(dniInput)
 
-    if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
-      if (usarSupabase && supabase) {
-        const { data: email, error: rpcError } = await supabase.rpc('resolver_email_hermano', { p_dni: dni })
-        if (rpcError || !email) {
-          setErrorLogin('DNI o contraseña incorrectos.')
-          return
-        }
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password: claveInput,
-        })
-        if (signInError || !signInData.session) {
-          setErrorLogin('DNI o contraseña incorrectos.')
-          return
-        }
-        const { data: fila } = await supabase.from('hermanos').select('*').eq('dni', dni).maybeSingle()
-        if (!fila) {
-          setErrorLogin('No se pudo cargar tu ficha. Inténtalo de nuevo en unos segundos.')
-          return
-        }
-        if (fila.estado === 'Baja') {
-          // La contraseña era correcta, así que la sesión de Supabase ya está
-          // abierta: se cierra antes de salir.
-          await supabase.auth.signOut()
-          setErrorLogin(MENSAJE_BAJA)
-          return
-        }
-        const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: fila.id as string }
-        guardarSesion(nueva)
-        setSesion(nueva)
-        setErrorLogin(null)
+    // Con la base de datos conectada, la hermandad elegida es una de verdad y
+    // su id viaja en la consulta. Es imprescindible: el DNI ya no es único en
+    // toda la base —la misma persona puede ser hermana de dos hermandades— y
+    // buscar solo por DNI podía devolver el correo de otra.
+    if (usarSupabase && supabase) {
+      const { data: email, error: rpcError } = await supabase.rpc('resolver_email_hermano', {
+        p_hermandad_id: hermandadElegida.id,
+        p_dni: dni,
+      })
+      if (rpcError || !email) {
+        setErrorLogin('DNI o contraseña incorrectos.')
         return
       }
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password: claveInput,
+      })
+      if (signInError || !signInData.session) {
+        setErrorLogin('DNI o contraseña incorrectos.')
+        return
+      }
+      // Sin filtrar por hermandad: ya con la sesión abierta, las políticas de
+      // Supabase hacen que esta persona solo vea su propia ficha y ninguna más.
+      const { data: fila } = await supabase.from('hermanos').select('*').eq('dni', dni).maybeSingle()
+      if (!fila) {
+        setErrorLogin('No se pudo cargar tu ficha. Inténtalo de nuevo en unos segundos.')
+        return
+      }
+      if (fila.estado === 'Baja') {
+        // La contraseña era correcta, así que la sesión de Supabase ya está
+        // abierta: se cierra antes de salir.
+        await supabase.auth.signOut()
+        setErrorLogin(MENSAJE_BAJA)
+        return
+      }
+      // La sesión sigue guardando ID_HERMANDAD_PRINCIPAL, que aquí significa
+      // «la hermandad de verdad, la que está en la base de datos», frente a
+      // las de muestra del modo demostración. Ya dentro, un hermano pertenece
+      // a una sola hermandad y todo lo que lee viene filtrado por Supabase.
+      const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: fila.id as string }
+      guardarSesion(nueva)
+      setSesion(nueva)
+      setErrorLogin(null)
+      return
+    }
 
+    if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
       const encontrado = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
       if (!encontrado) {
         setErrorLogin('DNI o contraseña incorrectos.')
@@ -424,10 +461,16 @@ export default function HermanoPortal() {
       return
     }
 
+    // Con Supabase conectado esta comprobación no se puede hacer aquí: quien
+    // rellena esto no ha iniciado sesión y no puede leer el censo de nadie
+    // —faltaría más—. Si el DNI ya estuviera, lo verá la secretaría al recibir
+    // la solicitud, que es quien tiene que decidir.
     const yaEsHermano =
-      hermandadElegida.id === ID_HERMANDAD_PRINCIPAL
-        ? hermanos.some((h) => normaliza(h.dni) === dni)
-        : (censosMuestra[hermandadElegida.id]?.[0] ?? []).some((h) => normaliza(h.dni) === dni)
+      usarSupabase
+        ? false
+        : hermandadElegida.id === ID_HERMANDAD_PRINCIPAL
+          ? hermanos.some((h) => normaliza(h.dni) === dni)
+          : (censosMuestra[hermandadElegida.id]?.[0] ?? []).some((h) => normaliza(h.dni) === dni)
     if (yaEsHermano) {
       setErrorSolicitud('Ya hay un hermano/a con ese DNI en esta hermandad. Prueba a iniciar sesión.')
       return
@@ -444,7 +487,7 @@ export default function HermanoPortal() {
       estado: 'Pendiente',
     }
 
-    if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
+    if (usarSupabase || hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
       // Se espera al resultado: antes se decía «tu solicitud se ha enviado a
       // la secretaría» aunque no hubiera salido del navegador.
       crearSolicitudPrincipal(nueva).then((r) => {
@@ -944,7 +987,11 @@ export default function HermanoPortal() {
                     </li>
                   ))}
                   {opcionesHermandad.length === 0 && (
-                    <li className="portal__picker-empty">No encontramos ninguna hermandad con ese nombre.</li>
+                    <li className="portal__picker-empty">
+                      {queryHermandad.trim()
+                        ? 'No encontramos ninguna hermandad con ese nombre.'
+                        : 'Todavía no hay ninguna hermandad dada de alta en Cabildo.'}
+                    </li>
                   )}
                 </ul>
 
