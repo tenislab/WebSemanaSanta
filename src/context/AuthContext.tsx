@@ -9,6 +9,7 @@ import {
 import { supabase, isSupabaseConfigured, supabaseDisponible, sinModoLocal } from '../lib/supabase'
 import { getPersonal } from '../lib/personal'
 import { limpiarModoDemo } from '../lib/demo'
+import { translateError } from '../lib/erroresAuth'
 import { asegurarHermandad, hermandadActualId, olvidarHermandad } from '../lib/multiHermandad'
 
 type AuthResult = { error: string | null }
@@ -406,17 +407,3 @@ function mapSupabaseUser(u: { id: string; email?: string; user_metadata: Record<
 }
 
 /** Traduce los mensajes de error más comunes de Supabase Auth al español. */
-function translateError(message: string): string {
-  const m = message.toLowerCase()
-  if (m.includes('invalid login credentials')) return 'Correo o contraseña incorrectos.'
-  if (m.includes('email not confirmed'))
-    return 'Aún no has confirmado tu correo. Revisa tu bandeja de entrada.'
-  if (m.includes('user already registered') || m.includes('already been registered'))
-    return 'Ese correo ya tiene una cuenta. Inicia sesión.'
-  if (m.includes('password should be at least'))
-    return 'La contraseña debe tener al menos 6 caracteres.'
-  if (m.includes('unable to validate email')) return 'El correo no parece válido.'
-  if (m.includes('rate limit') || m.includes('too many'))
-    return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
-  return message
-}
