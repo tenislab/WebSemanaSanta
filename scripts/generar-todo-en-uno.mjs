@@ -41,6 +41,7 @@ export const PIEZAS = [
   ['acceso-hermano.sql', 'Cerrar el barrido de DNI en el acceso del hermano'],
   ['area-hermano.sql', 'Que el área del hermano funcione de verdad'],
   ['correo-hermandad.sql', 'Que la configuración de correo sea de la hermandad'],
+  ['hermano-y-gestion.sql', 'Ser hermano Y llevar la hermandad a la vez'],
 ]
 
 const CABECERA = `-- =============================================================================

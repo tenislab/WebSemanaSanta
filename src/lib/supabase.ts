@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { vigilarRecuperacionDeClave } from './recuperacionClave'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -50,6 +51,16 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
       },
     })
   : null
+
+/**
+ * A la escucha de «he olvidado mi contraseña» DESDE EL PRIMER INSTANTE.
+ *
+ * Supabase emite `PASSWORD_RECOVERY` mientras procesa el enlace del correo, y
+ * eso ocurre al crear el cliente: antes de que React haya pintado nada. Si
+ * este oyente se registrara dentro de una pantalla llegaría tarde y el aviso
+ * se perdería, que es exactamente lo que pasaba.
+ */
+if (supabase) vigilarRecuperacionDeClave(supabase)
 
 /**
  * Cliente SOLO para dar de alta cuentas de otras personas (personal,

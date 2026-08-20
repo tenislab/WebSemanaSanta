@@ -243,3 +243,35 @@ export async function authUserIdActual(): Promise<string | undefined> {
     return undefined
   }
 }
+
+
+/**
+ * ¿Esta cuenta es SOLO de hermano?
+ *
+ * «Solo» es la palabra importante. En una hermandad casi todo el que gestiona
+ * es además hermano: el Hermano Mayor lo es, la secretaria lo es, el tesorero
+ * paga su cuota y saca su papeleta como cualquiera. A esos NO se les puede
+ * echar del panel.
+ *
+ * Se pregunta a la base de datos y no al metadata de la sesión por dos motivos:
+ * el metadata lo puede reescribir el propio usuario, y además solo sabe decir
+ * «es hermano», no «es solo hermano», que es lo que hay que saber aquí.
+ */
+export async function soloEsHermano(): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return false
+  try {
+    const { data } = await supabase.auth.getUser()
+    const uid = data.user?.id
+    if (!uid) return false
+    const [hermano, titular, personal] = await Promise.all([
+      supabase.from('hermanos').select('id').eq('auth_user_id', uid).limit(1).maybeSingle(),
+      supabase.from('titulares').select('auth_user_id').eq('auth_user_id', uid).limit(1).maybeSingle(),
+      supabase.from('personal').select('id').eq('auth_user_id', uid).eq('activo', true).limit(1).maybeSingle(),
+    ])
+    return Boolean(hermano.data) && !titular.data && !personal.data
+  } catch {
+    // Ante la duda NO se echa a nadie del panel: las políticas de la base de
+    // datos siguen mandando y no dejarán ver lo que no toque.
+    return false
+  }
+}

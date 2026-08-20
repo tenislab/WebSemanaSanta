@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import EscudoHermandad from '../components/EscudoHermandad'
 import PapeletaTicket from '../components/PapeletaTicket'
@@ -36,6 +36,7 @@ import { useAjustesCuotas } from '../lib/ajustesCuotas'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
 import { conRenovacion } from '../lib/renovarPapeleta'
 import { contactoDelHermanoToRow } from '../lib/db/hermanos'
+import { hayRecuperacionEnMarcha, olvidarRecuperacion } from '../lib/recuperacionClave'
 import CalendarioMes from '../components/CalendarioMes'
 import { claseTipo, fechaLarga } from '../lib/calendario'
 import { EVENTOS_INICIALES, type Aparicion, type Evento, type TipoEvento } from '../data/eventos'
@@ -145,49 +146,18 @@ function guardarSolicitudMuestra(hermandadId: string, nueva: SolicitudAlta) {
   localStorage.setItem(clave, JSON.stringify([nueva, ...prev]))
 }
 
-/**
- * ¿Estamos atendiendo un «he olvidado mi contraseña»?
- *
- * Supabase deja un `type=recovery` detrás de la almohadilla al volver del
- * enlace del correo. Se lee UNA vez y se quita de la barra de direcciones en
- * cuanto se ha visto: si se queda, acaba en el historial del navegador y en
- * cualquier captura de pantalla que haga el hermano para pedir ayuda.
- *
- * Pero quitarlo de la barra y guardarlo solo en memoria no basta. React vuelve
- * a montar la pantalla —en desarrollo siempre, y en producción a la que el
- * navegador restaura la página— y ahí el estado se pierde. Como el token ya no
- * está en la dirección, la segunda vez no queda ni rastro: el hermano pulsa el
- * enlace del correo y aterriza en la pantalla de entrar como si nada.
- *
- * Por eso queda apuntado en `sessionStorage`, que sobrevive a los remontajes y
- * se va al cerrar la pestaña.
- */
-const CLAVE_RECUPERACION = 'gobergo-recuperando-clave'
-
-function hayRecuperacionEnMarcha(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    const tras = window.location.hash.slice(1)
-    if (/(^|&)type=recovery(&|$)/.test(tras)) {
-      sessionStorage.setItem(CLAVE_RECUPERACION, 'si')
-      window.history.replaceState(null, '', window.location.pathname + window.location.search)
-      return true
-    }
-    return sessionStorage.getItem(CLAVE_RECUPERACION) === 'si'
-  } catch {
-    return false
-  }
-}
-
-function olvidarRecuperacion(): void {
-  try {
-    sessionStorage.removeItem(CLAVE_RECUPERACION)
-  } catch {
-    // sin sessionStorage no hay nada que olvidar
-  }
-}
 
 export default function HermanoPortal() {
+  /**
+   * ¿Se ha llegado aquí porque el panel de gestión ha echado a esta cuenta?
+   *
+   * Lo manda `ProtectedRoute`. Sin contarlo, el rebote se lee como que la
+   * aplicación está rota: pulsas «Gestiono la hermandad» y acabas en el área
+   * del hermano, como si los dos botones llevaran al mismo sitio.
+   */
+  const ubicacion = useLocation()
+  const echadoDelPanel = (ubicacion.state as { motivo?: string } | null)?.motivo === 'cuenta-de-hermano'
+
   const hermandadPrincipal = useHermandadSettings()
   const nombrePrincipal = hermandadPrincipal.nombreLegal || 'Tu hermandad (modo demo)'
   // Modo local efectivo: sin Supabase o con Supabase en pausa/caído. En ese
@@ -1155,7 +1125,21 @@ export default function HermanoPortal() {
             </ul>
           </aside>
           <div className="portal__card">
-            {paso === 'buscar' && (
+            {echadoDelPanel && !poniendoClaveNueva && (
+              <div className="banner-inline banner-inline--warn" role="status">
+                <span>
+                  <b>Esta cuenta es de hermano/a, no de gestión.</b> Por eso te hemos traído aquí, a
+                  tu área. Si además llevas la hermandad, sal de esta sesión y entra con la cuenta
+                  de secretaría.
+                </span>
+              </div>
+            )}
+
+            {/* `!poniendoClaveNueva`: viniendo del enlace del correo, el
+                buscador de hermandad no pinta nada. Sin esto se quedaba
+                ARRIBA, con el formulario de la contraseña debajo del todo, y
+                el hermano leía «Busca tu hermandad» y se paraba ahí. */}
+            {paso === 'buscar' && !poniendoClaveNueva && (
               <>
                 <p className="eyebrow">Área del hermano</p>
                 <h1>Busca tu hermandad</h1>
