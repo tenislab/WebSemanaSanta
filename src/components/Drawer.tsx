@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
+import { useFocoDeDialogo } from '../lib/foco'
 
 interface DrawerProps {
   open: boolean
@@ -17,6 +18,10 @@ interface DrawerProps {
  * hermano, y en próximas fases también papeletas y cuotas.
  */
 export default function Drawer({ open, onClose, title, subtitle, children, footer, ancho = 'normal' }: DrawerProps) {
+  const panel = useRef<HTMLElement>(null)
+  // El foco entra al abrir, no se escapa mientras está abierto y vuelve a la
+  // fila desde la que se abrió al cerrar (ver el comentario largo de foco.ts).
+  useFocoDeDialogo(open, panel)
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
@@ -30,8 +35,18 @@ export default function Drawer({ open, onClose, title, subtitle, children, foote
 
   return (
     <div className="drawer-layer">
-      <button className="drawer-scrim" aria-label="Cerrar" onClick={onClose} />
-      <aside className={`drawer${ancho === 'ancho' ? ' drawer--ancho' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      {/* El velo cierra al pulsarlo, pero NO es una parada del tabulador: la
+          cruz de arriba y la tecla Escape ya hacen lo mismo, y una parada
+          llamada «Cerrar» sin nada que ver era desconcertante. */}
+      <button className="drawer-scrim" aria-label="Cerrar" tabIndex={-1} onClick={onClose} />
+      <aside
+        ref={panel}
+        tabIndex={-1}
+        className={`drawer${ancho === 'ancho' ? ' drawer--ancho' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <header className="drawer__head">
           <div>
             {subtitle && <p className="eyebrow">{subtitle}</p>}

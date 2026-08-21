@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import HermanoPicker from '../../components/HermanoPicker'
@@ -28,6 +28,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { incidenciaToRow, rowToIncidencia } from '../../lib/db/incidencias'
 import { getCampana } from '../../lib/campana'
+import { useFocoDeDialogo } from '../../lib/foco'
 
 
 type FilaEstado = EstadoAsignacion | 'Pendiente' | 'Baja'
@@ -471,6 +472,7 @@ export default function Cortejo() {
         <input
           className="search-box"
           placeholder="Buscar hermano, número o tramo"
+          aria-label="Buscar en el cortejo por hermano, número o tramo"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -1096,13 +1098,19 @@ function IncidenciaForm({
 }) {
   const [tipo, setTipo] = useState<TipoIncidencia>(tipos[0] ?? 'Otra')
   const [descripcion, setDescripcion] = useState('')
+  const panel = useRef<HTMLElement>(null)
+  // El foco entra al abrir, no se escapa y vuelve al cerrar (ver foco.ts).
+  // Este panel se usa en la calle, el día de salida, con prisa: que el foco se
+  // pierda por detrás mientras se apunta que a un nazareno le ha pasado algo
+  // es exactamente lo que no puede ocurrir.
+  useFocoDeDialogo(!!papeleta && !!hermano, panel)
 
   if (!papeleta || !hermano) return null
 
   return (
     <div className="drawer-layer">
-      <button className="drawer-scrim" aria-label="Cerrar" onClick={onCancel} />
-      <aside className="drawer drawer--sm" role="dialog" aria-modal="true" aria-label="Registrar incidencia">
+      <button className="drawer-scrim" aria-label="Cerrar" tabIndex={-1} onClick={onCancel} />
+      <aside ref={panel} tabIndex={-1} className="drawer drawer--sm" role="dialog" aria-modal="true" aria-label="Registrar incidencia">
         <header className="drawer__head">
           <div>
             <p className="eyebrow">Modo día de salida</p>

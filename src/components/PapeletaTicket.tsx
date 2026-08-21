@@ -96,7 +96,8 @@ export default function PapeletaTicket({ papeleta, hermano, hermandad, tramo, pu
       <div className="ticket-doc__perf" aria-hidden="true" />
 
       <div className="ticket-doc__foot">
-        <span>Solicitada el {papeleta.fechaSolicitud}</span>
+        {/* Igual que en el recibo: media frase es peor que decir que falta. */}
+        <span>{papeleta.fechaSolicitud ? `Solicitada el ${papeleta.fechaSolicitud}` : 'Sin fecha de solicitud'}</span>
         {papeleta.fechaEntrega && <span>Entregada el {papeleta.fechaEntrega}</span>}
       </div>
 

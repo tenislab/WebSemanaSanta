@@ -1,7 +1,20 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import Landing from './Landing'
-import SitioPublico from './SitioPublico'
+
+/*
+ * La web de la hermandad se pide SOLO si hace falta.
+ *
+ * En gobergo.com («en casa») esta rama no se toca nunca: quien entra por la
+ * puerta principal ve la página de venta, y no tiene por qué descargarse el
+ * motor que pinta las webs de las hermandades —con su editor de secciones, su
+ * galería y su portada— para verla.
+ *
+ * Y en un dominio de hermandad no cuesta nada, porque ahí ya se está
+ * esperando a la consulta que dice de quién es el dominio: el trozo llega
+ * mientras tanto.
+ */
+const SitioPublico = lazy(() => import('./SitioPublico'))
 import { cargarWebPorDominio, type WebPublica } from '../lib/webPublica'
 import { fijarHermandadDeLaPagina } from '../lib/multiHermandad'
 import { esCasaDeGobergo } from '../lib/dominio'
@@ -59,20 +72,26 @@ export default function Raiz({ soloWeb = false }: { soloWeb?: boolean } = {}) {
     }
   }, [host, enCasa])
 
-  if (buscando) {
-    return (
-      <div className="sitio-noweb" aria-busy="true">
-        <LogoMark size={40} />
-        <p>Cargando…</p>
-      </div>
-    )
-  }
+  const cargando = (
+    <div className="sitio-noweb" aria-busy="true">
+      <LogoMark size={40} />
+      <p>Cargando…</p>
+    </div>
+  )
+
+  if (buscando) return cargando
 
   // Hay una hermandad con este dominio: su web, como si se hubiera entrado por
   // /w/su-slug. Si no la hay —el dominio apunta aquí pero nadie lo ha
   // configurado todavía— se enseña la página de Gobergo, que al menos explica
   // qué es esto en vez de dar un error.
-  if (web) return <SitioPublico webPorDominio={web} />
+  if (web) {
+    return (
+      <Suspense fallback={cargando}>
+        <SitioPublico webPorDominio={web} />
+      </Suspense>
+    )
+  }
   if (soloWeb) return <Navigate to="/" replace />
   return <Landing />
 }

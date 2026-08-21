@@ -81,6 +81,7 @@ export default function HistorialHermano({
     .filter((c) => c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta')
     .reduce((n, c) => n + c.importe, 0)
   const salidas = salidasDe(papeletas)
+  const aniosEnLaHermandad = aniosDeHermandad(hermano.antiguedad)
   // El ejercicio en curso ya se ve arriba: aquí se abre lo demás, no lo de hoy.
   const [abiertos, setAbiertos] = useState<Set<number>>(() => new Set(ejercicios[0] ? [ejercicios[0][0]] : []))
   function alternar(anio: number) {
@@ -100,8 +101,8 @@ export default function HistorialHermano({
 
       <div className="vida-cifras">
         <div>
-          <strong>{aniosDeHermandad(hermano.antiguedad)}</strong>
-          <span>{aniosDeHermandad(hermano.antiguedad) === 1 ? 'año' : 'años'} de hermano/a</span>
+          <strong>{aniosEnLaHermandad === null ? '—' : aniosEnLaHermandad}</strong>
+          <span>{aniosEnLaHermandad === 1 ? 'año' : 'años'} de hermano/a</span>
         </div>
         <div>
           <strong>{salidas}</strong>

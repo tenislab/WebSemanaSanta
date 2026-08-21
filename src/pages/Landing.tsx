@@ -291,6 +291,9 @@ export default function Landing() {
       </section>
 
       <footer className="site-footer">
+        {/* Los tres grupos del pie son h3, no h4: vienen detrás de los h2 de
+            las secciones y saltar un nivel rompe el índice que usa quien
+            navega la página con un lector de pantalla. */}
         <div className="wrap footer-grid">
           <div>
             <Logo light size={32} />
@@ -300,7 +303,7 @@ export default function Landing() {
             </p>
           </div>
           <div>
-            <h4>Producto</h4>
+            <h3>Producto</h3>
             <ul>
               <li><a href="#funciones">Funciones</a></li>
               <li><a href="#audiencia">Para quién es</a></li>
@@ -308,7 +311,7 @@ export default function Landing() {
             </ul>
           </div>
           <div>
-            <h4>Acceso</h4>
+            <h3>Acceso</h3>
             <ul>
               <li><Link to="/login">Iniciar sesión</Link></li>
               <li><Link to="/registro">Crear hermandad</Link></li>
@@ -316,7 +319,7 @@ export default function Landing() {
             </ul>
           </div>
           <div>
-            <h4>Legal</h4>
+            <h3>Legal</h3>
             <ul>
               <li><Link to="/legal/aviso-legal">Aviso legal</Link></li>
               <li><Link to="/legal/privacidad">Política de privacidad</Link></li>

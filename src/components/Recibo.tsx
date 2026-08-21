@@ -48,7 +48,12 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
         <div className="recibo-doc__meta">
           <p className="eyebrow">Recibo de cuota</p>
           <span className="recibo-doc__num">Nº {String(cuota.numero).padStart(4, '0')}</span>
-          <span className="recibo-doc__date">Emitido el {cuota.fechaEmision}</span>
+          {/* Sin fecha se decía «Emitido el » y ahí se acababa la frase. Un
+              recibo con la fecha a medias no vale como justificante, y al
+              hermano le llega en mano sin que nadie lo vuelva a mirar. */}
+          <span className="recibo-doc__date">
+            {cuota.fechaEmision ? `Emitido el ${cuota.fechaEmision}` : 'Sin fecha de emisión'}
+          </span>
         </div>
       </div>
 
@@ -86,7 +91,8 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
         </span>
         {cuota.domiciliada && hermano.iban && (
           <span className="recibo-doc__iban">
-            Domiciliado en tu cuenta {maskIban(hermano.iban)} · cobro previsto el {cuota.fechaCobro}
+            Domiciliado en tu cuenta {maskIban(hermano.iban)}
+            {cuota.fechaCobro ? ` · cobro previsto el ${cuota.fechaCobro}` : ''}
           </span>
         )}
         {cuota.estado !== 'Pagada' && cuota.domiciliada && !hermano.iban && (
@@ -112,7 +118,9 @@ export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
           </span>
         )}
         {cuota.estado !== 'Pagada' && !cuota.domiciliada && !hermandad.iban && (
-          <span className="recibo-doc__iban">Pago manual · previsto el {cuota.fechaCobro}</span>
+          <span className="recibo-doc__iban">
+            Pago manual{cuota.fechaCobro ? ` · previsto el ${cuota.fechaCobro}` : ''}
+          </span>
         )}
       </div>
 

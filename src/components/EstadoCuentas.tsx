@@ -105,6 +105,14 @@ export default function EstadoCuentas({
             <td className="estado-cuentas__importe">{formatCurrency(totalIngresos)}</td>
           </tr>
         </tbody>
+        {/* Reserva la banda del pie repetido en cada hoja (ver el comentario
+            de InformeImpreso: `.print-hoja` va fijo y no le quita sitio a
+            nada, así que sin esto pisa la última línea). */}
+        <tfoot className="print-pie-hueco">
+          <tr>
+            <td colSpan={2} />
+          </tr>
+        </tfoot>
       </table>
 
       <h3 className="estado-cuentas__seccion">G A S T O S</h3>
@@ -127,6 +135,14 @@ export default function EstadoCuentas({
             <td className="estado-cuentas__importe">{formatCurrency(totalGastos)}</td>
           </tr>
         </tbody>
+        {/* Reserva la banda del pie repetido en cada hoja (ver el comentario
+            de InformeImpreso: `.print-hoja` va fijo y no le quita sitio a
+            nada, así que sin esto pisa la última línea). */}
+        <tfoot className="print-pie-hueco">
+          <tr>
+            <td colSpan={2} />
+          </tr>
+        </tfoot>
       </table>
 
       <h3 className="estado-cuentas__seccion">R E S U M E N</h3>
@@ -153,6 +169,14 @@ export default function EstadoCuentas({
             <td className="estado-cuentas__importe">{formatCurrency(saldoFinal)}</td>
           </tr>
         </tbody>
+        {/* Reserva la banda del pie repetido en cada hoja (ver el comentario
+            de InformeImpreso: `.print-hoja` va fijo y no le quita sitio a
+            nada, así que sin esto pisa la última línea). */}
+        <tfoot className="print-pie-hueco">
+          <tr>
+            <td colSpan={2} />
+          </tr>
+        </tfoot>
       </table>
 
       <p className="recibo-doc__note">

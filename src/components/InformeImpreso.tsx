@@ -73,6 +73,24 @@ export default function InformeImpreso({
             </tr>
           ))}
         </tbody>
+        {/*
+          Hueco para el pie que se repite en cada hoja.
+
+          `.print-hoja` va con `position: fixed`, y el navegador lo clava al
+          fondo del área de contenido SIN quitarle sitio a nada: cuando la
+          tabla llenaba la hoja justa, el pie se pintaba encima de la última
+          fila y ese hermano salía tachado por una raya gris. En un padrón que
+          se lleva al cabildo de cuentas, una línea ilegible es una línea que
+          hay que ir a buscar a mano.
+
+          Un `tfoot` es lo único que Chrome repite en todas las hojas Y le
+          reserva su alto. No lleva nada dentro: el hueco es todo su trabajo.
+        */}
+        <tfoot className="print-pie-hueco">
+          <tr>
+            <td colSpan={columnas.length} />
+          </tr>
+        </tfoot>
       </table>
 
       <p className="recibo-doc__note">

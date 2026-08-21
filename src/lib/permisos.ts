@@ -183,20 +183,44 @@ export function cargoDeCuenta(
  * instante en cada carga en el que el tesorero ve el censo entero.
  */
 export function useCargoDeLaSesion(): Cargo | null {
-  const [cargo, setCargo] = useState<Cargo | null>('__desconocido__' as Cargo)
+  return useCargoDeLaSesionConEstado().cargo
+}
+
+/**
+ * El cargo Y si ya se sabe cuál es.
+ *
+ * `resuelto` importa más de lo que parece. «Todavía no lo sé» y «no tiene
+ * permisos» son cosas distintas, y confundirlas costó caro:
+ *
+ * El marco de la aplicación mira el cargo para decidir si redirige a Inicio. Y
+ * como el hook empezaba en `'__desconocido__'` —sin permisos— la redirección
+ * saltaba en el primer pintado, ANTES de que la respuesta llegara. Resultado:
+ * pulsabas «Cuotas» y aparecías en Inicio. Todas las secciones, siempre, para
+ * todo el mundo. El cargo se resolvía medio segundo después y ya daba igual,
+ * porque el navegador ya estaba en otra dirección.
+ *
+ * Empezar abierto tampoco vale: habría un instante en cada carga en el que el
+ * tesorero ve el censo. Por eso la respuesta correcta no es un valor, son dos:
+ * quien decide algo con esto tiene que ESPERAR mientras `resuelto` sea falso.
+ */
+export function useCargoDeLaSesionConEstado(): { cargo: Cargo | null; resuelto: boolean } {
+  const [estado, setEstado] = useState<{ cargo: Cargo | null; resuelto: boolean }>({
+    cargo: '__desconocido__' as Cargo,
+    resuelto: false,
+  })
   useEffect(() => {
     let cancelado = false
     async function resolver() {
       const [uid, titular] = await Promise.all([authUserIdActual(), soyTitular()])
       if (cancelado) return
-      setCargo(cargoDeCuenta(uid, getPersonal(), titular))
+      setEstado({ cargo: cargoDeCuenta(uid, getPersonal(), titular), resuelto: true })
     }
     void resolver()
     return () => {
       cancelado = true
     }
   }, [])
-  return cargo
+  return estado
 }
 
 

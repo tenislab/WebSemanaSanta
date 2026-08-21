@@ -81,6 +81,7 @@ import {
   type MensajeWeb,
 } from '../../lib/mensajesWeb'
 import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
+import { copiarAlPortapapeles } from '../../lib/portapapeles'
 
 /**
  * La copia pequeña para la rejilla de la galería. 520 px de lado basta y sobra
@@ -411,6 +412,7 @@ export default function WebPublica() {
     try { sessionStorage.setItem('cabildo-web-pestana', p) } catch { /* sin sessionStorage */ }
   }
   const [copiado, setCopiado] = useState(false)
+  const [noSePudoCopiar, setNoSePudoCopiar] = useState(false)
   const [paginaSel, setPaginaSel] = useState<string | null>(null)
   // Dentro de «Cabecera y pie» hay dos sitios muy separados de la web: la vista
   // previa sigue al que se esté tocando.
@@ -587,11 +589,17 @@ export default function WebPublica() {
       .filter((g) => g.items.length > 0)
   }, [busca])
 
-  function copiarEnlace() {
-    navigator.clipboard?.writeText(enlace).then(() => {
+  async function copiarEnlace() {
+    // Si el navegador no deja copiar, se enseña el enlace para copiarlo a
+    // mano. Antes el botón simplemente no hacía nada y la persona se iba al
+    // grupo de WhatsApp a pegar lo que tuviera antes en el portapapeles.
+    if (await copiarAlPortapapeles(enlace)) {
       setCopiado(true)
+      setNoSePudoCopiar(false)
       setTimeout(() => setCopiado(false), 2000)
-    })
+    } else {
+      setNoSePudoCopiar(true)
+    }
   }
 
   return (
@@ -633,6 +641,18 @@ export default function WebPublica() {
           <button type="button" className="btn btn-outline" onClick={copiarEnlace}>
             {copiado ? '✓ Enlace copiado' : 'Copiar enlace'}
           </button>
+          {noSePudoCopiar && (
+            <label className="cms-copiar-a-mano">
+              <span>Tu navegador no deja copiar solo. Cópialo de aquí:</span>
+              <input
+                type="text"
+                readOnly
+                value={enlace}
+                aria-label="Enlace de tu web, para copiar a mano"
+                onFocus={(e) => e.currentTarget.select()}
+              />
+            </label>
+          )}
           <a href={enlace} target="_blank" rel="noopener noreferrer" className="btn btn-primary">Ver mi web</a>
         </div>
       </div>
@@ -742,6 +762,7 @@ function VistaPrevia({
   enlace: string
 }) {
   const marco = useRef<HTMLDivElement>(null)
+  const escenario = useRef<HTMLDivElement>(null)
   const [escala, setEscala] = useState(1)
   const ancho = DISPOSITIVOS.find((d) => d.id === dispositivo)?.ancho ?? 390
 
@@ -756,6 +777,27 @@ function VistaPrevia({
     observador.observe(el)
     return () => observador.disconnect()
   }, [ancho])
+
+  /*
+   * La vista previa es una FOTO de la web, no la web.
+   *
+   * Dentro hay once cosas que se pueden enfocar: el botón «Quiero hacerme
+   * hermano», los campos del formulario de contacto, los enlaces del menú…
+   * Con el tabulador se caía dentro de todas ellas y no hacía nada ninguna:
+   * once paradas seguidas en un señuelo, en medio del editor. Y para un lector
+   * de pantalla era peor: el editor pasaba a tener dos títulos de nivel 1 —«Tu
+   * web» y «Nuestra Hermandad»— y el índice de la página mezclaba los
+   * apartados del editor con los de la web que se está editando.
+   *
+   * `inert` es exactamente eso: «esto está aquí para mirarlo». Saca todo lo de
+   * dentro del tabulador Y del árbol de accesibilidad de una vez.
+   *
+   * Se pone a mano y no como propiedad porque React 18 todavía no la conoce y
+   * la tira por el camino sin decir nada.
+   */
+  useEffect(() => {
+    escenario.current?.setAttribute('inert', '')
+  }, [])
 
   return (
     <aside className="cms-preview">
@@ -781,6 +823,7 @@ function VistaPrevia({
       </div>
       <div ref={marco} className={`cms-preview__frame cms-preview__frame--${dispositivo}`}>
         <div
+          ref={escenario}
           className="cms-preview__stage"
           style={{
             width: ancho,

@@ -35,3 +35,7 @@ pnpm-debug.log*
 *.patch
 *.zip
 LEEME.txt
+
+# copias temporales del .env (nunca al repositorio)
+.env.*
+!.env.example

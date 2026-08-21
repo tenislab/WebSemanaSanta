@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { NavLink, Outlet, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import BarraDeshacer from './BarraDeshacer'
 import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
 import Logo, { LogoMark } from './Logo'
 import AltaHermandad from './AltaHermandad'
 import { altaPendiente } from '../lib/altaHermandad'
-import { getHermandadSettings, useHermandadSettings } from '../lib/hermandadSettings'
+import { useHermandadSettingsConEstado } from '../lib/hermandadSettings'
 import ThemeToggle from './ThemeToggle'
 import PaletaComandos, { type DestinoPaleta } from './PaletaComandos'
 import { useAuth } from '../context/AuthContext'
-import { useCargoDeLaSesion, puedeVerModulo, usePermisosSincronizados, cargoEnCristiano } from '../lib/permisos'
+import { useCargoDeLaSesionConEstado, puedeVerModulo, usePermisosSincronizados, cargoEnCristiano } from '../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
 
@@ -76,6 +76,12 @@ const ic = {
   comunicados: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5h16v11H8l-4 4z" /><path d="M8 9h8M8 12h5" /></svg>
   ),
+  /* «Web pública» llevaba el mismo bocadillo que «Comunicados»: en el menú
+     lateral salían dos entradas seguidas con el mismo dibujo, y de un vistazo
+     parecían la misma cosa. Un globo terráqueo dice de qué va. */
+  web: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18" /></svg>
+  ),
   informes: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M5 21V9M12 21V4M19 21v-6" /></svg>
   ),
@@ -113,7 +119,7 @@ const NAV: NavGroup[] = [
       { to: '/app/eventos', label: 'Eventos y tareas', icon: ic.eventos, modulo: 'eventos' },
       { to: '/app/archivo', label: 'Archivo documental', icon: ic.archivo, modulo: 'archivo' },
       { to: '/app/comunicados', label: 'Comunicados', icon: ic.comunicados, modulo: 'comunicados' },
-      { to: '/app/web', label: 'Web pública', icon: ic.comunicados, modulo: 'web' },
+      { to: '/app/web', label: 'Web pública', icon: ic.web, modulo: 'web' },
       { to: '/app/informes', label: 'Informes', icon: ic.informes, modulo: 'informes' },
     ],
   },
@@ -161,14 +167,32 @@ export default function AppShell() {
   }, [])
   const navigate = useNavigate()
   const location = useLocation()
-  const ajustesHermandad = useHermandadSettings()
+  const { settings: ajustesHermandad, resuelto: ajustesResueltos } = useHermandadSettingsConEstado()
   const [mostrarAlta, setMostrarAlta] = useState(() => false)
-  // Se decide al montar y una sola vez: si se recalculara en cada render, al
-  // guardar el primer dato del asistente dejaría de cumplirse la condición y
-  // el asistente se cerraría solo a mitad.
+  /*
+   * Cuándo sale el asistente de «vamos a dejarlo listo».
+   *
+   * Se decide UNA vez, y no antes de saber la respuesta. Las dos partes
+   * importan, y cada una arregla un fallo distinto:
+   *
+   *   · Una vez: si se recalculara en cada pintado, al guardar el primer dato
+   *     del asistente dejaría de cumplirse la condición y el asistente se
+   *     cerraría solo a mitad de rellenarlo.
+   *
+   *   · No antes de saber: antes se miraba lo que hubiera en ESTE navegador,
+   *     al montar el panel. Y en un navegador nuevo —el ordenador de la casa
+   *     de hermandad, el móvil, una ventana de incógnito— todavía no hay nada,
+   *     porque la fila de la base tarda unas décimas en llegar. Así que al
+   *     Hermano Mayor que ya había rellenado el CIF, la dirección y la cuenta
+   *     se los volvía a pedir DESDE EL PRINCIPIO cada vez que entraba desde
+   *     otro sitio, con sus datos guardados por debajo.
+   */
+  const yaSeDecidio = useRef(false)
   useEffect(() => {
-    if (altaPendiente(getHermandadSettings())) setMostrarAlta(true)
-  }, [])
+    if (!ajustesResueltos || yaSeDecidio.current) return
+    yaSeDecidio.current = true
+    if (altaPendiente(ajustesHermandad)) setMostrarAlta(true)
+  }, [ajustesResueltos, ajustesHermandad])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { suscripcion, activar } = useSuscripcion()
 
@@ -180,7 +204,7 @@ export default function AppShell() {
    * (`auth.updateUser({ data: { cargo: null } })`) y borrarlo abría el panel
    * entero. El metadata solo se usa para saber QUÉ cuenta de personal es.
    */
-  const cargo = useCargoDeLaSesion()
+  const { cargo, resuelto: cargoResuelto } = useCargoDeLaSesionConEstado()
   // Trae los permisos reales de Supabase en cuanto cargan (no solo los que hubiera en este navegador).
   const permisosVersion = usePermisosSincronizados()
 
@@ -224,7 +248,15 @@ export default function AppShell() {
     const nombre = enlace?.label ?? 'Inicio'
     document.title = `${nombre} · ${hermandad} · Gobergo`
   }, [location.pathname, hermandad])
+  /**
+   * Solo se bloquea CUANDO SE SABE que no puede.
+   *
+   * Sin `cargoResuelto`, la redirección a Inicio saltaba en el primer pintado
+   * —cuando el cargo aún es «no lo sé»— así que pulsar cualquier sección
+   * devolvía a Inicio. Todas, siempre, para todo el mundo.
+   */
   const accesoBloqueado =
+    cargoResuelto &&
     moduloActual !== null &&
     (!puedeVerModulo(cargo, moduloActual) || !moduloPermitidoPorPack(suscripcion, moduloActual))
 

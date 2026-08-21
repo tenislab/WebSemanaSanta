@@ -25,6 +25,7 @@ export default function CarneHermano({
   const [pantallaCompleta, setPantallaCompleta] = useState(false)
   const [imprimiendo, setImprimiendo] = useState(false)
   const enlace = urlCarne(datosCarneDe(hermano, hermandadNombre))
+  const anios = aniosDeHermandad(hermano.antiguedad)
 
   /**
    * Al imprimir, la hoja de estilo deja visible SOLO lo marcado como
@@ -73,11 +74,13 @@ export default function CarneHermano({
         </div>
         <div>
           <span>Desde</span>
-          <b>{hermano.antiguedad}</b>
+          <b>{hermano.antiguedad || '—'}</b>
         </div>
         <div>
           <span>Antigüedad</span>
-          <b>{aniosDeHermandad(hermano.antiguedad)} años</b>
+          {/* Sin año de antigüedad, una raya. Antes salía «NaN años» en el
+              carné del hermano, que es lo que enseña en la puerta. */}
+          <b>{anios === null ? '—' : `${anios} años`}</b>
         </div>
       </div>
       <div className="carne__qr">

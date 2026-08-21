@@ -48,6 +48,8 @@ import { apuntar } from '../../lib/registroActividad'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { conRenovacion } from '../../lib/renovarPapeleta'
+import { filaQueAbre } from '../../lib/foco'
+import { aniosDeHermandad } from '../../lib/hermanoFicha'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -600,9 +602,21 @@ export default function Papeletas() {
     // Espera a que se pinten las páginas antes de abrir el diálogo de impresión.
     document.body.classList.add('print-masivo')
     setTimeout(() => {
+      // Y se recoge con `afterprint`, no en la línea de después de print():
+      // `window.print()` no promete devolver el control cuando el papel ya ha
+      // salido. En un navegador que vuelve enseguida, aquí se estaban tirando
+      // las cuatrocientas papeletas MIENTRAS se imprimían. Red de seguridad a
+      // los diez segundos por si `afterprint` no llega.
+      let recogido = false
+      const recoger = () => {
+        if (recogido) return
+        recogido = true
+        document.body.classList.remove('print-masivo')
+        setListaImpresion(null)
+      }
+      window.addEventListener('afterprint', recoger, { once: true })
+      window.setTimeout(recoger, 10000)
       window.print()
-      document.body.classList.remove('print-masivo')
-      setListaImpresion(null)
     }, 300)
   }
 
@@ -737,6 +751,7 @@ export default function Papeletas() {
         <input
           className="search-box"
           placeholder="Buscar por hermano, nº o DNI"
+          aria-label="Buscar papeletas por hermano, número o DNI"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -780,10 +795,11 @@ export default function Papeletas() {
           <tbody>
             {filas.map(({ hermano: h, renovacion: r }) => {
               const tramoAnterior = tramoDe(r.sitioAnterior?.tramoId ?? null)
+              const aniosEnLaHermandad = aniosDeHermandad(h.antiguedad, campana.anio)
               const asigActual = r.papeletaActual ? asignacionPorPapeleta.get(r.papeletaActual.id) : undefined
               const tramoActual = asigActual?.tramo ?? null
               return (
-                <tr key={h.id} onClick={() => abrirDetalle(h.id)} style={{ cursor: 'pointer' }}>
+                <tr key={h.id} {...filaQueAbre(() => abrirDetalle(h.id))}>
                   <td className="num col-opcional">{h.numero}</td>
                   <td>
                     <div className="row-person">
@@ -793,14 +809,25 @@ export default function Papeletas() {
                         <span className="row-person__sub">Nº {h.numero} · {h.estado}</span>
                         {/* En el móvil se ocultan sus columnas: el dato baja aquí. */}
                         <span className="row-person__sub solo-movil">
-                          {Math.max(0, campana.anio - h.antiguedad)} años · {tramoAnterior ? etiquetaTramo(tramoAnterior) : 'sin sitio anterior'}
+                          {aniosEnLaHermandad === null ? 'Antigüedad sin registrar' : `${aniosEnLaHermandad} años`}
+                          {' · '}
+                          {tramoAnterior ? etiquetaTramo(tramoAnterior) : 'sin sitio anterior'}
                         </span>
                       </span>
                     </div>
                   </td>
                   <td className="table-subtle td-nowrap col-opcional">
-                    {Math.max(0, campana.anio - h.antiguedad)} años
-                    <span className="table-muted"> · {h.antiguedad}</span>
+                    {/* La antigüedad manda en el reparto del cortejo, así que
+                        cuando no consta hay que decirlo, no poner un número
+                        inventado. Aquí llegó a salir «NaN años». */}
+                    {aniosEnLaHermandad === null ? (
+                      <span className="table-muted">Sin registrar</span>
+                    ) : (
+                      <>
+                        {aniosEnLaHermandad} años
+                        <span className="table-muted"> · {h.antiguedad}</span>
+                      </>
+                    )}
                   </td>
                   <td className="col-opcional">{tramoAnterior ? etiquetaTramo(tramoAnterior) : <span className="table-muted">—</span>}</td>
                   <td>

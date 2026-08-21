@@ -625,6 +625,7 @@ export default function Configuracion() {
                 <input
                   type="text"
                   className="color-picker-hex"
+                  aria-label="Color de tu hermandad en hexadecimal"
                   value={settings.colorPrimario}
                   onChange={(e) => update('colorPrimario', e.target.value)}
                   placeholder="#caa24a"
@@ -649,6 +650,7 @@ export default function Configuracion() {
                 <input
                   type="text"
                   className="color-picker-hex"
+                  aria-label="Segundo color en hexadecimal"
                   value={settings.colorSecundario}
                   onChange={(e) => update('colorSecundario', e.target.value)}
                   placeholder="#C5A059"

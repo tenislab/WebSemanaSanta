@@ -54,6 +54,7 @@ import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHerma
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
 import { apuntar } from '../../lib/registroActividad'
 import { useAuth } from '../../context/AuthContext'
+import { filaQueAbre } from '../../lib/foco'
 
 /**
  * Con Supabase conectado, crea además una cuenta real de acceso (mismo
@@ -101,6 +102,7 @@ export default function Hermanos() {
   }, [])
 
   const { user } = useAuth()
+  const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   // Quién está haciendo los cambios, para el registro de actividad. Se copia
   // el nombre tal como es AHORA: si esta persona deja la junta y se borra su
   // ficha, el registro tiene que seguir diciendo quién fue.
@@ -146,7 +148,12 @@ export default function Hermanos() {
   const selected = useMemo(() => hermanos.find((h) => h.id === selectedId) ?? null, [hermanos, selectedId])
   const [etiquetas, setEtiquetas] = useEtiquetas()
   const [camposPropios] = useCamposPropios()
-  const hermandad = useHermandadSettings()
+  // Con el nombre de la cuenta de reserva, igual que Cuotas, Tesorería,
+  // Papeletas, Cortejo e Informes. Sin él, el censo impreso salía encabezado
+  // «Tu hermandad» mientras el recibo de la misma hermandad, impreso cinco
+  // minutos antes, llevaba su nombre de verdad: dos papeles del mismo día,
+  // firmados por dos entidades distintas.
+  const hermandad = useHermandadSettings(fallbackNombre)
   // Sesgo aplicado al censo. Arranca en «no sesga nada»: el censo se ve entero,
   // bajas incluidas, hasta que alguien pide lo contrario.
   const [sesgando, setSesgando] = useState(false)
@@ -947,8 +954,7 @@ export default function Hermanos() {
               <tr
                 key={h.id}
                 className={h.id === justAddedId ? 'row--flash' : undefined}
-                onClick={() => setSelectedId(h.id)}
-                style={{ cursor: 'pointer' }}
+                {...filaQueAbre(() => setSelectedId(h.id))}
               >
                 <td className="col-marca" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -996,8 +1002,13 @@ export default function Hermanos() {
                   </span>
                 </td>
                 <td className="num col-opcional">
-                  {h.antiguedad}
-                  <span className="table-subtle"> · {aniosDeHermandad(h.antiguedad)} años</span>
+                  {/* Sin antigüedad, una raya: el censo llegó a poner «NaN
+                      años» debajo de cada nombre cuando esa columna no venía
+                      en el Excel que se importó. */}
+                  {h.antiguedad || '—'}
+                  {aniosDeHermandad(h.antiguedad) !== null && (
+                    <span className="table-subtle"> · {aniosDeHermandad(h.antiguedad)} años</span>
+                  )}
                 </td>
                 <td className="col-opcional">
                   <button

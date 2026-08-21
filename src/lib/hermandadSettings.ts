@@ -111,7 +111,32 @@ export function getHermandadSettings(fallbackNombre?: string): HermandadSettings
 
 /** Como `getHermandadSettings`, pero con Supabase conectado trae la fila real en cuanto llega. */
 export function useHermandadSettings(fallbackNombre?: string): HermandadSettings {
+  return useHermandadSettingsConEstado(fallbackNombre).settings
+}
+
+/**
+ * Los ajustes de la hermandad Y si ya se sabe cuáles son.
+ *
+ * `resuelto` hace falta para una cosa concreta: decidir si sale el asistente
+ * de «vamos a dejarlo listo».
+ *
+ * Esa decisión se tomaba al montar el panel, leyendo lo que hubiera en ESTE
+ * navegador. Y en un navegador nuevo —el ordenador de la casa de hermandad, el
+ * móvil, una ventana de incógnito— todavía no hay nada, porque la respuesta de
+ * la base de datos tarda unas décimas. Resultado: al Hermano Mayor que ya
+ * había rellenado el CIF, la dirección y la cuenta, la aplicación se los
+ * volvía a pedir todos desde el principio, cada vez que entraba desde otro
+ * sitio. Y por debajo estaban guardados.
+ *
+ * Con Supabase conectado, `resuelto` no es cierto hasta que la fila de verdad
+ * ha llegado (o hasta que se sabe que no hay ninguna). Sin Supabase, lo que
+ * hay en el navegador ES la verdad, así que es cierto desde el primer momento.
+ */
+export function useHermandadSettingsConEstado(
+  fallbackNombre?: string,
+): { settings: HermandadSettings; resuelto: boolean } {
   const [settings, setSettings] = useState<HermandadSettings>(() => getHermandadSettings(fallbackNombre))
+  const [resuelto, setResuelto] = useState(!isSupabaseConfigured)
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
@@ -127,7 +152,11 @@ export function useHermandadSettings(fallbackNombre?: string): HermandadSettings
       .select('*')
       .maybeSingle()
       .then(({ data, error }) => {
-        if (cancelado || error || !data) return
+        if (cancelado) return
+        // Resuelto pase lo que pase: si la consulta falla o no hay fila, ya se
+        // sabe todo lo que se puede saber y no hay que seguir esperando.
+        setResuelto(true)
+        if (error || !data) return
         const traidos = rowToSettings(data, fallbackNombre)
         setSettings(traidos)
         try {
@@ -146,7 +175,7 @@ export function useHermandadSettings(fallbackNombre?: string): HermandadSettings
   // la vez) se refleja aquí sin recargar.
   useEscuchaOtrasPestanas(STORAGE_KEY, () => setSettings(getHermandadSettings(fallbackNombre)))
 
-  return settings
+  return { settings, resuelto }
 }
 
 /**

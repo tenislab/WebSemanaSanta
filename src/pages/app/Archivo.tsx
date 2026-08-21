@@ -18,6 +18,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
 import { borrarArchivo, formatearTamano, guardarArchivo, leerArchivo } from '../../lib/filestore'
 import { hayDatosDeEjemplo } from '../../lib/demo'
+import { filaQueAbre } from '../../lib/foco'
 
 function fmt(iso: string) {
   return formatDate(new Date(`${iso}T00:00:00`))
@@ -331,6 +332,7 @@ export default function Archivo() {
         <input
           className="search-box"
           placeholder="Buscar por nombre, descripción o proveedor"
+          aria-label="Buscar documentos por nombre, descripción o proveedor"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -365,8 +367,7 @@ export default function Archivo() {
                 <tr
                   key={d.id}
                   className={d.id === justAddedId ? 'row--flash' : undefined}
-                  onClick={() => abrirFicha(d)}
-                  style={{ cursor: 'pointer' }}
+                  {...filaQueAbre(() => abrirFicha(d))}
                 >
                   <td className="num col-opcional">{d.numero}</td>
                   <td>

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { useFocoDeDialogo } from '../lib/foco'
 import { Link } from 'react-router-dom'
 import { saveHermandadSettings, type HermandadSettings } from '../lib/hermandadSettings'
 import { comprimirImagen, leerArchivo } from '../lib/imagen'
@@ -49,6 +50,11 @@ export default function AltaHermandad({
     onTerminar()
   }
 
+  const panel = useRef<HTMLDivElement>(null)
+  // El asistente tapa la pantalla entera: el foco tiene que entrar y quedarse.
+  // Es lo primero que ve una hermandad al empezar, y se rellena a teclado.
+  useFocoDeDialogo(true, panel)
+
   async function subirEscudo(file: File | null) {
     if (!file || !file.type.startsWith('image/')) return
     const crudo = await leerArchivo(file)
@@ -56,7 +62,7 @@ export default function AltaHermandad({
   }
 
   return (
-    <div className="alta-fondo" role="dialog" aria-modal="true" aria-label="Alta de la hermandad">
+    <div ref={panel} tabIndex={-1} className="alta-fondo" role="dialog" aria-modal="true" aria-label="Alta de la hermandad">
       <div className="alta">
         <header className="alta__head">
           <p className="eyebrow">Vamos a dejarlo listo</p>

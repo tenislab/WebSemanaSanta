@@ -36,6 +36,7 @@ import { agregarAvisoAVarios, getPreferenciasAvisos, quiereAviso } from '../../l
 import { correoDisponible, enviarCorreo, getAjustesCorreo } from '../../lib/correo'
 import { cuerpoCorreo } from '../../lib/avisosCorreo'
 import { hayDatosDeEjemplo } from '../../lib/demo'
+import { filaQueAbre } from '../../lib/foco'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -461,6 +462,7 @@ export default function Comunicados() {
         <input
           className="search-box"
           placeholder="Buscar por título, texto o destinatarios"
+          aria-label="Buscar comunicados por título, texto o destinatarios"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -495,8 +497,7 @@ export default function Comunicados() {
               <tr
                 key={c.id}
                 className={c.id === justAddedId ? 'row--flash' : undefined}
-                onClick={() => setSelected(c)}
-                style={{ cursor: 'pointer' }}
+                {...filaQueAbre(() => setSelected(c))}
               >
                 <td className="num col-opcional">{c.numero}</td>
                 <td>

@@ -119,14 +119,23 @@ async function cargoPorCuenta({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
   for (const f of ['src/components/AppShell.tsx', 'src/pages/app/Cuotas.tsx', 'src/pages/app/DashboardHome.tsx']) {
     const src = await readFile(f, 'utf8')
-    caso(`${f.split('/').pop()} usa el hook`, true, /useCargoDeLaSesion\(\)/.test(src))
+    caso(`${f.split('/').pop()} usa el hook`, true, /useCargoDeLaSesion(ConEstado)?\(\)/.test(src))
     caso(`${f.split('/').pop()} ya no mira el metadata`, false, /user_metadata\?\.personalId/.test(src))
   }
   // Mientras la respuesta no llega, sin permisos: si empezara abierto habría
   // un instante en cada carga en el que el tesorero ve el censo.
   const perm = await readFile('src/lib/permisos.ts', 'utf8')
+  // Empieza cerrado: si empezara abierto habría un instante en cada carga en
+  // el que el tesorero ve el censo entero.
   caso('empieza cerrado mientras se resuelve', true,
-    /useState<Cargo \| null>\('__desconocido__' as Cargo\)/.test(perm))
+    /cargo: '__desconocido__' as Cargo,\s*\n\s*resuelto: false,/.test(perm))
+  // Pero «todavía no lo sé» NO es «no tiene permisos»: confundirlos hacía que
+  // pulsar cualquier sección devolviera a Inicio, porque el marco redirigía en
+  // el primer pintado, antes de que llegara la respuesta.
+  caso('y dice si ya se sabe', true, /resuelto: boolean/.test(perm))
+  const shell = await readFile('src/components/AppShell.tsx', 'utf8')
+  caso('el marco espera a saberlo antes de redirigir', true,
+    /const accesoBloqueado =\s*\n\s*cargoResuelto &&/.test(shell))
 }
 
 /**

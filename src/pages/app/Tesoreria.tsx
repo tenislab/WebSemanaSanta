@@ -18,6 +18,7 @@ import { CLAVES_DATOS } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { hayDatosDeEjemplo } from '../../lib/demo'
+import { filaQueAbre } from '../../lib/foco'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -183,6 +184,7 @@ export default function Tesoreria() {
         <input
           className="search-box"
           placeholder="Buscar por concepto, categoría o nº"
+          aria-label="Buscar movimientos por concepto, categoría o número"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -219,8 +221,7 @@ export default function Tesoreria() {
               <tr
                 key={m.id}
                 className={m.id === justAddedId ? 'row--flash' : undefined}
-                onClick={() => setSelected(m)}
-                style={{ cursor: 'pointer' }}
+                {...filaQueAbre(() => setSelected(m))}
               >
                 <td className="num col-opcional">{String(m.numero).padStart(4, '0')}</td>
                 <td className="num col-opcional">{m.fecha}</td>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useFocoDeDialogo } from '../lib/foco'
 import { useNavigate } from 'react-router-dom'
 import { useTema } from '../lib/tema'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
@@ -41,6 +42,7 @@ export default function PaletaComandos({
   const [activo, setActivo] = useState(0)
   const navigate = useNavigate()
   const listaRef = useRef<HTMLDivElement>(null)
+  const capa = useRef<HTMLDivElement>(null)
   const [tema, ponerTema] = useTema()
   /**
    * El censo se lee una vez al abrir la paleta, no en cada tecla: con mil
@@ -155,6 +157,20 @@ export default function PaletaComandos({
     listaRef.current?.querySelector('[data-activo="si"]')?.scrollIntoView({ block: 'nearest' })
   }, [activo, abierta])
 
+  // El foco entra al abrir, no se escapa mientras está abierta y vuelve a
+  // donde estaba al cerrar (ver el comentario largo de foco.ts). Sin esto, el
+  // tabulador se iba a la página de atrás —tapada por la paleta— y desde allí
+  // Escape ya no cerraba nada, porque solo lo escuchaba el buscador.
+  useFocoDeDialogo(abierta, capa)
+  useEffect(() => {
+    if (!abierta) return
+    function alPulsar(e: KeyboardEvent) {
+      if (e.key === 'Escape') setAbierta(false)
+    }
+    document.addEventListener('keydown', alPulsar)
+    return () => document.removeEventListener('keydown', alPulsar)
+  }, [abierta])
+
   if (!abierta) return null
 
   function ejecutar(c: Comando) {
@@ -165,6 +181,8 @@ export default function PaletaComandos({
 
   function teclas(e: React.KeyboardEvent) {
     if (e.key === 'Escape') { setAbierta(false); return }
+    // (Escape también se escucha en todo el documento, más abajo: aquí solo
+    //  llega si el foco está en el buscador.)
     if (e.key === 'ArrowDown') { e.preventDefault(); setActivo((i) => Math.min(i + 1, filtrados.length - 1)) }
     if (e.key === 'ArrowUp') { e.preventDefault(); setActivo((i) => Math.max(i - 1, 0)) }
     if (e.key === 'Enter' && filtrados[activo]) { e.preventDefault(); ejecutar(filtrados[activo]) }
@@ -173,8 +191,9 @@ export default function PaletaComandos({
   let grupoAnterior = ''
 
   return (
-    <div className="paleta-capa" role="dialog" aria-modal="true" aria-label="Ir a o hacer">
-      <button className="paleta-fondo" aria-label="Cerrar" onClick={() => setAbierta(false)} />
+    <div ref={capa} tabIndex={-1} className="paleta-capa" role="dialog" aria-modal="true" aria-label="Ir a o hacer">
+      {/* El velo cierra al pulsarlo, pero no es una parada del tabulador. */}
+      <button className="paleta-fondo" aria-label="Cerrar" tabIndex={-1} onClick={() => setAbierta(false)} />
       <div className="paleta">
         <input
           className="paleta__buscar"

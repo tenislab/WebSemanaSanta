@@ -6,9 +6,32 @@ import type { Hermano } from '../data/hermanos'
  * fila de tabla.
  */
 
-/** Años que lleva en la hermandad, contados hasta hoy. */
-export function aniosDeHermandad(antiguedad: number, hoy = new Date()): number {
-  return Math.max(0, hoy.getFullYear() - antiguedad)
+/**
+ * Años que lleva en la hermandad, contados hasta hoy. `null` si no se sabe.
+ *
+ * Devuelve `null` y no un número porque «no lo sé» y «cero años» son cosas
+ * distintas, y confundirlas se veía en pantalla: sin año de antigüedad la
+ * resta daba NaN y el censo ponía «NaN años» debajo del nombre de cada
+ * hermano. Con la antigüedad a cero era peor todavía, porque no cantaba:
+ * ponía «2026 años de hermano/a» tan tranquilo.
+ *
+ * No es rebuscado. Es EXACTAMENTE lo que pasa el día que una hermandad
+ * importa su censo de un Excel donde esa columna no existe, o viene vacía en
+ * la mitad de las filas. Ese día hay ochocientos «NaN años» en pantalla.
+ *
+ * El tope de 1500 descarta erratas al teclear (un «19» suelto, un «205») sin
+ * dejar fuera a ninguna hermandad de verdad: la más antigua de Sevilla es de
+ * 1340 y pico.
+ */
+export function aniosDeHermandad(
+  antiguedad: number | null | undefined,
+  /** Hasta cuándo se cuenta: una fecha, o directamente un año (el de la campaña). */
+  hasta: Date | number = new Date(),
+): number | null {
+  const anioFinal = typeof hasta === 'number' ? hasta : hasta.getFullYear()
+  if (typeof antiguedad !== 'number' || !Number.isFinite(antiguedad)) return null
+  if (antiguedad < 1000 || antiguedad > anioFinal + 1) return null
+  return Math.max(0, anioFinal - antiguedad)
 }
 
 const MESES_LARGOS = [
@@ -67,6 +90,8 @@ export function esSuCumpleHoy(iso: string | undefined, hoy = new Date()): boolea
 /** Frase corta con la antigüedad, para la cabecera de la ficha. */
 export function fraseAntiguedad(h: Hermano, hoy = new Date()): string {
   const anios = aniosDeHermandad(h.antiguedad, hoy)
+  // Sin año de antigüedad no se inventa nada: se dice que no consta.
+  if (anios === null) return 'Antigüedad sin registrar'
   if (anios === 0) return `Hermano/a desde este año`
   return `Hermano/a desde ${h.antiguedad} · ${anios} ${anios === 1 ? 'año' : 'años'}`
 }

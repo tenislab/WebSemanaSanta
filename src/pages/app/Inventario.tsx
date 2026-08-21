@@ -13,6 +13,7 @@ import { CLAVES_DATOS } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { enserToRow, rowToEnser } from '../../lib/db/enseres'
 import { hayDatosDeEjemplo } from '../../lib/demo'
+import { filaQueAbre } from '../../lib/foco'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { year: 'numeric' })
@@ -167,6 +168,7 @@ export default function Inventario() {
         <input
           className="search-box"
           placeholder="Buscar por nombre, ubicación o nº"
+          aria-label="Buscar enseres por nombre, ubicación o número"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -201,8 +203,7 @@ export default function Inventario() {
               <tr
                 key={e.id}
                 className={e.id === justAddedId ? 'row--flash' : undefined}
-                onClick={() => openDetail(e)}
-                style={{ cursor: 'pointer' }}
+                {...filaQueAbre(() => openDetail(e))}
               >
                 <td className="num col-opcional">{e.numero}</td>
                 <td>

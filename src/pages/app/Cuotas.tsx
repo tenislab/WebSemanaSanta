@@ -55,6 +55,7 @@ import {
   parseFechaEs,
   ejercicioDe,
 } from '../../lib/cuotasEmision'
+import { filaQueAbre } from '../../lib/foco'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -684,6 +685,7 @@ export default function Cuotas() {
         <input
           className="search-box"
           placeholder="Buscar por hermano o nº de recibo"
+          aria-label="Buscar recibos por hermano o número"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -742,8 +744,7 @@ export default function Cuotas() {
                 <tr
                   key={c.id}
                   className={c.id === justAddedId ? 'row--flash' : undefined}
-                  onClick={() => setSelected(c)}
-                  style={{ cursor: 'pointer' }}
+                  {...filaQueAbre(() => setSelected(c))}
                 >
                   <td className="num col-opcional">{String(c.numero).padStart(4, '0')}</td>
                   <td>

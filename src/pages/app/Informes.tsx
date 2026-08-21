@@ -22,6 +22,7 @@ import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
 import { getCamposPropios, valorLegible } from '../../lib/camposPropios'
+import { filaQueAbre } from '../../lib/foco'
 
 interface Informe {
   id: string
@@ -279,8 +280,34 @@ export default function Informes() {
   const [imprimiendoEstado, setImprimiendoEstado] = useState(false)
   useEffect(() => {
     if (!imprimiendoEstado) return
+    /*
+     * Se recoge con `afterprint`, no en la línea de abajo.
+     *
+     * `window.print()` NO promete devolver el control cuando el papel ya ha
+     * salido: en Chrome espera a que se cierre el diálogo, pero en otros
+     * navegadores vuelve enseguida y deja la impresión en marcha por detrás.
+     * Quitando el documento en la línea siguiente, ahí se estaba tirando el
+     * Estado de Cuentas MIENTRAS se imprimía, y lo que salía era un folio en
+     * blanco. El estado de cuentas del ejercicio es el papel que se lleva al
+     * cabildo de cuentas.
+     *
+     * `afterprint` dispara cuando la impresión ha terminado de verdad, se
+     * haya aceptado o cancelado. Y por si un navegador viejo no lo lanza, hay
+     * una red de seguridad a los diez segundos.
+     */
+    let recogido = false
+    const recoger = () => {
+      if (recogido) return
+      recogido = true
+      setImprimiendoEstado(false)
+    }
+    window.addEventListener('afterprint', recoger, { once: true })
+    const red = window.setTimeout(recoger, 10000)
     window.print()
-    setImprimiendoEstado(false)
+    return () => {
+      window.removeEventListener('afterprint', recoger)
+      window.clearTimeout(red)
+    }
   }, [imprimiendoEstado])
 
   const kpis = useMemo(() => {
@@ -383,7 +410,7 @@ export default function Informes() {
           </thead>
           <tbody>
             {informes.map((inf, i) => (
-              <tr key={inf.id} onClick={() => setSelected(inf)} style={{ cursor: 'pointer' }}>
+              <tr key={inf.id} {...filaQueAbre(() => setSelected(inf))}>
                 <td className="num">{i + 1}</td>
                 <td>
                   <span className="row-person__name">{inf.titulo}</span>

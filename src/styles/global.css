@@ -595,7 +595,7 @@ h1, h2, h3,
 .site-footer { padding: 3.2rem 0 2.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .footer-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 2.5rem; }
 .footer-about { color: rgba(245, 237, 230, 0.6); font-size: 0.88rem; max-width: 34ch; margin: 0.9rem 0 0; }
-.footer-grid h4 { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(245, 237, 230, 0.55); margin: 0 0 0.9rem; }
+.footer-grid h3 { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(245, 237, 230, 0.55); margin: 0 0 0.9rem; }
 .footer-grid ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem; }
 .footer-grid a { text-decoration: none; color: rgba(245, 237, 230, 0.6); }
 .footer-grid a:hover { color: #fff; }
@@ -1592,6 +1592,14 @@ h1, h2, h3,
      en dos («622 104 / 558»). */
   .informe-doc__table { font-size: 8.4pt; }
   .informe-doc__table th { font-size: 6.6pt; }
+  /* Cada dato en una línea, sin partir.
+     Se probó lo contrario —dejar que las celdas partieran— porque el padrón de
+     nueve columnas mide 962 px en un folio de 688 y Chrome lo resuelve
+     encogiendo la hoja al 72 %. Partiendo cabía al 100 %... y salía «Acti /
+     vo», «Baj / a» y los teléfonos en tres líneas, con el informe en cinco
+     hojas en vez de dos. Un padrón se lee en columnas: una palabra cortada en
+     dos renglones se lee mal aunque esté más grande.
+     Se queda como estaba: encogido, entero y en dos hojas. */
   .informe-doc__table th, .informe-doc__table td { padding: 3pt 8pt 3pt 0; white-space: nowrap; }
   .informe-doc__table td:first-child, .informe-doc__table th:first-child { width: auto; }
 
@@ -1666,6 +1674,36 @@ h1, h2, h3,
   body.print-masivo .impresion-masiva__pagina { page-break-after: always; }
   /* La última no arrastra una hoja en blanco detrás. */
   body.print-masivo .impresion-masiva__pagina:last-child { page-break-after: auto; }
+}
+
+/* =========================================================================
+   Las dos hojas en blanco
+   -------------------------------------------------------------------------
+   Al imprimir un recibo de 14 cm salían TRES folios: el recibo y dos hojas
+   más, en blanco y teñidas del color de fondo de la aplicación.
+
+   El motivo: el documento se saca del flujo (`position: absolute`) y todo lo
+   demás se esconde con `visibility: hidden`. Pero esconder no es quitar —lo
+   escondido sigue ocupando su sitio—, así que la pantalla de Cuotas que había
+   detrás seguía midiendo sus 1.987 px y la impresora contaba tres hojas.
+
+   Se le quita el alto a la raíz de la aplicación. El documento no se recorta
+   porque `#root` no está posicionado: lo absoluto cuelga de la página, no de
+   él. Y en la impresión masiva de papeletas NO se toca, porque ahí el
+   contenido que se imprime sí vive dentro y necesita su alto para paginar.
+
+   Cuesta paciencia darse cuenta: en pantalla no se ve nada raro, y en la
+   vista previa del navegador hay que fijarse en el «1 de 3» de la esquina.
+   Quien lo paga es la hermandad que imprime 400 recibos y se encuentra con
+   800 folios de más.
+   ========================================================================= */
+@media print {
+  body:not(.print-masivo) #root { height: 0; overflow: hidden; }
+
+  /* Y el papel es blanco. Si alguien tiene activado «imprimir fondos» —o
+     guarda en PDF, que lo activa solo— el folio entero salía del color hueso
+     de la aplicación: un cartucho de color por recibo. */
+  html, body { background: #fff !important; }
 }
 
 /* =========================================================================
@@ -1894,7 +1932,7 @@ h1, h2, h3,
   background: linear-gradient(90deg, var(--gold), var(--accent));
   transition: width 0.3s;
 }
-.cms-progreso__texto { flex: 1; min-width: 0; color: var(--text-muted); font-size: 0.83rem; }
+.cms-progreso__texto { flex: 1; min-width: 0; color: var(--text-muted); font-size: 0.83rem; overflow-wrap: anywhere; }
 .cms-progreso__flecha { color: var(--text-muted); font-size: 0.68rem; }
 /* Con más peso que `.cms-avisos__lista li span`, que la estiraba a lo ancho. */
 .cms-avisos__lista li span.cms-avisos__marca {
@@ -2771,7 +2809,9 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 /* En pantallas estrechas no cabe el texto: se vuelve a los puntos. */
 @media (max-width: 760px) {
   .eventos-cal--titulos .eventos-cal__celda {
-    aspect-ratio: 1 / 0.82; min-height: 0; align-items: center; justify-content: center; padding: 0;
+    /* 46 px y no 0: la proporción sola daba celdas de 33 px de alto y pulsar
+       el día 14 abría el 21. Es un calendario que se usa con el dedo. */
+    aspect-ratio: 1 / 0.82; min-height: 46px; align-items: center; justify-content: center; padding: 0;
   }
   .eventos-cal--titulos .eventos-cal__dia { text-align: center; padding: 0; }
   .eventos-cal--titulos .eventos-cal__puntos { display: flex; }
@@ -3320,12 +3360,30 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   .auth-title { font-size: 1.7rem; }
 
   .app-content { padding: 1.3rem 1.1rem 2.5rem; }
-  .stat-grid { grid-template-columns: 1fr; }
+  /* DOS columnas, no una. En columna, los cuatro contadores de cabecera
+     ocupaban 570 px: en un iPhone había que bajar 1.200 px —vez y media la
+     pantalla— antes de ver la primera fila del censo. Lo que se viene a hacer
+     al módulo quedaba siempre fuera de la vista.
+     Son números cortos ("128", "1.450 €"), así que en media pantalla caben de
+     sobra; lo que se aprieta es el hueco y el cuerpo, no la cifra. */
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1.1rem; }
+  /* Y los de tres: la regla de 1000px se los lleva a una columna con
+     `!important` (ver el comentario de allí), así que aquí hay que insistir. */
+  .stat-grid--3 { grid-template-columns: 1fr 1fr !important; }
+  .stat-tile { padding: 0.75rem 0.85rem; gap: 0.15rem; }
+  .stat-tile__value { font-size: 1.35rem; }
+  .stat-tile__label { font-size: 0.66rem; letter-spacing: 0.04em; }
   .quick-actions { grid-template-columns: 1fr; }
   .dash-head--row { flex-direction: column; align-items: stretch; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .search-box { max-width: none; }
   .drawer { max-width: 100%; }
+  /* Un botón de pared a pared con una etiqueta larga («Entrar en modo demo
+     (datos de ejemplo)») se salía de su propia caja y el navegador le cortaba
+     las dos puntas: se leía «ntrar en modo demo (datos de ejempl». Los de
+     ancho completo pueden partir en dos líneas sin descuadrar nada; los de la
+     barra de herramientas siguen en una línea, que ahí partir sí descuadra. */
+  .btn-block { white-space: normal; text-wrap: balance; }
   /* En columna: cada acción a lo ancho, y la principal abajo (donde llega el
      pulgar). Apilarlas es lo único que cabe con tres o cuatro botones. */
   .drawer__foot { flex-direction: column; align-items: stretch; }
@@ -3341,6 +3399,14 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   .settings-card__head { flex-direction: column; align-items: stretch; }
   .tramos-grid { grid-template-columns: 1fr; }
   .dash-head__actions { flex-direction: column; align-items: stretch; }
+  /* En columna todo se estira a lo ancho, y el desplegable «Exportar» se
+     quedaba a medias (su botón mide lo que mide la palabra) al lado de un
+     «+ Nuevo hermano» de pared a pared. Se igualan. */
+  .dash-head__actions .menu-acciones,
+  .dash-head__actions .menu-acciones > button { width: 100%; }
+  /* Un filtro redondo estirado de lado a lado no parece un filtro, parece un
+     botón de acción. Los pastilleros se quedan del tamaño de su texto. */
+  .toolbar > .chip { align-self: flex-start; }
 }
 
 /* Barra de sesgos guardados (censo y comunicados) */
@@ -4474,6 +4540,13 @@ html:has(.sitio) { scroll-behavior: smooth; }
   .table-card table:has(.col-opcional) .row-avatar { width: 24px; height: 24px; font-size: 0.62rem; }
   .table-card table:has(.col-opcional) .row-person { gap: 0.45rem; }
   .solo-movil { font-size: 0.72rem; }
+  /* Un correo largo («joseantonio.reina@example.com») es una sola palabra: sin
+     poder partirlo, la columna del nombre se plantaba en 237 px y la tabla
+     sobresalía 16 px del borde de la tarjeta, con la pastilla de estado medio
+     comida. Partirlo por donde sea es más feo que no partirlo, pero mucho
+     menos feo que perder el estado del hermano. */
+  .table-card table:has(.col-opcional) .row-person__sub,
+  .table-card table:has(.col-opcional) .solo-movil { overflow-wrap: anywhere; }
   /* La casilla de marcar no necesita el mismo aire que una columna de texto. */
   .table-card table:has(.col-opcional) .col-marca { padding-left: 0.5rem; padding-right: 0.15rem; }
   /* La cabecera es una etiqueta en versalitas: encogerla no cuesta legibilidad
@@ -5564,3 +5637,133 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
 /* El «recibí» de un recibo ya cobrado: verde discreto, no rojo de aviso.
    Es una confirmación, no un problema. */
 .recibo-doc__iban--ok { color: var(--ok-fg); }
+
+/* =========================================================================
+   El pulgar
+   -------------------------------------------------------------------------
+   Los hermanos entran desde el móvil, no desde un portátil: pagan la cuota
+   en la cola del banco y miran su sitio en el cortejo el Martes Santo por la
+   mañana. Y quien lleva la hermandad también acaba mirando el censo en el
+   autobús.
+
+   Todo lo de aquí abajo es lo mismo: agrandar el AREA QUE SE PULSA sin tocar
+   el diseño de escritorio. Se hace con `pointer: coarse` —o sea, con el
+   dedo— y no con el ancho de la ventana, porque una tableta de 1024 px
+   también se toca y una ventana estrecha en un portátil no.
+
+   La referencia son 44 px, que es lo que ocupa la yema de un pulgar adulto.
+   Donde 44 rompería la composición (los filtros redondos, por ejemplo) se
+   deja en un tamaño cómodo pero no se baja de 24, que es el mínimo de la
+   norma de accesibilidad (WCAG 2.5.8).
+   ========================================================================= */
+@media (pointer: coarse) {
+  /* --- la barra de arriba: lo que más se pulsa en un móvil --- */
+  .app-menu-btn { width: 44px; height: 44px; flex: none; }
+  .app-menu-btn svg { width: 22px; height: 22px; }
+  .theme-toggle { width: 44px; height: 44px; }
+  .theme-toggle svg { width: 20px; height: 20px; }
+  .app-buscar { min-height: 44px; min-width: 44px; justify-content: center; }
+  .app-buscar svg { width: 18px; height: 18px; }
+  /* El escudo de la barra es un enlace a Inicio: se queda del mismo tamaño,
+     pero con sitio alrededor para no fallar el toque. */
+  .app-topbar .brand-link { min-height: 44px; align-items: center; padding: 0 0.35rem; }
+
+  /* --- el menú lateral: catorce enlaces seguidos, uno debajo de otro --- */
+  .app-nav__link { min-height: 44px; padding-block: 0.62rem; }
+
+  /* --- botones --- */
+  .icon-btn { width: 44px; height: 44px; }
+  .icon-btn svg { width: 19px; height: 19px; }
+  .btn-sm { min-height: 44px; }
+  /* Las flechas de reordenar tramos van pegadas dentro de una fila estrecha:
+     ahí 44 px las descuadra, pero 26 se falla siempre. */
+  .tramo-row__mover .icon-btn { width: 34px; height: 34px; }
+
+  /* --- casillas de marcar --- */
+  /* La matriz de permisos son 104 casillas de 18 px en una tabla; la columna
+     de selección del censo, otras tantas de 17. Con el dedo se marcaba la de
+     al lado. La tabla ya se desplaza a lo ancho, así que agrandarlas no
+     rompe nada. */
+  input[type='checkbox'],
+  input[type='radio'] { width: 24px; height: 24px; }
+  .checkbox-row input { width: 24px; height: 24px; }
+  /* La matriz de Personal las fija a 18 px con más peso que la regla de
+     arriba, así que hay que nombrarla igual de fuerte. */
+  .permisos-tabla input[type='checkbox'] { width: 24px; height: 24px; }
+  .checkbox input { width: 24px; height: 24px; }
+  .eventos-tarea__check input { width: 24px; height: 24px; }
+
+  /* --- desplegables --- */
+  select { min-height: 44px; }
+  .seccion-item__estado { min-height: 40px; }
+
+  /* --- filtros redondos --- */
+  /* A 44 px ocupan dos líneas enteras y esconden la tabla. 36 es cómodo y
+     pasa de sobra el mínimo de la norma. */
+  .chip { min-height: 36px; padding-block: 0.5rem; }
+
+  /* --- el calendario de eventos --- */
+  /* Siete columnas en 390 px dan celdas de 41 px de ancho; el alto lo fijaba
+     una proporción y salían 33. Pulsar el día 14 y que se abra el 21 es de
+     las cosas que más rabia dan. */
+  .eventos-cal__celda { min-height: 46px; }
+  .panel__link { display: inline-flex; align-items: center; min-height: 44px; }
+
+  /* --- enlaces sueltos que son de verdad botones --- */
+  .eventos-tarea-link { padding: 0.55rem 0; }
+  .dash-head__link { display: inline-flex; align-items: center; min-height: 44px; }
+  .alert-item__link { min-height: 44px; }
+  .portal__foot-back { display: inline-flex; align-items: center; min-height: 44px; }
+  /* El pie de la portada: nueve enlaces legales de 16 px de alto, pegados. */
+  .footer-grid a,
+  .footer-legal a { display: inline-flex; align-items: center; min-height: 40px; }
+  .pricing-periodo__btn { min-height: 44px; }
+  .cms-preview__dispositivo { min-height: 40px; min-width: 40px; }
+
+  /* El salto al contenido no se toca: solo aparece con el teclado, y con el
+     dedo no hay teclado que lo enfoque. */
+}
+
+/* Lo que se ve mientras llega el trozo de aplicación que falta (ver el
+   comentario largo de App.tsx). Alto mínimo para que el pie no pegue un salto
+   hacia arriba y vuelva a bajar cuando la sección termina de llegar. */
+.ruta-cargando {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* Hueco para el pie repetido (ver el comentario de InformeImpreso).
+   En pantalla no existe: es un `tfoot` vacío que solo sirve para que el
+   navegador reserve, en TODAS las hojas, la banda que ocupa `.print-hoja`. */
+.print-pie-hueco { display: none; }
+@media print {
+  .print-pie-hueco { display: table-footer-group; }
+  .print-pie-hueco td {
+    height: 10mm;
+    padding: 0 !important;
+    border: none !important;
+  }
+}
+
+/* El enlace de la web cuando el navegador no deja copiarlo solo. Sale al lado
+   del botón, no en su sitio: si el botón desapareciera, quien lo vuelva a
+   intentar no sabría dónde ha ido. */
+.cms-copiar-a-mano {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  min-width: 16rem;
+}
+.cms-copiar-a-mano input {
+  font-size: 0.82rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+}
