@@ -160,7 +160,7 @@ export default function HermanoPortal() {
   const echadoDelPanel = (ubicacion.state as { motivo?: string } | null)?.motivo === 'cuenta-de-hermano'
 
   // Qué es esta cuenta. Puede ser las dos cosas a la vez, que es lo normal.
-  const [papelesAqui, setPapelesAqui] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: false })
+  const [papelesAqui, setPapelesAqui] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: false, seguro: false })
   useEffect(() => {
     void papelesDeLaCuenta().then(setPapelesAqui)
   }, [])

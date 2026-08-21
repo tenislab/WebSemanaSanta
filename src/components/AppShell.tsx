@@ -153,7 +153,7 @@ export default function AppShell() {
   // Aviso cuando un guardado no llega a la base de datos (ver supabaseSync).
   const [errorSync, setErrorSync] = useState<string | null>(null)
   // Si esta cuenta tiene además ficha en el censo, se le ofrece su área.
-  const [papeles, setPapeles] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: true })
+  const [papeles, setPapeles] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: true, seguro: false })
   useEffect(() => {
     void papelesDeLaCuenta().then(setPapeles)
   }, [])

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { soloEsHermano } from '../lib/multiHermandad'
 import type { ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
@@ -21,6 +21,11 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
    * empezara en `false` un hermano vería el panel un instante.
    */
   const [soloHermano, setSoloHermano] = useState<boolean | null>(null)
+  /**
+   * Ha elegido entrar al panel aun sabiendo que su cuenta es de hermano.
+   * Se respeta: no se le vuelve a preguntar en cada pantalla que abra.
+   */
+  const [seguirAlPanel, setSeguirAlPanel] = useState(false)
   useEffect(() => {
     if (!session || !configured) {
       setSoloHermano(false)
@@ -57,30 +62,57 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   }
 
   /**
-   * Una cuenta de hermano no es personal de la hermandad: aunque tenga sesión
-   * real de Supabase, no entra aquí. La regla está bien; lo que estaba mal era
-   * no decirlo.
+   * Una cuenta que solo es de hermano no tiene nada que hacer en el panel.
+   * Pero AQUÍ NO SE LA ECHA: se le pregunta a dónde quiere ir.
    *
-   * Sin explicación, esto se lee como que la aplicación está rota. Pulsas
-   * «Gestiono la hermandad», te lleva al panel y te devuelve al área del
-   * hermano en un parpadeo: parece que los dos botones de «¿Quién eres?»
-   * llevan al mismo sitio. Pasa mucho más de lo que parece, porque el enlace
-   * de recuperar contraseña ABRE SESIÓN con esa cuenta: quien acaba de
-   * recuperar la de un hermano se queda con esa sesión puesta sin saberlo.
+   * Antes había una redirección automática al área del hermano, y era un
+   * problema aunque la regla fuera correcta. Pulsas «Gestiono la hermandad»,
+   * la pantalla parpadea y apareces en el área del hermano. Desde tu lado no
+   * se distingue de que la aplicación esté rota: los dos botones de «¿Quién
+   * eres?» parecen llevar al mismo sitio. Y pasa más de lo que parece, porque
+   * el enlace de recuperar contraseña ABRE SESIÓN: quien acaba de recuperar la
+   * de un hermano se queda con esa sesión puesta sin saberlo.
+   *
+   * Lo peor es que echar a la fuerza no protegía nada. Quien no gestiona no ve
+   * un solo dato aunque entre: las políticas de la base de datos son las que
+   * mandan, y no enseñan lo que no toca. O sea que la redirección solo servía
+   * para desconcertar a quien sí gestionaba y había caído aquí por error.
    *
    * OJO CON «SOLO»: en una hermandad casi todo el que gestiona es ADEMÁS
    * hermano. El Hermano Mayor es hermano, la secretaria es hermana, el
-   * tesorero paga su cuota como cualquiera. A esos NO se les puede echar del
-   * panel: son personal, y entran por la puerta de personal.
-   *
-   * Por eso se pregunta a la base de datos en vez de mirar el metadata de la
-   * sesión, que además de ser reescribible por el propio usuario solo sabe
-   * decir «es hermano» y no «es solo hermano».
-   *
-   * Se manda el motivo para que el área del hermano lo cuente al llegar.
+   * tesorero paga su cuota como cualquiera. A esos no les sale esta pantalla:
+   * son personal, y entran por la puerta de personal.
    */
-  if (session && configured && soloHermano) {
-    return <Navigate to="/hermano" replace state={{ motivo: 'cuenta-de-hermano' }} />
+  if (session && configured && soloHermano && !seguirAlPanel) {
+    return (
+      <div className="dos-puertas">
+        <div className="dos-puertas__caja">
+          <p className="eyebrow">Acceso</p>
+          <h1>¿A dónde quieres ir?</h1>
+          <p className="dos-puertas__lead">
+            Esta cuenta está en el censo como hermano/a, y no figura como personal de
+            gestión. Puedes ir a tu área, o entrar de todas formas al panel.
+          </p>
+          <div className="entrada-opciones">
+            <Link to="/hermano" className="entrada-opcion">
+              <span>
+                <b>Mi área de hermano</b>
+                <small>Tus cuotas, tu papeleta, tu sitio en el cortejo</small>
+              </span>
+            </Link>
+            <button type="button" className="entrada-opcion" onClick={() => setSeguirAlPanel(true)}>
+              <span>
+                <b>Entrar al panel de gestión</b>
+                <small>
+                  Si llevas un cargo y no lo ves completo, pídele a secretaría que te dé de
+                  alta como personal: no hace falta otra cuenta
+                </small>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Mientras no se sabe qué es esta cuenta, no se pinta el panel: enseñarlo y

@@ -146,7 +146,7 @@ async function cargoPorCuenta({ cargar, caso }) {
  * decir «sal de esta sesión y entra con la cuenta de secretaría», o sea, ten
  * dos cuentas. Eso no es una hermandad, es un apaño.
  */
-async function unaCuentaDosPuertas({ caso }) {
+async function unaCuentaDosPuertas({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
 
   // Los dos papeles por separado, no un «es hermano» de sí o no: con un solo
@@ -175,4 +175,78 @@ async function unaCuentaDosPuertas({ caso }) {
     /not exists \(select 1 from titulares where auth_user_id = auth\.uid\(\)\)/.test(sql))
   caso('y cuenta el personal activo', true,
     /not exists \(select 1 from personal where auth_user_id = auth\.uid\(\) and activo\)/.test(sql))
+
+  // ---------------------------------------------------------------------
+  // No poder saberlo NO es lo mismo que saber que no
+  // ---------------------------------------------------------------------
+  /*
+   * `papelesDeLaCuenta` preguntaba tres cosas a la base y no miraba si alguna
+   * había fallado. Y `supabase.rpc()` no lanza excepción cuando va mal:
+   * devuelve `{ data: null, error: {...} }`. Así que un `data: null` de una
+   * consulta rota se colaba como un «no» perfectamente creíble.
+   *
+   * Bastaba con que la llamada a `es_titular()` fallara una vez —la función
+   * todavía sin desplegar, un permiso, medio segundo sin red— para que al
+   * Hermano Mayor le dijeran que él no lleva su hermandad y lo echaran al área
+   * del hermano. Y desde allí no hay vuelta: vuelve a pulsar «gestiono la
+   * hermandad» y vuelve a salir rebotado.
+   *
+   * Encima era incoherente: el `catch` de al lado sí daba `gestiona: true`.
+   * El mismo fallo, resuelto de las dos maneras contrarias según por dónde
+   * saliera.
+   */
+  const fuente = await (await import('node:fs/promises')).readFile('src/lib/multiHermandad.ts', 'utf8')
+  caso('se mira si la consulta falló', true, fuente.includes('!titular.error && !personal.error'))
+  caso('y se dice si la respuesta es de fiar', true, /seguro: sabemosSiGestiona/.test(fuente))
+  // Sin saberlo, se da por hecho que SÍ gestiona: el daño de dejar entrar de
+  // más lo paran las políticas de la base; el de echar de menos es dejar al
+  // Hermano Mayor fuera de su hermandad.
+  caso('sin saberlo, no se le cierra la puerta', true, /sabemosSiGestiona \? gestiona : true/.test(fuente))
+  // Y lo que de verdad protege: echar a alguien exige estar seguro.
+  caso('echar del panel exige estar seguro', true, /return p\.seguro && p\.esHermano && !p\.gestiona/.test(fuente))
+
+  // ---------------------------------------------------------------------
+  // «Entra como un cargo concreto y comprueba qué ve cada uno»
+  // ---------------------------------------------------------------------
+  /*
+   * Eso es lo que ofrece la pantalla de acceso. Y no lo cumplía: se entraba
+   * como Carmen Ruiz, Secretaria, y salía el panel ENTERO —Tesorería,
+   * Inventario, Personal y permisos, Configuración— con un «Titular de la
+   * hermandad» debajo de su nombre.
+   *
+   * El motivo: sin Supabase no hay tabla `titulares` a la que preguntar, así
+   * que `soyTitular()` contesta que sí para no bloquear la demostración. Y
+   * titular quiere decir acceso completo.
+   *
+   * Comprobado en un navegador, cargo por cargo, después del arreglo:
+   *   Secretario/a  → Hermanos, Cortejo, Papeletas, Eventos, Archivo,
+   *                   Comunicados, Web, Informes
+   *   Tesorero/a    → Cuotas, Tesorería, Inventario, Informes
+   *   Fiscal        → Archivo, Informes
+   * Y escribiendo /app/tesoreria a mano, la secretaria vuelve a Inicio.
+   */
+  const permisos = await cargar('src/lib/permisos.ts')
+  const fuentePermisos = await (await import('node:fs/promises'))
+    .readFile('src/lib/permisos.ts', 'utf8')
+
+  caso('el cargo sale de la cuenta de ejemplo', true, fuentePermisos.includes('function cargoDeLaCuentaDemo'))
+  // La línea que lo hace seguro: SOLO con la base de datos apagada. Con
+  // Supabase conectado, el metadata de la sesión no se mira nunca, porque lo
+  // puede reescribir el propio usuario y por ahí se coló en su día que todo el
+  // personal entrara como titular.
+  caso('y solo con Supabase apagado', true, /if \(isSupabaseConfigured\) return undefined/.test(fuentePermisos))
+
+  // Los permisos de fábrica de cada cargo, que es lo que se ve en el menú.
+  const porDefecto = permisos.PERMISOS_POR_DEFECTO
+  caso('la secretaria no ve tesorería', false, porDefecto['Secretario/a'].includes('tesoreria'))
+  caso('ni cuotas', false, porDefecto['Secretario/a'].includes('cuotas'))
+  caso('ni personal y permisos', false, porDefecto['Secretario/a'].includes('personal'))
+  caso('pero sí el censo', true, porDefecto['Secretario/a'].includes('hermanos'))
+  caso('el tesorero sí ve tesorería', true, porDefecto['Tesorero/a'].includes('tesoreria'))
+  caso('y no ve el censo', false, porDefecto['Tesorero/a'].includes('hermanos'))
+  // El titular no tiene lista: la ausencia de lista ES el acceso completo.
+  caso('el titular no tiene restricción', null, permisos.permisosDeCargo(null))
+  // Y un cargo que no se reconoce se queda SIN nada, nunca con todo.
+  caso('un cargo desconocido no abre nada', 0, permisos.permisosDeCargo('__desconocido__').length)
+  caso('y no puede ver tesorería', false, permisos.puedeVerModulo('__desconocido__', 'tesoreria'))
 }

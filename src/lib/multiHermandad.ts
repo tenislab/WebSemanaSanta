@@ -285,11 +285,31 @@ export interface PapelesDeLaCuenta {
   esHermano: boolean
   /** Es titular o personal activo: puede entrar en el panel. */
   gestiona: boolean
+  /**
+   * ¿Se ha podido averiguar de verdad, o alguna consulta falló?
+   *
+   * ESTE CAMPO ES EL ARREGLO. Antes no existía, y por eso «no he podido
+   * saberlo» y «he mirado y no es» acababan siendo la misma cosa: las dos
+   * dejaban `gestiona` en falso, y con `gestiona` falso se echa a la cuenta
+   * del panel al área del hermano.
+   *
+   * O sea que bastaba con que la llamada a `es_titular()` fallara una vez —la
+   * función todavía sin desplegar, un permiso, un corte de red de medio
+   * segundo— para que al Hermano Mayor le dijeran que él no lleva su
+   * hermandad y lo mandaran al área del hermano. Y desde allí no hay vuelta:
+   * vuelve a pulsar «gestiono la hermandad» y vuelve a salir rebotado.
+   *
+   * Con `seguro` en falso, quien decide algo con esto NO decide: espera o se
+   * queda como está. Cerrar la puerta del panel es una decisión demasiado
+   * gorda para tomarla sin saber.
+   */
+  seguro: boolean
 }
 
-const SIN_PAPELES: PapelesDeLaCuenta = { esHermano: false, gestiona: false }
+const SIN_PAPELES: PapelesDeLaCuenta = { esHermano: false, gestiona: false, seguro: true }
 
 export async function papelesDeLaCuenta(): Promise<PapelesDeLaCuenta> {
+  // Sin base de datos no hay cuentas que valgan: modo local, todo abierto.
   if (!isSupabaseConfigured || !supabase) return SIN_PAPELES
   try {
     const { data } = await supabase.auth.getUser()
@@ -302,14 +322,34 @@ export async function papelesDeLaCuenta(): Promise<PapelesDeLaCuenta> {
       supabase.rpc('es_titular'),
       supabase.from('personal').select('id').eq('auth_user_id', uid).eq('activo', true).limit(1).maybeSingle(),
     ])
+
+    /*
+     * Los errores se MIRAN, uno por uno.
+     *
+     * `supabase.rpc()` y `.select()` no lanzan excepción cuando algo va mal:
+     * devuelven `{ data: null, error: {...} }`. Así que el `catch` de abajo no
+     * se enteraba de nada y el `data: null` se colaba como un «no» perfectamente
+     * creíble. Ese es el fallo entero, en una línea.
+     *
+     * De los tres, los dos que dicen si gestiona son los que importan: si
+     * cualquiera de ellos ha fallado, no se sabe y no se echa a nadie.
+     */
+    const sabemosSiGestiona = !titular.error && !personal.error
+    const gestiona = titular.data === true || Boolean(personal.data)
+
     return {
-      esHermano: Boolean(hermano.data),
-      gestiona: titular.data === true || Boolean(personal.data),
+      esHermano: !hermano.error && Boolean(hermano.data),
+      // Si no se ha podido preguntar, se da por hecho que sí gestiona: el
+      // daño de dejar entrar de más lo paran las políticas de la base de
+      // datos, que no enseñan lo que no toca. El daño de echar de menos es
+      // dejar al Hermano Mayor fuera de su propia hermandad.
+      gestiona: sabemosSiGestiona ? gestiona : true,
+      seguro: sabemosSiGestiona,
     }
   } catch {
     // Ante la duda NO se echa a nadie de ningún sitio: las políticas de la base
     // de datos siguen mandando y no dejarán ver lo que no toque.
-    return { esHermano: false, gestiona: true }
+    return { esHermano: false, gestiona: true, seguro: false }
   }
 }
 
@@ -320,5 +360,7 @@ export async function papelesDeLaCuenta(): Promise<PapelesDeLaCuenta> {
  */
 export async function soloEsHermano(): Promise<boolean> {
   const p = await papelesDeLaCuenta()
-  return p.esHermano && !p.gestiona
+  // `seguro` manda: si no se ha podido averiguar, esto contesta que NO, que es
+  // lo mismo que decir «no lo eches». Ver el comentario de `PapelesDeLaCuenta`.
+  return p.seguro && p.esHermano && !p.gestiona
 }

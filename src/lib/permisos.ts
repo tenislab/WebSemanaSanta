@@ -211,6 +211,13 @@ export function useCargoDeLaSesionConEstado(): { cargo: Cargo | null; resuelto: 
   useEffect(() => {
     let cancelado = false
     async function resolver() {
+      // En la demostración no hay base de datos a la que preguntar, así que el
+      // cargo sale de la cuenta de ejemplo con la que se ha entrado.
+      const deLaDemo = cargoDeLaCuentaDemo()
+      if (deLaDemo !== undefined) {
+        setEstado({ cargo: deLaDemo, resuelto: true })
+        return
+      }
       const [uid, titular] = await Promise.all([authUserIdActual(), soyTitular()])
       if (cancelado) return
       setEstado({ cargo: cargoDeCuenta(uid, getPersonal(), titular), resuelto: true })
@@ -221,6 +228,45 @@ export function useCargoDeLaSesionConEstado(): { cargo: Cargo | null; resuelto: 
     }
   }, [])
   return estado
+}
+
+/**
+ * El cargo de la cuenta de ejemplo con la que se ha entrado en la demostración.
+ * `undefined` si no estamos en demostración: entonces manda la base de datos.
+ *
+ * EL FALLO QUE ARREGLA: la pantalla de acceso ofrece «entra como un cargo
+ * concreto y comprueba qué ve cada uno». Y no cumplía. Se entraba como Carmen
+ * Ruiz, Secretaria, y salía el panel ENTERO —Tesorería, Inventario, Personal y
+ * permisos, Configuración— con un «Titular de la hermandad» debajo de su
+ * nombre. Justo lo contrario de lo que se estaba enseñando.
+ *
+ * El motivo: sin Supabase no hay tabla `titulares` a la que preguntar, así que
+ * `soyTitular()` contesta que sí para no bloquear la demostración. Y titular
+ * quiere decir acceso completo.
+ *
+ * Aquí SÍ se mira el metadata de la sesión, que en el resto de la aplicación
+ * está prohibido a propósito —lo puede reescribir el propio usuario, y por ahí
+ * se coló en su día que todo el personal entrara como titular—. La diferencia
+ * es que esto solo corre CON SUPABASE APAGADO: no hay datos de nadie que
+ * proteger, no hay sesión que falsificar y no hay nada que ganar falsificando.
+ * Con base de datos conectada esta función devuelve `undefined` y no se toca.
+ */
+function cargoDeLaCuentaDemo(): Cargo | null | undefined {
+  if (isSupabaseConfigured) return undefined
+  try {
+    const crudo = sessionStorage.getItem('cabildo-demo-user')
+    if (!crudo) return undefined
+    const id = (JSON.parse(crudo) as { user_metadata?: { personalId?: string } })
+      ?.user_metadata?.personalId
+    // Sin `personalId` es la cuenta de titular de la demostración: manda todo.
+    if (!id) return null
+    const miembro = getPersonal().find((p) => p.id === id)
+    if (!miembro) return null
+    // Desactivado no es titular: se queda sin permisos, igual que de verdad.
+    return miembro.activo ? miembro.cargo : ('__desconocido__' as Cargo)
+  } catch {
+    return undefined
+  }
 }
 
 
