@@ -137,7 +137,12 @@ export function cuerpoCorreo(titulo: string, parrafos: string[], pie?: string): 
   const texto = [titulo, '', ...parrafos, '', pie ?? '', `— ${hermandad}`].filter((l) => l !== undefined).join('\n')
 
   const html =
-    `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.6;max-width:34rem;color:#1c1917">` +
+    // `lang="es"` no es un adorno: sin él, Gmail adivina el idioma por el
+    // texto y se equivoca a menudo con los mensajes cortos. Al hermano le
+    // salía, encima de un comunicado de SU hermandad, un «parece que este
+    // mensaje está en inglés · ¿traducir?». Eso resta credibilidad justo en el
+    // correo que más se manda.
+    `<div lang="es" style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.6;max-width:34rem;color:#1c1917">` +
     // La banda de arriba con el nombre: es lo primero que se ve al abrirlo y
     // lo que dice de quién es sin tener que leer nada.
     `<div style="background:${color};color:#ffffff;padding:0.9rem 1.1rem;border-radius:8px 8px 0 0">` +

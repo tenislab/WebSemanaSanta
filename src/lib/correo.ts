@@ -202,27 +202,52 @@ export async function enviarCorreo(mensaje: {
 /**
  * Traduce el fallo de `functions.invoke` a algo que se pueda arreglar.
  *
- * EL CASO REAL: la función `enviar-correo` no está desplegada todavía.
- * Supabase devuelve entonces un «Failed to send a request to the Edge
- * Function» o un 404 pelado, que no le dice nada a nadie. La hermandad manda
- * un comunicado, ve un error incomprensible, y da por hecho que la aplicación
- * está rota — cuando lo que falta es un paso de instalación de diez minutos.
+ * OJO CON «FAILED TO SEND A REQUEST»: Supabase suelta esa misma frase en dos
+ * situaciones que no tienen nada que ver, y distinguirlas importa mucho.
+ *
+ *   1. La función no está desplegada. Falta un paso de instalación.
+ *   2. La función SÍ está, pero la petición no llega a entrar. Casi siempre es
+ *      el interruptor «Verify JWT with legacy secret» de la propia función:
+ *      con él encendido, la puerta de Supabase rechaza el sondeo que el
+ *      navegador manda ANTES de la petición de verdad —ese sondeo va sin
+ *      cabecera de autorización, por diseño— y el navegador lo cuenta como
+ *      «no he podido mandar la petición».
+ *
+ * Este mensaje decía solo lo primero. Y eso mandaba a la hermandad a instalar
+ * durante media hora algo que ya tenía instalado, sin tocar lo que fallaba.
+ * Un 404 de verdad sí es inequívoco; el resto hay que contarlo entero.
  */
-function explicarFalloDeEnvio(error: unknown): string {
+export function explicarFalloDeEnvio(error: unknown): string {
   const crudo = (error as { message?: string })?.message ?? ''
   const estado = (error as { context?: { status?: number } })?.context?.status
-  const noExiste =
-    estado === 404 ||
-    /not found|failed to send a request|failed to fetch|function not found/i.test(crudo)
-  if (noExiste) {
+
+  // Un 404 no admite duda: ahí no hay función.
+  if (estado === 404 || /function not found/i.test(crudo)) {
     return (
-      'La función de envío no está instalada en Supabase todavía. ' +
-      'Hay que desplegar «enviar-correo» y poner sus dos secretos (RESEND_API_KEY y ' +
-      'CORREO_REMITENTE). Está explicado en docs/CUANDO-TENGA-DOMINIO.md, apartado 6.'
+      'La función de envío no está desplegada en Supabase. Hay que crear ' +
+      '«enviar-correo» (Edge Functions → Deploy a new function → Via Editor) y ' +
+      'poner sus dos secretos: RESEND_API_KEY y CORREO_REMITENTE.'
     )
   }
+
+  // Y aquí es donde había que dejar de adivinar.
+  if (/not found|failed to send a request|failed to fetch|networkerror|load failed/i.test(crudo)) {
+    return (
+      'No se ha podido contactar con la función de envío. Puede ser una de dos, ' +
+      'y se distinguen mirando Supabase → Edge Functions → enviar-correo → Invocations: ' +
+      'si NO aparece ninguna llamada, la petición se queda en la puerta —apaga ' +
+      '«Verify JWT with legacy secret» en los ajustes de la función y guarda—; ' +
+      'si aparece con error, el problema está dentro y ahí pone cuál. ' +
+      'Y si la función no existe siquiera, hay que desplegarla.'
+    )
+  }
+
   if (estado === 401 || estado === 403) {
-    return 'La función de envío ha rechazado la petición. Suele ser que falta la clave RESEND_API_KEY en los secretos de Supabase.'
+    return (
+      'La función de envío ha rechazado la petición. Comprueba que existe el ' +
+      'secreto RESEND_API_KEY, y que «Verify JWT with legacy secret» está apagado ' +
+      'en los ajustes de la función.'
+    )
   }
   return crudo || 'No se pudo contactar con el servidor de correo.'
 }
@@ -251,7 +276,8 @@ export function correoDePrueba(nombreHermandad: string): { asunto: string; texto
     `Este mensaje lo ha mandado Gobergo para comprobar la configuración de ` +
     `${nombreHermandad || 'la hermandad'}. No hay que hacer nada.`
   const html =
-    `<div style="font-family:system-ui,sans-serif;line-height:1.6;max-width:34rem">` +
+    // Con el idioma declarado, igual que los avisos (ver avisosCorreo.ts).
+    `<div lang="es" style="font-family:system-ui,sans-serif;line-height:1.6;max-width:34rem">` +
     `<p><b>Si estás leyendo esto, el envío de correo funciona.</b></p>` +
     `<p>Este mensaje lo ha mandado Gobergo para comprobar la configuración de ` +
     `${escapar(nombreHermandad || 'la hermandad')}. No hay que hacer nada.</p>` +

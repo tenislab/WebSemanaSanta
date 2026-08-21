@@ -132,4 +132,76 @@ async function correoAuditoria({ cargar, caso }) {
   const db = await readFile('src/lib/db/comunicados.ts', 'utf8')
   caso('se guardan', true, /criterios: c\.criterios/.test(db))
   caso('y se leen', true, /criterios: \(r\.criterios/.test(db))
+
+  // ---------------------------------------------------------------------
+  // Cuando el envío falla, ¿se dice algo que sirva?
+  // ---------------------------------------------------------------------
+  /*
+   * EL CASO REAL, vivido: la función estaba desplegada, con sus dos secretos,
+   * y la aplicación decía «La función de envío no está instalada en Supabase
+   * todavía». Media hora reinstalando algo que ya estaba puesto, sin tocar lo
+   * que fallaba de verdad —el interruptor «Verify JWT» de la propia función,
+   * que hace que la puerta de Supabase rechace el sondeo que el navegador
+   * manda antes de cada petición—.
+   *
+   * La culpa era de dar por hecha UNA causa: Supabase suelta «Failed to send a
+   * request» tanto si la función no existe como si existe y no se llega a
+   * ella. Un 404 sí es inequívoco; lo demás hay que contarlo entero.
+   */
+  const fallo = (message, status) => m.explicarFalloDeEnvio({ message, context: { status } })
+
+  // 404: aquí no hay función, y se puede decir sin miedo.
+  const noHay = fallo('Not Found', 404)
+  caso('un 404 dice que hay que desplegarla', true, /no está desplegada/.test(noHay))
+  caso('y dice dónde', true, /Deploy a new function/.test(noHay))
+
+  // La frase ambigua: NO puede afirmar que falte instalarla.
+  const ambiguo = fallo('Failed to send a request to the Edge Function')
+  caso('no afirma que falte instalarla', false, /no está desplegada|no está instalada/.test(ambiguo))
+  caso('manda a mirar las invocaciones', true, /Invocations/.test(ambiguo))
+  caso('y nombra el interruptor que lo causa', true, /Verify JWT/.test(ambiguo))
+  // Las dos salidas, para que quien lo lea sepa cuál es la suya.
+  caso('explica el caso «no aparece ninguna»', true, /NO aparece/.test(ambiguo))
+  caso('y el caso «aparece con error»', true, /aparece con error/.test(ambiguo))
+
+  // Y las otras formas en que el navegador cuenta lo mismo.
+  for (const frase of ['Failed to fetch', 'NetworkError when attempting to fetch resource', 'Load failed']) {
+    caso(`«${frase}» se trata igual`, true, /Invocations/.test(fallo(frase)))
+  }
+
+  // Un rechazo con estado: ahí sí se puede apuntar a la clave.
+  const rechazo = fallo('Unauthorized', 401)
+  caso('un 401 apunta a la clave y al interruptor', true,
+    /RESEND_API_KEY/.test(rechazo) && /Verify JWT/.test(rechazo))
+
+  // Y lo que no se reconoce se dice tal cual, sin inventar.
+  caso('lo desconocido se cuenta tal cual', 'Algo raro de Resend', fallo('Algo raro de Resend', 500))
+
+  // ---------------------------------------------------------------------
+  // Las cabeceras CORS de la función de envío
+  // ---------------------------------------------------------------------
+  /*
+   * ESTO COSTÓ UNA TARDE. La función respondía al sondeo del navegador
+   * autorizando solo «authorization, content-type». Pero el cliente de
+   * Supabase manda además `apikey` y `x-client-info` en cada llamada.
+   *
+   * Lo que se veía era desconcertante: en el panel salían las llamadas OPTIONS
+   * con un 200 tan tranquilas —el sondeo llegaba y se contestaba bien— y
+   * NINGUNA POST detrás. Porque el navegador manda el sondeo, lee que `apikey`
+   * no está permitida, y decide por su cuenta no mandar la petición de verdad.
+   * Nunca sale de él. Por eso no había ni rastro en el servidor.
+   *
+   * La lista tiene que incluir TODAS las que manda el cliente, no solo las que
+   * se usan dentro de la función.
+   */
+  const fuente = await (await import('node:fs/promises')).readFile(
+    'supabase/functions/enviar-correo/index.ts', 'utf8')
+  const permitidas = (fuente.match(/'Access-Control-Allow-Headers': '([^']+)'/) ?? [])[1] ?? ''
+  for (const cabecera of ['authorization', 'apikey', 'x-client-info', 'content-type']) {
+    caso(`la función permite «${cabecera}»`, true, permitidas.includes(cabecera))
+  }
+  caso('y dice qué métodos acepta', true, /'Access-Control-Allow-Methods': '[^']*POST/.test(fuente))
+  // El sondeo se contesta antes de comprobar nada: va sin sesión, por diseño.
+  caso('el sondeo se contesta el primero', true,
+    /if \(req\.method === 'OPTIONS'\) return new Response\('ok', \{ headers: cabeceras \}\)/.test(fuente))
 }

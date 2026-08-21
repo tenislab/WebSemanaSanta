@@ -40,9 +40,28 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 /** Cuántas direcciones como mucho de una vez. Resend admite 50 por llamada. */
 const MAXIMO_DESTINATARIOS = 50
 
+/*
+ * Las cabeceras que el navegador tiene que ver para dejar pasar la llamada.
+ *
+ * ESTO ESTUVO MAL Y COSTÓ UNA TARDE. Aquí solo ponía «authorization,
+ * content-type», y el cliente de Supabase manda además `apikey` y
+ * `x-client-info` en cada llamada a una función.
+ *
+ * Lo que se veía era desconcertante: en el panel de Supabase salían las
+ * llamadas OPTIONS con un 200 tan tranquilas —el sondeo llegaba y se
+ * contestaba bien— y NINGUNA POST detrás. Porque el navegador manda el sondeo,
+ * lee que `apikey` no está entre las permitidas, y decide por su cuenta no
+ * mandar la petición de verdad. Nunca sale de él. Por eso no había ni rastro
+ * en el servidor, y por eso el error que llegaba a la pantalla era el inútil
+ * «Failed to send a request to the Edge Function».
+ *
+ * La lista tiene que incluir TODAS las que manda el cliente, no solo las que
+ * uno usa dentro.
+ */
 const cabeceras = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Content-Type': 'application/json',
 }
 

@@ -69,4 +69,11 @@ export default async function ({ cargar, caso }) {
   caso('el ampersand va escapado', true, cuerpo.html.includes('&amp;'))
   caso('la versión en texto plano lleva el título', true, cuerpo.texto.startsWith('Título <script>'))
   caso('y el cuerpo', true, cuerpo.texto.includes('Cuerpo & "cosas"'))
+
+  // El idioma, declarado. Sin esto Gmail lo adivina por el texto y se
+  // equivoca con los mensajes cortos: al hermano le salía, encima de un
+  // comunicado de SU hermandad, un «parece que este mensaje está en inglés ·
+  // ¿traducir?».
+  const conIdioma = m.cuerpoCorreo('Convocatoria de cabildo', ['El jueves a las ocho.'])
+  caso('el correo dice que va en español', true, /<div lang="es"/.test(conIdioma.html))
 }

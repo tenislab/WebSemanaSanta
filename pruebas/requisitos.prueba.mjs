@@ -139,8 +139,11 @@ async function loQueVaEnLaBase({ caso }) {
   // El correo, que se activaba en un portátil y no salía desde ningún otro.
   const correo = await readFile('src/lib/correo.ts', 'utf8')
   caso('la config de correo se comparte', true, /cargarAjustesCorreoDeLaBase/.test(correo))
-  // Y cuando la función no está instalada, que lo diga en cristiano.
-  caso('explica si falta desplegar la función', true, /La función de envío no está instalada/.test(correo))
+  // Y cuando el envío falla, que lo diga en cristiano SIN dar por hecha la
+  // causa: «Failed to send a request» sale tanto si la función no existe como
+  // si existe y el navegador no llega a ella. Ver pruebas/correo.prueba.mjs.
+  caso('un 404 dice que hay que desplegarla', true, /no está desplegada en Supabase/.test(correo))
+  caso('y lo ambiguo manda a mirar las invocaciones', true, /Invocations/.test(correo))
 
   // El borrado del artículo 17 tiene que llevarse TODO, no solo la ficha.
   const rgpd = await readFile('src/lib/rgpd.ts', 'utf8')
