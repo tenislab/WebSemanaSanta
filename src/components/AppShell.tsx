@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext'
 import { useCargoDeLaSesionConEstado, puedeVerModulo, usePermisosSincronizados, cargoEnCristiano } from '../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
+import ReportarFallo from './ReportarFallo'
 
 interface NavItem {
   to: string
@@ -165,6 +166,9 @@ export default function AppShell() {
    * puede abrirlo y copiarlo tal cual para mandarlo, que es lo que hace falta.
    */
   const [detalleSync, setDetalleSync] = useState<string>('')
+  /** El último error de la base en toda la sesión, para adjuntarlo a un reporte. */
+  const [ultimoErrorBd, setUltimoErrorBd] = useState<string | null>(null)
+  const [reporteAbierto, setReporteAbierto] = useState(false)
   // Si esta cuenta tiene además ficha en el censo, se le ofrece su área.
   const [papeles, setPapeles] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: true, seguro: false })
   useEffect(() => {
@@ -174,7 +178,12 @@ export default function AppShell() {
     function alFallar(e: Event) {
       const detalle = (e as CustomEvent<{ tabla: string; fallos?: string[] }>).detail
       setErrorSync(detalle?.tabla ?? '')
-      setDetalleSync((detalle?.fallos ?? []).join('\n'))
+      const texto = (detalle?.fallos ?? []).join('\n')
+      setDetalleSync(texto)
+      // Se guarda aparte y NO se borra al dar a «Entendido»: cuando alguien se
+      // decide a contar el fallo, el aviso ya lo cerró hace rato, y ese texto
+      // es justo el dato que hace falta.
+      if (texto) setUltimoErrorBd(`${detalle?.tabla ?? ''} · ${texto}`)
     }
     window.addEventListener('cabildo-sync-error', alFallar)
     return () => window.removeEventListener('cabildo-sync-error', alFallar)
@@ -379,6 +388,15 @@ export default function AppShell() {
                 Mi área de hermano
               </Link>
             )}
+            {/* Contar un fallo, desde cualquier pantalla. Si hay que buscarlo
+                en un menú, no se cuenta: se deja pasar y se pierde. */}
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setReporteAbierto(true)}
+              title="Contar un fallo a quien mantiene Gobergo"
+            >
+              Contar un fallo
+            </button>
             <ThemeToggle />
             <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
               Cerrar sesión
@@ -416,6 +434,20 @@ export default function AppShell() {
             borran algo. Va fuera de <main> porque no es contenido de la
             página, es un aviso sobre lo que se acaba de hacer. */}
         <BarraDeshacer />
+
+        <ReportarFallo
+          abierto={reporteAbierto}
+          onCerrar={() => setReporteAbierto(false)}
+          contexto={{
+            ruta: location.pathname,
+            hermandad: ajustesHermandad.nombreLegal || undefined,
+            cargo: cargoResuelto ? (cargo ?? null) : null,
+            ultimoErrorBd,
+            navegador: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+            tamanoPantalla:
+              typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}` : undefined,
+          }}
+        />
       </div>
     </div>
   )

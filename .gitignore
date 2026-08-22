@@ -39,3 +39,4 @@ LEEME.txt
 # copias temporales del .env (nunca al repositorio)
 .env.*
 !.env.example
+GOBERGO-costes.pdf

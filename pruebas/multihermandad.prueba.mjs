@@ -120,9 +120,28 @@ export default async function ({ cargar, caso }) {
   caso('sin logo sigue dibujando el suyo', true, /const uid = /.test(escudo))
 
   const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
-  const conLogo = (portal.match(/<EscudoHermandad[\s\S]{0,220}?logoDataUrl=/g) ?? []).length
+  const conLogo = (portal.match(/<EscudoHermandad[\s\S]{0,260}?logoDataUrl=/g) ?? []).length
   const total = (portal.match(/<EscudoHermandad/g) ?? []).length
   caso('y en el buscador se le pasa siempre', total, conLogo)
+
+  /*
+   * Y SIN LOGO, LAS INICIALES.
+   *
+   * El glifo dibujado solo lo tienen las hermandades de muestra. Una hermandad
+   * de verdad recién creada se quedaba con un escudo LISO, sin nada dentro: en
+   * una lista, todas iguales salvo por el color — justo lo contrario de para lo
+   * que está ahí, que es reconocer la tuya sin leer.
+   */
+  caso('el escudo acepta el nombre', true, /nombre\?: string/.test(escudo))
+  caso('y sin logo ni glifo pone las iniciales', true, /inicialesHermandad\(nombre\)/.test(escudo))
+  const conNombre = (portal.match(/<EscudoHermandad[\s\S]{0,300}?nombre=/g) ?? []).length
+  caso('y el nombre se le pasa siempre', total, conNombre)
+
+  // Las iniciales que salen: sin «de», «la», «del»…
+  const { inicialesHermandad } = await cargar('src/lib/color.ts')
+  caso('las iniciales saltan los artículos', 'HN',
+    inicialesHermandad('Hermandad de Ntra. Sra. del Nazareno'))
+  caso('y con una sola palabra', 'P', inicialesHermandad('particular'))
 
   await aislamientoAuditoria({ cargar, caso })
 

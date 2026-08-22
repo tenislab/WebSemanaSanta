@@ -82,6 +82,7 @@ import {
 } from '../../lib/mensajesWeb'
 import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
 import { copiarAlPortapapeles } from '../../lib/portapapeles'
+import { pedirActivarDominio } from '../../lib/reporteFallo'
 
 /**
  * La copia pequeña para la rejilla de la galería. 520 px de lado basta y sobra
@@ -1145,6 +1146,33 @@ function DisenoTab({
   const conDominioPropio = tieneCapacidad(suscripcion, 'premium')
   const problemaDominio = (web.dominio ?? '').trim() ? problemaDelDominio(web.dominio ?? '') : null
   const [estadoDominio, setEstadoDominio] = useState<EstadoDominio>('sinProbar')
+  const hermandad = useHermandadSettings()
+  const [avisoDominio, setAvisoDominio] = useState<'sinPedir' | 'mandando' | 'enviado'>('sinPedir')
+  const [errorDominioAviso, setErrorDominioAviso] = useState<{ texto: string; reserva: string } | null>(null)
+
+  /**
+   * Pide que le den de alta el dominio. Es el paso que la hermandad no puede
+   * dar por su cuenta, y el único que faltaba para que el circuito se cerrara
+   * sin salir de la aplicación.
+   */
+  async function pedirDominio() {
+    const dominio = (web.dominio ?? '').trim()
+    if (!dominio) return
+    setAvisoDominio('mandando')
+    setErrorDominioAviso(null)
+    const r = await pedirActivarDominio({
+      dominio,
+      hermandad: hermandad.nombreLegal || web.titulo || 'Sin nombre',
+      slug: web.slug,
+      quienLoPide: hermandad.email || undefined,
+    })
+    if (r.ok) { setAvisoDominio('enviado'); return }
+    setAvisoDominio('sinPedir')
+    setErrorDominioAviso({
+      texto: r.error ?? 'No se ha podido avisar desde aquí.',
+      reserva: r.reserva ?? '',
+    })
+  }
 
   /**
    * Comprueba de verdad si el dominio ya sirve esta web, en vez de fiarse de
@@ -1260,30 +1288,68 @@ function DisenoTab({
                 </p>
               )}
               {/* Esto estaba dentro de dos desplegables cerrados, o sea que no
-                  lo leía nadie, y es LA pega que se lleva todo el mundo. */}
+                  lo leía nadie, y es LA pega que se lleva todo el mundo.
+                  Antes decía «añadidlos vosotros en Vercel», que es algo que la
+                  hermandad NO puede hacer: ese paso es de quien lleva Gobergo.
+                  Pedirle a alguien algo que no está en su mano es peor que no
+                  decirle nada, porque se queda intentándolo. */}
+              {/*
+                * EL PASO QUE NO PUEDE DAR LA HERMANDAD.
+                *
+                * De los tres pasos del dominio, el de en medio —darlo de alta
+                * en el servidor— solo lo puede hacer quien lleva Gobergo. La
+                * pantalla decía «avísanos» y no daba forma de avisar: o no se
+                * avisaba, o se avisaba por otro sitio y se perdía.
+                */}
+              <div className="dominio-aviso">
+                {avisoDominio === 'enviado' ? (
+                  <p className="form-hint form-hint--ok">
+                    ✓ Avisado. Os damos de alta el dominio y os escribimos con los DNS que hay que
+                    poner en vuestro registrador.
+                  </p>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={avisoDominio === 'mandando'}
+                      onClick={pedirDominio}
+                    >
+                      {avisoDominio === 'mandando' ? 'Avisando…' : 'Avisar para que lo activen'}
+                    </button>
+                    <p className="form-hint">
+                      Escrito el dominio, este es el siguiente paso: nos llega el aviso y lo damos
+                      de alta.
+                    </p>
+                  </>
+                )}
+                {errorDominioAviso && (
+                  <p className="aviso-falta__error-suelto">
+                    {errorDominioAviso.texto}{' '}
+                    <a href={errorDominioAviso.reserva}>Avisar desde mi correo</a>
+                  </p>
+                )}
+              </div>
               <p className="form-hint">
-                <b>Acordaos del www.</b> Media España lo escribe. Añadid los dos en Vercel
-                (<code>{web.dominio}</code> y <code>www.{web.dominio}</code>) y que uno redirija al
-                otro; si no, quien escriba el www no llegará.
+                <b>El www va incluido.</b> Media España lo escribe, así que se dan de alta los dos
+                (<code>{web.dominio}</code> y <code>www.{web.dominio}</code>) y uno lleva al otro.
+                De eso nos encargamos nosotros.
               </p>
             </div>
           )}
           <details className="form-hint" style={{ marginTop: '0.5rem' }}>
             <summary>Cómo poner tu dominio propio (p. ej. hermandaddetriana.es)</summary>
             <ol style={{ margin: '0.5rem 0 0 1rem', lineHeight: 1.7 }}>
-              <li>Compra el dominio en un registrador (IONOS, GoDaddy, Namecheap…).</li>
-              <li>Escríbelo aquí arriba y guarda.</li>
-              <li>Avísanos para que lo demos de alta en el servidor (es un paso nuestro, de un minuto).</li>
-              <li>En tu registrador, apunta los DNS a donde te digamos (un registro <code>A</code> o un <code>CNAME</code>).</li>
-              <li>En unos minutos, quien escriba <b>tu dominio</b> verá tu web directamente, sin el enlace largo.</li>
+              <li><b>Vosotros:</b> comprad el dominio en un registrador (IONOS, GoDaddy, Namecheap…).</li>
+              <li><b>Vosotros:</b> escribidlo aquí arriba y guardad.</li>
+              <li><b>Vosotros:</b> dadle al botón de avisarnos, aquí mismo.</li>
+              <li><b>Nosotros:</b> lo damos de alta en el servidor y os mandamos los DNS que hay que poner.</li>
+              <li><b>Vosotros:</b> ponéis esos DNS en vuestro registrador.</li>
+              <li>En unos minutos, quien escriba <b>vuestro dominio</b> ve vuestra web directamente.</li>
             </ol>
             <p style={{ marginTop: '0.4rem' }}>
-              Ojo con el <code>www</code>: media España lo escribe. En Vercel añadid los dos
-              (<b>hermandaddetriana.es</b> y <b>www.hermandaddetriana.es</b>) y decidle que uno
-              redirija al otro; si no, quien escriba el <code>www</code> no llegará.
-            </p>
-            <p style={{ marginTop: '0.4rem' }}>
-              El certificado HTTPS lo emite Vercel solo, sin que tengáis que hacer nada.
+              El candado de seguridad (HTTPS) se emite solo. No tenéis que comprar nada aparte ni
+              renovarlo nunca.
             </p>
           </details>
         </div>

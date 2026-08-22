@@ -2855,6 +2855,16 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .cuotas-nuevo-ejercicio .btn { flex: none; }
 /* El bloque de «darle acceso» en la ficha del hermano. Separado del resto
    porque no es un dato suyo: es una acción, y de las que se hacen una vez. */
+/* El aviso para activar un dominio. Va destacado dentro del bloque del
+   dominio porque es EL paso siguiente en cuanto se escribe uno: si se
+   confunde con el resto del texto, no se pulsa. */
+.dominio-aviso {
+  margin: 0.8rem 0; padding: 0.7rem 0.85rem;
+  background: var(--surface-2, rgba(0, 0, 0, 0.03));
+  border-radius: 10px;
+}
+.dominio-aviso .form-hint { margin: 0.45rem 0 0; }
+
 .ficha-acceso {
   margin: 0.9rem 0; padding: 0.75rem 0.9rem;
   border: 1px dashed var(--linea); border-radius: 10px;

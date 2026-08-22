@@ -1,4 +1,5 @@
 import type { IconoHermandad } from '../lib/hermandades'
+import { inicialesHermandad } from '../lib/color'
 
 const GLIFOS: Record<IconoHermandad, JSX.Element> = {
   cruz: (
@@ -47,6 +48,11 @@ interface EscudoHermandadProps {
    * hermano reconozca la suya de un vistazo, sin leer.
    */
   logoDataUrl?: string | null
+  /**
+   * El nombre de la hermandad, para poner sus iniciales cuando no hay ni logo
+   * ni glifo — que es el caso de cualquier hermandad recién creada.
+   */
+  nombre?: string
 }
 
 /**
@@ -55,7 +61,9 @@ interface EscudoHermandadProps {
  * hermandad una identidad reconocible a simple vista en el buscador y en la
  * cabecera del área del hermano.
  */
-export default function EscudoHermandad({ color, icono, size = 36, className, logoDataUrl }: EscudoHermandadProps) {
+export default function EscudoHermandad({
+  color, icono, size = 36, className, logoDataUrl, nombre,
+}: EscudoHermandadProps) {
   // Con logo propio, se enseña el logo y no se dibuja nada.
   if (logoDataUrl) {
     return (
@@ -107,11 +115,37 @@ export default function EscudoHermandad({ color, icono, size = 36, className, lo
         stroke="rgba(255,255,255,0.35)"
         strokeWidth="0.6"
       />
-      {icono && (
+      {icono ? (
         <g transform="translate(4.2 5.2) scale(0.65)" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.92">
           {GLIFOS[icono]}
         </g>
-      )}
+      ) : nombre ? (
+        /*
+         * SIN LOGO Y SIN GLIFO, LAS INICIALES.
+         *
+         * El glifo dibujado solo lo tienen las hermandades de muestra. Una
+         * hermandad de verdad que todavía no ha subido su escudo se quedaba
+         * con un escudo LISO, sin nada dentro: en una lista, todas iguales
+         * salvo por el color. Justo lo contrario de para lo que está ahí, que
+         * es reconocer la tuya sin leer.
+         *
+         * Las iniciales no son el escudo de nadie, pero distinguen. Y en
+         * cuanto la hermandad sube el suyo, esto desaparece solo.
+         */
+        <text
+          x="12"
+          y="14.5"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="#fff"
+          fillOpacity="0.95"
+          fontSize="9"
+          fontWeight="700"
+          fontFamily="system-ui, sans-serif"
+        >
+          {inicialesHermandad(nombre)}
+        </text>
+      ) : null}
     </svg>
   )
 }

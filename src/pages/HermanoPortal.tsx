@@ -56,6 +56,7 @@ import { estiloTema, inicialesHermandad } from '../lib/color'
 import AvisoFalta from '../components/AvisoFalta'
 import Drawer from '../components/Drawer'
 import FotoHermano from '../components/FotoHermano'
+import ReportarFallo from '../components/ReportarFallo'
 import { requisito, requisitoActual } from '../lib/requisitos'
 import {
   ID_HERMANDAD_PRINCIPAL,
@@ -293,6 +294,7 @@ export default function HermanoPortal() {
 
   // Solicitud de papeleta de sitio (el hermano la pide; la secretaría la acepta o rechaza).
   const [solicitudesPapeleta, setSolicitudesPapeleta] = useSolicitudesPapeleta()
+  const [reporteAbierto, setReporteAbierto] = useState(false)
   const [solModalidad, setSolModalidad] = useState<ModalidadPapeleta>('Nazareno')
   const [solTramo, setSolTramo] = useState('')
   const [solPreferencia, setSolPreferencia] = useState('')
@@ -1228,7 +1230,7 @@ export default function HermanoPortal() {
                   {opcionesHermandad.map((h) => (
                     <li key={h.id}>
                       <button type="button" className="portal__picker-item" onClick={() => elegirHermandad(h)}>
-                        <EscudoHermandad color={h.color} icono={h.icono} logoDataUrl={h.logoDataUrl} size={30} />
+                        <EscudoHermandad color={h.color} icono={h.icono} logoDataUrl={h.logoDataUrl} nombre={h.nombre} size={30} />
                         <span>
                           <b>{h.nombre}</b>
                           {h.ciudad && <small>{h.ciudad}</small>}
@@ -1337,6 +1339,7 @@ export default function HermanoPortal() {
                     color={hermandadElegida.color}
                     icono={hermandadElegida.icono}
                     logoDataUrl={hermandadElegida.logoDataUrl}
+                    nombre={hermandadElegida.nombre}
                     size={34}
                   />
                   <span>
@@ -1490,7 +1493,22 @@ export default function HermanoPortal() {
         color={colorActivo}
         icono={esPrincipal ? undefined : hermandadMuestra?.icono}
         onSalir={salir}
+        onContarFallo={() => setReporteAbierto(true)}
         alPanel={llevaCargo}
+      />
+      <ReportarFallo
+        abierto={reporteAbierto}
+        onCerrar={() => setReporteAbierto(false)}
+        contexto={{
+          ruta: '/hermano',
+          hermandad: nombreHermandadActiva,
+          // Aquí no hay cargo: quien reporta es un hermano, y decirlo así
+          // ahorra la pregunta de «¿desde dónde lo mandaste?».
+          cargo: 'área del hermano',
+          navegador: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+          tamanoPantalla:
+            typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}` : undefined,
+        }}
       />
       <main className="portal__main">
         {deBaja && (
@@ -2234,6 +2252,7 @@ function PortalHead({
   color,
   icono,
   onSalir,
+  onContarFallo,
   alPanel,
 }: {
   hermandad: string
@@ -2241,6 +2260,8 @@ function PortalHead({
   color?: string
   icono?: IconoHermandad
   onSalir?: () => void
+  /** Abre el cajón de contar un fallo. */
+  onContarFallo?: () => void
   /**
    * Quien lleva cargo entra por la misma puerta que cualquier hermano —su DNI
    * y su clave— y desde aquí pasa al panel de un clic.
@@ -2260,12 +2281,11 @@ function PortalHead({
               suyo si no. Antes esto tenía su propio `<img>` aparte, y por eso
               el buscador podía quedarse con el dibujo genérico mientras la
               cabecera sí enseñaba el escudo de verdad. */}
-          {logo || (color && icono) ? (
-            <EscudoHermandad color={color ?? '#6A1A23'} icono={icono} logoDataUrl={logo} size={28} />
-          ) : color ? (
-            <span className="portal__logo-badge" style={{ background: color }} aria-hidden="true">
-              {inicialesHermandad(hermandad)}
-            </span>
+          {/* Con color hay hermandad detrás, y el escudo se apaña con lo que
+              haya: su logo, su glifo o sus iniciales. Sin color no hay
+              hermandad elegida todavía y va la marca de Gobergo. */}
+          {color ? (
+            <EscudoHermandad color={color} icono={icono} logoDataUrl={logo} nombre={hermandad} size={28} />
           ) : (
             <LogoMark size={28} />
           )}
@@ -2280,6 +2300,14 @@ function PortalHead({
           <Link to="/app" className="btn btn-outline btn-sm">
             Ir al panel de gestión
           </Link>
+        )}
+        {/* Contar un fallo TAMBIÉN aquí, y aquí hace más falta que en el panel:
+            el hermano está solo con su móvil, sin nadie de la junta al lado a
+            quien preguntar. Si no puede decirlo desde aquí, no lo dice. */}
+        {onContarFallo && (
+          <button className="btn btn-ghost btn-sm" onClick={onContarFallo}>
+            Contar un fallo
+          </button>
         )}
         {onSalir && (
           <button className="btn btn-ghost btn-sm" onClick={onSalir}>
