@@ -52,6 +52,7 @@ export const PIEZAS = [
   // `modulo_permitido()` y varias políticas que crean los archivos de arriba.
   // De todas las definiciones de una función, manda la última que se ejecuta.
   ['hermano-con-cargo.sql', 'Una persona, una ficha: el cargo va en la ficha del hermano'],
+  ['seguridad-claves-y-registro.sql', 'Fuera las contraseñas en claro; el registro lo escribe la base'],
 ]
 
 const CABECERA = `-- =============================================================================

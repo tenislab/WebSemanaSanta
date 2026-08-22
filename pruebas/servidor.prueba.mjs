@@ -186,4 +186,9 @@ export default async function ({ caso }) {
   caso('la función lleva red de seguridad', true, /try \{\n\s*await servir\(req, res\)/.test(w))
   caso('y si falla sirve la página sin adornar', true,
     /se sirve la página sin adornar/.test(w))
+
+  // El idioma sale de la hermandad, y limpio. Si alguien vuelve a meter el
+  // valor crudo en el HTML, salta aquí.
+  caso('el idioma del HTML sale de la hermandad', true, /lang="\$\{idioma\}"/.test(w))
+  caso('y pasa por el filtro', true, /const idioma = idiomaSeguro\(web\.idioma\)/.test(w))
 }

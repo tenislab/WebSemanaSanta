@@ -34,7 +34,6 @@ export default function ImportarCenso({
     () => proponerEmparejado([]),
   )
   const [conLosQueYaEstan, setConLosQueYaEstan] = useState<'actualizar' | 'saltar'>('actualizar')
-  const [clave, setClave] = useState('cabildo2026')
   const [resultado, setResultado] = useState<{ creados: number; actualizados: number } | null>(null)
   /**
    * El censo tal y como estaba justo antes de importar. Traer mil fichas y no
@@ -88,7 +87,7 @@ export default function ImportarCenso({
   function confirmar() {
     if (!ensayo) return
     setCensoAnterior(censo)
-    const r = aplicar(ensayo, censo, { conLosQueYaEstan, clavePorDefecto: clave }, nuevoId)
+    const r = aplicar(ensayo, censo, { conLosQueYaEstan }, nuevoId)
     onImportar(r.censo)
     setResultado({ creados: r.creados, actualizados: r.actualizados })
     setDeshecho(false)
@@ -279,14 +278,18 @@ export default function ImportarCenso({
               </p>
             </div>
           )}
-          <div className="form-row">
-            <label htmlFor="impClave">Contraseña inicial para los que entren nuevos</label>
-            <input id="impClave" type="text" value={clave} onChange={(e) => setClave(e.target.value)} />
-            <p className="form-hint">
-              Con ella entrarán en su área por primera vez, usando su DNI. Decídsela cuando les
-              aviséis de que ya pueden entrar.
-            </p>
-          </div>
+          {/*
+            AQUÍ HABÍA UNA CASILLA DE «contraseña inicial para todos», y se ha
+            quitado. Ponía LA MISMA contraseña a las ochocientas fichas del
+            Excel, y quedaba escrita en claro en cada una. Una contraseña que
+            se sabe la hermandad entera no es una contraseña.
+          */}
+          <p className="form-hint">
+            Los hermanos que entren con esta importación <b>todavía no podrán entrar</b> en su
+            área: se les crea la ficha, no la cuenta. Cuando queráis darle acceso a alguien, se
+            hace desde su ficha, y entonces se le manda por correo una contraseña de un solo uso
+            que cambiará al entrar.
+          </p>
 
           {/* Números de hermano pedidos que ya estaban cogidos. No impide
               importar, pero hay que decirlo ANTES: el número es lo que más

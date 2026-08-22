@@ -15,7 +15,21 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
     cuota_al_dia: h.cuotaAlDia,
     iban: h.iban,
     dni: h.dni,
-    clave_acceso: h.claveAcceso,
+    /*
+     * LA CONTRASEÑA YA NO VIAJA A LA BASE.
+     *
+     * `clave_acceso` guardaba la contraseña del hermano en texto plano dentro
+     * de la tabla, y la ficha la imprimía en pantalla. No hacía falta para
+     * nada: la de verdad vive cifrada en Supabase Auth y es la que comprueba
+     * `signInWithPassword`. Esta era una copia en claro que solo servía para
+     * el modo demostración —donde no hay base de datos— y que en producción
+     * era un regalo para cualquiera que pudiera leer el censo.
+     *
+     * Se manda vacía, no se quita del todo: la columna sigue existiendo un
+     * tiempo para que la versión anterior de la web no falle al guardar
+     * mientras dura el cambio. Ver supabase/seguridad-claves-y-registro.sql.
+     */
+    clave_acceso: '',
     auth_user_id: h.authUserId,
     etiquetas: h.etiquetas ?? [],
     fecha_nacimiento: h.fechaNacimiento ?? null,
@@ -75,7 +89,9 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     cuotaAlDia: r.cuota_al_dia as boolean,
     iban: (r.iban as string | null) ?? null,
     dni: r.dni as string,
-    claveAcceso: r.clave_acceso as string,
+    // Nunca se lee de la base: en modo demostración vive solo en el navegador,
+    // y con Supabase la contraseña la guarda Auth, no nosotros.
+    claveAcceso: '',
     authUserId: (r.auth_user_id as string | null) ?? null,
     etiquetas: (r.etiquetas as string[] | null) ?? [],
     fechaNacimiento: (r.fecha_nacimiento as string | null) ?? undefined,

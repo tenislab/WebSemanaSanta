@@ -94,3 +94,51 @@ le dice que vuelva a mirar.)
   luego cuesta meses quitarlo.
 - **Con dominio propio configurado**, el `canonical` apunta al dominio y no al
   enlace largo, para que Google no cuente dos webs distintas.
+
+---
+
+# Segunda vuelta (agosto 2026): que cada página sea lo que es
+
+Lo de arriba resolvió **compartir**. Esto resuelve **encontrar**.
+
+## Lo que se manda ahora
+
+| Página | Qué le decimos a Google |
+|---|---|
+| Portada | `ReligiousOrganization` + `Place` (la sede, con su dirección) |
+| Noticia | `NewsArticle` con titular, fecha, foto y editor |
+| Titular | La ficha, con sus migas de pan |
+| Actualidad | El listado, con sus migas de pan |
+
+Y en todas, `BreadcrumbList`: lo que hace que en el buscador se lea
+«Hermandad › Actualidad › El cartel de 2027» en vez de
+`hermandad.es/n/cartel-2027`.
+
+## Por qué la fecha importa tanto
+
+Una `NewsArticle` sin `datePublished` no entra en Google Discover ni en los
+resultados de «lo más reciente». Para una hermandad eso es justo lo que
+interesa: el día que se publica el cartel o se anuncia el besamanos, esa
+noticia tiene que poder salir. Sin fecha, no puede.
+
+La fecha va también en `article:published_time`, que es lo que lee Facebook.
+
+## El idioma
+
+`index.html` trae `lang="es"` fijo, porque la aplicación es española. Pero la
+web de la hermandad puede estar en otra lengua, y entonces esa etiqueta miente:
+Google indexa la página como castellana y un lector de pantalla la lee con
+acento castellano. El servidor lo corrige con `web.idioma`.
+
+Va filtrado por `idiomaSeguro()`: un código de idioma es letras y guiones
+(`es`, `en`, `pt-BR`). Si lo guardado no lo parece, se sirve en castellano. Sin
+ese filtro, unas comillas escritas en el editor cerrarían el atributo y podrían
+escribir HTML en la página.
+
+## Detalle para quien lo mantenga
+
+`seoWeb.ts` lee la web con interrogantes (`web.seo?.titulo`) **a propósito**.
+El navegador rellena los huecos al cargar; el servidor no, lee el JSON crudo de
+la base. Una web guardada antes de que existiera un campo no lo tiene, y sin
+interrogante se cae la cabecera entera y la página sale sin una sola etiqueta,
+sin dar error. Si añades un campo nuevo, léelo con interrogante.

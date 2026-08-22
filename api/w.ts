@@ -51,6 +51,7 @@
  * tiempo de ejecución.
  */
 import type { WebPublica } from '../src/lib/webPublica'
+import type { PiezaSeo } from '../src/lib/seoWeb'
 import type { HermandadSettings } from '../src/lib/hermandadSettings'
 import type { CultoWeb } from '../src/lib/webPublica'
 
@@ -225,7 +226,7 @@ async function servir(req: Peticion, res: Respuesta) {
     return
   }
   /* Se pide aquí, no arriba: ver la nota del principio del fichero. */
-  const { cabeceraHtml } = await import('../src/lib/seoWeb')
+  const { cabeceraHtml, idiomaSeguro } = await import('../src/lib/seoWeb')
   const slug = web.slug || slugRuta
 
   // Los datos de la hermandad (nombre legal, dirección, logo) salen de una
@@ -248,24 +249,49 @@ async function servir(req: Peticion, res: Respuesta) {
   } as HermandadSettings
   const cultos: CultoWeb[] = []
 
-  // La pieza concreta que se está compartiendo, si es una página suelta.
-  let pieza: { titulo: string; descripcion: string; imagen: string | null; ruta: string } | undefined
+  /*
+   * La pieza concreta que se está compartiendo, si es una página suelta.
+   *
+   * Va con TIPO y con FECHA. Sin el tipo, una noticia y la ficha de un titular
+   * se describían igual a ojos de Google; y una noticia sin fecha no puede
+   * salir en Discover ni en «lo más reciente», que es justo donde una
+   * hermandad quiere aparecer cuando publica el cartel.
+   */
+  let pieza: PiezaSeo | undefined
   if (tipoPieza === 'n' && slugPieza) {
     const n = (web.noticias ?? []).find((x) => (x.slug?.trim() || '') === slugPieza || x.id === slugPieza)
-    if (n) pieza = { titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl, ruta: `/n/${slugPieza}` }
+    if (n) {
+      pieza = {
+        titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl,
+        ruta: `/n/${slugPieza}`, tipo: 'noticia', fecha: n.fecha || undefined,
+      }
+    }
   } else if (tipoPieza === 't' && slugPieza) {
     const t = (web.titulares ?? []).find((x) => (x.slug?.trim() || '') === slugPieza || x.id === slugPieza)
-    if (t) pieza = { titulo: t.nombre, descripcion: t.descripcion || t.autoria, imagen: t.fotoDataUrl, ruta: `/t/${slugPieza}` }
+    if (t) {
+      pieza = {
+        titulo: t.nombre, descripcion: t.descripcion || t.autoria, imagen: t.fotoDataUrl,
+        ruta: `/t/${slugPieza}`, tipo: 'titular',
+      }
+    }
   } else if (tipoPieza === 'noticias') {
-    pieza = { titulo: 'Actualidad', descripcion: '', imagen: null, ruta: '/noticias' }
+    pieza = { titulo: 'Actualidad', descripcion: '', imagen: null, ruta: '/noticias', tipo: 'listado' }
   }
 
   const base = (web.dominio ?? '').trim() ? `https://${web.dominio!.trim()}` : `${origen}/w/${slug}`
   const cabecera = cabeceraHtml(web, hermandad, cultos, base, pieza)
 
+  // El idioma de la página. El `index.html` viene con `lang="es"` fijo porque
+  // la aplicación es española, pero una hermandad puede publicar su web en
+  // otra lengua, y entonces esa etiqueta miente: Google la indexa como
+  // castellano y un lector de pantalla la lee con acento castellano. Aquí se
+  // sabe el idioma de verdad, así que se corrige.
+  const idioma = idiomaSeguro(web.idioma)
+
   // Se quitan el título y la descripción genéricos de la aplicación para que no
   // haya dos, y se mete la cabecera de la hermandad justo antes de </head>.
   const htmlSinCabecera = html
+    .replace(/<html([^>]*)\slang=["'][^"']*["']/i, `<html$1 lang="${idioma}"`)
     .replace(/<title>[\s\S]*?<\/title>/i, '')
     .replace(/<meta\s+name=["']description["'][^>]*>/gi, '')
   res.setHeader('Content-Type', 'text/html; charset=utf-8')

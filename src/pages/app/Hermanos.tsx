@@ -17,6 +17,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { crearAccesoHermano } from '../../lib/accesos'
 import { darLaBienvenida } from '../../lib/bienvenida'
+import { claveDeUnSoloUso } from '../../lib/claves'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
@@ -249,7 +250,8 @@ export default function Hermanos() {
       cuotaAlDia: false,
       iban: null,
       dni: dniSolicitud,
-      claveAcceso: sol.clavePropuesta,
+      // Vacía a propósito: la de verdad vive en Supabase Auth. Ver claves.ts.
+      claveAcceso: '',
       authUserId: null,
       // Si la pidió un hermano para un hijo suyo, el menor queda a su cargo y
       // podrá gestionarle la papeleta desde su propia cuenta.
@@ -273,9 +275,12 @@ export default function Hermanos() {
      * y que hacía pensar que el alta no había funcionado.
      */
     const esMenorACargo = Boolean(sol.tutorId) || !sol.clavePropuesta.trim()
+    /* La que eligió al pedir el alta, si eligió una; si no, una de un solo uso.
+       En los dos casos deja de guardarse en la ficha. */
+    const claveProvisional = sol.clavePropuesta.trim() || claveDeUnSoloUso()
     const acceso = esMenorACargo
       ? { id: null, error: null }
-      : await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
+      : await crearAccesoHermano(sol.email, claveProvisional, sol.dni, sol.nombre)
     nuevo.authUserId = acceso.id
     // Si no se ha podido crear su acceso, se DICE. Ver crearAccesoHermano().
     if (acceso.error) setAvisoAcceso(acceso.error)
@@ -322,7 +327,10 @@ export default function Hermanos() {
       } else {
         void darLaBienvenida({
           id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
-          numero: suNumero, claveEsElDni: nuevo.claveAcceso === nuevo.dni,
+          numero: suNumero,
+          // Solo si la eligió ELLA al pedir el alta ya se la sabe: entonces no
+          // se le repite por correo. Si se la hemos puesto nosotros, sí.
+          claveProvisional: sol.clavePropuesta.trim() ? null : (acceso.id ? claveProvisional : null),
           hermandad: hermandad.nombreLegal,
         })
       }
@@ -594,14 +602,25 @@ export default function Hermanos() {
       cuotaAlDia: false,
       iban,
       dni,
-      // Al dar de alta, su contraseña provisional es su propio DNI: fácil de
-      // comunicar y que el hermano cambia luego desde su área.
-      claveAcceso: dni,
+      /*
+       * Su contraseña provisional es ALEATORIA, no su DNI.
+       *
+       * Antes era el DNI, «fácil de comunicar». Y también fácil de adivinar:
+       * el DNI está en su ficha, así que cualquiera con acceso al censo podía
+       * entrar como cualquier hermano que no la hubiera cambiado — incluido el
+       * Hermano Mayor, cuyo cargo abre los trece módulos. Ver src/lib/claves.ts.
+       *
+       * No se guarda en ninguna parte: se usa para crear la cuenta, se le manda
+       * por correo y aquí queda en blanco. La de verdad vive cifrada en
+       * Supabase Auth.
+       */
+      claveAcceso: '',
       authUserId: null,
       fechaNacimiento,
       campos: Object.keys(camposNuevo).length ? camposNuevo : undefined,
     }
-    const acceso = await crearAccesoHermano(email, dni, dni, nombre)
+    const claveProvisional = claveDeUnSoloUso()
+    const acceso = await crearAccesoHermano(email, claveProvisional, dni, nombre)
     nuevo.authUserId = acceso.id
     if (acceso.error) setAvisoAcceso(acceso.error)
     // El duplicado se vuelve a mirar DENTRO del updater: entre el clic y la
@@ -618,11 +637,12 @@ export default function Hermanos() {
       return [...prev, { ...nuevo, numero: suNumero }]
     })
     // La bienvenida, igual que en el alta desde solicitud.
-    // La bienvenida, igual que en el alta desde solicitud.
+    // La bienvenida, igual que en el alta desde solicitud, y con la contraseña
+    // de un solo uso: es la única vez que se escribe en algún sitio.
     if (!duplicado) {
       void darLaBienvenida({
         id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
-        numero: suNumero, claveEsElDni: nuevo.claveAcceso === nuevo.dni,
+        numero: suNumero, claveProvisional: acceso.id ? claveProvisional : null,
         hermandad: hermandad.nombreLegal,
       })
     }
@@ -1229,7 +1249,18 @@ export default function Hermanos() {
               )}
               <div>
                 <dt>Entra a su área con</dt>
-                <dd>su DNI y la contraseña <code>{selected.claveAcceso}</code></dd>
+                <dd>
+                  {/*
+                    LA CONTRASEÑA YA NO SE ENSEÑA, y era lo peor de todo: se
+                    imprimía en claro en la ficha, así que bastaba con abrirla
+                    para poder entrar como esa persona.
+                    Ahora ni se guarda ni se sabe: se le manda de un solo uso
+                    al darle de alta y él la cambia. Si la pierde, se le manda
+                    una nueva a su correo desde la propia pantalla de acceso.
+                  */}
+                  su DNI y su contraseña. Si no la recuerda, puede pedir una
+                  nueva desde <code>/hermano</code>, con «He olvidado mi contraseña».
+                </dd>
               </div>
             </dl>
 

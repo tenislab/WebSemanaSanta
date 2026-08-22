@@ -126,7 +126,7 @@ async function bienvenida({ caso }) {
 
   const t = textoBienvenida({
     id: '1', nombre: 'María Reyes Ortega', email: 'm@x.com', dni: '12345678A',
-    numero: 214, claveEsElDni: true, hermandad: 'Real Hermandad del Nazareno',
+    numero: 214, claveProvisional: 'KRPT-4829-MXWD', hermandad: 'Real Hermandad del Nazareno',
   })
   const todo = t.parrafos.join(' ')
 
@@ -137,11 +137,17 @@ async function bienvenida({ caso }) {
   caso('y qué hacer si olvida la contraseña', true, /pedir una nueva/.test(todo))
 
   /*
-   * LA CONTRASEÑA NO VA ESCRITA, y es a propósito: mandarla la deja para
-   * siempre en un buzón que se sincroniza con el móvil, el ordenador de casa y
-   * el del trabajo. Y no hace falta, porque la primera vez es su propio DNI.
+   * LA CONTRASEÑA VA EN EL CORREO, y ahora sí hace falta.
+   *
+   * Antes la inicial era su propio DNI: no había que mandarla porque ya se la
+   * sabía — y también se la sabía cualquiera que pudiera leer el censo. Ahora
+   * es aleatoria y no se guarda en ninguna parte, así que este correo es la
+   * única vez que se escribe.
    */
+  caso('lleva la contraseña de un solo uso', true, todo.includes('KRPT-4829-MXWD'))
+  caso('y dice que es de un solo uso', true, /un solo uso/.test(todo))
   caso('se le pide cambiarla al entrar', true, /[Cc]ámbiala nada más entrar/.test(todo))
+  caso('y se avisa de que no se repite', true, /único correo donde aparece/.test(todo))
 
   /*
    * Y SE HABLA SIN GÉNERO. «Ya estás dado de alta» hay que concordarlo, y la
@@ -155,13 +161,14 @@ async function bienvenida({ caso }) {
   // pone un cero.
   const sinNada = textoBienvenida({
     id: '1', nombre: 'Juan Pérez', email: 'j@x.com', dni: '99999999Z',
-    numero: 0, claveEsElDni: false,
+    numero: 0, claveProvisional: null,
   })
   caso('sin hermandad no se inventa el nombre', true, /de la hermandad/.test(sinNada.asunto))
   caso('sin número no se pone un cero', false, /número de hermano es el 0/.test(sinNada.parrafos.join(' ')))
-  // Y si la clave no es el DNI, no se dice cuál es.
-  caso('si la clave no es el DNI, no se escribe', true,
-    /que te haya dado la hermandad/.test(sinNada.parrafos.join(' ')))
+  // Si la eligió ella al pedir el alta, no se le repite: ya la sabe, y
+  // escribirla otra vez solo añade un sitio más donde queda.
+  caso('si la eligió ella, no se le repite', true,
+    /la que elegiste al pedir el alta/.test(sinNada.parrafos.join(' ')))
 
   // Y la pantalla la manda en los DOS sitios que dan de alta.
   const { readFile } = await import('node:fs/promises')

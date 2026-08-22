@@ -107,12 +107,21 @@ export default async function ({ cargar, caso }) {
     email: 'vieja@correo.es', telefono: '600 000 000', direccion: 'C/ Vieja', cuotaAlDia: true,
     iban: null, dni: '12345678A', claveAcceso: 'x', authUserId: null,
   }]
-  const r = m.aplicar(e, censoCompleto, { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'cabildo' }, id)
+  const r = m.aplicar(e, censoCompleto, { conLosQueYaEstan: 'actualizar' }, id)
   caso('crea uno', 1, r.creados)
   caso('actualiza uno', 1, r.actualizados)
   caso('el censo queda con dos', 2, r.censo.length)
   caso('al nuevo se le da el número siguiente', 90, r.censo[1].numero)
-  caso('con la contraseña por defecto', 'cabildo', r.censo[1].claveAcceso)
+  /*
+   * Ya NO se le pone contraseña al importar. Antes se ponía `clavePorDefecto`,
+   * la misma para las ochocientas fichas del Excel, y quedaba escrita en claro
+   * en cada una. Una contraseña que se sabe la hermandad entera no lo es.
+   *
+   * Un hermano importado no tiene cuenta: la crea secretaría desde su ficha y
+   * entonces se le manda una de un solo uso.
+   */
+  caso('sin contraseña: al importar no se crea cuenta', '', r.censo[1].claveAcceso ?? '')
+  caso('y sin cuenta de acceso', null, r.censo[1].authUserId)
   caso('se actualiza el correo del que ya estaba', 'ana@correo.es', r.censo[0].email)
   // Lo que el archivo NO trae no se borra: la hoja no tenía teléfono.
   caso('lo que no trae el archivo no se borra', '600 000 000', r.censo[0].telefono)
@@ -145,7 +154,7 @@ export default async function ({ cargar, caso }) {
     2026,
   )
   caso('la hoja corta actualiza a Ana', 1, hojaCorta.actualizados)
-  const tras = m.aplicar(hojaCorta, conIban, { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, () => 'x')
+  const tras = m.aplicar(hojaCorta, conIban, { conLosQueYaEstan: 'actualizar' }, () => 'x')
   caso('NO le borra la antigüedad', 1991, tras.censo[0].antiguedad)
   caso('NO la convierte en «Nuevo»', 'Activo', tras.censo[0].estado)
   caso('NO le borra el IBAN', 'ES9121000418450200051332', tras.censo[0].iban)
@@ -160,14 +169,14 @@ export default async function ({ cargar, caso }) {
     conIban,
     2026,
   )
-  const tras2 = m.aplicar(hojaLarga, conIban, { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, () => 'x')
+  const tras2 = m.aplicar(hojaLarga, conIban, { conLosQueYaEstan: 'actualizar' }, () => 'x')
   caso('con columna de antigüedad, sí se escribe', 1985, tras2.censo[0].antiguedad)
   caso('con columna de estado, sí se escribe', 'Baja', tras2.censo[0].estado)
   caso('con columna de IBAN, sí se escribe', 'ES7620770024003102575766', tras2.censo[0].iban)
 
   // Un alta que viene en la hoja corta sí necesita valores: hay que poner algo.
   const alta = m.ensayar([cabCorta, ['Luis Nuevo', '99999999Z']], m.proponerEmparejado(cabCorta), [], 2026)
-  const trasAlta = m.aplicar(alta, [], { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, () => 'n1')
+  const trasAlta = m.aplicar(alta, [], { conLosQueYaEstan: 'actualizar' }, () => 'n1')
   caso('a quien entra nuevo sí se le pone el año en curso', 2026, trasAlta.censo[0].antiguedad)
   caso('y se le deduce «Nuevo»', 'Nuevo', trasAlta.censo[0].estado)
 
@@ -195,7 +204,7 @@ export default async function ({ cargar, caso }) {
     [cabBaja, ['Se fue', '10000001A', 'Sí'], ['Sigue aquí', '10000002B', 'No']],
     m.proponerEmparejado(cabBaja), [], 2026,
   )
-  const trasBaja = m.aplicar(hojaBaja, [], { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, (() => { let n = 0; return () => `n${++n}` })())
+  const trasBaja = m.aplicar(hojaBaja, [], { conLosQueYaEstan: 'actualizar' }, (() => { let n = 0; return () => `n${++n}` })())
   caso('el que se fue entra de baja', 'Baja', trasBaja.censo.find((h) => h.nombre === 'Se fue')?.estado)
   caso('y el que sigue, activo', 'Activo', trasBaja.censo.find((h) => h.nombre === 'Sigue aquí')?.estado)
   // Y a las bajas les toca el número 0, no uno del censo.
@@ -227,7 +236,7 @@ export default async function ({ cargar, caso }) {
   caso('y espacios y minúsculas', '12345678A', m.limpiarDni(' 12345678 a '))
 
   // Saltar en vez de actualizar.
-  const r2 = m.aplicar(e, censoCompleto, { conLosQueYaEstan: 'saltar', clavePorDefecto: 'c' }, () => 'x')
+  const r2 = m.aplicar(e, censoCompleto, { conLosQueYaEstan: 'saltar' }, () => 'x')
   caso('con «saltar», no se actualiza a nadie', 0, r2.actualizados)
   caso('pero el nuevo sí entra', 1, r2.creados)
   caso('y el que ya estaba se queda igual', 'vieja@correo.es', r2.censo[0].email)
@@ -240,7 +249,7 @@ export default async function ({ cargar, caso }) {
      ['De baja', '88888888J', '7', 'Baja']],
     m.proponerEmparejado(['Nombre', 'DNI', 'Nº', 'Estado']), [], 2026,
   )
-  const r3 = m.aplicar(conNumeros, censoCompleto, { conLosQueYaEstan: 'actualizar', clavePorDefecto: 'c' }, id)
+  const r3 = m.aplicar(conNumeros, censoCompleto, { conLosQueYaEstan: 'actualizar' }, id)
   caso('el 89 ya está cogido, se le da otro', true, r3.censo[1].numero !== 89)
   caso('el 500 estaba libre, se respeta', 500, r3.censo[2].numero)
   caso('quien entra de baja queda fuera de la numeración', 0, r3.censo[3].numero)
@@ -291,7 +300,7 @@ async function numeroEnLaVistaPrevia({ cargar, caso }) {
   caso('y cuál le toca', true, /3/.test(ens.avisos[0]))
 
   // Lo que enseña la vista previa y lo que hace la importación coinciden.
-  const res = m.aplicar(ens, censo, { conLosQueYaEstan: 'saltar', clavePorDefecto: 'k' }, () => 'n1')
+  const res = m.aplicar(ens, censo, { conLosQueYaEstan: 'saltar' }, () => 'n1')
   const creado = res.censo.find((h) => h.id === 'n1')
   caso('la importación da el mismo número que enseñó la previa', ens.filas[0].datos.numero, creado.numero)
 

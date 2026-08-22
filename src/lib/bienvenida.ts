@@ -9,16 +9,19 @@ import { avisarPorCorreo } from './avisosCorreo'
  * llamadas, y las que no se hacen se convierten en treinta personas que no
  * saben que tienen un área.
  *
- * LA CONTRASEÑA NO VA EN EL CORREO, y es a propósito.
+ * LA CONTRASEÑA, Y POR QUÉ AHORA SÍ VA EN EL CORREO.
  *
- * Mandarla escrita la deja para siempre en un buzón que se sincroniza con el
- * móvil, el ordenador de casa y el del trabajo. Y no hace falta: la clave con
- * la que entra la primera vez es SU PROPIO DNI, que ya se sabe. Así que el
- * correo dice cómo entrar, no con qué — y le pide que la cambie nada más
- * entrar, que es lo que hay que hacer de todas formas.
+ * Antes la contraseña inicial era SU PROPIO DNI, así que no hacía falta
+ * mandarla: ya se la sabía. El problema es que también se la sabía cualquiera
+ * que pudiera leer el censo, porque el DNI está en la ficha.
  *
- * Si la hermandad le puso otra clave distinta del DNI, el correo lo dice sin
- * escribirla: «la que te haya dado la hermandad».
+ * Ahora es aleatoria y no se guarda en ninguna parte —ni en la ficha ni en la
+ * base—, así que este correo es la ÚNICA vez que se escribe. Va marcada como
+ * de un solo uso y con la petición de cambiarla al entrar, que es lo primero
+ * que se le ofrece en su área.
+ *
+ * Si la eligió ella misma al pedir el alta, no se le repite: ya la sabe y
+ * escribirla otra vez solo añade un sitio más donde queda.
  */
 export interface DatosBienvenida {
   id: string
@@ -27,8 +30,12 @@ export interface DatosBienvenida {
   dni: string
   /** Su número en el censo, si ya lo tiene. 0 mientras se le asigna. */
   numero?: number
-  /** Si su clave inicial es su propio DNI, se le puede decir cuál es. */
-  claveEsElDni: boolean
+  /**
+   * La contraseña de un solo uso con la que se ha creado su cuenta, si se la
+   * hemos puesto nosotros. `null` si la eligió ella al pedir el alta, o si no
+   * hay cuenta que crear (un menor a cargo de su tutor).
+   */
+  claveProvisional?: string | null
   hermandad?: string
 }
 
@@ -53,15 +60,17 @@ export function textoBienvenida(h: DatosBienvenida): { asunto: string; parrafos:
     'Tienes un área propia donde puedes ver tus cuotas, sacar tu papeleta de sitio, consultar '
     + 'tu sitio en el cortejo y cambiar tus datos de contacto.',
   )
+  parrafos.push(`Para entrar, busca tu hermandad y usa tu DNI (${h.dni}) como usuario.`)
+  if (h.claveProvisional) {
+    parrafos.push(
+      `Tu contraseña es ${h.claveProvisional}, y es de un solo uso: cámbiala nada más entrar, `
+      + 'desde «Mi cuenta» en tu área. Este es el único correo donde aparece.',
+    )
+  } else {
+    parrafos.push('La contraseña es la que elegiste al pedir el alta.')
+  }
   parrafos.push(
-    h.claveEsElDni
-      ? `Para entrar, busca tu hermandad y usa tu DNI (${h.dni}) como usuario. La primera vez, `
-        + 'la contraseña es también tu DNI: cámbiala nada más entrar.'
-      : `Para entrar, busca tu hermandad y usa tu DNI (${h.dni}) como usuario, con la contraseña `
-        + 'que te haya dado la hermandad. Cámbiala nada más entrar.',
-  )
-  parrafos.push(
-    'Si no recuerdas la contraseña, desde la misma pantalla puedes pedir una nueva a tu correo.',
+    'Si no la recuerdas, desde la misma pantalla puedes pedir una nueva a tu correo.',
   )
   return {
     asunto: casa ? `Ya eres hermano/a de ${casa}` : 'Ya eres hermano/a de la hermandad',

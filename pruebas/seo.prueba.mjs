@@ -62,9 +62,65 @@ export default async function ({ cargar, caso }) {
   ]
   const ld = m.datosEstructurados(base, hermandad, cultos, 'https://veracruz.es')
   const tipos = ld['@graph'].map((x) => x['@type'])
-  caso('la hermandad es una organización', true, tipos.includes('Organization'))
+  /*
+   * `ReligiousOrganization`, no `Organization` a secas. schema.org tiene un
+   * tipo que describe exactamente lo que es una hermandad, y decírselo a
+   * Google es lo que hace que salga como institución religiosa —con su ficha,
+   * su dirección y sus cultos— en vez de como una empresa con un nombre raro.
+   */
+  caso('la hermandad es una organización religiosa', true, tipos.includes('ReligiousOrganization'))
   caso('la sede es un lugar', true, tipos.includes('Place'))
   caso('los cultos con fecha son eventos', 1, tipos.filter((t) => t === 'Event').length)
+
+  /*
+   * Y UNA PÁGINA SUELTA SE DESCRIBE A SÍ MISMA.
+   *
+   * Sin esto, las cuarenta noticias de una hermandad eran para Google cuarenta
+   * copias de la misma ficha —la de la organización— y ninguna tenía fecha ni
+   * foto propia. Con esto, cada una es un artículo, y sale en los resultados
+   * con su imagen en vez de como una línea de texto.
+   */
+  const conNoticia = m.datosEstructurados(base, hermandad, cultos, 'https://veracruz.es', {
+    titulo: 'Ya está el cartel de 2027', descripcion: 'Lo firma Rocío Medina.',
+    imagen: 'https://veracruz.es/cartel.jpg', ruta: '/n/cartel-2027',
+    tipo: 'noticia', fecha: '2027-01-15',
+  })
+  const tiposN = conNoticia['@graph'].map((x) => x['@type'])
+  caso('una noticia es un artículo', true, tiposN.includes('NewsArticle'))
+  const art = conNoticia['@graph'].find((x) => x['@type'] === 'NewsArticle')
+  caso('con su fecha', '2027-01-15', art.datePublished)
+  caso('con su foto', 'https://veracruz.es/cartel.jpg', art.image)
+  caso('y colgando de la hermandad', 'https://veracruz.es#hermandad', art.publisher['@id'])
+  caso('y apuntando a su propia página', 'https://veracruz.es/n/cartel-2027', art.mainEntityOfPage['@id'])
+  caso('sin el `isPartOf` que no decía nada', undefined, art.isPartOf)
+
+  // Las migas de pan: lo que hace que en Google se lea «hermandad › Actualidad
+  // › El cartel de 2027» debajo del título, en vez de la dirección cruda.
+  const migas = conNoticia['@graph'].find((x) => x['@type'] === 'BreadcrumbList')
+  caso('hay migas de pan', true, Boolean(migas))
+  caso('con tres escalones para una noticia', 3, migas.itemListElement.length)
+  caso('y el último es la noticia', 'Ya está el cartel de 2027',
+    migas.itemListElement[2].name)
+
+  // Una foto en `data:` no la lee ningún rastreador: mejor no prometerla.
+  const conDataUrl = m.datosEstructurados(base, hermandad, cultos, 'https://veracruz.es', {
+    titulo: 'X', descripcion: '', imagen: 'data:image/png;base64,AAAA', ruta: '/n/x', tipo: 'noticia',
+  })
+  const artD = conDataUrl['@graph'].find((x) => x['@type'] === 'NewsArticle')
+  caso('una foto en data: no se promete', undefined, artD.image)
+  // Y sin fecha no se inventa ninguna.
+  caso('sin fecha no se inventa', undefined, artD.datePublished)
+
+  // La ficha de un titular NO es un artículo —no tiene fecha ni es actualidad—
+  // pero sí lleva sus migas.
+  const conTitular = m.datosEstructurados(base, hermandad, cultos, 'https://veracruz.es', {
+    titulo: 'Nuestro Padre Jesús', descripcion: '', imagen: null, ruta: '/t/jesus', tipo: 'titular',
+  })
+  const tiposT = conTitular['@graph'].map((x) => x['@type'])
+  caso('un titular no es una noticia', false, tiposT.includes('NewsArticle'))
+  caso('pero sí lleva migas', true, tiposT.includes('BreadcrumbList'))
+  const migasT = conTitular['@graph'].find((x) => x['@type'] === 'BreadcrumbList')
+  caso('con dos escalones', 2, migasT.itemListElement.length)
   const org = ld['@graph'][0]
   caso('con su nombre', 'Hdad. de la Vera-Cruz', org.name)
   caso('su teléfono', '954 00 00 00', org.telephone)
@@ -104,4 +160,33 @@ export default async function ({ cargar, caso }) {
   caso('y las etiquetas', false, peligro.includes('<b>Cruz</b>'))
   caso('el JSON-LD no puede cerrar el script', false,
     m.cabeceraHtml({ ...base, lema: '</script><script>alert(1)' }, hermandad, [], 'https://x.es').includes('</script><script>alert(1)'))
+
+  // --- Una web guardada antes de que existieran estos campos ---
+  // En el navegador nunca pasa: al cargar se rellenan los huecos. Pero el
+  // servidor lee el JSON tal cual está en la base de datos, y una web vieja
+  // no trae `seo` ni `redes`. Antes eso tiraba la cabecera entera y la página
+  // se servía pelada, sin una sola etiqueta, sin que nadie se enterara.
+  const vieja = { ...base }
+  delete vieja.seo
+  delete vieja.redes
+  delete vieja.heroFotos
+  delete vieja.noticias
+  delete vieja.titulares
+  const htmlViejo = m.cabeceraHtml(vieja, hermandad, [], 'https://veracruz.es')
+  caso('una web sin `seo` no tumba la cabecera', true, htmlViejo.includes('<title>'))
+  caso('y cae en el título de la web', true, htmlViejo.includes('Hdad. de la Vera-Cruz'))
+  caso('y sigue llevando sus datos', true, htmlViejo.includes('application/ld+json'))
+  caso('y sin fotos no promete imagen', false, htmlViejo.includes('og:image'))
+
+  // --- El idioma de la página ---
+  // El `index.html` viene con `lang="es"` fijo. El servidor lo corrige con el
+  // idioma de la hermandad, y de ahí sale al HTML: si no se limpia, unas
+  // comillas guardadas en el editor cierran el atributo.
+  caso('el castellano pasa', 'es', m.idiomaSeguro('es'))
+  caso('el inglés también', 'en', m.idiomaSeguro('en'))
+  caso('y una variante regional', 'pt-BR', m.idiomaSeguro('pt-BR'))
+  caso('lo vacío cae en castellano', 'es', m.idiomaSeguro(''))
+  caso('y lo que no está', 'es', m.idiomaSeguro(undefined))
+  caso('unas comillas no salen al HTML', 'es', m.idiomaSeguro('es" onload="alert(1)'))
+  caso('ni un signo de mayor', 'es', m.idiomaSeguro('es><script>'))
 }

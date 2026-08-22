@@ -55,12 +55,21 @@ export function urlAbsoluta(base: string, ruta: string): string {
 }
 
 /** El título y la descripción que se ven al compartir y en Google. */
+/*
+ * Los interrogantes de aquí abajo no sobran. La aplicación rellena los huecos
+ * al cargar la web (`webGuardada` mezcla los valores por defecto), pero esta
+ * función se llama TAMBIÉN desde el servidor, y allí el JSON se lee tal cual
+ * está en la base de datos. Una hermandad que guardara su web antes de que
+ * existieran estos campos no los tiene, y sin interrogante se caía la cabecera
+ * entera: no un error a la vista, sino la página servida sin una sola etiqueta
+ * y la hermandad sin saber por qué no se comparte bien.
+ */
 export function tituloWeb(web: WebPublica, hermandad: HermandadSettings): string {
-  return web.seo.titulo.trim() || web.titulo || hermandad.nombreLegal || 'Nuestra Hermandad'
+  return (web.seo?.titulo ?? '').trim() || web.titulo || hermandad.nombreLegal || 'Nuestra Hermandad'
 }
 
 export function descripcionWeb(web: WebPublica): string {
-  return web.seo.descripcion.trim() || web.lema || ''
+  return (web.seo?.descripcion ?? '').trim() || web.lema || ''
 }
 
 /**
@@ -68,18 +77,47 @@ export function descripcionWeb(web: WebPublica): string {
  * lugar y CADA CULTO como evento. Es lo que hace que un culto salga en Google
  * con su fecha y su hora en vez de perdido dentro del texto de la página.
  */
+/**
+ * La página concreta que se está mirando, cuando no es la portada.
+ *
+ * Lleva `tipo` y `fecha`, que antes no llevaba: sin el tipo, una noticia y la
+ * ficha de un titular se describían igual —y una noticia con fecha es lo que
+ * Google puede sacar en Discover y en «noticias recientes», y sin fecha no.
+ */
+export interface PiezaSeo {
+  titulo: string
+  descripcion: string
+  imagen: string | null
+  ruta: string
+  tipo?: 'noticia' | 'titular' | 'listado'
+  /** Fecha de publicación, en `2027-03-15`. Solo la noticia la tiene. */
+  fecha?: string
+}
+
 export function datosEstructurados(
   web: WebPublica,
   hermandad: HermandadSettings,
   cultos: CultoWeb[],
   base: string,
+  pieza?: PiezaSeo,
 ): Record<string, unknown> {
   const nombre = tituloWeb(web, hermandad)
   const direccion = web.direccion.trim() || hermandad.direccion.trim()
   const grafo: Record<string, unknown>[] = []
 
+  /*
+   * `ReligiousOrganization`, no `Organization` a secas.
+   *
+   * schema.org tiene un tipo que describe EXACTAMENTE lo que es una hermandad,
+   * y decírselo a Google cambia bastante: es lo que hace que aparezca como una
+   * institución religiosa —con su ficha lateral, su dirección y sus cultos— y
+   * no como una empresa cualquiera con un nombre raro.
+   *
+   * Es una palabra, y es de lo poco en SEO que se nota sin tener que escribir
+   * más contenido.
+   */
   const organizacion: Record<string, unknown> = {
-    '@type': 'Organization',
+    '@type': 'ReligiousOrganization',
     '@id': `${base}#hermandad`,
     name: nombre,
     url: base,
@@ -93,7 +131,7 @@ export function datosEstructurados(
   if (telefono) organizacion.telephone = telefono
   const email = web.email.trim() || hermandad.email.trim()
   if (email) organizacion.email = email
-  const redes = web.redes.map((r) => r.url).filter((u) => /^https?:\/\//.test(u))
+  const redes = (web.redes ?? []).map((r) => r.url).filter((u) => /^https?:\/\//.test(u))
   if (redes.length > 0) organizacion.sameAs = redes
   if (direccion) {
     organizacion.address = {
@@ -134,16 +172,67 @@ export function datosEstructurados(
       })
     })
 
+  /*
+   * Y SI SE ESTÁ MIRANDO UNA PÁGINA SUELTA —una noticia, la ficha de un
+   * titular— se describe también ELLA, no solo la hermandad.
+   *
+   * Sin esto, las cuarenta noticias de una hermandad eran para Google cuarenta
+   * copias de la misma ficha: la de la organización. Con esto, cada una es un
+   * artículo con su título, su fecha y su foto, que es lo que hace que salga
+   * en los resultados con imagen y no como una línea de texto.
+   */
+  if (pieza) {
+    const url = urlAbsoluta(base, pieza.ruta)
+    if (pieza.tipo === 'noticia') {
+      grafo.push({
+        '@type': 'NewsArticle',
+        '@id': `${url}#articulo`,
+        headline: pieza.titulo,
+        url,
+        ...(pieza.descripcion.trim() ? { description: pieza.descripcion.trim() } : {}),
+        ...(pieza.fecha ? { datePublished: pieza.fecha } : {}),
+        // Un `data:` no le sirve a Google: solo se manda si es una dirección.
+        ...(pieza.imagen && !pieza.imagen.startsWith('data:') ? { image: pieza.imagen } : {}),
+        publisher: { '@id': `${base}#hermandad` },
+        // `mainEntityOfPage`, no `isPartOf`: la noticia no es «parte de» la
+        // hermandad (eso no significa nada en schema.org), es el contenido
+        // principal de su propia página. Es la pareja que Google espera ver
+        // en una NewsArticle y la que le dice cuál es la dirección buena.
+        mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+      })
+    }
+    /*
+     * Las migas de pan. Es lo que hace que en el resultado de Google, debajo
+     * del título, se lea «hermandaddetriana.es › Actualidad › El cartel de
+     * 2027» en vez de la dirección cruda. Se lee mejor y se pulsa más.
+     */
+    grafo.push({
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: nombre, item: base },
+        ...(pieza.tipo === 'noticia'
+          ? [{ '@type': 'ListItem', position: 2, name: 'Actualidad', item: urlAbsoluta(base, '/noticias') }]
+          : []),
+        {
+          '@type': 'ListItem',
+          position: pieza.tipo === 'noticia' ? 3 : 2,
+          name: pieza.titulo,
+          item: url,
+        },
+      ],
+    })
+  }
+
   return { '@context': 'https://schema.org', '@graph': grafo }
 }
 
 /** Todas las direcciones de la web, para el sitemap y para el buscador. */
 export function rutasDeLaWeb(web: WebPublica): { ruta: string; fecha?: string }[] {
   const rutas: { ruta: string; fecha?: string }[] = [{ ruta: '/' }]
-  const noticias = noticiasPublicadas(web.noticias)
+  const noticias = noticiasPublicadas(web.noticias ?? [])
   if (noticias.length > 0) rutas.push({ ruta: '/noticias' })
   noticias.forEach((n) => rutas.push({ ruta: `/n/${slugNoticia(n)}`, fecha: n.fecha || undefined }))
-  web.titulares.forEach((t) => {
+  ;(web.titulares ?? []).forEach((t) => {
     const conFicha = (t.parrafos ?? []).some((p) => p.texto.trim() || p.subtitulo.trim()) || (t.fotos ?? []).length > 0
     if (conFicha) rutas.push({ ruta: `/t/${slugTitular(t)}` })
   })
@@ -186,30 +275,51 @@ export function robotsTxt(web: WebPublica, base: string): string {
  * ni Facebook ejecutan JavaScript, así que lo que ponga el navegador después de
  * cargar no lo ven.
  */
+/**
+ * El idioma que se puede escribir en el HTML sin miedo.
+ *
+ * Lo que hay guardado en `web.idioma` lo escribe una persona en el editor, y
+ * de ahí va derecho al atributo `lang` de la página. Si alguien guardara ahí
+ * unas comillas, cerraría el atributo y podría escribir HTML por su cuenta.
+ * Un código de idioma es siempre letras y guiones («es», «en», «pt-BR»): si no
+ * lo parece, se sirve en castellano y no se discute.
+ */
+export function idiomaSeguro(idioma: string | null | undefined): string {
+  const limpio = (idioma ?? '').trim()
+  return /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})?$/.test(limpio) ? limpio : 'es'
+}
+
 export function cabeceraHtml(
   web: WebPublica,
   hermandad: HermandadSettings,
   cultos: CultoWeb[],
   base: string,
-  pieza?: { titulo: string; descripcion: string; imagen: string | null; ruta: string },
+  pieza?: PiezaSeo,
 ): string {
   const nombre = tituloWeb(web, hermandad)
   const titulo = pieza ? `${pieza.titulo} · ${nombre}` : nombre
   const descripcion = pieza ? pieza.descripcion.trim() || descripcionWeb(web) : descripcionWeb(web)
-  const imagen = pieza?.imagen ?? web.seo.imagenDataUrl ?? web.heroFotos[0] ?? null
+  const imagen = pieza?.imagen ?? web.seo?.imagenDataUrl ?? web.heroFotos?.[0] ?? null
   const url = urlAbsoluta(base, pieza?.ruta ?? '/')
   const et = (x: string) => escaparXml(x)
   const lineas = [
     `<title>${et(titulo)}</title>`,
     `<link rel="canonical" href="${et(url)}">`,
     `<meta name="description" content="${et(descripcion)}">`,
-    `<meta property="og:type" content="website">`,
+    // `article` para una noticia: es lo que la separa de «una página más» a
+    // ojos de Facebook y de WhatsApp, y lo que hace que se comparta con su
+    // fecha en vez de con el nombre de la hermandad y ya está.
+    `<meta property="og:type" content="${pieza?.tipo === 'noticia' ? 'article' : 'website'}">`,
+    `<meta property="og:site_name" content="${et(nombre)}">`,
     `<meta property="og:title" content="${et(titulo)}">`,
     `<meta property="og:description" content="${et(descripcion)}">`,
     `<meta property="og:url" content="${et(url)}">`,
     `<meta property="og:locale" content="${et((web.idioma || 'es') === 'es' ? 'es_ES' : web.idioma)}">`,
     `<meta name="theme-color" content="${et(web.colorPrimario)}">`,
   ]
+  if (pieza?.tipo === 'noticia' && pieza.fecha) {
+    lineas.push(`<meta property="article:published_time" content="${et(pieza.fecha)}">`)
+  }
   // Una imagen en `data:` no la lee ningún rastreador: mejor no prometerla.
   if (imagen && !imagen.startsWith('data:')) {
     lineas.push(`<meta property="og:image" content="${et(imagen)}">`)
@@ -218,7 +328,7 @@ export function cabeceraHtml(
     lineas.push('<meta name="twitter:card" content="summary">')
   }
   lineas.push(
-    `<script type="application/ld+json">${JSON.stringify(datosEstructurados(web, hermandad, cultos, base)).replace(/</g, '\\u003c')}</script>`,
+    `<script type="application/ld+json">${JSON.stringify(datosEstructurados(web, hermandad, cultos, base, pieza)).replace(/</g, '\\u003c')}</script>`,
   )
   return lineas.join('\n')
 }

@@ -551,8 +551,6 @@ export function ensayar(
 export interface OpcionesImportacion {
   /** Qué hacer con quien ya está en el censo. */
   conLosQueYaEstan: 'actualizar' | 'saltar'
-  /** Contraseña inicial para el área del hermano de los que entren nuevos. */
-  clavePorDefecto: string
 }
 
 /**
@@ -621,7 +619,18 @@ export function aplicar(
       cuotaAlDia: false,
       iban: fila.datos.iban ?? null,
       dni: fila.datos.dni ?? '',
-      claveAcceso: opciones.clavePorDefecto,
+      /*
+       * SIN CONTRASEÑA, y esto era lo peor de la importación.
+       *
+       * Antes se le ponía `clavePorDefecto`: LA MISMA para las ochocientas
+       * fichas del Excel. Una contraseña que se sabe la hermandad entera no es
+       * una contraseña, y encima quedaba escrita en claro en cada ficha.
+       *
+       * Un hermano importado no tiene cuenta todavía (`authUserId: null`): la
+       * crea secretaría desde su ficha cuando haga falta, y entonces se le
+       * manda una de un solo uso por correo. Ver src/lib/claves.ts.
+       */
+      claveAcceso: '',
       authUserId: null,
       ...(fila.datos.fechaNacimiento ? { fechaNacimiento: fila.datos.fechaNacimiento } : {}),
     })
