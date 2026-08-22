@@ -1294,10 +1294,31 @@ h1, h2, h3,
 .settings-card__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
 
-.tramos-card { max-width: 880px; margin-top: 1.1rem; }
-.tramos-editor { display: flex; flex-direction: column; gap: 0.5rem; }
+.tramos-card { max-width: 1180px; margin-top: 1.1rem; }
+/*
+ * El editor de tramos: diez campos en una fila.
+ *
+ * Se desplaza en horizontal en vez de encogerse. Antes las columnas se
+ * repartían un ancho fijo de 880 px y al nombre le tocaban unos 140: la
+ * cabecera «Nombre del tramo» salía partida en tres líneas y encima de la
+ * casilla equivocada, porque la rejilla declaraba nueve columnas para diez
+ * campos y el botón de quitar se caía solo a otra fila.
+ */
+.tramos-editor { display: flex; flex-direction: column; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.25rem; }
 .tramo-row {
-  display: grid; grid-template-columns: 1fr 100px 110px 122px 64px 76px 104px 60px 34px; gap: 0.55rem; align-items: center;
+  display: grid;
+  grid-template-columns:
+    minmax(170px, 1.5fr)  /* nombre    */
+    116px                 /* cuerpo    */
+    minmax(110px, 1fr)    /* tipo      */
+    128px                 /* reparto   */
+    70px                  /* aforo     */
+    82px                  /* precio    */
+    106px                 /* citación  */
+    minmax(110px, 1fr)    /* rol       */
+    62px                  /* orden     */
+    34px;                 /* quitar    */
+  gap: 0.55rem; align-items: center; min-width: 1020px;
 }
 .tramos-precio-base { max-width: 300px; margin-bottom: 1.1rem; }
 .tramo-row--head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
@@ -3006,6 +3027,10 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   transition: background 0.4s ease;
   display: flex; flex-direction: column;
 }
+/* Quien lleva cargo tiene dos botones aquí: «Ir al panel» y «Salir». En el
+   móvil caben en fila; si no cupieran, la cabecera ya envuelve. */
+.portal__head-acciones { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+
 .portal__head {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
   padding: 0.9rem 1.5rem;
@@ -4331,8 +4356,21 @@ html:has(.sitio) { scroll-behavior: smooth; }
 
 /* Filas del editor de las secciones nuevas de la web */
 .opcion-row--horario { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) auto; gap: 0.5rem; align-items: center; }
-.opcion-row--parada { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto auto auto; gap: 0.5rem; align-items: center; }
-.opcion-row--parada .checkbox { font-size: 0.8rem; white-space: nowrap; }
+/*
+ * Una parada del itinerario: hora, lugar, «Hito», orden y quitar.
+ *
+ * En FILA QUE SE PARTE, no en rejilla de cinco columnas fijas. El editor de la
+ * web vive en un panel lateral estrecho, y ahí las cinco columnas no caben: la
+ * palabra «Hito» se montaba encima de las flechas de orden y las tres cosas
+ * salían pisadas. Una consulta de medios no lo arregla —el problema no es que
+ * la pantalla sea estrecha, es que lo es el panel—, así que la fila se parte
+ * sola cuando hace falta y las tres últimas se van a una segunda línea.
+ */
+.opcion-row--parada { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.opcion-row--parada > input:first-of-type { flex: 0 0 5.5rem; }
+.opcion-row--parada > input:nth-of-type(2) { flex: 1 1 9rem; min-width: 7rem; }
+.opcion-row--parada .checkbox { font-size: 0.8rem; white-space: nowrap; flex: none; }
+.opcion-row--parada .seccion-item__orden, .opcion-row--parada > .icon-btn { flex: none; }
 .opcion-row--junta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: 0.5rem; align-items: center; }
 @media (max-width: 760px) {
   .opcion-row--horario, .opcion-row--parada, .opcion-row--junta { grid-template-columns: minmax(0, 1fr); }

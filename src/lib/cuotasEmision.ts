@@ -45,8 +45,18 @@ export function ultimoEjercicio(cuotas: Cuota[]): number | null {
 
 /**
  * Hermanos ACTIVOS (o nuevos) que aún no tienen una cuota de ese concepto en
- * ese ejercicio. Son los candidatos a la emisión anual. Los de baja quedan
- * fuera: ya no pagan cuota.
+ * ese ejercicio. Son los candidatos a la emisión anual.
+ *
+ * Quedan fuera dos grupos:
+ *   · los de baja, que ya no pagan cuota;
+ *   · los hermanos CIVILES, a los que no se les emite ninguna — es lo que
+ *     significa ser civil.
+ *
+ * Este filtro es el embudo de toda la emisión: de aquí salen los candidatos de
+ * `emitirCuotasAnuales`, el contador del cajón de emisión y el aviso de nuevo
+ * ejercicio. Cerrarlo aquí los cierra todos. Si un civil se colara, con IBAN
+ * puesto acabaría en la siguiente remesa SEPA y se le cobraría en el banco una
+ * cuota que no debe.
  */
 export function hermanosSinCuota(
   cuotas: Cuota[],
@@ -59,7 +69,7 @@ export function hermanosSinCuota(
       .filter((c) => ejercicioDe(c) === ejercicio && mismoConcepto(c.concepto, concepto))
       .map((c) => c.hermanoId),
   )
-  return hermanos.filter((h) => h.estado !== 'Baja' && !yaTienen.has(h.id))
+  return hermanos.filter((h) => h.estado !== 'Baja' && !h.civil && !yaTienen.has(h.id))
 }
 
 /**

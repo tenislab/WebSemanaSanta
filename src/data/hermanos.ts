@@ -1,3 +1,4 @@
+import type { Cargo } from './documentos'
 export type EstadoHermano = 'Activo' | 'Nuevo' | 'Baja'
 
 export interface Hermano {
@@ -18,6 +19,37 @@ export interface Hermano {
   claveAcceso: string
   /** Id de su cuenta real de Supabase Auth, una vez creada (null en modo demostración o hasta que se cree). */
   authUserId: string | null
+  /**
+   * El cargo que lleva en la junta, si lleva alguno. Vacío = hermano de a pie.
+   *
+   * VA AQUÍ, EN SU FICHA, Y NO EN UNA SEGUNDA CUENTA. En una hermandad nadie
+   * se ve como «un usuario del sistema»: se ve como hermano nº 214 que este
+   * año lleva la secretaría. El cargo es temporal —cambia con cada junta— y
+   * ser hermano es para siempre. Teniéndolo aquí, cuando cambia la junta no
+   * hay que borrar cuentas ni crear otras: se mueve el cargo de una ficha a
+   * otra.
+   *
+   * Y quita de en medio el lío de tener dos identidades: la secretaria entraba
+   * con DNI y clave a su área, y con correo y contraseña al panel. Dos formas
+   * de ser la misma persona, y de ahí salían la mitad de los desconciertos.
+   *
+   * PARA LLEVAR CARGO HACE FALTA CORREO. No es un capricho: con cargo se entra
+   * al panel, y el panel lo protegen las políticas de la base de datos, que
+   * preguntan «¿quién eres?» a una cuenta de verdad. Sin correo no hay cuenta,
+   * y sin cuenta no hay protección en el servidor. La pantalla lo dice al
+   * intentar ponerlo.
+   */
+  cargo?: Cargo | null
+  /**
+   * Hermano civil: está en el censo y tiene su área, pero NO paga cuotas.
+   *
+   * Para quien trabaja en la hermandad sin ser hermano —un administrativo
+   * contratado, un asesor— y necesita entrar. Antes había que darle de alta
+   * como «personal», que era una segunda forma de existir en el sistema con
+   * sus propias reglas. Así es una persona más del censo, con su ficha y su
+   * área, y lo único distinto es que no se le emiten cuotas.
+   */
+  civil?: boolean
   /** Etiquetas del hermano (costalero, acólito, banda…), para segmentar avisos y listados. */
   etiquetas?: string[]
   /**

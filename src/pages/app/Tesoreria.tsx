@@ -19,6 +19,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
+import { hoyIso } from '../../lib/hoy'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -366,7 +367,7 @@ export default function Tesoreria() {
             </div>
             <div className="form-row">
               <label htmlFor="fecha">Fecha</label>
-              <input id="fecha" name="fecha" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />
+              <input id="fecha" name="fecha" type="date" defaultValue={hoyIso()} />
             </div>
           </div>
           <p className="form-hint">

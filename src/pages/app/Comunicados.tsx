@@ -37,6 +37,7 @@ import { correoDisponible, enviarCorreo, getAjustesCorreo } from '../../lib/corr
 import { cuerpoCorreo } from '../../lib/avisosCorreo'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
+import { hoyIso } from '../../lib/hoy'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -229,7 +230,7 @@ export default function Comunicados() {
   }
 
   async function enviarAhora(c: Comunicado) {
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyIso()
     // Al buzón de cada hermano en su área, SIEMPRE. Es lo que no depende de que
     // haya proveedor de correo contratado.
     const reciben = hermanosAAvisar(c)
@@ -292,7 +293,7 @@ export default function Comunicados() {
     const fechaProgramada = estado === 'Programado' ? String(data.get('fechaProgramada') ?? '') || null : null
     if (estado === 'Programado' && !fechaProgramada) return
 
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyIso()
     const nextNumero = Math.max(0, ...comunicados.map((c) => c.numero)) + 1
     // Los criterios se guardan, no solo su etiqueta: es lo único que permite
     // volver a resolver a quién iba dirigido.

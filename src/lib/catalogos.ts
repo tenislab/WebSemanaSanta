@@ -49,11 +49,12 @@ export function useLista(clave: string, porDefecto: readonly string[]): string[]
   return lista
 }
 
-export async function saveLista(clave: string, valores: string[]) {
+export async function saveLista(clave: string, valores: string[]): Promise<{ ok: boolean; error?: string }> {
   // Primero el navegador: si la llamada remota lanza, lo que acaba de escribir
   // el usuario no se puede perder por el camino.
   localStorage.setItem(clave, JSON.stringify(valores))
-  if (isSupabaseConfigured) await reemplazarCatalogo(clave, valores)
+  if (!isSupabaseConfigured) return { ok: true }
+  return reemplazarCatalogo(clave, valores)
 }
 
 /**

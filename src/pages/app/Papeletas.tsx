@@ -258,9 +258,21 @@ export default function Papeletas() {
   const abierta = ventanaAbierta(campana)
   const diasRestantes = diasHasta(campana.fechaLimiteRenovacion)
 
-  /** Siguiente número de papeleta a partir de la lista más reciente (dentro del updater, nunca del closure). */
-  function siguienteNumero(lista: Papeleta[]) {
-    return Math.max(0, ...lista.map((p) => p.numero)) + 1
+  /**
+   * Siguiente número de papeleta, DENTRO DE SU AÑO.
+   *
+   * Se calcula a partir de la lista más reciente —dentro del updater, nunca
+   * del closure— porque entre el clic y el guardado puede entrar otra.
+   *
+   * Y cuenta solo las de ESTE ejercicio, que es como está hecha la regla en la
+   * base: el índice único es (hermandad, año, número). Contando todos los años
+   * juntos, una hermandad que llevara tres campañas empezaba la cuarta por el
+   * número 553, y eso es lo que sale impreso en la papeleta que se le da al
+   * hermano: «Papeleta nº 0553» en una campaña con veinte papeletas. Ahora
+   * cada campaña empieza por el 1, como toda la vida.
+   */
+  function siguienteNumero(lista: Papeleta[], anio = campana.anio) {
+    return Math.max(0, ...lista.filter((p) => p.anio === anio).map((p) => p.numero)) + 1
   }
 
   function abrirDetalle(id: string) {
@@ -293,7 +305,7 @@ export default function Papeletas() {
         hoy,
       }),
     )
-    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null)
+    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null, tramoId)
   }
 
   /** El hermano renuncia a salir este año: pierde su sitio, que queda libre. */
@@ -347,7 +359,7 @@ export default function Papeletas() {
       }
       return [nueva, ...prev]
     })
-    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null)
+    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null, tramoId)
     setPendingCuerpo('')
   }
 
@@ -383,7 +395,7 @@ export default function Papeletas() {
    * Le dice al hermano que ya tiene sitio. Es lo que espera desde que manda la
    * solicitud, y hasta ahora se enteraba al entrar en su área por su cuenta.
    */
-  function avisarDeSitio(hermanoId: string, tramo: string | null, opcion: string | null) {
+  function avisarDeSitio(hermanoId: string, tramo: string | null, opcion: string | null, tramoId?: string | null) {
     const que = tramo ?? opcion
     const texto = que
       ? `Ya tienes sitio para la estación de penitencia de ${campana.anio}: ${que}.`
@@ -392,15 +404,45 @@ export default function Papeletas() {
     // Y por correo. Esta es de las que más se agradecen: hasta ahora el
     // hermano se enteraba de su sitio solo si entraba a mirarlo por su cuenta.
     const h = hermanos.find((x) => x.id === hermanoId)
-    if (h) {
-      avisarPorCorreo(
-        [{ id: h.id, nombre: h.nombre, email: h.email }],
-        'papeleta',
-        'Tu papeleta de sitio',
-        [texto, 'Puedes verla y descargarla desde tu área de hermano.'],
-        'Este aviso lo puedes apagar desde tu área de hermano.',
-      )
+    if (!h) return
+
+    /*
+     * QUÉ LLEVA ESTE CORREO, y por qué cada cosa.
+     *
+     * Antes decía «Ya tienes sitio: Cirio 1º tramo» y poco más. Eso está bien
+     * como aviso, pero deja fuera lo único que el hermano va a necesitar
+     * buscar después: A QUÉ HORA TIENE QUE ESTAR. Es literalmente la pregunta
+     * de la semana antes de la salida, la que satura el teléfono de secretaría
+     * y el grupo de WhatsApp.
+     *
+     * La hora de citación es de cada tramo —no salen todos a la vez— y hasta
+     * ahora no se podía ni guardar, porque a la tabla le faltaba la columna.
+     * Ya se guarda, así que ya se puede decir aquí.
+     */
+    const t = tramoId ? tramos.find((x) => x.id === tramoId) : null
+    const parrafos = [texto]
+    if (t?.horaCitacion?.trim()) {
+      parrafos.push(`Tu hora de citación es a las ${t.horaCitacion.trim()}.`)
     }
+    if (campana.fechaSalida) {
+      const f = new Date(`${campana.fechaSalida}T12:00:00`)
+      if (!Number.isNaN(f.getTime())) {
+        parrafos.push(`La salida es el ${f.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}.`)
+      }
+    }
+    parrafos.push('Puedes ver tu papeleta y descargarla desde tu área de hermano.')
+
+    void avisarPorCorreo(
+      [{ id: h.id, nombre: h.nombre, email: h.email }],
+      'papeleta',
+      'Tu papeleta de sitio',
+      parrafos,
+      'Este aviso lo puedes apagar desde tu área de hermano.',
+    ).then((r) => {
+      // No corta el guardado —la papeleta ya está emitida y eso es lo que
+      // importa— pero deja rastro de que el aviso no salió.
+      if (r.error) console.warn(`El aviso de papeleta a ${h.nombre} no salió: ${r.error}`)
+    })
   }
 
   function actualizarPapeleta(id: string, cambios: Partial<Papeleta>) {
@@ -483,14 +525,48 @@ export default function Papeletas() {
     .filter((e) => imprimirEstados[e])
     .reduce((s, e) => s + (contadorImpresion[e] ?? 0), 0)
 
-  /** Abre el plazo avisando a todos los hermanos (email simulado + registro en Comunicados). */
-  function convocar() {
-    const total = enviarConvocatoria(campana.anio, hermanos, fmtIso(campana.fechaLimiteRenovacion))
-    refrescarConvocatoria()
-    window.alert(
-      `Convocatoria enviada (simulada) a ${total} hermanos con correo. Queda registrada en Comunicados. ` +
-        'El envío real de email se activará al conectar el proveedor.',
-    )
+  /**
+   * Abre el plazo avisando por correo a todos los hermanos que pueden sacar
+   * papeleta, y lo deja registrado en Comunicados.
+   *
+   * Es el correo más importante del año: de él depende que la gente saque su
+   * papeleta a tiempo, y quien no la saca en plazo pierde el sitio que llevaba
+   * años ocupando. Por eso el resultado se cuenta de verdad —cuántos han
+   * salido de cuántos— en vez del «(simulada)» de antes, que decía que se
+   * había avisado a ochocientos hermanos sin haber avisado a ninguno.
+   */
+  const [convocando, setConvocando] = useState(false)
+  async function convocar() {
+    if (convocando) return
+    setConvocando(true)
+    try {
+      const r = await enviarConvocatoria(
+        campana.anio,
+        hermanos,
+        fmtIso(campana.fechaLimiteRenovacion),
+        { hermandad: hermandad.nombreLegal, fechaSalidaIso: campana.fechaSalida },
+      )
+      refrescarConvocatoria()
+      if (r.enviados > 0) {
+        window.alert(
+          `Convocatoria enviada a ${r.enviados} hermano${r.enviados === 1 ? '' : 's'}`
+          + `${r.total !== r.enviados ? ` (de ${r.total} con correo)` : ''}. Queda registrada en Comunicados.`,
+        )
+      } else if (r.total === 0) {
+        window.alert(
+          'No hay a quién avisar: ningún hermano activo tiene correo en su ficha. '
+          + 'Añádeselo desde Hermanos y vuelve a intentarlo.',
+        )
+      } else {
+        window.alert(
+          `No ha salido ningún correo${r.error ? `: ${r.error}` : '.'}\n\n`
+          + 'Comprueba en Configuración → Correo que el envío está encendido. '
+          + 'La convocatoria NO se ha dado por hecha: puedes volver a intentarlo.',
+        )
+      }
+    } finally {
+      setConvocando(false)
+    }
   }
 
   /** Acepta una solicitud online: le emite la papeleta con lo pedido y marca la solicitud como aceptada. */
@@ -697,8 +773,12 @@ export default function Papeletas() {
             de sitio {campana.anio}.
           </span>
         )}
-        <button className="btn btn-primary btn-sm" onClick={convocar}>
-          {convocatoria && convocatoria.anio === campana.anio ? 'Reenviar convocatoria' : 'Convocar papeletas'}
+        <button className="btn btn-primary btn-sm" onClick={convocar} disabled={convocando}>
+          {convocando
+            ? 'Enviando…'
+            : convocatoria && convocatoria.anio === campana.anio
+              ? 'Reenviar convocatoria'
+              : 'Convocar papeletas'}
         </button>
       </div>
 

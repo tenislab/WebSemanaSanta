@@ -64,6 +64,50 @@ export default async function ({ caso }) {
       motivo = String(e).split('\n')[0]
     }
     caso(`api/${funcion}.ts arranca${motivo ? ' — ' + motivo : ''}`, true, arranca)
+    if (!arranca) continue
+
+    /*
+     * EL TAMAÑO, que es la señal más afilada de todas.
+     *
+     * Cuando se coló el import malo, `@supabase/supabase-js` entero acabó
+     * DENTRO del paquete de la función: 896 KB en vez de 10. Ese número es
+     * imposible de conseguir con código nuestro —son tres ficheros de texto—,
+     * así que un salto ahí significa siempre lo mismo: alguien ha vuelto a
+     * importar media aplicación en una función de servidor.
+     *
+     * Vale la pena aunque el arranque ya se compruebe arriba: una biblioteca
+     * de navegador puede colarse y no reventar hasta que se use, y entonces el
+     * fallo sale en producción y con un usuario delante.
+     */
+    const { statSync } = await import('node:fs')
+    const kb = Math.round(statSync(destino).size / 1024)
+    caso(`api/${funcion}.ts pesa poco (${kb} kB)`, true, kb < 100)
+
+    /*
+     * Y que RESPONDA, no solo que cargue. Un fallo dentro del manejador no se
+     * ve al importar: se ve cuando entra alguien.
+     */
+    for (const url of ['/', '/w/una-hermandad', '/n/una-noticia']) {
+      const r = { code: 0, body: '' }
+      const res = {
+        status(c) { r.code = c; return this },
+        setHeader() {},
+        send(b) { r.body = b ?? '' },
+      }
+      let respondio = true
+      let fallo = ''
+      try {
+        const modulo = await import(destino)
+        await modulo.default({ url, headers: { host: 'gobergo.com' } }, res)
+      } catch (e) {
+        respondio = false
+        fallo = String(e).split('\n')[0]
+      }
+      caso(`api/${funcion}.ts responde a ${url}${fallo ? ' — ' + fallo : ''}`, true, respondio)
+      // Nunca un 500 en la puerta: sin base de datos ni red, se sirve la
+      // página sin adornar, pero se sirve.
+      caso(`api/${funcion}.ts no devuelve 500 en ${url}`, false, r.code >= 500)
+    }
   }
 
   // Y que no se vuelva a colar el import que lo rompió. Las funciones de

@@ -320,6 +320,23 @@ export default function HermanoPortal() {
    * descargar sus datos.
    */
   const deBaja = hermanoPrincipal?.estado === 'Baja'
+  /*
+   * ¿Lleva cargo en la hermandad? Entonces desde su área tiene que poder
+   * llegar al panel sin cerrar sesión, porque es la misma persona.
+   *
+   * Con `hermanoPrincipal` y no con `hermanoActivo`: las hermandades de
+   * muestra del modo demostración no tienen panel al que ir. Y se pide correo
+   * porque sin correo no hay cuenta, y sin cuenta el panel le rebotaría.
+   */
+  const llevaCargo = Boolean(
+    hermanoPrincipal?.cargo
+    && hermanoPrincipal.cargo !== 'Hermano de a pie'
+    && hermanoPrincipal.estado !== 'Baja'
+    && hermanoPrincipal.email?.includes('@'),
+  )
+  /* El civil no paga cuota: es lo que significa. Sin esto lee «Cuota
+     pendiente» en su propia área para siempre. */
+  const esCivil = Boolean(hermanoPrincipal?.civil)
 
   /**
    * Lo que debe este hermano: cuotas pendientes, en mora o devueltas, de
@@ -1150,9 +1167,10 @@ export default function HermanoPortal() {
             {echadoDelPanel && !poniendoClaveNueva && (
               <div className="banner-inline banner-inline--warn" role="status">
                 <span>
-                  <b>Esta cuenta es de hermano/a, no de gestión.</b> Por eso te hemos traído aquí, a
-                  tu área. Si llevas algún cargo en la hermandad y no puedes entrar al panel, pídele
-                  a secretaría que te dé de alta como personal: no hace falta otra cuenta.
+                  <b>Esta cuenta no lleva ningún cargo en la hermandad.</b> Por eso te hemos traído
+                  aquí, a tu área. Si tienes cargo y no puedes entrar al panel, pídele a secretaría
+                  que te lo ponga en tu ficha, en «Personal y permisos». No hace falta otra cuenta ni
+                  otra contraseña: es la misma.
                 </span>
               </div>
             )}
@@ -1450,6 +1468,7 @@ export default function HermanoPortal() {
         color={colorActivo}
         icono={esPrincipal ? undefined : hermandadMuestra?.icono}
         onSalir={salir}
+        alPanel={llevaCargo}
       />
       <main className="portal__main">
         {deBaja && (
@@ -1467,16 +1486,23 @@ export default function HermanoPortal() {
             <p className="eyebrow">Área del hermano · {nombreHermandadActiva}</p>
             <h1>Hola, {primerNombre}</h1>
             <div className="portal__resumen">
-              <span className="pill pill--info">{numeroActivo > 0 ? `Nº ${numeroActivo}` : 'Sin número (baja)'}</span>
+              <span className="pill pill--info">
+                {numeroActivo > 0 ? `Nº ${numeroActivo}` : esCivil ? 'Sin número de hermano' : 'Sin número (baja)'}
+              </span>
               {hermanoPrincipal && (
                 <>
                   <span className={`pill ${hermanoPrincipal.estado === 'Activo' ? 'pill--ok' : hermanoPrincipal.estado === 'Nuevo' ? 'pill--info' : 'pill--off'}`}>
                     {hermanoPrincipal.estado}
                   </span>
-                  <span className={`pill ${hermanoPrincipal.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
-                    {hermanoPrincipal.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
-                  </span>
-                  <span className="pill pill--off">Hermano/a desde {hermanoPrincipal.antiguedad}</span>
+                  {esCivil ? (
+                    <span className="pill pill--info">No se te emiten cuotas</span>
+                  ) : (
+                    <span className={`pill ${hermanoPrincipal.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
+                      {hermanoPrincipal.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
+                    </span>
+                  )}
+                  {hermanoPrincipal.cargo && <span className="pill pill--info">{hermanoPrincipal.cargo}</span>}
+                  {!esCivil && <span className="pill pill--off">Hermano/a desde {hermanoPrincipal.antiguedad}</span>}
                 </>
               )}
             </div>
@@ -1485,10 +1511,12 @@ export default function HermanoPortal() {
 
         {hermanoPrincipal && (
           <div className="portal__cards">
-            <div className={`portal__card-mini portal__card-mini--${hermanoPrincipal.cuotaAlDia ? 'ok' : 'warn'}`}>
+            <div className={`portal__card-mini portal__card-mini--${esCivil ? 'ok' : hermanoPrincipal.cuotaAlDia ? 'ok' : 'warn'}`}>
               <span className="portal__card-mini__label">Mi cuota</span>
-              <span className="portal__card-mini__value">{hermanoPrincipal.cuotaAlDia ? 'Al día' : 'Pendiente'}</span>
-              <span className="portal__card-mini__sub">{campana.anio}</span>
+              <span className="portal__card-mini__value">
+                {esCivil ? 'No procede' : hermanoPrincipal.cuotaAlDia ? 'Al día' : 'Pendiente'}
+              </span>
+              <span className="portal__card-mini__sub">{esCivil ? 'Hermano civil' : campana.anio}</span>
             </div>
             <div className="portal__card-mini portal__card-mini--accent">
               <span className="portal__card-mini__label">Mi papeleta {campana.anio}</span>
@@ -2175,12 +2203,22 @@ function PortalHead({
   color,
   icono,
   onSalir,
+  alPanel,
 }: {
   hermandad: string
   logo: string | null
   color?: string
   icono?: IconoHermandad
   onSalir?: () => void
+  /**
+   * Quien lleva cargo entra por la misma puerta que cualquier hermano —su DNI
+   * y su clave— y desde aquí pasa al panel de un clic.
+   *
+   * Antes NO había ningún enlace al panel dentro del área: el único estaba en
+   * la pantalla de identificación, o sea antes de entrar. Quien llevaba cargo
+   * y entraba a ver su papeleta tenía que cerrar sesión y volver a empezar.
+   */
+  alPanel?: boolean
 }) {
   return (
     <header className="portal__head">
@@ -2203,11 +2241,18 @@ function PortalHead({
           <small>Área del hermano</small>
         </span>
       </div>
-      {onSalir && (
-        <button className="btn btn-ghost btn-sm" onClick={onSalir}>
-          Salir
-        </button>
-      )}
+      <div className="portal__head-acciones">
+        {alPanel && (
+          <Link to="/app" className="btn btn-outline btn-sm">
+            Ir al panel de gestión
+          </Link>
+        )}
+        {onSalir && (
+          <button className="btn btn-ghost btn-sm" onClick={onSalir}>
+            Salir
+          </button>
+        )}
+      </div>
     </header>
   )
 }

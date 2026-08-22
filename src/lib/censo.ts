@@ -16,13 +16,26 @@ import type { Hermano } from '../data/hermanos'
  *
  * Quien está de baja queda con número 0: fuera de la numeración, pero con su
  * ficha y su historial intactos.
+ *
+ * Y hay un segundo grupo fuera de la numeración: los hermanos CIVILES. Un
+ * administrativo contratado tiene su ficha y su acceso, pero no ocupa un
+ * puesto del escalafón — no va en el cortejo y no tiene antigüedad que
+ * defender. Si se le diera número, todos los hermanos de detrás bajarían uno,
+ * y eso se ve el día de la salida.
  */
+
+/** Fuera del escalafón: los de baja y los civiles. */
+function enElEscalafon(h: { estado: string; numero: number; civil?: boolean }): boolean {
+  return h.estado !== 'Baja' && !h.civil && h.numero > 0
+}
 
 /**
  * Da de baja y recoloca el escalafón. El número del que se va queda libre y
  * todos los de número mayor descienden uno.
  */
-export function darDeBajaEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'numero'>>(
+export function darDeBajaEnCenso<
+  T extends Pick<Hermano, 'id' | 'estado' | 'numero'> & { civil?: boolean; cargo?: unknown },
+>(
   censo: T[],
   hermanoId: string,
 ): T[] {
@@ -30,10 +43,23 @@ export function darDeBajaEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'nume
   if (!actual || actual.estado === 'Baja') return censo
   const numBaja = actual.numero
   return censo.map((h) => {
-    if (h.id === hermanoId) return { ...h, estado: 'Baja' as const, numero: 0, bajaSolicitada: false }
+    /*
+     * La baja QUITA EL CARGO, y no es un detalle de limpieza.
+     *
+     * La única forma que tiene la base de datos de revocarle los permisos a
+     * alguien es su `estado`: tanto `auth_es_hermano()` como
+     * `modulo_permitido()` preguntan por `estado <> 'Baja'`. Dejar el cargo
+     * escrito en la ficha del tesorero destituido es dejar la puerta apoyada:
+     * basta con que su estado vuelva a 'Activo' —por un error de secretaría,
+     * por una reincorporación— para que recupere Tesorería sin que nadie lo
+     * decida.
+     */
+    if (h.id === hermanoId) {
+      return { ...h, estado: 'Baja' as const, numero: 0, bajaSolicitada: false, cargo: null }
+    }
     // Solo descienden los que están DENTRO de la numeración activa: los de
     // baja ya están fuera (número 0) y no se tocan.
-    if (h.estado !== 'Baja' && h.numero > 0 && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
+    if (enElEscalafon(h) && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
     return h
   })
 }
@@ -50,7 +76,9 @@ export function darDeBajaEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'nume
  * A igualdad de año se le pone DETRÁS de los que ya están: quien no ha faltado
  * en todos estos años no debe caer por debajo de quien vuelve.
  */
-export function reactivarEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'numero' | 'antiguedad'>>(
+export function reactivarEnCenso<
+  T extends Pick<Hermano, 'id' | 'estado' | 'numero' | 'antiguedad'> & { civil?: boolean },
+>(
   censo: T[],
   hermanoId: string,
   recuperarAntiguedad: boolean,
@@ -63,9 +91,7 @@ export function reactivarEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'nume
     return censo.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo' as const, numero: siguiente } : h))
   }
 
-  const activos = censo
-    .filter((h) => h.estado !== 'Baja' && h.numero > 0)
-    .sort((a, b) => a.numero - b.numero)
+  const activos = censo.filter(enElEscalafon).sort((a, b) => a.numero - b.numero)
   // Su sitio es delante del primero que entró DESPUÉS que él.
   const detras = activos.find((h) => h.antiguedad > actual.antiguedad)
   /**
@@ -83,7 +109,7 @@ export function reactivarEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'nume
   const suNumero = detras ? detras.numero : Math.max(0, ...activos.map((h) => h.numero)) + 1
   return censo.map((h) => {
     if (h.id === hermanoId) return { ...h, estado: 'Activo' as const, numero: suNumero }
-    if (h.estado !== 'Baja' && h.numero >= suNumero) return { ...h, numero: h.numero + 1 }
+    if (enElEscalafon(h) && h.numero >= suNumero) return { ...h, numero: h.numero + 1 }
     return h
   })
 }
@@ -92,8 +118,12 @@ export function reactivarEnCenso<T extends Pick<Hermano, 'id' | 'estado' | 'nume
  * ¿Está la numeración sana? Sirve para comprobarlo en las pruebas y, más
  * adelante, para avisar si una importación o una migración la dejó rota.
  */
-export function numeracionSana<T extends Pick<Hermano, 'estado' | 'numero'>>(censo: T[]): boolean {
-  const activos = censo.filter((h) => h.estado !== 'Baja').map((h) => h.numero)
+export function numeracionSana<T extends Pick<Hermano, 'estado' | 'numero'> & { civil?: boolean }>(
+  censo: T[],
+): boolean {
+  // Los civiles no entran: llevan número 0 a propósito, y sin esta línea un
+  // censo perfectamente sano daría «rota» solo por tener un contratado.
+  const activos = censo.filter((h) => h.estado !== 'Baja' && !h.civil).map((h) => h.numero)
   if (activos.some((n) => n <= 0)) return false
   if (new Set(activos).size !== activos.length) return false
   // Sin huecos: del 1 al total, sin saltarse ninguno.

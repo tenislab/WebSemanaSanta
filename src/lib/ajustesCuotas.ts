@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
+import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 
 /**
  * Ajustes de cuotas que decide cada hermandad. Por ahora: si poner en mora a un
@@ -23,6 +24,27 @@ export function getAjustesCuotas(): AjustesCuotas {
 
 export function saveAjustesCuotas(a: AjustesCuotas) {
   localStorage.setItem(CLAVE_AJUSTES_CUOTAS, JSON.stringify(a))
+  window.dispatchEvent(new Event('cabildo-ajustes-cuotas'))
+  /*
+   * Y A LA BASE, porque esto lo decide la hermandad, no el navegador.
+   *
+   * `bloquearPapeletaConDeuda` es «a quien deba cuotas no se le saca
+   * papeleta»: se acuerda en cabildo y se activa una vez. Viviendo solo aquí,
+   * quien atendía el sábado desde el otro ordenador no tenía el bloqueo y le
+   * sacaba la papeleta a un moroso.
+   *
+   * Y `moraRequiereDosCargos` es un control de cuatro ojos. Un control de
+   * cuatro ojos que se salta abriendo otro navegador no es un control.
+   */
+  void guardarPlantilla('ajustes_cuotas', a)
+}
+
+/** Trae los ajustes de la hermandad y los deja en la copia de este navegador. */
+export async function cargarAjustesCuotasDeLaBase(): Promise<void> {
+  const a = await traerPlantilla<AjustesCuotas>('ajustes_cuotas')
+  if (!a) return
+  localStorage.setItem(CLAVE_AJUSTES_CUOTAS, JSON.stringify(a))
+  window.dispatchEvent(new Event('cabildo-ajustes-cuotas'))
 }
 
 export function useAjustesCuotas(): [AjustesCuotas, (a: AjustesCuotas) => void] {
@@ -32,7 +54,13 @@ export function useAjustesCuotas(): [AjustesCuotas, (a: AjustesCuotas) => void] 
       setAjustesState(getAjustesCuotas())
     }
     window.addEventListener('storage', sync)
-    return () => window.removeEventListener('storage', sync)
+    window.addEventListener('cabildo-ajustes-cuotas', sync)
+    // Al montar, lo que diga la base manda sobre lo que hubiera aquí.
+    void cargarAjustesCuotasDeLaBase()
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('cabildo-ajustes-cuotas', sync)
+    }
   }, [])
   function setAjustes(a: AjustesCuotas) {
     setAjustesState(a)

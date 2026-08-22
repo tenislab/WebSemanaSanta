@@ -106,13 +106,34 @@ export async function saveSolicitudes(solicitudes: SolicitudAlta[]) {
       const nuevas = solicitudes.filter((s) => !idsActuales.has(s.id))
       const posiblesCambios = solicitudes.filter((s) => idsActuales.has(s.id))
 
-      if (eliminadas.length > 0) await supabase.from('solicitudes_alta').delete().in('id', eliminadas)
-      if (nuevas.length > 0) await supabase.from('solicitudes_alta').insert(nuevas.map(solicitudToRow))
+      /* Se mira el error de cada una: supabase-js no lanza excepción cuando la
+         base rechaza la operación, devuelve `{ error }`. Sin mirarlo, una
+         solicitud de alta aceptada en pantalla podía no llegar nunca a la
+         base, y la persona se quedaba sin dar de alta creyendo que lo estaba. */
+      const fallos: string[] = []
+      if (eliminadas.length > 0) {
+        const { error } = await supabase.from('solicitudes_alta').delete().in('id', eliminadas)
+        if (error) fallos.push(`borrar: ${error.message}`)
+      }
+      if (nuevas.length > 0) {
+        const { error } = await supabase.from('solicitudes_alta').insert(nuevas.map(solicitudToRow))
+        if (error) fallos.push(`crear: ${error.message}`)
+      }
       for (const s of posiblesCambios) {
-        await supabase.from('solicitudes_alta').update(solicitudToRow(s)).eq('id', s.id)
+        const { error } = await supabase.from('solicitudes_alta').update(solicitudToRow(s)).eq('id', s.id)
+        if (error) fallos.push(`guardar ${s.nombre}: ${error.message}`)
+      }
+      if (fallos.length > 0) {
+        console.error('No se pudieron guardar las solicitudes en Supabase:', fallos.join(' · '))
+        window.dispatchEvent(new CustomEvent('cabildo-sync-error', {
+          detail: { tabla: 'solicitudes_alta', fallos },
+        }))
       }
     } catch (err) {
       console.error('No se pudieron guardar las solicitudes en Supabase:', err)
+      window.dispatchEvent(new CustomEvent('cabildo-sync-error', {
+        detail: { tabla: 'solicitudes_alta', fallos: [String(err)] },
+      }))
     }
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(solicitudes))

@@ -8,6 +8,8 @@ import {
 } from 'react'
 import { supabase, isSupabaseConfigured, supabaseDisponible, sinModoLocal } from '../lib/supabase'
 import { getPersonal } from '../lib/personal'
+import { CLAVES_DATOS, leerDatos } from '../lib/persistencia'
+import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { limpiarModoDemo } from '../lib/demo'
 import { translateError } from '../lib/erroresAuth'
 import { ajustarEspejoALaHermandad, asegurarHermandad, hermandadActualId, olvidarHermandad } from '../lib/multiHermandad'
@@ -304,8 +306,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { error: null }
         }
 
+        /*
+         * Y un HERMANO CON CARGO en su ficha, que es la vía nueva y la
+         * recomendada. Sin esto, la demostración enseñaría lo contrario de lo
+         * que se ha construido: sin Supabase, `soyTitular()` contesta que sí
+         * para no bloquear la demo, así que un hermano con cargo entraría con
+         * el panel entero abierto.
+         *
+         * Entra con su correo y su clave de acceso, la misma con la que entra
+         * a su área por DNI: es la misma persona y la misma contraseña.
+         */
+        const censo = leerDatos<Hermano>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+        const conCargo = censo.find(
+          (h) =>
+            h.cargo
+            && h.cargo !== 'Hermano de a pie'
+            && h.estado !== 'Baja'
+            && h.email.trim().toLowerCase() === normalizado,
+        )
+        if (conCargo && conCargo.claveAcceso === password) {
+          const u = buildDemoUser(conCargo.email, 'Hermandad de prueba', conCargo.nombre)
+          u.user_metadata.cargo = conCargo.cargo ?? undefined
+          u.user_metadata.hermanoId = conCargo.id
+          sessionStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(u))
+          setDemoUser(u)
+          return { error: null }
+        }
+
         return {
-          error: `Estás en modo demostración. Usa el usuario de prueba: ${DEMO_EMAIL} / ${DEMO_PASSWORD}, o el acceso de personal que te haya dado tu hermandad.`,
+          error: `Estás en modo demostración. Usa el usuario de prueba: ${DEMO_EMAIL} / ${DEMO_PASSWORD}, o el acceso que te haya dado tu hermandad.`,
         }
       },
 

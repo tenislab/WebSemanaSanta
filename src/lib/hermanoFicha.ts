@@ -1,10 +1,40 @@
-import type { Hermano } from '../data/hermanos'
+import type { EstadoHermano, Hermano } from '../data/hermanos'
 
 /**
  * Datos «humanos» del hermano para su ficha: no cambian nada en la base, pero
  * son los que hacen que la ficha se lea como la de una persona y no como una
  * fila de tabla.
  */
+
+/**
+ * ¿Cuenta este hermano como miembro de la hermandad?
+ *
+ * Sí salvo que se haya ido. «Nuevo» ES miembro: ese estado se pone al ACEPTAR
+ * a alguien —tanto desde una solicitud como al darlo de alta a mano— y quiere
+ * decir «entró este año», no «está pendiente de algo».
+ *
+ * EL FALLO QUE ARREGLA: se contaban los activos como `estado === 'Activo'`, en
+ * tres sitios distintos, dejando fuera a los nuevos. O sea que todo hermano
+ * dado de alta hoy no contaba. Una hermandad que importa su censo entero —con
+ * todos marcados como nuevos, porque acaban de entrar en la aplicación— veía
+ * «Hermanos activos: 0» encima de sus ochocientas fichas. Y uno de esos tres
+ * sitios era el informe que se imprime y se lleva al cabildo de cuentas.
+ *
+ * Está aquí, en una sola función, para que las tres pantallas no puedan volver
+ * a contar cada una a su manera.
+ */
+export function esMiembro(h: { estado: EstadoHermano; civil?: boolean }): boolean {
+  /*
+   * El hermano civil NO cuenta como hermano en las cifras, y esa decisión
+   * importa: el «Padrón de hermanos» de Informes es el documento que se lleva
+   * al cabildo de cuentas y a la diócesis. El administrativo contratado no es
+   * hermano de la hermandad, aunque tenga su ficha y su acceso.
+   *
+   * Sí sigue apareciendo en el LISTADO del censo, para que secretaría pueda
+   * encontrarlo y gestionarlo. Fuera de las cifras, dentro de la lista.
+   */
+  return h.estado !== 'Baja' && !h.civil
+}
 
 /**
  * Años que lleva en la hermandad, contados hasta hoy. `null` si no se sabe.

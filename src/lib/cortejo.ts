@@ -33,8 +33,11 @@ function candidatosDe(
     .filter((p) => predicado(p) && p.estado !== 'Anulada' && p.estado !== 'Renuncia')
     .map((p) => ({ papeleta: p, hermano: hermanoDe(p.hermanoId) }))
     // Los hermanos de baja no salen en el cortejo: si se quedaran, además, su
-    // número 0 los pondría los primeros del reparto y quitarían sitio a los activos.
-    .filter((x): x is Candidato => Boolean(x.hermano) && x.hermano!.estado !== 'Baja')
+    // número 0 los pondría los primeros del reparto y quitarían sitio a los
+    // activos. Y los civiles tampoco: están en el censo para trabajar en la
+    // hermandad, no para hacer la estación de penitencia, y llevan número 0
+    // por lo mismo — se colarían en cabeza del reparto.
+    .filter((x): x is Candidato => Boolean(x.hermano) && x.hermano!.estado !== 'Baja' && !x.hermano!.civil)
   // Un hermano cuenta una sola vez aunque, por un error de datos o una
   // resincronización, tenga dos papeletas activas: si no, ocuparía dos
   // puestos y desplazaría al resto (o dispararía un falso "Excede aforo").

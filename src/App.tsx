@@ -1,5 +1,5 @@
-import { Suspense, lazy } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Suspense, lazy, useEffect } from 'react'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Raiz from './pages/Raiz'
 import EntradaUnificada from './pages/EntradaUnificada'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -39,22 +39,134 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const PaginaLegal = lazy(() => import('./pages/PaginaLegal'))
 const VerificarPapeleta = lazy(() => import('./pages/VerificarPapeleta'))
 
-const AppShell = lazy(() => import('./components/AppShell'))
-const DashboardHome = lazy(() => import('./pages/app/DashboardHome'))
-const Hermanos = lazy(() => import('./pages/app/Hermanos'))
-const Cuotas = lazy(() => import('./pages/app/Cuotas'))
-const Papeletas = lazy(() => import('./pages/app/Papeletas'))
-const Cortejo = lazy(() => import('./pages/app/Cortejo'))
-const Tesoreria = lazy(() => import('./pages/app/Tesoreria'))
-const Inventario = lazy(() => import('./pages/app/Inventario'))
-const Archivo = lazy(() => import('./pages/app/Archivo'))
-const Eventos = lazy(() => import('./pages/app/Eventos'))
-const Comunicados = lazy(() => import('./pages/app/Comunicados'))
-const Informes = lazy(() => import('./pages/app/Informes'))
-const Personal = lazy(() => import('./pages/app/Personal'))
-const WebPublica = lazy(() => import('./pages/app/WebPublica'))
-const Configuracion = lazy(() => import('./pages/app/Configuracion'))
-const Seguridad = lazy(() => import('./pages/app/Seguridad'))
+/*
+ * Las páginas del panel, con el «pídelo» separado del componente.
+ *
+ * Partir el paquete arregló la primera visita pero estropeó las siguientes:
+ * cada vez que se cambiaba de pestaña dentro del panel había un parpadeo,
+ * porque el trozo de esa pestaña no se había pedido todavía. Se notaba poco en
+ * el despacho de la hermandad, con fibra, y bastante en un móvil.
+ *
+ * La solución no es volver a juntarlo todo: es pedirlo ANTES de que haga
+ * falta. Por eso cada página tiene aquí su función de carga con nombre, y no
+ * un `import()` anónimo metido dentro del `lazy()`. La misma función que usa
+ * React para cargar la página bajo demanda la usa `prefetch` de abajo para
+ * traérsela en los ratos muertos. Y como `import()` guarda lo que ya trajo,
+ * llamarla dos veces no descarga nada dos veces: la segunda es instantánea.
+ */
+const cargarAppShell = () => import('./components/AppShell')
+const cargarDashboard = () => import('./pages/app/DashboardHome')
+const cargarHermanos = () => import('./pages/app/Hermanos')
+const cargarCuotas = () => import('./pages/app/Cuotas')
+const cargarPapeletas = () => import('./pages/app/Papeletas')
+const cargarCortejo = () => import('./pages/app/Cortejo')
+const cargarTesoreria = () => import('./pages/app/Tesoreria')
+const cargarInventario = () => import('./pages/app/Inventario')
+const cargarArchivo = () => import('./pages/app/Archivo')
+const cargarEventos = () => import('./pages/app/Eventos')
+const cargarComunicados = () => import('./pages/app/Comunicados')
+const cargarInformes = () => import('./pages/app/Informes')
+const cargarPersonal = () => import('./pages/app/Personal')
+const cargarWebPublica = () => import('./pages/app/WebPublica')
+const cargarConfiguracion = () => import('./pages/app/Configuracion')
+const cargarSeguridad = () => import('./pages/app/Seguridad')
+
+const AppShell = lazy(cargarAppShell)
+const DashboardHome = lazy(cargarDashboard)
+const Hermanos = lazy(cargarHermanos)
+const Cuotas = lazy(cargarCuotas)
+const Papeletas = lazy(cargarPapeletas)
+const Cortejo = lazy(cargarCortejo)
+const Tesoreria = lazy(cargarTesoreria)
+const Inventario = lazy(cargarInventario)
+const Archivo = lazy(cargarArchivo)
+const Eventos = lazy(cargarEventos)
+const Comunicados = lazy(cargarComunicados)
+const Informes = lazy(cargarInformes)
+const Personal = lazy(cargarPersonal)
+const WebPublica = lazy(cargarWebPublica)
+const Configuracion = lazy(cargarConfiguracion)
+const Seguridad = lazy(cargarSeguridad)
+
+/*
+ * El orden en que se traen las pestañas del panel cuando no se está haciendo
+ * nada. No es alfabético ni caprichoso: es el orden en que la gente las abre.
+ *
+ * Quien entra al panel casi siempre va a Hermanos —a buscar a alguien—, y de
+ * ahí a Cuotas. En febrero y marzo, a Papeletas. El editor de la web y la
+ * matriz de permisos se abren una vez al trimestre, así que van los últimos:
+ * si al usuario le da tiempo a pulsarlos antes de que lleguen, se cargan como
+ * siempre y no ha pasado nada.
+ */
+const PRECARGA = [
+  cargarHermanos,
+  cargarCuotas,
+  cargarPapeletas,
+  cargarCortejo,
+  cargarTesoreria,
+  cargarComunicados,
+  cargarEventos,
+  cargarInformes,
+  cargarInventario,
+  cargarArchivo,
+  cargarPersonal,
+  cargarConfiguracion,
+  cargarSeguridad,
+  cargarWebPublica,
+]
+
+/*
+ * Trae las pestañas de una en una, y solo cuando el navegador no tiene nada
+ * mejor que hacer.
+ *
+ * Las tres cautelas importantes:
+ *
+ * - De una en una, encadenadas. Catorce descargas a la vez le quitarían el
+ *   ancho de banda a lo que el usuario está mirando AHORA, que es justo lo
+ *   contrario de lo que se busca.
+ * - `requestIdleCallback`, no un `setTimeout`. Si el usuario está escribiendo
+ *   en un buscador o desplegando una lista larga, no se descarga nada hasta
+ *   que pare.
+ * - `saveData` y las conexiones lentas quedan fuera. A quien tiene el móvil en
+ *   ahorro de datos o va con 2G no se le gastan megas en pantallas que a lo
+ *   mejor no abre; para esa persona el parpadeo es el mal menor.
+ */
+function precargarPanel(): () => void {
+  let cancelado = false
+  const w = window as unknown as {
+    requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number
+    cancelIdleCallback?: (id: number) => void
+  }
+  const conexion = (navigator as unknown as {
+    connection?: { saveData?: boolean; effectiveType?: string }
+  }).connection
+  if (conexion?.saveData) return () => {}
+  if (conexion?.effectiveType && /^(slow-)?2g$/.test(conexion.effectiveType)) return () => {}
+
+  let idle = 0
+  let timer = 0
+  const enHueco = (fn: () => void) => {
+    if (w.requestIdleCallback) idle = w.requestIdleCallback(fn, { timeout: 3000 })
+    else timer = window.setTimeout(fn, 300)
+  }
+
+  let i = 0
+  const siguiente = () => {
+    if (cancelado || i >= PRECARGA.length) return
+    const traer = PRECARGA[i++]
+    /* Si una falla (un despliegue a mitad de sesión deja los nombres de los
+       ficheros viejos sin servidor) no se cae nada: esa pestaña se pedirá otra
+       vez al pulsarla, y entonces sí se verá el error donde toca. */
+    traer().catch(() => {}).then(() => enHueco(siguiente))
+  }
+  enHueco(siguiente)
+
+  return () => {
+    cancelado = true
+    if (idle && w.cancelIdleCallback) w.cancelIdleCallback(idle)
+    if (timer) clearTimeout(timer)
+  }
+}
 
 /**
  * Lo que se ve mientras llega el trozo que falta.
@@ -75,6 +187,17 @@ function Cargando() {
 }
 
 export default function App() {
+  const { pathname } = useLocation()
+  /* Solo se precarga el panel a quien está DENTRO del panel. Quien está
+     mirando la web pública de una hermandad, o su área de hermano, no tiene
+     por qué descargarse tesorería ni el editor de la web: para esa persona
+     serían megas tirados. */
+  const enElPanel = pathname === '/app' || pathname.startsWith('/app/')
+  useEffect(() => {
+    if (!enElPanel) return
+    return precargarPanel()
+  }, [enElPanel])
+
   return (
     <Suspense fallback={<Cargando />}>
       <Routes>

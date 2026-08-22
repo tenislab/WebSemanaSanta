@@ -23,6 +23,7 @@ import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campa
 import { formatCurrency } from '../../lib/format'
 import { puedeVerModulo } from '../../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../../lib/suscripcion'
+import { esMiembro } from '../../lib/hermanoFicha'
 
 const QUICK_ACTIONS = [
   { to: '/app/hermanos', label: 'Nuevo hermano', icon: 'user' as const, modulo: 'hermanos' },
@@ -92,7 +93,9 @@ export default function DashboardHome() {
     const campana = getCampana()
     const papeletasCampana = papeletas.filter((p) => p.anio === campana.anio)
 
-    const activos = hermanos.filter((h) => h.estado === 'Activo').length
+    // Miembros = todos menos los que se han ido. «Nuevo» es miembro: ese
+    // estado se pone al ACEPTAR a alguien. Ver esMiembro().
+    const activos = hermanos.filter(esMiembro).length
     const nuevos = hermanos.filter((h) => h.estado === 'Nuevo').length
     const cuotasPendientes = cuotas.filter((c) => c.estado === 'Pendiente').length
     const pctPendientes = cuotas.length ? Math.round((cuotasPendientes / cuotas.length) * 100) : 0

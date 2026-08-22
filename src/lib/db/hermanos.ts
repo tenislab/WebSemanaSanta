@@ -1,4 +1,5 @@
 import type { Hermano } from '../../data/hermanos'
+import type { Cargo } from '../../data/documentos'
 
 /** camelCase (app) ⇄ snake_case (tabla `hermanos` en Supabase). */
 export function hermanoToRow(h: Hermano): Record<string, unknown> {
@@ -27,6 +28,14 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
     baja_solicitada: h.bajaSolicitada ?? false,
     baja_solicitada_el: h.bajaSolicitadaEl ?? null,
     motivo_baja: h.motivoBaja ?? null,
+    /* El cargo va EN LA FICHA: es lo que hace que una persona sea una sola
+       persona y no dos (hermano nº 47 por un lado, «personal» por otro).
+       Quien manda esto no decide nada: en la base hay un disparador que
+       devuelve `cargo` y `civil` a su valor anterior si quien escribe no lleva
+       el módulo de Personal. Sin él, cualquier hermano se nombraría Hermano
+       Mayor desde la consola del navegador. */
+    cargo: h.cargo ?? null,
+    civil: h.civil ?? false,
   }
 }
 
@@ -79,5 +88,60 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     bajaSolicitada: Boolean(r.baja_solicitada),
     bajaSolicitadaEl: (r.baja_solicitada_el as string | null) ?? undefined,
     motivoBaja: (r.motivo_baja as string | null) ?? undefined,
+    cargo: (r.cargo as Cargo | null) ?? null,
+    civil: Boolean(r.civil),
+  }
+}
+
+/**
+ * Guardar el cargo de un hermano COMPROBANDO que la base lo ha aceptado.
+ *
+ * EL FALLO QUE EVITA, que es de los peores que hay: en la base hay un
+ * disparador que devuelve `cargo` a su valor anterior si quien escribe no
+ * tiene permiso para repartir cargos. Y lo hace EN SILENCIO, a propósito —la
+ * aplicación manda la fila entera en cada guardado, así que lanzar un error
+ * rompería el guardado normal de cualquier hermano—.
+ *
+ * El efecto secundario es que un guardado revertido es indistinguible de uno
+ * que ha ido bien: la petición no da error, el espejo no tiene nada que
+ * avisar, y React ya ha pintado el cargo nuevo. La secretaria ve a Juan Luis
+ * de Tesorero/a, cierra el navegador tranquila, y en la base Juan Luis sigue
+ * sin cargo. Se descubre al día siguiente, cuando Juan Luis entra y no ve
+ * Tesorería.
+ *
+ * Por eso esto pide la fila DE VUELTA y compara. Si la base ha devuelto otra
+ * cosa, se dice. Es el mismo problema que ya costó caro en la tabla de
+ * permisos, donde el visto bueno verde salía aunque no se hubiera guardado.
+ */
+export async function guardarCargoDeHermano(
+  id: string,
+  cargo: string | null,
+): Promise<{ ok: boolean; error: string | null }> {
+  const { isSupabaseConfigured, supabase } = await import('../supabase')
+  if (!isSupabaseConfigured || !supabase) return { ok: true, error: null }
+  try {
+    const { data, error } = await supabase
+      .from('hermanos').update({ cargo }).eq('id', id).select('cargo').maybeSingle()
+    if (error) return { ok: false, error: `No se ha podido guardar el cargo: ${error.message}` }
+    if (!data) {
+      // Cero filas: las políticas no han dejado pasar el update. No es un
+      // error de Postgres, es una fila que no existe para esta cuenta.
+      return {
+        ok: false,
+        error: 'No se ha podido guardar el cargo: tu cuenta no tiene permiso para escribir en esa ficha.',
+      }
+    }
+    if ((data.cargo ?? null) !== cargo) {
+      return {
+        ok: false,
+        error:
+          'No se ha podido cambiar el cargo: tu cuenta no tiene permiso para repartir cargos en la '
+          + 'base de datos. Hace falta el módulo «Personal y permisos», o el módulo «Hermanos». '
+          + 'Pídeselo a quien lleve la hermandad.',
+      }
+    }
+    return { ok: true, error: null }
+  } catch (e) {
+    return { ok: false, error: `No se ha podido guardar el cargo: ${(e as Error).message}` }
   }
 }

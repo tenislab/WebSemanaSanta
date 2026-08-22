@@ -110,6 +110,25 @@ create table if not exists tramos (
   etiqueta text,
   orden int not null default 0
 );
+/*
+ * La hora de citación del tramo — «a las 17:30 en la casa de hermandad».
+ *
+ * Va como `alter table` y no dentro del `create table` de arriba para las
+ * bases que ya existen: el `create table if not exists` no toca una tabla que
+ * ya está, así que a ellas la columna solo les llega por aquí.
+ *
+ * EL DESTROZO QUE ARREGLA: la aplicación llevaba escribiendo `hora_citacion`
+ * en cada guardado de tramo, y la columna NO EXISTÍA en ninguna parte.
+ * Postgres rechaza la sentencia entera cuando una columna no existe, así que
+ * NINGÚN TRAMO SE GUARDABA NUNCA. Ni al crear ni al editar.
+ *
+ * Y no se veía: la pantalla pintaba el tramo recién creado —el estado de React
+ * ya lo tenía— y solo al recargar aparecía Cortejo con «0/0 puestos cubiertos»
+ * y «No hay tramos». Sin tramos no hay cortejo, y sin cortejo las papeletas no
+ * se pueden asignar a ningún sitio: de un fallo de una palabra colgaba la
+ * mitad de la Semana Santa de la hermandad.
+ */
+alter table tramos add column if not exists hora_citacion text;
 
 -- -----------------------------------------------------------------------------
 -- Cuotas

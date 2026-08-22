@@ -47,6 +47,11 @@ export const PIEZAS = [
   ['eventos-repeticion.sql', 'Que un culto que se repite siga repitiéndose'],
   ['suscripcion.sql', 'Que la suscripción sea de la hermandad, no del navegador'],
   ['plantillas-hermandad.sql', 'Que los modelos y la asistencia no se pierdan al cerrar sesión'],
+  ['ajustes-de-la-hermandad.sql', 'Ajustes de cuotas y etiquetas: de la hermandad, no del navegador'],
+  // EL ÚLTIMO, y tiene que seguir siéndolo: redefine `auth_es_hermano()`,
+  // `modulo_permitido()` y varias políticas que crean los archivos de arriba.
+  // De todas las definiciones de una función, manda la última que se ejecuta.
+  ['hermano-con-cargo.sql', 'Una persona, una ficha: el cargo va en la ficha del hermano'],
 ]
 
 const CABECERA = `-- =============================================================================

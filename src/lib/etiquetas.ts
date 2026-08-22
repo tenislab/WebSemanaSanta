@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
+import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 
 /**
- * Catálogo de etiquetas de la hermandad (costalero, acólito, banda…). Cada
- * hermandad crea las suyas; se guardan en el navegador (localStorage) y, más
- * adelante, en una tabla propia de Supabase. Sirven para segmentar avisos
- * (mandar un comunicado solo a los costaleros, por ejemplo) y para filtrar el
- * censo.
+ * Catálogo de etiquetas de la hermandad (costalero, acólito, banda…). Sirven
+ * para segmentar avisos —mandar un comunicado solo a los costaleros— y para
+ * filtrar el censo.
+ *
+ * Van en la base, en `hermandad_settings.etiquetas`. Antes vivían solo en el
+ * navegador y eso daba dos problemas a la vez: el mayordomo creaba «Costalero
+ * de repuesto» en su ordenador y desde secretaría esa etiqueta no existía, así
+ * que el comunicado a ese grupo no se podía mandar; y al cerrar sesión se
+ * borra todo lo que empieza por `cabildo-`, así que el catálogo entero
+ * desaparecía y volvían las siete de fábrica.
  */
 
 export const CLAVE_ETIQUETAS = 'cabildo-etiquetas'
@@ -28,6 +34,16 @@ export function getEtiquetas(): string[] {
 
 export function saveEtiquetas(etiquetas: string[]) {
   localStorage.setItem(CLAVE_ETIQUETAS, JSON.stringify(etiquetas))
+  window.dispatchEvent(new Event('cabildo-etiquetas'))
+  void guardarPlantilla('etiquetas', etiquetas)
+}
+
+/** Trae el catálogo de la hermandad y lo deja en la copia de este navegador. */
+export async function cargarEtiquetasDeLaBase(): Promise<void> {
+  const e = await traerPlantilla<string[]>('etiquetas')
+  if (!Array.isArray(e)) return
+  localStorage.setItem(CLAVE_ETIQUETAS, JSON.stringify(e))
+  window.dispatchEvent(new Event('cabildo-etiquetas'))
 }
 
 /** Hook con el catálogo de etiquetas y un setter que persiste. */
@@ -39,7 +55,13 @@ export function useEtiquetas(): [string[], (siguiente: string[]) => void] {
       setEtiquetasState(getEtiquetas())
     }
     window.addEventListener('storage', sincronizar)
-    return () => window.removeEventListener('storage', sincronizar)
+    window.addEventListener('cabildo-etiquetas', sincronizar)
+    // Al montar, el catálogo de la hermandad manda sobre el de este navegador.
+    void cargarEtiquetasDeLaBase()
+    return () => {
+      window.removeEventListener('storage', sincronizar)
+      window.removeEventListener('cabildo-etiquetas', sincronizar)
+    }
   }, [])
 
   function setEtiquetas(siguiente: string[]) {

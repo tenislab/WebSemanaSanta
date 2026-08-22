@@ -75,7 +75,17 @@ export function filtrarSegmento(
     // Las bajas nunca reciben salvo que se pidan explícitamente.
     if (c.estado !== 'Cualquiera' && (c.estado === 'Todos' ? h.estado === 'Baja' : h.estado !== c.estado)) return false
     if (c.cuota === 'AlDia' && !h.cuotaAlDia) return false
-    if (c.cuota === 'Pendiente' && h.cuotaAlDia) return false
+    /*
+     * «Pendiente» es el sesgo con el que se manda el aviso a quien debe, y es
+     * lo más parecido a un aviso de morosidad que hay en la aplicación.
+     *
+     * El civil queda fuera SIEMPRE, y si no se hace es un fallo seguro: nace
+     * con `cuotaAlDia: false` y nunca se le emite un recibo, así que se queda
+     * «pendiente» para siempre. Al administrativo contratado le llegarían
+     * todos los avisos de morosidad de la hermandad, uno tras otro, por una
+     * deuda que no existe.
+     */
+    if (c.cuota === 'Pendiente' && (h.cuotaAlDia || h.civil)) return false
     if (c.edad !== 'Todos') {
       const e = edadDe(h.fechaNacimiento)
       if (e == null) return false

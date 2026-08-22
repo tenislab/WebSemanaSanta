@@ -12,9 +12,11 @@ import { useOpcionesPapeleta } from '../../lib/opcionesPapeleta'
 import { useTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
-import { aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
+import { esMiembro, aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
-import { isSupabaseConfigured, supabaseAlta } from '../../lib/supabase'
+import { isSupabaseConfigured } from '../../lib/supabase'
+import { crearAccesoHermano } from '../../lib/accesos'
+import { darLaBienvenida } from '../../lib/bienvenida'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
@@ -57,33 +59,21 @@ import { useAuth } from '../../context/AuthContext'
 import { filaQueAbre } from '../../lib/foco'
 
 /**
- * Con Supabase conectado, crea además una cuenta real de acceso (mismo
- * correo y contraseña) para que el hermano pueda entrar en su área; sin él,
- * solo entra por el modo demostración. Devuelve el id de esa cuenta, o
- * `null` si no hay Supabase o si algo falla (el hermano se guarda igual,
- * solo que sin poder entrar hasta que se resuelva).
+ * La cuota de un hermano en una palabra. Son TRES estados, no dos.
+ *
+ * El hermano civil no paga cuota: es lo que significa ser civil. Y como nace
+ * con `cuotaAlDia` en falso y no se le emite ningún recibo nunca, sin este
+ * tercer estado el administrativo contratado sale como moroso permanente en
+ * el listado, en la ficha, en la exportación y en el padrón del cabildo.
  */
-async function crearAccesoHermano(
-  email: string,
-  password: string,
-  dni: string,
-  nombre: string,
-): Promise<string | null> {
-  if (!isSupabaseConfigured || !supabaseAlta) return null
-  // supabaseAlta: crea la cuenta sin pisar la sesión del administrador.
-  const { data, error } = await supabaseAlta.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { tipo: 'hermano', dni, nombre },
-      emailRedirectTo: `${window.location.origin}/hermano`,
-    },
-  })
-  if (error) {
-    console.error('No se pudo crear el acceso real del hermano en Supabase:', error.message)
-    return null
-  }
-  return data.user?.id ?? null
+function cuotaEnPalabras(h: { cuotaAlDia: boolean; civil?: boolean }): string {
+  if (h.civil) return 'No paga cuota'
+  return h.cuotaAlDia ? 'Al día' : 'Pendiente'
+}
+
+function cuotaClass(h: { cuotaAlDia: boolean; civil?: boolean }): string {
+  if (h.civil) return 'pill--info'
+  return h.cuotaAlDia ? 'pill--ok' : 'pill--warn'
 }
 
 function estadoClass(estado: EstadoHermano) {
@@ -209,6 +199,13 @@ export default function Hermanos() {
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [dniError, setDniError] = useState<string | null>(null)
+  /**
+   * «La ficha se ha guardado, pero NO se ha creado su acceso».
+   *
+   * Va aquí arriba y no dentro del panel del alta porque el panel se cierra al
+   * guardar: si el aviso viviera dentro, se cerraría con él y nadie lo vería.
+   */
+  const [avisoAcceso, setAvisoAcceso] = useState<string | null>(null)
 
   const [ibanDraft, setIbanDraft] = useState('')
   const [ibanError, setIbanError] = useState<string | null>(null)
@@ -259,17 +256,39 @@ export default function Hermanos() {
       ...(sol.tutorId ? { tutorId: sol.tutorId } : {}),
       ...(sol.fechaNacimiento ? { fechaNacimiento: sol.fechaNacimiento } : {}),
     }
-    nuevo.authUserId = await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
+    const acceso = await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
+    nuevo.authUserId = acceso.id
+    // Si no se ha podido crear su acceso, se DICE. Ver crearAccesoHermano().
+    if (acceso.error) setAvisoAcceso(acceso.error)
     // La comprobación de DNI se repite AQUÍ, ya con la lista más reciente: entre
     // el clic y el final del alta (una llamada de red) pudo entrar otro hermano.
     let duplicado = false
+    let suNumero = 0
     setHermanos((prev) => {
       if (prev.some((h) => h.dni.toUpperCase() === sol.dni.toUpperCase())) {
         duplicado = true
         return prev
       }
-      return [...prev, { ...nuevo, numero: Math.max(0, ...prev.map((h) => h.numero)) + 1 }]
+      suNumero = Math.max(0, ...prev.map((h) => h.numero)) + 1
+      return [...prev, { ...nuevo, numero: suNumero }]
     })
+    /*
+     * Y SE LE DA LA BIENVENIDA por correo, con su número y cómo entrar.
+     *
+     * Antes había que decírselo a mano, por teléfono o en el mostrador. En una
+     * hermandad que da de alta a treinta personas después de un cabildo, eso
+     * son treinta llamadas — y las que no se hacen son treinta personas que no
+     * saben que tienen un área.
+     *
+     * La contraseña NO va escrita en el correo: ver src/lib/bienvenida.ts.
+     */
+    if (!duplicado) {
+      void darLaBienvenida({
+        id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
+        numero: suNumero, claveEsElDni: nuevo.claveAcceso === nuevo.dni,
+        hermandad: hermandad.nombreLegal,
+      })
+    }
     // Sobre el estado más reciente de las solicitudes, no sobre el de antes del
     // await: si no, aprobar dos seguidas revertía la primera a «Pendiente».
     setSolicitudesState((prev) => {
@@ -375,9 +394,11 @@ export default function Hermanos() {
 
   const stats = useMemo(() => {
     const total = hermanos.length
-    const activos = hermanos.filter((h) => h.estado === 'Activo').length
+    // «Nuevo» también es miembro: ver esMiembro().
+    const activos = hermanos.filter(esMiembro).length
     const nuevos = hermanos.filter((h) => h.estado === 'Nuevo').length
-    const pendientes = hermanos.filter((h) => !h.cuotaAlDia).length
+    // Los civiles fuera: no se les emite cuota, así que no pueden deberla.
+    const pendientes = hermanos.filter((h) => !h.civil && !h.cuotaAlDia).length
     return { total, activos, nuevos, pendientes }
   }, [hermanos])
 
@@ -542,18 +563,30 @@ export default function Hermanos() {
       fechaNacimiento,
       campos: Object.keys(camposNuevo).length ? camposNuevo : undefined,
     }
-    nuevo.authUserId = await crearAccesoHermano(email, dni, dni, nombre)
+    const acceso = await crearAccesoHermano(email, dni, dni, nombre)
+    nuevo.authUserId = acceso.id
+    if (acceso.error) setAvisoAcceso(acceso.error)
     // El duplicado se vuelve a mirar DENTRO del updater: entre el clic y la
     // respuesta de Supabase pasan segundos, y pulsando dos veces se daban de
     // alta dos hermanos con el mismo DNI.
     let duplicado = false
+    let suNumero = 0
     setHermanos((prev) => {
       if (prev.some((h) => h.dni.trim().toUpperCase() === dni)) {
         duplicado = true
         return prev
       }
-      return [...prev, { ...nuevo, numero: Math.max(0, ...prev.map((h) => h.numero)) + 1 }]
+      suNumero = Math.max(0, ...prev.map((h) => h.numero)) + 1
+      return [...prev, { ...nuevo, numero: suNumero }]
     })
+    // La bienvenida, igual que en el alta desde solicitud.
+    if (!duplicado) {
+      void darLaBienvenida({
+        id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
+        numero: suNumero, claveEsElDni: nuevo.claveAcceso === nuevo.dni,
+        hermandad: hermandad.nombreLegal,
+      })
+    }
     if (duplicado) {
       setDniError('Ya hay un hermano con ese DNI.')
       setGuardandoAlta(false)
@@ -730,6 +763,14 @@ export default function Hermanos() {
 
   return (
     <div className="dash">
+      {avisoAcceso && (
+        <div className="banner-inline banner-inline--warn" role="alert">
+          <span>{avisoAcceso}</span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAvisoAcceso(null)}>
+            Entendido
+          </button>
+        </div>
+      )}
       <div className="dash-head dash-head--row">
         <div>
           <p className="eyebrow">Hermanos</p>
@@ -977,7 +1018,7 @@ export default function Hermanos() {
                       <span className="row-person__sub">{h.email}</span>
                       {/* En el móvil se ocultan Nº, tramo y antigüedad. */}
                       <span className="row-person__sub solo-movil">
-                        Nº {h.numero > 0 ? h.numero : '—'} · cuota {h.cuotaAlDia ? 'al día' : 'pendiente'} · {tramoPorHermano.get(h.id) ?? 'sin papeleta'}
+                        Nº {h.numero > 0 ? h.numero : '—'} · {cuotaEnPalabras(h).toLowerCase()} · {tramoPorHermano.get(h.id) ?? 'sin papeleta'}
                       </span>
                     </span>
                   </div>
@@ -997,9 +1038,7 @@ export default function Hermanos() {
                   )}
                 </td>
                 <td className="col-opcional">
-                  <span className={`pill ${h.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
-                    {h.cuotaAlDia ? 'Al día' : 'Pendiente'}
-                  </span>
+                  <span className={`pill ${cuotaClass(h)}`}>{cuotaEnPalabras(h)}</span>
                 </td>
                 <td className="num col-opcional">
                   {/* Sin antigüedad, una raya: el censo llegó a poner «NaN
@@ -1078,7 +1117,15 @@ export default function Hermanos() {
         ancho="ancho"
         onClose={() => setSelectedId(null)}
         title={selected?.nombre ?? ''}
-        subtitle={selected ? (selected.numero > 0 ? `Hermano nº ${selected.numero}` : 'De baja · sin número activo') : undefined}
+        subtitle={
+          selected
+            ? selected.numero > 0
+              ? `Hermano nº ${selected.numero}`
+              : selected.civil
+                ? 'Hermano civil · no ocupa número ni paga cuota'
+                : 'De baja · sin número activo'
+            : undefined
+        }
       >
         {selected && (
           <div className="ficha">
@@ -1102,9 +1149,23 @@ export default function Hermanos() {
                 </small>
                 <div className="ficha-hero__pills">
                   <span className={`pill ${estadoClass(selected.estado)}`}>{selected.estado}</span>
-                  <span className={`pill ${selected.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
-                    {selected.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
+                  <span className={`pill ${cuotaClass(selected)}`}>
+                    {selected.civil ? 'No paga cuota' : cuotaEnPalabras(selected) === 'Al día' ? 'Cuota al día' : 'Cuota pendiente'}
                   </span>
+                  {/* El cargo se VE aquí pero no se toca aquí: se pone y se
+                      quita en Personal y permisos, que es la pantalla que
+                      además lleva la tabla de qué ve cada cargo. Tenerlo en
+                      dos sitios sería tener dos verdades. */}
+                  {selected.cargo && (
+                    <Link className="pill pill--info" to="/app/personal" title="Se cambia en Personal y permisos">
+                      {selected.cargo}
+                    </Link>
+                  )}
+                  {isSupabaseConfigured && !selected.authUserId && (
+                    <span className="pill pill--alerta" title="No tiene cuenta: no puede entrar en su área">
+                      Sin acceso
+                    </span>
+                  )}
                   {etiquetasDe(selected, roles.get(selected.id) ?? []).slice(0, 4).map((et) => (
                     <span key={et} className="pill pill--info">{et}</span>
                   ))}
@@ -1500,7 +1561,7 @@ export default function Hermanos() {
         ]}
         columnas={['Nº', 'Hermano', 'Estado', 'Antigüedad', 'Cuota']}
         filas={filtered.map((h) => [
-          h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.cuotaAlDia ? 'Al día' : 'Pendiente',
+          h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, cuotaEnPalabras(h),
         ])}
       />
 
@@ -1528,7 +1589,7 @@ export default function Hermanos() {
                   <div><dt>Hermano/a</dt><dd>{h.nombre}</dd></div>
                   <div><dt>Número</dt><dd>{h.numero > 0 ? h.numero : '—'}</dd></div>
                   <div><dt>Hermano desde</dt><dd>{h.antiguedad}</dd></div>
-                  <div><dt>Cuota</dt><dd>{h.cuotaAlDia ? 'Al día' : 'Pendiente'}</dd></div>
+                  <div><dt>Cuota</dt><dd>{cuotaEnPalabras(h)}</dd></div>
                   {h.email && <div><dt>Correo</dt><dd><a href={`mailto:${h.email}`}>{h.email}</a></dd></div>}
                   {h.telefono && <div><dt>Teléfono</dt><dd><a href={`tel:${h.telefono.replace(/\s+/g, '')}`}>{h.telefono}</a></dd></div>}
                 </dl>

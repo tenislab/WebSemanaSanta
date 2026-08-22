@@ -20,6 +20,7 @@
  * sigue funcionando con los datos del navegador, como hasta ahora.
  */
 import { isSupabaseConfigured, supabase } from './supabase'
+import type { Cargo } from '../data/documentos'
 
 /**
  * El id resuelto, guardado para no preguntarlo en cada subida de archivo.
@@ -270,6 +271,36 @@ export async function authUserIdActual(): Promise<string | undefined> {
 
 
 /**
+ * Mi propia ficha del censo: el cargo que llevo y si estoy de baja.
+ *
+ * SE PREGUNTA A LA BASE, no al espejo del navegador, y no es un capricho.
+ * El espejo de `localStorage` está vacío la primera vez que alguien abre la
+ * aplicación en un navegador nuevo, y el área del hermano además espeja solo
+ * SU fila. Un secretario que entrara al panel desde el ordenador de la casa de
+ * hermandad se habría quedado sin su cargo, y sin explicación.
+ *
+ * Las políticas ya dejan a cada uno leer su propia ficha, así que esta consulta
+ * la puede hacer cualquiera y solo devuelve lo suyo.
+ *
+ * Si falla, devuelve `null`: sin cargo. NUNCA hay que interpretar un fallo de
+ * esta consulta como «es el titular».
+ */
+export async function miFichaDeHermano(): Promise<{ cargo: Cargo | null; estado: string } | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  try {
+    const { data } = await supabase.auth.getUser()
+    const uid = data.user?.id
+    if (!uid) return null
+    const { data: fila, error } = await supabase
+      .from('hermanos').select('cargo, estado').eq('auth_user_id', uid).limit(1).maybeSingle()
+    if (error || !fila) return null
+    return { cargo: (fila.cargo as Cargo | null) ?? null, estado: (fila.estado as string) ?? '' }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Qué es esta cuenta: hermano, gestión, o LAS DOS COSAS.
  *
  * Las dos cosas es lo normal, no la excepción. El Hermano Mayor es hermano y
@@ -316,7 +347,10 @@ export async function papelesDeLaCuenta(): Promise<PapelesDeLaCuenta> {
     const uid = data.user?.id
     if (!uid) return SIN_PAPELES
     const [hermano, titular, personal] = await Promise.all([
-      supabase.from('hermanos').select('id').eq('auth_user_id', uid).limit(1).maybeSingle(),
+      // `cargo` y `estado`, no solo `id`: son los que dicen si esta persona
+      // gestiona. Antes se pedía solo el id y la información con la que
+      // decidir ni siquiera llegaba al navegador.
+      supabase.from('hermanos').select('id, cargo, estado').eq('auth_user_id', uid).limit(1).maybeSingle(),
       // Por RPC: la tabla `titulares` no se puede leer desde el navegador
       // (política `titulares_nadie`). Ver el comentario de `soyTitular`.
       supabase.rpc('es_titular'),
@@ -334,8 +368,21 @@ export async function papelesDeLaCuenta(): Promise<PapelesDeLaCuenta> {
      * De los tres, los dos que dicen si gestiona son los que importan: si
      * cualquiera de ellos ha fallado, no se sabe y no se echa a nadie.
      */
-    const sabemosSiGestiona = !titular.error && !personal.error
-    const gestiona = titular.data === true || Boolean(personal.data)
+    const sabemosSiGestiona = !titular.error && !personal.error && !hermano.error
+    /*
+     * Las TRES formas de gestionar, sumadas: el titular, quien está en la
+     * tabla de personal, y —la nueva— quien lleva un cargo en su propia ficha
+     * de hermano. Sin el tercer sumando, el secretario que es hermano nº 47
+     * sale como «no gestiona» y la aplicación le trata como hermano de a pie.
+     *
+     * 'Hermano de a pie' no cuenta: es un cargo del catálogo sin ningún
+     * módulo, así que llevarlo no es gestionar nada.
+     */
+    const conCargo = hermano.data?.cargo as string | null | undefined
+    const gestionaPorCargo = Boolean(conCargo)
+      && conCargo !== 'Hermano de a pie'
+      && hermano.data?.estado !== 'Baja'
+    const gestiona = titular.data === true || Boolean(personal.data) || gestionaPorCargo
 
     return {
       esHermano: !hermano.error && Boolean(hermano.data),

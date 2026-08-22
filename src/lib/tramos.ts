@@ -146,28 +146,60 @@ export function useTramos(): Tramo[] {
  * tramos se editan como borrador y se guardan de una vez con el botón
  * «Guardar tramos», no en cada tecleo).
  */
-export async function saveTramos(tramos: Tramo[]) {
+export async function saveTramos(tramos: Tramo[]): Promise<{ ok: boolean; error?: string }> {
+  const fallos: string[] = []
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data } = await supabase.from('tramos').select('id')
+      const { data, error: leyendo } = await supabase.from('tramos').select('id')
+      if (leyendo) fallos.push(`leer: ${leyendo.message}`)
       const idsActuales = new Set((data ?? []).map((r: { id: string }) => r.id))
       const nextIds = new Set(tramos.map((t) => t.id))
       const eliminados = [...idsActuales].filter((id) => !nextIds.has(id))
       const nuevos = tramos.filter((t) => !idsActuales.has(t.id))
       const posiblesCambios = tramos.filter((t) => idsActuales.has(t.id))
 
-      if (eliminados.length > 0) await supabase.from('tramos').delete().in('id', eliminados)
+      /*
+       * SE MIRA EL ERROR DE CADA UNA, y esto es lo que costó el cortejo entero.
+       *
+       * supabase-js no lanza excepción cuando la base rechaza la operación:
+       * devuelve `{ error }` en la respuesta. Como aquí no se miraba, el
+       * `try/catch` no se enteraba de nada y `saveTramos` devolvía como si
+       * todo hubiera ido bien.
+       *
+       * Con eso, el guardado de tramos llevaba fallando SIEMPRE —a la tabla le
+       * faltaba la columna `hora_citacion`, así que Postgres rechazaba cada
+       * insert y cada update— y en pantalla no había ni un aviso. Se creaban
+       * los tramos, se pintaban, se pulsaba «Guardar tramos», y al recargar
+       * Cortejo decía «0/0 puestos cubiertos · No hay tramos».
+       */
+      if (eliminados.length > 0) {
+        const { error } = await supabase.from('tramos').delete().in('id', eliminados)
+        if (error) fallos.push(`borrar: ${error.message}`)
+      }
       if (nuevos.length > 0) {
-        await supabase.from('tramos').insert(nuevos.map((t, i) => tramoToRow(t, tramos.indexOf(t) ?? i)))
+        const { error } = await supabase
+          .from('tramos').insert(nuevos.map((t, i) => tramoToRow(t, tramos.indexOf(t) ?? i)))
+        if (error) fallos.push(`crear: ${error.message}`)
       }
       for (const t of posiblesCambios) {
-        await supabase.from('tramos').update(tramoToRow(t, tramos.indexOf(t))).eq('id', t.id)
+        const { error } = await supabase.from('tramos').update(tramoToRow(t, tramos.indexOf(t))).eq('id', t.id)
+        if (error) fallos.push(`guardar «${t.nombre}»: ${error.message}`)
       }
     } catch (err) {
-      console.error('No se pudieron guardar los tramos en Supabase:', err)
+      fallos.push(String(err))
     }
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tramos))
+
+  if (fallos.length > 0) {
+    console.error('No se pudieron guardar los tramos en Supabase:', fallos.join(' · '))
+    // La misma banda de aviso que usa el resto de la aplicación: quien está
+    // delante tiene que enterarse de que lo que ve en pantalla no ha llegado
+    // a la base de datos.
+    window.dispatchEvent(new CustomEvent('cabildo-sync-error', { detail: { tabla: 'tramos', fallos } }))
+    return { ok: false, error: fallos.join(' · ') }
+  }
+  return { ok: true }
 }
 
 /**

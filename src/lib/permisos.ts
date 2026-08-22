@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
+import { CLAVES_DATOS, leerDatos, leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { isSupabaseConfigured } from './supabase'
 import { fetchPermisosPorCargoRemoto, guardarPermisosPorCargoRemoto } from './db/permisos'
 import { CARGOS, type Cargo } from '../data/documentos'
-import { authUserIdActual, soyTitular } from './multiHermandad'
+import { authUserIdActual, miFichaDeHermano, soyTitular } from './multiHermandad'
 import { getPersonal } from './personal'
+import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 
 export interface Modulo {
   id: string
@@ -159,17 +160,71 @@ export function cargoDeCuenta(
   authUserId: string | undefined,
   personal: { cargo: Cargo; activo: boolean; authUserId: string | null }[],
   esTitular = false,
+  hermanos: ConCargo[] = [],
 ): Cargo | null {
+  // Sin identificador de cuenta no hay nada que cruzar. Y esta línea es
+  // además la que hace cumplir «para llevar cargo hace falta correo»: sin
+  // correo no hay cuenta de Supabase, sin cuenta no hay `auth_user_id`, y sin
+  // eso las políticas de la base no pueden saber quién eres.
   if (!authUserId) return esTitular ? null : ('__desconocido__' as Cargo)
+
+  // 1ª vía: la tabla `personal`, que es como entraba la junta hasta ahora.
+  // Solo si está ACTIVA: una fila desactivada no manda.
   const miembro = personal.find((m) => m.authUserId === authUserId)
-  if (miembro) {
-    // Desactivado NO es el titular: se queda sin permisos hasta que alguien lo
-    // arregle. Devolver `null` aquí volvería a abrir el panel entero.
-    return miembro.activo ? miembro.cargo : ('__desconocido__' as Cargo)
-  }
-  // No está en personal. O es el titular, o es una cuenta que no sabemos qué
-  // es. Solo lo primero abre la puerta.
+  if (miembro?.activo) return miembro.cargo
+
+  // 2ª vía: el cargo en la ficha del hermano.
+  const conCargo = cargoDeSuFicha(hermanos.find((h) => h.authUserId === authUserId))
+  if (conCargo) return conCargo
+
+  /*
+   * Y si estaba en personal pero desactivado, y tampoco tiene cargo en su
+   * ficha, entonces sí: sin permisos. Nunca `null`, que significa titular.
+   *
+   * EL ORDEN IMPORTA, y aquí se ve por qué. Antes se devolvía
+   * '__desconocido__' en cuanto se encontraba una fila de personal
+   * desactivada, sin llegar a mirar la ficha. Y esa es EXACTAMENTE la
+   * migración natural: «le pongo el cargo en su ficha y desactivo su acceso
+   * viejo de personal». La secretaria acababa con 'Secretario/a' escrito en su
+   * ficha, la base de datos dejándola escribir —modulo_permitido suma las tres
+   * vías con OR— y la aplicación enseñándole un panel sin un solo módulo y su
+   * correo debajo del nombre. Guardaba bien y no veía nada, que desconcierta
+   * el doble.
+   */
+  if (miembro) return '__desconocido__' as Cargo
+
+  // No está en ningún sitio. O es el titular, o es una cuenta que no sabemos
+  // qué es. Solo lo primero abre la puerta.
   return esTitular ? null : ('__desconocido__' as Cargo)
+}
+
+/**
+ * El cargo que da una ficha de hermano, o nada.
+ *
+ * TIENE QUE DEVOLVER `undefined` Y NO `null` cuando no hay cargo, y ese
+ * detalle es la trampa número uno de todo este cambio.
+ *
+ * En esta misma casa, `null` significa TITULAR: acceso a todo. Y en la ficha
+ * de un hermano, `cargo: null` significa exactamente lo contrario — hermano de
+ * a pie, sin panel. Son el mismo valor queriendo decir cosas opuestas. Si
+ * alguien escribe `puedeVerModulo(hermano.cargo, ...)` le abre la aplicación
+ * entera a cualquier hermano del censo.
+ *
+ * Por eso el cargo de un hermano NO se pasa nunca directamente a
+ * `permisosDeCargo` ni a `puedeVerModulo`: pasa por aquí, que solo devuelve
+ * algo cuando de verdad hay un cargo.
+ */
+export type ConCargo = { cargo?: Cargo | null; authUserId: string | null; estado: string }
+
+function cargoDeSuFicha(h: ConCargo | undefined): Cargo | undefined {
+  if (!h || !h.cargo) return undefined
+  // Un hermano dado de baja no sigue llevando la tesorería.
+  if (h.estado === 'Baja') return '__desconocido__' as Cargo
+  // 'Hermano de a pie' es un cargo del catálogo sin ningún módulo. Ponérselo a
+  // alguien sería darle una cuenta de panel vacío, así que cuenta como no
+  // llevar cargo. La pantalla de Personal no lo ofrece; esto es el cinturón.
+  if (h.cargo === 'Hermano de a pie') return undefined
+  return h.cargo
 }
 
 
@@ -218,9 +273,18 @@ export function useCargoDeLaSesionConEstado(): { cargo: Cargo | null; resuelto: 
         setEstado({ cargo: deLaDemo, resuelto: true })
         return
       }
-      const [uid, titular] = await Promise.all([authUserIdActual(), soyTitular()])
+      const [uid, titular, ficha] = await Promise.all([
+        authUserIdActual(),
+        soyTitular(),
+        // Mi propia ficha del censo, preguntada a la base. NO se lee del
+        // espejo del navegador: está vacío la primera vez que se abre la
+        // aplicación en un ordenador nuevo, y el secretario se quedaría sin
+        // su cargo sin saber por qué.
+        miFichaDeHermano(),
+      ])
       if (cancelado) return
-      setEstado({ cargo: cargoDeCuenta(uid, getPersonal(), titular), resuelto: true })
+      const mios = ficha ? [{ ...ficha, authUserId: uid ?? null }] : []
+      setEstado({ cargo: cargoDeCuenta(uid, getPersonal(), titular, mios), resuelto: true })
     }
     void resolver()
     return () => {
@@ -256,14 +320,34 @@ function cargoDeLaCuentaDemo(): Cargo | null | undefined {
   try {
     const crudo = sessionStorage.getItem('cabildo-demo-user')
     if (!crudo) return undefined
-    const id = (JSON.parse(crudo) as { user_metadata?: { personalId?: string } })
-      ?.user_metadata?.personalId
-    // Sin `personalId` es la cuenta de titular de la demostración: manda todo.
-    if (!id) return null
-    const miembro = getPersonal().find((p) => p.id === id)
-    if (!miembro) return null
-    // Desactivado no es titular: se queda sin permisos, igual que de verdad.
-    return miembro.activo ? miembro.cargo : ('__desconocido__' as Cargo)
+    const marcas = (JSON.parse(crudo) as {
+      user_metadata?: { personalId?: string; hermanoId?: string }
+    })?.user_metadata
+    const idPersonal = marcas?.personalId
+    const idHermano = marcas?.hermanoId
+
+    // Sin NINGUNA de las dos marcas es la cuenta de titular de la
+    // demostración: manda todo. Hay que mirar las dos antes de decidirlo —
+    // cuando solo se miraba `personalId`, un hermano de demostración entraba
+    // de titular con el panel entero.
+    if (!idPersonal && !idHermano) return null
+
+    if (idPersonal) {
+      const miembro = getPersonal().find((p) => p.id === idPersonal)
+      // No está en la lista (lo han borrado, o se han restablecido los datos
+      // de ejemplo). NO es el titular: sin permisos. Devolver `null` aquí
+      // convertía esa sesión abierta en titular de golpe.
+      if (!miembro) return '__desconocido__' as Cargo
+      // Desactivado no es titular: se queda sin permisos, igual que de verdad.
+      return miembro.activo ? miembro.cargo : ('__desconocido__' as Cargo)
+    }
+
+    const censo = leerDatos<Hermano>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+    const hermano = censo.find((h) => h.id === idHermano)
+    if (!hermano) return '__desconocido__' as Cargo
+    if (hermano.estado === 'Baja' || !hermano.cargo) return '__desconocido__' as Cargo
+    if (hermano.cargo === 'Hermano de a pie') return '__desconocido__' as Cargo
+    return hermano.cargo
   } catch {
     return undefined
   }
@@ -280,6 +364,9 @@ function cargoDeLaCuentaDemo(): Cargo | null | undefined {
  */
 export function cargoEnCristiano(cargo: Cargo | null, correo?: string | null): string {
   if (cargo === null) return 'Titular de la hermandad'
-  if (cargo === ('__desconocido__' as Cargo)) return correo || 'Sin cargo asignado'
+  // Con los cargos en la ficha del hermano, esto sale mucho más que antes:
+  // cualquier hermano que llegue al panel cae aquí. Por eso NO puede sonar a
+  // error — no lo es, es lo normal para quien solo es hermano.
+  if (cargo === ('__desconocido__' as Cargo)) return correo || 'Hermano/a de la hermandad'
   return cargo
 }

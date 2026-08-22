@@ -83,4 +83,39 @@ export default async function ({ cargar, caso }) {
   // Los de baja no cuentan: están fuera de la numeración a propósito.
   caso('los de baja no rompen la numeración', true,
     m.numeracionSana([{ numero: 1, estado: 'Activo' }, { numero: 0, estado: 'Baja' }, { numero: 0, estado: 'Baja' }]))
+
+  // ---------------------------------------------------------------------
+  // «Hermanos activos: 0» con el censo lleno
+  // ---------------------------------------------------------------------
+  /*
+   * EL FALLO: se contaban los activos como `estado === 'Activo'`, en tres
+   * sitios distintos, dejando fuera a los «Nuevo».
+   *
+   * Y «Nuevo» no es «pendiente de algo»: es el estado que se pone al ACEPTAR a
+   * alguien, tanto desde una solicitud como al darlo de alta a mano. O sea que
+   * todo hermano dado de alta hoy no contaba como activo.
+   *
+   * Se veía así: una hermandad que acaba de importar su censo entero —con
+   * todos marcados como nuevos, porque acaban de entrar en la aplicación— leía
+   * «Hermanos activos: 0» encima de sus ochocientas fichas. Y uno de los tres
+   * sitios era el informe que se imprime y se lleva al cabildo de cuentas.
+   */
+  const ficha = await cargar('src/lib/hermanoFicha.ts')
+  caso('un activo es miembro', true, ficha.esMiembro({ estado: 'Activo' }))
+  caso('un nuevo TAMBIÉN es miembro', true, ficha.esMiembro({ estado: 'Nuevo' }))
+  caso('quien se ha ido, no', false, ficha.esMiembro({ estado: 'Baja' }))
+
+  // Y que las tres pantallas usen la misma función, para que no puedan volver
+  // a contar cada una a su manera.
+  const { readFile } = await import('node:fs/promises')
+  for (const pantalla of [
+    'src/pages/app/DashboardHome.tsx',
+    'src/pages/app/Hermanos.tsx',
+    'src/pages/app/Informes.tsx',
+  ]) {
+    const t = await readFile(pantalla, 'utf8')
+    caso(`${pantalla.split('/').pop()} cuenta con esMiembro`, true, /filter\(esMiembro\)/.test(t))
+    caso(`${pantalla.split('/').pop()} ya no deja fuera a los nuevos`, false,
+      /const activos = [a-zA-Z]*\.filter\(\(h\) => h\.estado === 'Activo'\)/.test(t))
+  }
 }

@@ -56,6 +56,7 @@ import {
   ejercicioDe,
 } from '../../lib/cuotasEmision'
 import { filaQueAbre } from '../../lib/foco'
+import { hoyIso } from '../../lib/hoy'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -458,7 +459,7 @@ export default function Cuotas() {
       return [c.numero, h.nombre, h.iban ?? '', c.concepto, c.importe.toFixed(2).replace('.', ','), c.fechaCobro]
     })
     const csv = toCsv(['Nº recibo', 'Hermano', 'IBAN', 'Concepto', 'Importe (€)', 'Fecha de cobro'], filas)
-    descargarArchivo(`remesa-cuotas-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    descargarArchivo(`remesa-cuotas-${hoyIso()}.csv`, csv)
   }
 
   function descargarSepaXml() {
@@ -928,7 +929,13 @@ export default function Cuotas() {
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
             <HermanoPicker
-              hermanos={hermanosAsignables(hermanos)}
+              /* Los civiles fuera, y el filtro va AQUÍ y no dentro de
+                 `hermanosAsignables`: esa función la comparten Papeletas,
+                 Eventos y Cortejo, y ahí el administrativo contratado SÍ tiene
+                 que poder elegirse — puede llevar una tarea de un culto. Lo
+                 único que no puede es tener un recibo, porque con IBAN puesto
+                 se colaría solo en la siguiente remesa del banco. */
+              hermanos={hermanosAsignables(hermanos.filter((h) => !h.civil))}
               name="hermanoId"
               id="hermanoId"
               onSelect={(p) => setHermanoNuevaCuota(p ? (hermanos.find((h) => h.id === p.id) ?? null) : null)}
@@ -1175,7 +1182,8 @@ export default function Cuotas() {
           <div className="banner-inline banner-inline--accent">
             Se emitirá <b>{formatCurrency(importeConceptoEmision)}</b> de «{conceptoEmision}» a{' '}
             <b>{pendientesDeEmitir.length}</b> hermano{pendientesDeEmitir.length === 1 ? '' : 's'} del
-            ejercicio {ejercicioEmision} que aún no la tienen. Los de baja quedan fuera y a quien ya
+            ejercicio {ejercicioEmision} que aún no la tienen. Los de baja y los hermanos civiles
+            quedan fuera, y a quien ya
             la tenga no se le duplica.
           </div>
           {pendientesDeEmitir.length === 0 && (

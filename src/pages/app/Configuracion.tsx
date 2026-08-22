@@ -44,6 +44,7 @@ import type { Papeleta } from '../../data/papeletas'
 import {
   correoDePrueba, correoDisponible, enviarCorreo, useAjustesCorreo, type AjustesCorreo,
 } from '../../lib/correo'
+import { hoyIso } from '../../lib/hoy'
 
 const MAX_LOGO_BYTES = 800_000
 
@@ -253,7 +254,7 @@ export default function Configuracion() {
     setCopiaEstado('Preparando la copia…')
     try {
       const copia = await crearCopia()
-      const fecha = new Date().toISOString().slice(0, 10)
+      const fecha = hoyIso()
       const slug = (settings.nombreLegal || 'hermandad').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
       descargarArchivo(`copia-cabildo-${slug}-${fecha}.json`, JSON.stringify(copia), 'application/json;charset=utf-8;')
       // Si alguna tabla no se pudo traer, se dice. Una copia a la que le falta
@@ -403,12 +404,35 @@ export default function Configuracion() {
     setTramosSaved(false)
   }
 
+  const [tramosError, setTramosError] = useState<string | null>(null)
+
   async function handleSaveTramos() {
     // Se guarda el reparto de forma explícita (los datos antiguos lo deducían del tipo).
     const explicitos = tramos.map((t) => ({ ...t, reparto: repartoDe(t) }))
     setTramos(explicitos)
-    await saveTramos(explicitos)
+    const r = await saveTramos(explicitos)
     savePrecioBase(precioBase)
+    /*
+     * EL VERDE SOLO SI DE VERDAD SE HA GUARDADO.
+     *
+     * Antes salía siempre. Y como el guardado de tramos llevaba fallando en
+     * todos los casos —a la tabla le faltaba una columna—, lo que veía la
+     * hermandad era el visto bueno verde de «Tramos guardados» encima de unos
+     * tramos que no existían en ninguna parte. Al recargar, Cortejo decía
+     * «0/0 puestos cubiertos».
+     *
+     * Es el mismo arreglo que ya se hizo con la tabla de permisos, y por la
+     * misma razón: un visto bueno que sale pase lo que pase no informa de
+     * nada, engaña.
+     */
+    if (!r.ok) {
+      setTramosError(
+        `No se han podido guardar los tramos: ${r.error ?? 'la base de datos los ha rechazado.'}`,
+      )
+      setTramosSaved(false)
+      return
+    }
+    setTramosError(null)
     setTramosTocado(false)
     setTramosSaved(true)
     setTimeout(() => setTramosSaved(false), 3000)
@@ -449,8 +473,18 @@ export default function Configuracion() {
     setOpcionesSaved(false)
   }
 
+  const [opcionesError, setOpcionesError] = useState<string | null>(null)
+
   async function handleSaveOpciones() {
-    await saveOpcionesPapeleta(opciones)
+    const r = await saveOpcionesPapeleta(opciones)
+    // Mismo caso que los catálogos: borra y reinserta, así que un fallo no
+    // deja las cosas como estaban — deja la lista de papeletas vacía.
+    if (!r.ok) {
+      setOpcionesError(`No se han podido guardar las papeletas: ${r.error ?? 'la base las ha rechazado.'}`)
+      setOpcionesSaved(false)
+      return
+    }
+    setOpcionesError(null)
     setOpcionesTocado(false)
     setOpcionesSaved(true)
     setTimeout(() => setOpcionesSaved(false), 3000)
@@ -514,14 +548,34 @@ export default function Configuracion() {
     setCatalogosSaved(false)
   }
 
+  const [catalogosError, setCatalogosError] = useState<string | null>(null)
+
   async function handleSaveCatalogos() {
-    await saveConceptosCuota(conceptosCuota.filter((c) => c.nombre.trim()))
+    /*
+     * Se recogen los fallos y el verde solo sale si no hay ninguno.
+     *
+     * Estos guardados BORRAN y vuelven a insertar, así que un alta que falle
+     * no deja las cosas como estaban: deja la tabla vacía. Y aquí se guarda la
+     * lista de precios de la hermandad —los conceptos de cuota con su importe—
+     * así que perderla en silencio no es una molestia, es una tarde de trabajo
+     * y unas cuentas que ya no cuadran.
+     */
+    const fallos: string[] = []
+    const r0 = await saveConceptosCuota(conceptosCuota.filter((c) => c.nombre.trim()))
+    if (!r0.ok) fallos.push(`conceptos de cuota (${r0.error})`)
     const limpios: Record<string, string[]> = {}
     for (const d of CATALOGOS_DEF) {
       const valores = (catalogos[d.k] ?? []).map((v) => v.trim()).filter(Boolean)
       limpios[d.k] = valores.length > 0 ? valores : [...d.porDefecto]
-      await saveLista(d.clave, limpios[d.k])
+      const r = await saveLista(d.clave, limpios[d.k])
+      if (!r.ok) fallos.push(`${d.k} (${r.error})`)
     }
+    if (fallos.length > 0) {
+      setCatalogosError(`No se han podido guardar: ${fallos.join(' · ')}`)
+      setCatalogosSaved(false)
+      return
+    }
+    setCatalogosError(null)
     setCatalogos(limpios)
     setConceptosCuota((prev) => prev.filter((c) => c.nombre.trim()))
     setCatalogosTocado(false)
@@ -909,6 +963,13 @@ export default function Configuracion() {
         </div>
 
         <div className="tramos-editor">
+          {/*
+            DIEZ cabeceras para DIEZ campos. Antes había nueve y la fila tenía
+            diez: la rejilla definía nueve columnas, así que el botón de quitar
+            se caía a una segunda línea él solo y cada título quedaba encima
+            del campo equivocado. Y a «Rol» no le correspondía ninguno, que era
+            lo que hacía que nadie supiera para qué servía esa casilla.
+          */}
           <div className="tramo-row tramo-row--head">
             <span>Nombre del tramo</span>
             <span>Cuerpo</span>
@@ -917,7 +978,8 @@ export default function Configuracion() {
             <span>Aforo</span>
             <span>Precio €</span>
             <span>Citación</span>
-            <span></span>
+            <span>Rol</span>
+            <span>Orden</span>
             <span></span>
           </div>
           {tramos.map((t, i) => (
@@ -1027,6 +1089,7 @@ export default function Configuracion() {
 
         <div className="settings-actions">
           {tramosSaved && <span className="alert-item alert-item--ok">Tramos guardados</span>}
+          {tramosError && <span className="alert-item alert-item--alerta">{tramosError}</span>}
           <button type="button" className="btn btn-primary" onClick={handleSaveTramos}>
             Guardar tramos
           </button>
@@ -1090,6 +1153,7 @@ export default function Configuracion() {
 
         <div className="settings-actions">
           {opcionesSaved && <span className="alert-item alert-item--ok">Papeletas guardadas</span>}
+          {opcionesError && <span className="alert-item alert-item--alerta">{opcionesError}</span>}
           <button type="button" className="btn btn-primary" onClick={handleSaveOpciones}>
             Guardar papeletas
           </button>
@@ -1180,6 +1244,7 @@ export default function Configuracion() {
 
         <div className="settings-actions">
           {catalogosSaved && <span className="alert-item alert-item--ok">Catálogos guardados</span>}
+          {catalogosError && <span className="alert-item alert-item--alerta">{catalogosError}</span>}
           <button type="button" className="btn btn-primary" onClick={handleSaveCatalogos}>
             Guardar catálogos
           </button>

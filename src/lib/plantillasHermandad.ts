@@ -16,9 +16,20 @@ import { isSupabaseConfigured, supabase } from './supabase'
  * Y la asistencia no se puede rehacer: se marca la madrugada del Viernes
  * Santo, tramo por tramo, desde el móvil del diputado.
  *
- * Aquí van las tres, contra las columnas de `hermandad_settings`.
+ * Aquí van todas, contra las columnas de `hermandad_settings`.
+ *
+ * Se sumaron después otras dos del mismo tipo: los ajustes de cuotas y el
+ * catálogo de etiquetas. Las dos son decisiones DE LA HERMANDAD y estaban en
+ * el navegador de quien las tocó — el bloqueo de papeleta a los morosos no
+ * valía desde otro ordenador, y el control de la mora por dos cargos se
+ * saltaba abriendo otro navegador.
  */
-export type PlantillaGuardable = 'modelo_papeleta' | 'modelo_recibo' | 'asistencia'
+export type PlantillaGuardable =
+  | 'modelo_papeleta'
+  | 'modelo_recibo'
+  | 'asistencia'
+  | 'ajustes_cuotas'
+  | 'etiquetas'
 
 /** Trae una de ellas, o null si no hay base de datos o no está guardada. */
 export async function traerPlantilla<T>(cual: PlantillaGuardable): Promise<T | null> {

@@ -19,6 +19,7 @@ import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
 import { borrarArchivo, formatearTamano, guardarArchivo, leerArchivo } from '../../lib/filestore'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
+import { hoyIso } from '../../lib/hoy'
 
 function fmt(iso: string) {
   return formatDate(new Date(`${iso}T00:00:00`))
@@ -176,7 +177,7 @@ export default function Archivo() {
       nombre,
       categoria,
       fecha,
-      fechaAlta: new Date().toISOString().slice(0, 10),
+      fechaAlta: hoyIso(),
       descripcion,
       archivadoPor,
       cargosConAcceso,

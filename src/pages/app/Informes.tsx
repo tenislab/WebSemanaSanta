@@ -23,6 +23,7 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
 import { getCamposPropios, valorLegible } from '../../lib/camposPropios'
 import { filaQueAbre } from '../../lib/foco'
+import { esMiembro } from '../../lib/hermanoFicha'
 
 interface Informe {
   id: string
@@ -65,10 +66,14 @@ function construirInformes(
   const camposPropios = getCamposPropios().filter((c) => c.nombre.trim())
   const hermanoDe = (id: string) => hermanosActuales.find((h) => h.id === id)
 
-  const activos = hermanosActuales.filter((h) => h.estado === 'Activo').length
+  // «Nuevo» también es miembro: ver esMiembro(). Este número se imprime.
+  const activos = hermanosActuales.filter(esMiembro).length
   const nuevos = hermanosActuales.filter((h) => h.estado === 'Nuevo').length
   const bajas = hermanosActuales.filter((h) => h.estado === 'Baja').length
-  const alDia = hermanosActuales.filter((h) => h.cuotaAlDia).length
+  /* Los civiles no cuentan ni arriba ni abajo: no se les emite cuota, así que
+     contarlos como «no al día» bajaría el número del documento que se lleva al
+     cabildo por una deuda que no existe. */
+  const alDia = hermanosActuales.filter((h) => !h.civil && h.cuotaAlDia).length
   const sinIban = hermanosActuales.filter((h) => !h.iban).length
 
   const cobrado = cuotasActuales.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
@@ -144,7 +149,8 @@ function construirInformes(
       filas: hermanosActuales.map((h) => [
         // Los de baja tienen numero 0, no un número real: en papel eso se lee
         // como «el hermano cero». Se pinta igual que en el resto de la app.
-        h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.email, h.telefono, h.cuotaAlDia ? 'Sí' : 'No',
+        h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.email, h.telefono,
+        h.civil ? '—' : h.cuotaAlDia ? 'Sí' : 'No',
         ...camposPropios.map((c) => valorLegible(c, h.campos?.[c.id])),
       ]),
     },
