@@ -38,6 +38,15 @@ interface EscudoHermandadProps {
   icono?: IconoHermandad
   size?: number
   className?: string
+  /**
+   * El escudo DE VERDAD de la hermandad, si lo ha subido.
+   *
+   * El glifo de abajo es un apaño digno para una hermandad que todavía no ha
+   * puesto su logo, pero en cuanto lo pone, enseñarle una cruz genérica es
+   * decirle que su escudo no importa. Y en el buscador es lo que hace que un
+   * hermano reconozca la suya de un vistazo, sin leer.
+   */
+  logoDataUrl?: string | null
 }
 
 /**
@@ -46,7 +55,28 @@ interface EscudoHermandadProps {
  * hermandad una identidad reconocible a simple vista en el buscador y en la
  * cabecera del área del hermano.
  */
-export default function EscudoHermandad({ color, icono, size = 36, className }: EscudoHermandadProps) {
+export default function EscudoHermandad({ color, icono, size = 36, className, logoDataUrl }: EscudoHermandadProps) {
+  // Con logo propio, se enseña el logo y no se dibuja nada.
+  if (logoDataUrl) {
+    return (
+      <img
+        src={logoDataUrl}
+        alt=""
+        aria-hidden="true"
+        className={className}
+        width={size}
+        height={size}
+        /* `contain` y no `cover`: un escudo recortado por los bordes deja de
+           ser ese escudo. Y el fondo del color de la hermandad para que un
+           logo con transparencia no se pierda sobre el blanco. */
+        style={{
+          width: size, height: size, objectFit: 'contain',
+          borderRadius: '6px', background: color,
+          padding: '2px', flexShrink: 0,
+        }}
+      />
+    )
+  }
   const uid = `${color.replace('#', '')}-${icono ?? 'llano'}`
   return (
     <svg

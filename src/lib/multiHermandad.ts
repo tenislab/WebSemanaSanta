@@ -98,6 +98,8 @@ export function olvidarHermandad(): void {
 export interface HermandadPublica {
   id: string
   nombre: string
+  /** De dónde es. Es la mitad del buscador: «escribe el nombre o la ciudad». */
+  ciudad: string
   /** Color de marca de la hermandad. Los suyos, no los de Gobergo. */
   colorPrimario: string
   colorSecundario: string
@@ -111,6 +113,9 @@ export async function hermandadesPublicas(): Promise<HermandadPublica[]> {
   return (data as Record<string, string | null>[]).map((h) => ({
     id: String(h.id),
     nombre: String(h.nombre ?? ''),
+    // La pantalla dice «escribe el nombre o la ciudad». Sin esto, la ciudad
+    // llegaba siempre vacía y buscar por ciudad no encontraba nunca nada.
+    ciudad: String(h.ciudad ?? ''),
     // Los de Gobergo si la hermandad todavía no ha puesto los suyos. La
     // función del servidor ya los rellena, pero una lista guardada por una
     // versión anterior puede no traerlos.

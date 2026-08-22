@@ -1228,7 +1228,7 @@ export default function HermanoPortal() {
                   {opcionesHermandad.map((h) => (
                     <li key={h.id}>
                       <button type="button" className="portal__picker-item" onClick={() => elegirHermandad(h)}>
-                        <EscudoHermandad color={h.color} icono={h.icono} size={30} />
+                        <EscudoHermandad color={h.color} icono={h.icono} logoDataUrl={h.logoDataUrl} size={30} />
                         <span>
                           <b>{h.nombre}</b>
                           {h.ciudad && <small>{h.ciudad}</small>}
@@ -1333,7 +1333,12 @@ export default function HermanoPortal() {
                   ← Cambiar de hermandad
                 </button>
                 <div className="portal__chosen" style={{ borderColor: hermandadElegida.color }}>
-                  <EscudoHermandad color={hermandadElegida.color} icono={hermandadElegida.icono} size={34} />
+                  <EscudoHermandad
+                    color={hermandadElegida.color}
+                    icono={hermandadElegida.icono}
+                    logoDataUrl={hermandadElegida.logoDataUrl}
+                    size={34}
+                  />
                   <span>
                     <b>{hermandadElegida.nombre}</b>
                     {hermandadElegida.ciudad && <small>{hermandadElegida.ciudad}</small>}
@@ -2250,10 +2255,13 @@ function PortalHead({
     <header className="portal__head">
       <div className="portal__brand">
         <span className="portal__logo">
-          {logo ? (
-            <img src={logo} alt="" />
-          ) : color && icono ? (
-            <EscudoHermandad color={color} icono={icono} size={28} />
+          {/* Un solo sitio decide cómo se ve la insignia de una hermandad: el
+              propio `EscudoHermandad`, que enseña el logo si lo hay y dibuja el
+              suyo si no. Antes esto tenía su propio `<img>` aparte, y por eso
+              el buscador podía quedarse con el dibujo genérico mientras la
+              cabecera sí enseñaba el escudo de verdad. */}
+          {logo || (color && icono) ? (
+            <EscudoHermandad color={color ?? '#6A1A23'} icono={icono} logoDataUrl={logo} size={28} />
           ) : color ? (
             <span className="portal__logo-badge" style={{ background: color }} aria-hidden="true">
               {inicialesHermandad(hermandad)}

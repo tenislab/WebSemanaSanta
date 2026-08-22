@@ -72,6 +72,58 @@ export default async function ({ cargar, caso }) {
   caso('buscar por nombre encuentra', true, buscadas.every((h) => /esperanza/i.test(h.nombre + h.ciudad)))
   caso('buscar algo que no existe no devuelve nada', 0, dir.buscarHermandades('zzzz', principal).length)
 
+  /*
+   * EL BUSCADOR, COMO SE TECLEA DE VERDAD.
+   *
+   * La pantalla dice «escribe el nombre o la ciudad». Antes exigía que el texto
+   * apareciera tal cual, entero y seguido, y con sus tildes. O sea: nadie que
+   * escribiera «soledad» desde un móvil encontraba «Hermandad de Ntra. Sra. de
+   * la Soledad», y «ecija» no encontraba «Écija».
+   */
+  // Sobre el directorio de muestra, que trae «Hermandad de la Soledad» (Écija)
+  // y varias de Sevilla: justo los casos que hacían falta.
+  const busca = (q) => dir.buscarHermandades(q, principal).map((h) => h.nombre)
+
+  caso('una palabra suelta del nombre encuentra', true,
+    busca('soledad').some((n) => /Soledad/.test(n)))
+  caso('sin tildes también', true, busca('ecija').some((n) => /Soledad/.test(n)))
+  caso('en mayúsculas igual', true, busca('SOLEDAD').some((n) => /Soledad/.test(n)))
+  caso('por la ciudad', true, busca('sevilla').length > 0)
+  // Dos palabras: tienen que aparecer LAS DOS, para distinguir dos hermandades
+  // parecidas en ciudades distintas.
+  caso('dos palabras afinan', true, busca('soledad ecija').some((n) => /Soledad/.test(n)))
+  caso('y descartan lo que no cuadra', 0, busca('soledad seviIla').length)
+  caso('lo que no existe sigue sin salir', 0, busca('zzzz').length)
+
+  // Y la ciudad tiene que LLEGAR desde la base. Venía siempre vacía, así que la
+  // mitad del buscador que la pantalla ofrece no encontraba nunca nada.
+  const conCiudad = dir.directorioCompleto(principal, [
+    { id: '1', nombre: 'Real Hermandad del Nazareno', ciudad: 'Sevilla' },
+  ])
+  caso('la ciudad viaja hasta el directorio', true,
+    conCiudad.every((h) => typeof h.ciudad === 'string'))
+
+  /*
+   * EL ESCUDO DE LA HERMANDAD, NO UNO GENÉRICO.
+   *
+   * El logo llegaba de la base y la pantalla lo tiraba: pintaba siempre el
+   * glifo dibujado. A una hermandad que ha subido su escudo, enseñarle una
+   * cruz de plantilla es decirle que su escudo da igual — y en el buscador es
+   * justo lo que hace que un hermano reconozca la suya sin leer.
+   */
+  const { readFile } = await import('node:fs/promises')
+  const escudo = await readFile('src/components/EscudoHermandad.tsx', 'utf8')
+  caso('el escudo acepta el logo de la hermandad', true, /logoDataUrl\?: string \| null/.test(escudo))
+  caso('y si lo hay, lo enseña en vez del dibujo', true, /if \(logoDataUrl\)/.test(escudo))
+  // Sin logo sigue habiendo escudo: una hermandad recién creada no puede
+  // quedarse con un hueco en blanco.
+  caso('sin logo sigue dibujando el suyo', true, /const uid = /.test(escudo))
+
+  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const conLogo = (portal.match(/<EscudoHermandad[\s\S]{0,220}?logoDataUrl=/g) ?? []).length
+  const total = (portal.match(/<EscudoHermandad/g) ?? []).length
+  caso('y en el buscador se le pasa siempre', total, conLogo)
+
   await aislamientoAuditoria({ cargar, caso })
 
   await areaHermanoAuditoria({ cargar, caso })

@@ -281,7 +281,13 @@ export interface DatosHermandadPrincipal {
  */
 export function directorioCompleto(
   principal: DatosHermandadPrincipal,
-  reales: { id: string; nombre: string; colorPrimario?: string; logoDataUrl?: string | null }[] = [],
+  reales: {
+    id: string
+    nombre: string
+    ciudad?: string
+    colorPrimario?: string
+    logoDataUrl?: string | null
+  }[] = [],
 ): HermandadDirectorio[] {
   // Con la base de datos conectada, la lista son las hermandades dadas de alta
   // de verdad: todas comparten un mismo Supabase y cada hermano tiene que
@@ -295,7 +301,7 @@ export function directorioCompleto(
     return reales.map((h) => ({
       id: h.id,
       nombre: h.nombre,
-      ciudad: '',
+      ciudad: h.ciudad ?? '',
       // El color de SU hermandad. Antes era un mostaza fijo igual para todas,
       // así que el área del hermano se veía idéntica eligieras la que
       // eligieras. Cada hermandad tiene sus colores: los de su escudo, los de
@@ -331,8 +337,35 @@ export function buscarHermandades(
   principal: DatosHermandadPrincipal,
   reales: { id: string; nombre: string }[] = [],
 ): HermandadDirectorio[] {
-  const q = query.trim().toLowerCase()
+  const q = sinAcentos(query)
   const todas = directorioCompleto(principal, reales)
   if (!q) return todas
-  return todas.filter((h) => h.nombre.toLowerCase().includes(q) || h.ciudad.toLowerCase().includes(q))
+  /*
+   * Se busca SIN ACENTOS y por palabras sueltas.
+   *
+   * Dos motivos, los dos vistos de verdad:
+   *
+   *  · Nadie escribe «Hermandad de Ntra. Sra. de la Soledad» en un buscador.
+   *    Escribe «soledad», y antes eso no encontraba nada porque se exigía que
+   *    el texto apareciera tal cual, entero y seguido.
+   *  · Y nadie pone las tildes en el móvil. «Ecija» tenía que encontrar
+   *    «Écija», y no lo hacía.
+   *
+   * Cada palabra tiene que aparecer en alguna parte —el nombre o la ciudad—,
+   * así que «soledad ecija» encuentra la de Écija y no la de otro sitio.
+   */
+  const palabras = q.split(/\s+/).filter(Boolean)
+  return todas.filter((h) => {
+    const donde = `${sinAcentos(h.nombre)} ${sinAcentos(h.ciudad)}`
+    return palabras.every((p) => donde.includes(p))
+  })
+}
+
+/** Minúsculas y sin tildes, que es como se teclea de verdad en un móvil. */
+function sinAcentos(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
 }
