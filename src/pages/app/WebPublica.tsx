@@ -1269,6 +1269,15 @@ function DisenoTab({
           {problemaDominio && (
             <p id="dominioError" className="aviso-falta__error-suelto">{explicarProblema(problemaDominio)}</p>
           )}
+          {/* Con el campo vacío no había NADA: ni botón ni pista. Y como el
+              ejemplo en gris parece un valor escrito, se queda uno esperando a
+              que pase algo. Se dice cuál es el paso siguiente. */}
+          {conDominioPropio && (web.dominio ?? '').trim() === '' && (
+            <p className="form-hint">
+              Escribe aquí vuestro dominio y guarda: entonces aparece el botón para avisarnos y
+              darlo de alta.
+            </p>
+          )}
           {/* Comprobar de verdad que apunta aquí, en vez de fiarse de que lo
               escribieron bien: es lo único que despeja la duda de «¿ya está?». */}
           {conDominioPropio && (web.dominio ?? '').trim() !== '' && !problemaDominio && (
