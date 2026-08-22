@@ -74,6 +74,20 @@ export function svgDelLogo() {
     .replace(/fontSize=/g, 'font-size=')
     .replace(/fontWeight=/g, 'font-weight=')
     .replace(/aria-hidden="true"/, 'xmlns="http://www.w3.org/2000/svg"')
+    /*
+     * EL TAMAÑO PROPIO, y es lo que hacía falta para que el icono se viera.
+     *
+     * En el componente el `<svg>` no lleva `width` ni `height` a propósito: se
+     * lo da por CSS el `<span>` que lo envuelve, y así la marca vale para
+     * cualquier tamaño. Suelto, en cambio, se queda sin medidas.
+     *
+     * Con un `<img width="16">` no se nota —el tamaño lo pone el `<img>`—, y
+     * ese fue el error al comprobarlo: la prueba le daba justo lo que faltaba.
+     * Pero un FAVICON no lleva tamaño: el navegador le pregunta al dibujo
+     * cuánto mide, `naturalWidth` sale 0, y no hay nada que rasterizar. No da
+     * error: pinta el globo gris de «esta página no tiene icono».
+     */
+    .replace(/^<svg /, '<svg width="120" height="120" ')
     .replace(/\s+/g, ' ')
     .replace(/> </g, '><')
     .trim()
@@ -81,7 +95,32 @@ export function svgDelLogo() {
   return svg
 }
 
-/** El SVG metido en una dirección `data:`, listo para el `<link rel="icon">`. */
+/**
+ * EL ICONO VA EN ARCHIVOS, NO METIDO EN LA DIRECCIÓN.
+ *
+ * Estuvo como `data:image/svg+xml,…` dentro del propio `<link>`, para ahorrar
+ * una petición. Salió caro: dos fallos distintos y ninguno da error.
+ *
+ *   1. Las comillas del `font-family` cerraban el atributo antes de tiempo y
+ *      el SVG dejaba de ser XML válido.
+ *   2. Y aun arreglado eso, seguía sin verse, sin forma de comprobar desde
+ *      aquí si era el dibujo, el despliegue o la caché del navegador.
+ *
+ * Un archivo quita las tres dudas: se abre en el navegador y se ve, se puede
+ * pedir con `curl`, y no hay codificación que se pueda romper. Pesa 1,6 kB y
+ * se cachea para siempre. La petición de más no vale ni la mitad de lo que
+ * cuesta un icono que no se ve.
+ *
+ * Y va acompañado de un PNG. El SVG en la pestaña lo entienden los navegadores
+ * modernos; el PNG lo entiende TODO, y es el que garantiza que se vea aunque
+ * uno tropiece con el otro.
+ */
+export const RUTA_SVG = 'public/favicon.svg'
+export const RUTA_PNG = 'public/favicon-32.png'
+export const RUTA_PNG_IOS = 'public/apple-touch-icon.png'
+
+/** El SVG metido en una dirección `data:`. Ya no se usa en el HTML: se
+ *  conserva porque los documentos imprimibles sí lo necesitan en línea. */
 export function faviconDataUri() {
   // Solo se escapan los caracteres que romperían el atributo HTML. Codificarlo
   // entero triplica el tamaño por nada.
@@ -109,17 +148,60 @@ export function faviconDataUri() {
   return `data:image/svg+xml,${limpio}`
 }
 
+/**
+ * Las etiquetas del icono. Tres, y cada una cubre a la anterior:
+ *
+ *   · el SVG, que se ve nítido a cualquier tamaño
+ *   · el PNG de 32, para el navegador que no se lleve bien con el SVG
+ *   · el de iOS, para cuando alguien lo guarda en la pantalla de inicio
+ *
+ * Llevan `?v=2` para que el navegador no siga enseñando el que tenía
+ * guardado: la caché de iconos de Chrome es de las que no se van solas ni
+ * recargando con Ctrl+F5, y sin esto el arreglo no se vería hasta dentro de
+ * días.
+ */
+export const ETIQUETAS_ICONO = [
+  '<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />',
+  '<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2" />',
+  '<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />',
+].join('\n    ')
+
 /** Deja `index.html` con el icono al día. Devuelve el HTML resultante. */
 export function generar() {
   const html = readFileSync(`${RAIZ}index.html`, 'utf8')
-  const uri = faviconDataUri()
-  return html
-    .replace(/(<link\s+rel="icon"[^>]*?href=")[^"]*(")/s, `$1${uri}$2`)
-    .replace(/(<link\s+rel="apple-touch-icon"\s+href=")[^"]*(")/s, `$1${uri}$2`)
+  /*
+   * Se sustituyen TODAS las etiquetas de icono de una vez —desde la primera
+   * hasta la última— en vez de una por una. Cambiándolas por separado, al
+   * pasar de dos etiquetas a tres se quedaba una vieja suelta y el navegador
+   * se quedaba con la del data URI, que es la que no se veía.
+   */
+  return html.replace(
+    /<link[^>]*rel="(?:icon|apple-touch-icon)"[\s\S]*?rel="apple-touch-icon"[^>]*\/>/,
+    ETIQUETAS_ICONO,
+  )
+}
+
+/**
+ * El SVG del archivo: la marca SOBRE UNA BALDOSA color hueso.
+ *
+ * En la aplicación la marca va sobre el papel de la página y no necesita
+ * fondo. Suelta en una pestaña, sí: el arco es dorado y la G granate, y sobre
+ * la pestaña oscura de Chrome la G desaparece y el arco se queda en un
+ * garabato. Con la baldosa detrás se lee igual en clara y en oscura, que es lo
+ * único que importa en 16 píxeles.
+ *
+ * `rx` redondea la esquina: los sitios que recortan el icono en círculo
+ * —Android, la pantalla de inicio— muerden menos.
+ */
+const HUESO = '#F7F1E4'
+export function svgDeArchivo() {
+  const baldosa = `<rect width="120" height="120" rx="22" fill="${HUESO}" />`
+  return `${svgDelLogo().replace(/(<svg[^>]*>)/, `$1${baldosa}`)}\n`
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const html = generar()
-  writeFileSync(`${RAIZ}index.html`, html)
-  console.log(`Icono regenerado desde el logo (${faviconDataUri().length} caracteres).`)
+  writeFileSync(`${RAIZ}${RUTA_SVG}`, svgDeArchivo())
+  writeFileSync(`${RAIZ}index.html`, generar())
+  console.log(`Icono regenerado desde el logo → ${RUTA_SVG} y las etiquetas de index.html.`)
+  console.log(`Los PNG (${RUTA_PNG}, ${RUTA_PNG_IOS}) se rasterizan aparte: node scripts/rasterizar-icono.mjs`)
 }

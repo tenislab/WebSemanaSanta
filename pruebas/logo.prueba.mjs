@@ -16,7 +16,8 @@
  */
 export default async function ({ caso }) {
   const { readFile } = await import('node:fs/promises')
-  const { generar, svgDelLogo, faviconDataUri } = await import('../scripts/generar-favicon.mjs')
+  const { generar, svgDelLogo, faviconDataUri, svgDeArchivo, ETIQUETAS_ICONO } =
+    await import('../scripts/generar-favicon.mjs')
 
   // --- El icono, al día ---
   const enDisco = await readFile('index.html', 'utf8')
@@ -26,7 +27,14 @@ export default async function ({ caso }) {
 
   // Y que sea el logo de verdad, no un dibujo aparte.
   const svg = svgDelLogo()
-  caso('el icono sale del logo', true, svg.startsWith('<svg viewBox="0 0 120 120"'))
+  caso('el icono sale del logo', true, /^<svg width="120" height="120" viewBox="0 0 120 120"/.test(svg))
+  /*
+   * CON TAMAÑO PROPIO. En el componente el `<svg>` no lo lleva —se lo da el
+   * `<span>` por CSS— y suelto se quedaba sin medidas. Un `<img width="16">`
+   * lo disimula porque el tamaño lo pone el `<img>`; un favicon no lleva
+   * ninguno, así que conviene que el dibujo diga cuánto mide.
+   */
+  caso('y con tamaño propio, no solo viewBox', true, /width="120" height="120"/.test(svg))
   caso('sin comentarios de JSX dentro', false, /\{\/\*/.test(svg))
   caso('ni atributos de JSX sin traducir', false, /strokeWidth|strokeLinecap/.test(svg))
   caso('ni llaves de JavaScript sueltas', false, /=\{/.test(svg))
@@ -75,7 +83,7 @@ export default async function ({ caso }) {
   caso('el icono va en la propia dirección', true, uri.startsWith('data:image/svg+xml,'))
   caso('y no se dispara de tamaño', true, uri.length < 4000)
   caso('sin comillas dobles que rompan el atributo', false, uri.includes('"'))
-  caso('y el icono de iOS es el mismo', 2, (enDisco.match(/data:image\/svg\+xml,%3Csvg/g) ?? []).length)
+  await elIconoVaEnArchivos({ caso, enDisco, svgDeArchivo, ETIQUETAS_ICONO })
 
   /*
    * --- La marca, en sus dos versiones ---
@@ -113,6 +121,51 @@ export default async function ({ caso }) {
   caso('y no hay colores sueltos por el dibujo', true, sueltos <= 1)
 
   await todoElMundoPideLaMarcaAqui({ caso })
+}
+
+/**
+ * EL ICONO VA EN ARCHIVOS.
+ *
+ * Estuvo metido en la propia etiqueta como `data:image/svg+xml,…`, para
+ * ahorrar una petición. Salió caro: primero las comillas del `font-family`
+ * cerraban el atributo antes de tiempo, y ya arreglado eso seguía sin verse
+ * —sin manera de saber desde el código si era el dibujo, el despliegue o la
+ * caché del navegador—. Un archivo se abre y se ve; una dirección `data:` de
+ * mil quinientos caracteres, no.
+ */
+async function elIconoVaEnArchivos({ caso, enDisco, svgDeArchivo, ETIQUETAS_ICONO }) {
+  const { readFile, stat } = await import('node:fs/promises')
+
+  caso('el HTML enlaza archivos, no una dirección data:', false, /rel="(icon|apple-touch-icon)"[^>]*data:/.test(enDisco))
+  caso('las tres etiquetas están puestas', true, enDisco.includes(ETIQUETAS_ICONO))
+  /*
+   * Con `?v=`: la caché de iconos de Chrome no se va ni recargando con
+   * Ctrl+F5. Sin cambiar la dirección, un icono arreglado sigue sin verse
+   * durante días y parece que no se ha arreglado.
+   */
+  caso('y llevan versión para saltarse la caché', 3, (enDisco.match(/\?v=\d+/g) ?? []).length)
+
+  // El archivo del dibujo, al día con el logo.
+  const enArchivo = await readFile('public/favicon.svg', 'utf8')
+  caso('el favicon.svg está al día', svgDeArchivo(), enArchivo)
+  if (svgDeArchivo() !== enArchivo) console.log('    → ejecuta: node scripts/generar-favicon.mjs')
+
+  /*
+   * Y con la baldosa detrás. El arco es dorado y la G granate: sobre la
+   * pestaña OSCURA de Chrome la G desaparece y el arco se queda en un
+   * garabato. El fondo es lo que hace que se lea en las dos.
+   */
+  caso('lleva la baldosa de fondo', true, /<rect width="120" height="120" rx="22"/.test(enArchivo))
+
+  /*
+   * Los PNG, porque el SVG en la pestaña no lo entienden todos. Se comprueba
+   * que existan y que pesen: un PNG de doscientos bytes es un cuadro vacío,
+   * y se ve exactamente igual de bien en la prueba que uno bueno.
+   */
+  for (const [ruta, minimo] of [['public/favicon-32.png', 400], ['public/apple-touch-icon.png', 1500]]) {
+    const info = await stat(ruta).catch(() => null)
+    caso(`${ruta} existe y tiene dibujo dentro`, true, !!info && info.size > minimo)
+  }
 }
 
 /**

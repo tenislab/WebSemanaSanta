@@ -15,7 +15,7 @@
  * suele seguir enseñando el favicon que tenía cacheado.
  */
 export default async function ({ caso }) {
-  const { readFile } = await import('node:fs/promises')
+  const { readFile, stat } = await import('node:fs/promises')
   const html = await readFile('index.html', 'utf8')
 
   /*
@@ -32,17 +32,28 @@ export default async function ({ caso }) {
   )
   caso('se encuentran los colores de la marca', true, Object.keys(coloresDeLaMarca).length >= 2)
 
-  const iconos = [...html.matchAll(/href="(data:image\/svg\+xml,[^"]+)"/g)].map((m) => m[1])
+  /*
+   * El icono ya no va metido en la etiqueta como `data:image/svg+xml,…`: son
+   * archivos. Estuvo así para ahorrar una petición y costó dos fallos que no
+   * dan error —comillas que cerraban el atributo antes de tiempo, y luego un
+   * icono que seguía sin verse sin forma de saber por qué—. Un archivo se abre
+   * y se ve.
+   */
+  const iconos = [...html.matchAll(/<link[^>]*rel="(?:icon|apple-touch-icon)"[^>]*href="([^"]+)"/g)].map((m) => m[1])
   caso('hay iconos declarados', true, iconos.length >= 2)
+  caso('y son archivos, no direcciones data:', 0, iconos.filter((h) => h.startsWith('data:')).length)
+  caso('todos cuelgan de la raíz', iconos.length, iconos.filter((h) => h.startsWith('/')).length)
 
-  for (const [i, href] of iconos.entries()) {
-    // Lo que de verdad le llega al navegador: todo lo anterior a la primera
-    // almohadilla sin codificar.
-    const loQueLlega = href.split('#')[0]
-    caso(`icono ${i + 1}: llega entero`, href.length, loQueLlega.length)
+  for (const [i, ruta] of iconos.entries()) {
+    // El archivo tiene que existir de verdad, no solo estar enlazado: un
+    // `href` a un archivo que no está es exactamente lo que se ve como el
+    // globo gris, y desde el HTML no se distingue.
+    const enDisco = `public${ruta.split('?')[0]}`
+    const info = await stat(enDisco).catch(() => null)
+    caso(`icono ${i + 1} (${ruta.split('?')[0]}): el archivo existe`, true, !!info)
+    if (!info || !enDisco.endsWith('.svg')) continue
 
-    // Y que lo que llega sea un SVG completo, no un trozo.
-    const svg = decodeURIComponent(href.slice(href.indexOf(',') + 1))
+    const svg = await readFile(enDisco, 'utf8')
     caso(`icono ${i + 1}: abre y cierra el svg`, true, svg.startsWith('<svg') && svg.trimEnd().endsWith('</svg>'))
     /*
      * Los colores tienen que seguir ahí: si se perdieron, el dibujo sale negro.
