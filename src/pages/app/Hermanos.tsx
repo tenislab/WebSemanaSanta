@@ -7,7 +7,7 @@ import MenuAcciones from '../../components/MenuAcciones'
 import CamposPropiosForm from '../../components/CamposPropios'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
-import { isPlausibleIban, maskIban } from '../../lib/format'
+import { formatCurrency, isPlausibleIban, maskIban } from '../../lib/format'
 import { useTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
@@ -61,23 +61,38 @@ import { avisarPorCorreo } from '../../lib/avisosCorreo'
 import { apuntar } from '../../lib/registroActividad'
 import { useAuth } from '../../context/AuthContext'
 import { filaQueAbre } from '../../lib/foco'
+import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
+import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
+import {
+  etiquetaDeSituacion,
+  situacionDeHermano,
+  situacionDeTodos,
+  situacionEnUnaFrase,
+  type SituacionCuota,
+} from '../../lib/estadoCuotaHermano'
+import { resolverSolicitud, MOTIVOS_DE_RECHAZO } from '../../lib/familia'
 
 /**
- * La cuota de un hermano en una palabra. Son TRES estados, no dos.
+ * La cuota de un hermano en una palabra. Son CUATRO estados, no dos.
  *
- * El hermano civil no paga cuota: es lo que significa ser civil. Y como nace
- * con `cuotaAlDia` en falso y no se le emite ningún recibo nunca, sin este
- * tercer estado el administrativo contratado sale como moroso permanente en
- * el listado, en la ficha, en la exportación y en el padrón del cabildo.
+ * Y SALE DE SUS RECIBOS, no de la ficha. Antes se miraba `h.cuotaAlDia`, un
+ * booleano guardado que nadie actualizaba nunca al cobrar: se ponía en falso
+ * al dar de alta y ahí se quedaba para siempre. Todo el censo salía
+ * «Pendiente» —hubieran pagado o no—, y de ese mismo dato bebían Informes, la
+ * segmentación de comunicados y el área del propio hermano. Llegó dicho como
+ * «las cuotas no se ponen en condiciones, no puedes ver si alguien tiene la
+ * cuota en orden», y era literalmente cierto.
+ *
+ * El cuarto estado es «sin emitir»: a quien no se le ha emitido ningún recibo
+ * no se le puede llamar moroso ni decir que está al día. Es lo que le pasa a
+ * un censo recién importado, que es el caso de la captura que llegó.
  */
-function cuotaEnPalabras(h: { cuotaAlDia: boolean; civil?: boolean }): string {
-  if (h.civil) return 'No paga cuota'
-  return h.cuotaAlDia ? 'Al día' : 'Pendiente'
+function cuotaEnPalabras(s: SituacionCuota): string {
+  return etiquetaDeSituacion(s).texto
 }
 
-function cuotaClass(h: { cuotaAlDia: boolean; civil?: boolean }): string {
-  if (h.civil) return 'pill--info'
-  return h.cuotaAlDia ? 'pill--ok' : 'pill--warn'
+function cuotaClass(s: SituacionCuota): string {
+  return etiquetaDeSituacion(s).clase
 }
 
 function estadoClass(estado: EstadoHermano) {
@@ -214,9 +229,41 @@ export default function Hermanos() {
     { sinEspejo: true },
   )
   const cargosPorHermano = useMemo(() => cargosEfectivos(hermanos, personal), [hermanos, personal])
+  /*
+   * LOS RECIBOS DE VERDAD, para poder decir quién está al corriente.
+   *
+   * Se traen aquí porque la respuesta no está en la ficha del hermano: está en
+   * sus cuotas. `cuotaAlDia` seguía existiendo en la ficha y nadie lo tocaba al
+   * cobrar, así que decía «pendiente» de todo el mundo para siempre.
+   */
+  const [cuotasDelCenso] = useSupabaseTable<Cuota>(
+    'cuotas', CLAVES_DATOS.cuotas, CUOTAS_INICIALES, cuotaToRow, rowToCuota,
+  )
+  const ejercicioDeCuotas = new Date().getFullYear()
+  const situacionesDeCuota = useMemo(
+    () => new Map(
+      situacionDeTodos(cuotasDelCenso, hermanos, ejercicioDeCuotas).map((s) => [s.hermano.id, s.situacion]),
+    ),
+    [cuotasDelCenso, hermanos, ejercicioDeCuotas],
+  )
+  /** La situación de uno, con «sin emitir» de respaldo mientras cargan los recibos. */
+  const situacionDe = (id: string): SituacionCuota => situacionesDeCuota.get(id) ?? 'sinEmitir'
+  /**
+   * La situación del hermano ABIERTO en la ficha, con sus importes.
+   *
+   * Va aparte del mapa de arriba —que solo lleva la situación, para pintar la
+   * columna del listado— porque en la ficha hace falta más: cuánto debe,
+   * cuánto viene atrasado de otros años y cuántos recibos tiene este.
+   */
+  const suSituacionDeCuota = useMemo(
+    () => (selected ? situacionDeHermano(cuotasDelCenso, selected, ejercicioDeCuotas) : null),
+    [cuotasDelCenso, selected, ejercicioDeCuotas],
+  )
   const sesgados = useMemo(
-    () => (sesgoActivo ? filtrarSegmento(hermanos, limpiarCriterios(criterios), roles, cargosPorHermano) : hermanos),
-    [hermanos, criterios, sesgoActivo, roles, cargosPorHermano],
+    () => (sesgoActivo
+      ? filtrarSegmento(hermanos, limpiarCriterios(criterios), roles, cargosPorHermano, situacionesDeCuota)
+      : hermanos),
+    [hermanos, criterios, sesgoActivo, roles, cargosPorHermano, situacionesDeCuota],
   )
   const camposDeAlta = camposPropios.filter((c) => c.enAlta && c.nombre.trim())
   // Los campos propios del alta no van en el <form> (no son inputs con name):
@@ -306,6 +353,10 @@ export default function Hermanos() {
   const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(solicitudesRemotas)
   useEffect(() => setSolicitudesState(solicitudesRemotas), [solicitudesRemotas])
   const [solicitudesOpen, setSolicitudesOpen] = useState(false)
+  /* Qué solicitud se está rechazando y con qué motivo. Se pide SIEMPRE: un
+     «no» sin explicación obliga a la persona a llamar a la hermandad. */
+  const [rechazando, setRechazando] = useState<string | null>(null)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
   const [importarOpen, setImportarOpen] = useState(false)
   const [bajasOpen, setBajasOpen] = useState(false)
   const pendientes = useMemo(() => solicitudes.filter((s) => s.estado === 'Pendiente'), [solicitudes])
@@ -367,7 +418,13 @@ export default function Hermanos() {
     // sin puntos pasaba el control y entraba dos veces en el censo.
     const dniSolicitud = limpiarDni(sol.dni)
     if (hermanos.some((h) => limpiarDni(h.dni) === dniSolicitud)) {
-      actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Rechazada' } : s)))
+      // Este rechazo lo decide la aplicación, así que el motivo lo escribe
+      // ella: es el único caso en que se sabe seguro por qué.
+      actualizarSolicitudes(solicitudes.map((s) => (
+        s.id === sol.id
+          ? resolverSolicitud(s, 'Rechazada', 'Ya hay un hermano/a con ese DNI en el censo de la hermandad.')
+          : s
+      )))
       return
     }
     const nuevo: Hermano = {
@@ -473,7 +530,13 @@ export default function Hermanos() {
     // Sobre el estado más reciente de las solicitudes, no sobre el de antes del
     // await: si no, aprobar dos seguidas revertía la primera a «Pendiente».
     setSolicitudesState((prev) => {
-      const next = prev.map((s) => (s.id === sol.id ? { ...s, estado: (duplicado ? 'Rechazada' : 'Aprobada') as SolicitudAlta['estado'] } : s))
+      const next = prev.map((s) => (s.id === sol.id
+        ? resolverSolicitud(
+          s,
+          duplicado ? 'Rechazada' : 'Aprobada',
+          duplicado ? 'Ya hay un hermano/a con ese DNI en el censo de la hermandad.' : undefined,
+        )
+        : s))
       saveSolicitudes(next)
       return next
     })
@@ -481,8 +544,20 @@ export default function Hermanos() {
     setTimeout(() => setJustAddedId(null), 3000)
   }
 
-  function rechazarSolicitud(sol: SolicitudAlta) {
-    actualizarSolicitudes(solicitudes.map((s) => (s.id === sol.id ? { ...s, estado: 'Rechazada' } : s)))
+  /**
+   * Rechaza una solicitud CON EL PORQUÉ, que es lo que se pidió.
+   *
+   * Antes se ponía «Rechazada» y ya. Quien la había mandado no volvía a saber
+   * nada: la solicitud desaparecía de su área sin decir si le habían dado de
+   * alta, si se había perdido o si le habían dicho que no. El motivo se guarda
+   * en la solicitud y se lee en «Mi familia» (ver lib/familia.ts).
+   */
+  function rechazarSolicitud(sol: SolicitudAlta, motivo: string) {
+    actualizarSolicitudes(solicitudes.map((s) => (
+      s.id === sol.id ? resolverSolicitud(s, 'Rechazada', motivo) : s
+    )))
+    setRechazando(null)
+    setMotivoRechazo('')
   }
 
   useEffect(() => {
@@ -532,11 +607,19 @@ export default function Hermanos() {
         const signo = orden.asc ? 1 : -1
         if (orden.campo === 'nombre') return signo * a.nombre.localeCompare(b.nombre, 'es')
         if (orden.campo === 'estado') return signo * a.estado.localeCompare(b.estado, 'es')
-        if (orden.campo === 'cuota') return signo * (Number(a.cuotaAlDia) - Number(b.cuotaAlDia))
+        if (orden.campo === 'cuota') {
+          // Por gravedad: primero quien debe, luego el que no tiene recibo,
+          // después el que está al día y al final el que no paga cuota.
+          const peso = { debe: 0, sinEmitir: 1, alDia: 2, noAplica: 3 }
+          // Se lee del mapa, no del ayudante `situacionDe`: así el orden se
+          // recalcula cuando cambian los recibos (es la dependencia de abajo).
+          const de = (id: string) => peso[situacionesDeCuota.get(id) ?? 'sinEmitir']
+          return signo * (de(a.id) - de(b.id))
+        }
         if (orden.campo === 'antiguedad') return signo * (a.antiguedad - b.antiguedad)
         return signo * ((a.numero || Infinity) - (b.numero || Infinity))
       })
-  }, [sesgados, query, filter, filtroEtiqueta, orden, soloCumples, roles])
+  }, [sesgados, query, filter, filtroEtiqueta, orden, soloCumples, roles, situacionesDeCuota])
 
   const cumplenEsteMes = useMemo(
     () => hermanos.filter((h) => h.estado !== 'Baja' && cumpleEsteMes(h.fechaNacimiento)).length,
@@ -578,10 +661,18 @@ export default function Hermanos() {
     // «Nuevo» también es miembro: ver esMiembro().
     const activos = hermanos.filter(esMiembro).length
     const nuevos = hermanos.filter((h) => h.estado === 'Nuevo').length
-    // Los civiles fuera: no se les emite cuota, así que no pueden deberla.
-    const pendientes = hermanos.filter((h) => !h.civil && !h.cuotaAlDia).length
-    return { total, activos, nuevos, pendientes }
-  }, [hermanos])
+    /*
+     * Los que DEBEN de verdad, con recibos sin cobrar detrás. Antes era «los
+     * que no tienen el booleano puesto», o sea el censo entero menos los
+     * civiles: la cifra de la cabecera decía siempre que debía todo el mundo.
+     */
+    const pendientes = hermanos.filter((h) => situacionDe(h.id) === 'debe').length
+    /* Y a cuántos no se les ha emitido nada, que es lo que hay que arreglar
+       antes de poder hablar de morosos. */
+    const sinEmitir = hermanos.filter((h) => situacionDe(h.id) === 'sinEmitir').length
+    return { total, activos, nuevos, pendientes, sinEmitir }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hermanos, situacionesDeCuota])
 
   // El tramo de cada hermano no se guarda: se calcula solo a partir de su
   // número de hermano y del aforo de los tramos configurados (ver Cortejo).
@@ -628,11 +719,14 @@ export default function Hermanos() {
   const fechaLarga = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
 
   function exportarCsv(lista: Hermano[] = filtered) {
-    const columnas = ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota al día',
+    // «Cuota» y no «Cuota al día»: ya no es un sí/no. Se exporta la situación
+    // en palabras porque «No» no distinguía al que debe del que no tiene
+    // ningún recibo emitido, y son dos cosas distintas de arreglar.
+    const columnas = ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota',
       ...camposPropios.filter((c) => c.nombre.trim()).map((c) => c.nombre)]
     const filas = lista.map((h) => [
       h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.email, h.telefono,
-      h.cuotaAlDia ? 'Sí' : 'No',
+      cuotaEnPalabras(situacionDe(h.id)),
       ...camposPropios.filter((c) => c.nombre.trim()).map((c) => valorLegible(c, h.campos?.[c.id])),
     ])
     const hoy = new Date()
@@ -1257,7 +1351,7 @@ export default function Hermanos() {
                       <span className="row-person__sub">{h.email}</span>
                       {/* En el móvil se ocultan Nº, tramo y antigüedad. */}
                       <span className="row-person__sub solo-movil">
-                        Nº {h.numero > 0 ? h.numero : '—'} · {cuotaEnPalabras(h).toLowerCase()} · {tramoPorHermano.get(h.id) ?? 'sin papeleta'}
+                        Nº {h.numero > 0 ? h.numero : '—'} · {cuotaEnPalabras(situacionDe(h.id)).toLowerCase()} · {tramoPorHermano.get(h.id) ?? 'sin papeleta'}
                       </span>
                     </span>
                   </div>
@@ -1277,7 +1371,7 @@ export default function Hermanos() {
                   )}
                 </td>
                 <td className="col-opcional">
-                  <span className={`pill ${cuotaClass(h)}`}>{cuotaEnPalabras(h)}</span>
+                  <span className={`pill ${cuotaClass(situacionDe(h.id))}`}>{cuotaEnPalabras(situacionDe(h.id))}</span>
                 </td>
                 <td className="num col-opcional">
                   {/* Sin antigüedad, una raya: el censo llegó a poner «NaN
@@ -1403,8 +1497,10 @@ export default function Hermanos() {
                 {fraseAsistencia && <small className="ficha-hero__asistencia">{fraseAsistencia}</small>}
                 <div className="ficha-hero__pills">
                   <span className={`pill ${estadoClass(selected.estado)}`}>{selected.estado}</span>
-                  <span className={`pill ${cuotaClass(selected)}`}>
-                    {selected.civil ? 'No paga cuota' : cuotaEnPalabras(selected) === 'Al día' ? 'Cuota al día' : 'Cuota pendiente'}
+                  <span className={`pill ${cuotaClass(situacionDe(selected.id))}`}>
+                    {situacionDe(selected.id) === 'alDia'
+                      ? 'Cuota al día'
+                      : cuotaEnPalabras(situacionDe(selected.id))}
                   </span>
                   {/* El cargo se VE aquí pero no se toca aquí: se pone y se
                       quita en Personal y permisos, que es la pantalla que
@@ -1445,7 +1541,56 @@ export default function Hermanos() {
               distinguirla: casi todos los hermanos entraron antes de que esto
               existiera.
             */}
-            <section className="ficha-asistencia">
+            {/*
+              SUS CUOTAS, QUE ES LO PRIMERO QUE SE MIRA.
+
+              Llegó dicho como «no puedes ver si alguien tiene la cuota en
+              orden», y la ficha no lo decía en ningún sitio: solo estaba la
+              píldora de arriba, que salía de un booleano guardado que nadie
+              actualizaba al cobrar. Aquí va lo que hace falta para decidir en
+              el mostrador: en qué situación está, cuánto debe, desde cuándo y
+              cuántos recibos tiene este año — con el enlace a Cuotas para
+              verlos uno a uno.
+            */}
+            {suSituacionDeCuota && (
+            <section className="ficha-bloque ficha-cuotas">
+              <h4>Cuotas</h4>
+              <p className="table-subtle">{situacionEnUnaFrase(suSituacionDeCuota, ejercicioDeCuotas)}</p>
+              <ul className="ficha-bloque__filas">
+                <li>
+                  <b>{ejercicioDeCuotas}</b>
+                  <span className={`pill ${cuotaClass(suSituacionDeCuota.situacion)}`}>
+                    {cuotaEnPalabras(suSituacionDeCuota.situacion)}
+                  </span>
+                  <span className="table-subtle">
+                    {suSituacionDeCuota.recibosDelEjercicio === 0
+                      ? 'sin recibos emitidos'
+                      : `${suSituacionDeCuota.recibosDelEjercicio} recibo${suSituacionDeCuota.recibosDelEjercicio === 1 ? '' : 's'}`}
+                  </span>
+                </li>
+                {/* Lo atrasado va aparte: no es lo mismo deber el recibo de
+                    este mes que arrastrar dos ejercicios, y con lo segundo
+                    algunas hermandades ni dan papeleta de sitio. */}
+                {suSituacionDeCuota.deudaAtrasada > 0 && (
+                  <li>
+                    <b>Atrasado</b>
+                    <span className="pill pill--err">{formatCurrency(suSituacionDeCuota.deudaAtrasada)}</span>
+                    <span className="table-subtle">de ejercicios anteriores</span>
+                  </li>
+                )}
+                {suSituacionDeCuota.avisa && (
+                  <li>
+                    <b>Avisa</b>
+                    <span className="pill pill--info">Dice que ha pagado</span>
+                    <span className="table-subtle">falta confirmarlo en el banco</span>
+                  </li>
+                )}
+              </ul>
+              <Link className="btn btn-ghost btn-sm" to="/app/cuotas">Ver sus recibos</Link>
+            </section>
+            )}
+
+            <section className="ficha-bloque ficha-asistencia">
               <h4>Participación en la estación de penitencia</h4>
               {historialAsistencia.length === 0 ? (
                 <p className="table-subtle">
@@ -1455,7 +1600,7 @@ export default function Hermanos() {
               ) : (
                 <>
                   <p className="table-subtle">{fraseAsistencia}</p>
-                  <ul className="ficha-asistencia__anios">
+                  <ul className="ficha-bloque__filas">
                     {historialAsistencia.map((a) => (
                       <li key={a.anio}>
                         <b>{a.anio}</b>
@@ -1906,7 +2051,7 @@ export default function Hermanos() {
         ]}
         columnas={['Nº', 'Hermano', 'Estado', 'Antigüedad', 'Cuota']}
         filas={filtered.map((h) => [
-          h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, cuotaEnPalabras(h),
+          h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, cuotaEnPalabras(situacionDe(h.id)),
         ])}
       />
 
@@ -1934,7 +2079,7 @@ export default function Hermanos() {
                   <div><dt>Hermano/a</dt><dd>{h.nombre}</dd></div>
                   <div><dt>Número</dt><dd>{h.numero > 0 ? h.numero : '—'}</dd></div>
                   <div><dt>Hermano desde</dt><dd>{h.antiguedad}</dd></div>
-                  <div><dt>Cuota</dt><dd>{cuotaEnPalabras(h)}</dd></div>
+                  <div><dt>Cuota</dt><dd>{cuotaEnPalabras(situacionDe(h.id))}</dd></div>
                   {h.email && <div><dt>Correo</dt><dd><a href={`mailto:${h.email}`}>{h.email}</a></dd></div>}
                   {h.telefono && <div><dt>Teléfono</dt><dd><a href={`tel:${h.telefono.replace(/\s+/g, '')}`}>{h.telefono}</a></dd></div>}
                 </dl>
@@ -1995,14 +2140,74 @@ export default function Hermanos() {
                     </div>
                   )}
                 </dl>
-                <div className="assign-box__row">
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSolicitud(sol)}>
-                    Aprobar y dar de alta
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => rechazarSolicitud(sol)}>
-                    Rechazar
-                  </button>
-                </div>
+                {/*
+                  RECHAZAR PIDE EL PORQUÉ. Antes era un botón y ya: quedaba
+                  «Rechazada» y la persona que la mandó no volvía a saber nada
+                  —la solicitud desaparecía de su área sin decir si le habían
+                  dado de alta, si se había perdido o si le habían dicho que
+                  no—. Los motivos de siempre están hechos para no tener que
+                  escribirlos, pero se puede escribir otro.
+                */}
+                {rechazando === sol.id ? (
+                  <div className="assign-box assign-box--anidada">
+                    <label htmlFor={`motivo-${sol.id}`}>¿Por qué se rechaza?</label>
+                    <p className="form-hint">
+                      Lo va a leer {sol.nombre} en su área. Sé breve y concreto: si es algo que
+                      puede arreglar (un DNI mal escrito, un dato que falta), dilo.
+                    </p>
+                    <div className="filters">
+                      {MOTIVOS_DE_RECHAZO.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          className={`chip${motivoRechazo === m ? ' chip--active' : ''}`}
+                          onClick={() => setMotivoRechazo(m)}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="form-row">
+                      <input
+                        id={`motivo-${sol.id}`}
+                        type="text"
+                        value={motivoRechazo}
+                        onChange={(e) => setMotivoRechazo(e.target.value)}
+                        placeholder="O escríbelo tú"
+                      />
+                    </div>
+                    <div className="assign-box__row">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm rgpd-borrar"
+                        disabled={!motivoRechazo.trim()}
+                        onClick={() => rechazarSolicitud(sol, motivoRechazo)}
+                      >
+                        Rechazar y avisar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { setRechazando(null); setMotivoRechazo('') }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="assign-box__row">
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSolicitud(sol)}>
+                      Aprobar y dar de alta
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm rgpd-borrar"
+                      onClick={() => { setRechazando(sol.id); setMotivoRechazo('') }}
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}

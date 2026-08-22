@@ -212,19 +212,27 @@ export default async function ({ caso }) {
   // 8. EL HERMANO CIVIL: en el censo, con su área, sin cuotas.
   // ---------------------------------------------------------------------
   /*
-   * Nace con `cuotaAlDia` en falso y nunca se le emite un recibo, así que sin
-   * tratarlo aparte se queda «pendiente» para siempre: al administrativo
-   * contratado le llegarían todos los avisos de morosidad de la hermandad.
+   * Nunca se le emite un recibo, así que sin tratarlo aparte se quedaría
+   * «pendiente» para siempre: al administrativo contratado le llegarían todos
+   * los avisos de morosidad de la hermandad, por una deuda que no existe.
+   *
+   * Antes había que excluirlo A MANO en cada sitio y era un fallo seguro si
+   * alguien se olvidaba en uno. Ahora su situación de cuota es `noAplica` —lo
+   * dice `leTocaPagar`, un solo sitio— y queda fuera solo.
    */
   const emision = await readFile('src/lib/cuotasEmision.ts', 'utf8')
   caso('no se le emiten cuotas', true, /h\.estado !== 'Baja' && !h\.civil/.test(emision))
+  const estado = await readFile('src/lib/estadoCuotaHermano.ts', 'utf8')
+  caso('su situación de cuota es «no le toca»', true,
+    /h\.estado !== 'Baja' && !h\.civil/.test(estado))
   const seg = await readFile('src/lib/segmentacion.ts', 'utf8')
-  caso('ni le llegan avisos de impago', true, /h\.cuotaAlDia \|\| h\.civil/.test(seg))
+  caso('ni le llegan avisos de impago', true,
+    /c\.cuota === 'Pendiente' && situaciones\.get\(h\.id\) !== 'debe'/.test(seg))
   const ficha = await readFile('src/lib/hermanoFicha.ts', 'utf8')
   caso('no cuenta como hermano en las cifras', true, /h\.estado !== 'Baja' && !h\.civil/.test(ficha))
   // Pero SÍ sigue en el listado del censo, para que secretaría lo gestione.
   const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
-  caso('en el censo se le distingue', true, /No paga cuota/.test(hermanos))
+  caso('en el censo se le distingue', true, /'No paga cuota'/.test(estado) && /cuotaEnPalabras\(situacionDe/.test(hermanos))
   caso('y no sale como «de baja» por no tener número', true,
     /Hermano civil · no ocupa número ni paga cuota/.test(hermanos))
   // Fuera del escalafón: si ocupara puesto, todos los de detrás bajarían uno.

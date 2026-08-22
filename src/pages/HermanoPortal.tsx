@@ -68,6 +68,8 @@ import {
   type IconoHermandad,
 } from '../lib/hermandades'
 import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
+import { solicitudesDeMiFamilia } from '../lib/familia'
+import { situacionDeHermano, etiquetaDeSituacion } from '../lib/estadoCuotaHermano'
 import { fijarHermandadDeLaPagina, hermandadesPublicas, type HermandadPublica } from '../lib/multiHermandad'
 import { codigoDeHermano } from '../lib/codigoHermano'
 
@@ -353,6 +355,18 @@ export default function HermanoPortal() {
       .filter((c) => c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta')
       .reduce((n, c) => n + c.importe, 0)
   }, [cuotas, hermanoPrincipal])
+
+  /**
+   * Su situación de cuota, sacada de los recibos. «Sin emitir» NO es «al día»:
+   * a quien no se le ha cobrado nada todavía no se le puede decir que está al
+   * corriente, y a él le interesa saberlo antes de que le llegue todo junto.
+   */
+  const miSituacionDeCuota = useMemo(
+    () => (hermanoPrincipal
+      ? situacionDeHermano(cuotas, hermanoPrincipal, new Date().getFullYear()).situacion
+      : 'sinEmitir'),
+    [cuotas, hermanoPrincipal],
+  )
 
   /**
    * ¿Puede pedir o renovar su sitio? Y si no, por qué.
@@ -1097,12 +1111,15 @@ export default function HermanoPortal() {
     () => (hermanoPrincipal ? hermanos.filter((h) => h.tutorId === hermanoPrincipal.id) : []),
     [hermanos, hermanoPrincipal],
   )
-  /** Altas de familia que ya ha pedido y siguen sin tramitar. */
+  /**
+   * Todas las altas de familia que ha pedido, RESUELTAS INCLUIDAS.
+   *
+   * Aquí estaba el fallo: se filtraba por «Pendiente», así que en cuanto
+   * secretaría resolvía una desaparecía de su área. Ni aprobada ni rechazada:
+   * desaparecida. Ver `lib/familia.ts`, que es donde se decide el orden.
+   */
   const solicitudesFamilia = useMemo(
-    () =>
-      hermanoPrincipal
-        ? solicitudesAlta.filter((s) => s.tutorId === hermanoPrincipal.id && s.estado === 'Pendiente')
-        : [],
+    () => solicitudesDeMiFamilia(solicitudesAlta, hermanoPrincipal?.id),
     [solicitudesAlta, hermanoPrincipal],
   )
 
@@ -1553,11 +1570,22 @@ export default function HermanoPortal() {
                   <span className={`pill ${hermanoPrincipal.estado === 'Activo' ? 'pill--ok' : hermanoPrincipal.estado === 'Nuevo' ? 'pill--info' : 'pill--off'}`}>
                     {hermanoPrincipal.estado}
                   </span>
+                  {/*
+                    SALE DE SUS RECIBOS, no del `cuotaAlDia` de su ficha.
+                    Aquel era un booleano guardado que NADIE actualizaba al
+                    cobrar: nacía en falso y se quedaba en falso, así que el
+                    hermano leía «Cuota pendiente» en su propia área para
+                    siempre, hubiera pagado o no. Ver lib/estadoCuotaHermano.ts.
+                  */}
                   {esCivil ? (
                     <span className="pill pill--info">No se te emiten cuotas</span>
                   ) : (
-                    <span className={`pill ${hermanoPrincipal.cuotaAlDia ? 'pill--ok' : 'pill--warn'}`}>
-                      {hermanoPrincipal.cuotaAlDia ? 'Cuota al día' : 'Cuota pendiente'}
+                    <span className={`pill ${etiquetaDeSituacion(miSituacionDeCuota).clase}`}>
+                      {miSituacionDeCuota === 'alDia'
+                        ? 'Cuota al día'
+                        : miSituacionDeCuota === 'sinEmitir'
+                          ? 'Sin cuotas emitidas'
+                          : `Debes ${formatCurrency(miDeuda)}`}
                     </span>
                   )}
                   {hermanoPrincipal.cargo && <span className="pill pill--info">{hermanoPrincipal.cargo}</span>}
@@ -1570,12 +1598,26 @@ export default function HermanoPortal() {
 
         {hermanoPrincipal && (
           <div className="portal__cards">
-            <div className={`portal__card-mini portal__card-mini--${esCivil ? 'ok' : hermanoPrincipal.cuotaAlDia ? 'ok' : 'warn'}`}>
+            <div className={`portal__card-mini portal__card-mini--${esCivil || miSituacionDeCuota === 'alDia' ? 'ok' : 'warn'}`}>
               <span className="portal__card-mini__label">Mi cuota</span>
               <span className="portal__card-mini__value">
-                {esCivil ? 'No procede' : hermanoPrincipal.cuotaAlDia ? 'Al día' : 'Pendiente'}
+                {esCivil
+                  ? 'No procede'
+                  : miSituacionDeCuota === 'alDia'
+                    ? 'Al día'
+                    : miSituacionDeCuota === 'sinEmitir'
+                      ? 'Sin emitir'
+                      : formatCurrency(miDeuda)}
               </span>
-              <span className="portal__card-mini__sub">{esCivil ? 'Hermano civil' : campana.anio}</span>
+              <span className="portal__card-mini__sub">
+                {esCivil
+                  ? 'Hermano civil'
+                  : miSituacionDeCuota === 'sinEmitir'
+                    ? 'Aún no se te ha cobrado'
+                    : miSituacionDeCuota === 'debe'
+                      ? 'Pendiente de pago'
+                      : campana.anio}
+              </span>
             </div>
             <div className="portal__card-mini portal__card-mini--accent">
               <span className="portal__card-mini__label">Mi papeleta {campana.anio}</span>
@@ -2000,7 +2042,7 @@ export default function HermanoPortal() {
             cuotas={cuotas}
             tramos={tramos}
             anioCampana={campana.anio}
-            solicitudesPendientes={solicitudesFamilia}
+            solicitudesFamilia={solicitudesFamilia}
             onSolicitarAlta={solicitarAltaFamilia}
             bloqueado={deBaja ? 'Tu ficha figura de baja: no se pueden pedir altas nuevas.' : null}
           />

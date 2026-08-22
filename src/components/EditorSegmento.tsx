@@ -137,9 +137,22 @@ export default function EditorSegmento({
           <label>Cuota</label>
           <select value={criterios.cuota} onChange={(e) => editar({ cuota: e.target.value as CriteriosSegmento['cuota'] })}>
             <option value="Todos">Cualquiera</option>
-            <option value="AlDia">Al día</option>
-            <option value="Pendiente">Pendiente</option>
+            <option value="AlDia">Al corriente de pago</option>
+            <option value="Pendiente">Debe alguna cuota</option>
           </select>
+          {/*
+            Se dice lo que deja fuera, porque no es evidente y en este sesgo
+            importa: es con el que se manda el aviso de morosidad. Quien no
+            tiene ningún recibo emitido no debe nada —no se le ha pedido— y no
+            entra en ninguna de las dos, que es lo correcto pero sorprende al
+            ver el recuento.
+          */}
+          {criterios.cuota !== 'Todos' && (
+            <small className="form-hint">
+              Se mira en sus recibos. Queda fuera quien no tiene ninguno emitido, y también los
+              hermanos civiles y las bajas, a los que no se les emite cuota.
+            </small>
+          )}
         </div>
         <div className="form-row">
           <label>Etiqueta</label>

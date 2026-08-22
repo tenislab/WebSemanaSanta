@@ -7,7 +7,16 @@ export default async function ({ cargar, caso }) {
     iban: null, dni: '', claveAcceso: '', authUserId: null, ...extra,
   })
   const base = { estado: 'Cualquiera', cuota: 'Todos', edad: 'Todos', etiqueta: '', cargo: '', soloConEmail: false, campos: [] }
-  const ids = (hs, c) => m.filtrarSegmento(hs, c).map((h) => h.id)
+  /*
+   * La situación de cuota ya NO sale de la ficha: se le pasa a `filtrarSegmento`
+   * calculada desde los recibos (`estadoCuotaHermano.ts`). Aquí se apaña con el
+   * `cuotaAlDia` del censo de ejemplo, que es lo que estas pruebas usan para
+   * decir quién debe y quién no.
+   */
+  const situaciones = (hs) => new Map(hs.map((h) => [
+    h.id, h.civil || h.estado === 'Baja' ? 'noAplica' : h.cuotaAlDia ? 'alDia' : 'debe',
+  ]))
+  const ids = (hs, c) => m.filtrarSegmento(hs, c, new Map(), new Map(), situaciones(hs)).map((h) => h.id)
 
   const hs = [
     H('activo'),
@@ -58,7 +67,16 @@ async function sesgarPorCargo({ cargar, caso }) {
     iban: null, dni: '', claveAcceso: '', authUserId: null, ...extra,
   })
   const base = { estado: 'Cualquiera', cuota: 'Todos', edad: 'Todos', etiqueta: '', cargo: '', soloConEmail: false, campos: [] }
-  const ids = (hs, c) => m.filtrarSegmento(hs, c).map((h) => h.id)
+  /*
+   * La situación de cuota ya NO sale de la ficha: se le pasa a `filtrarSegmento`
+   * calculada desde los recibos (`estadoCuotaHermano.ts`). Aquí se apaña con el
+   * `cuotaAlDia` del censo de ejemplo, que es lo que estas pruebas usan para
+   * decir quién debe y quién no.
+   */
+  const situaciones = (hs) => new Map(hs.map((h) => [
+    h.id, h.civil || h.estado === 'Baja' ? 'noAplica' : h.cuotaAlDia ? 'alDia' : 'debe',
+  ]))
+  const ids = (hs, c) => m.filtrarSegmento(hs, c, new Map(), new Map(), situaciones(hs)).map((h) => h.id)
 
   const censo = [
     H('mayor', { cargo: 'Hermano Mayor' }),
@@ -162,13 +180,18 @@ async function lasCincoOpcionesDelDesplegable({ cargar, caso }) {
     H('baja', { estado: 'Baja' }),
     H('civil', { cuotaAlDia: false, civil: true }),
   ]
+  /* La situación de cuota ya no sale de la ficha: se le pasa calculada desde
+     los recibos. Aquí se deriva del `cuotaAlDia` del censo de ejemplo. */
+  const situaciones = (hs) => new Map(hs.map((h) => [
+    h.id, h.civil || h.estado === 'Baja' ? 'noAplica' : h.cuotaAlDia ? 'alDia' : 'debe',
+  ]))
   /** Resuelve un nombre del desplegable igual que lo hace la pantalla. */
   const aQuien = (nombre, conSitio = new Set()) => {
     const papeleta = m.segmentoDePapeleta(nombre)
     const criterios = m.criteriosDeSegmento(nombre)
     if (!papeleta && !criterios) return null            // no se sabe resolver
     const base = criterios ?? { ...m.CRITERIOS_POR_DEFECTO, soloConEmail: false }
-    let lista = m.filtrarSegmento(censo, base)
+    let lista = m.filtrarSegmento(censo, base, new Map(), new Map(), situaciones(censo))
     if (papeleta === 'con') lista = lista.filter((h) => conSitio.has(h.id))
     if (papeleta === 'sin') lista = lista.filter((h) => !conSitio.has(h.id))
     return lista.map((h) => h.id)
@@ -373,5 +396,5 @@ async function laPantallaLoUsa({ caso }) {
   // según en qué pantalla se abra.
   const herm = (await readFile('src/pages/app/Hermanos.tsx', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   caso('y en Hermanos también', true, /cargosEfectivos\(/.test(herm))
-  caso('el sesgo del censo lo usa', true, /filtrarSegmento\(hermanos, limpiarCriterios\(criterios\), roles, cargosPorHermano\)/.test(herm))
+  caso('el sesgo del censo lo usa', true, /filtrarSegmento\(hermanos, limpiarCriterios\(criterios\), roles, cargosPorHermano, situacionesDeCuota\)/.test(herm))
 }

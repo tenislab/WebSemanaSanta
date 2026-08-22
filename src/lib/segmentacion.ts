@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Hermano } from '../data/hermanos'
 import { leerPersistido } from './persistencia'
 import { getCamposPropios, type CampoPropio } from './camposPropios'
+import type { SituacionCuota } from './estadoCuotaHermano'
 
 /**
  * Segmentación de hermanos por criterios, para mandar comunicados solo a quien
@@ -102,22 +103,44 @@ export function filtrarSegmento(
   c: CriteriosSegmento,
   roles: Map<string, string[]> = new Map(),
   cargos: Map<string, string> = new Map(),
+  /**
+   * La situación de cuota de cada hermano, SACADA DE SUS RECIBOS
+   * (`situacionDeTodos` en `estadoCuotaHermano.ts`).
+   *
+   * Antes esto no existía y se miraba `h.cuotaAlDia`, un booleano guardado en
+   * la ficha que NADIE actualizaba al cobrar: nacía en falso al dar de alta y
+   * ahí se quedaba. Así que «mándaselo a los que deben» sacaba el censo entero
+   * —incluida la gente que había pagado en febrero— y «a los que están al día»
+   * no sacaba a nadie. Es el peor sitio donde podía pasar: ese sesgo es con el
+   * que se manda el aviso de morosidad.
+   *
+   * A quien no esté en el mapa NO se le aplica ninguno de los dos sesgos de
+   * cuota. Es a propósito: si algún día alguien llama a esta función sin
+   * pasarlo, el resultado será una lista vacía —que se ve— y no una carta de
+   * impago a todo el censo, que no se ve hasta que suena el teléfono.
+   */
+  situaciones: Map<string, SituacionCuota> = new Map(),
 ): Hermano[] {
   return hermanos.filter((h) => {
     // Las bajas nunca reciben salvo que se pidan explícitamente.
     if (c.estado !== 'Cualquiera' && (c.estado === 'Todos' ? h.estado === 'Baja' : h.estado !== c.estado)) return false
-    if (c.cuota === 'AlDia' && !h.cuotaAlDia) return false
+    if (c.cuota === 'AlDia' && situaciones.get(h.id) !== 'alDia') return false
     /*
      * «Pendiente» es el sesgo con el que se manda el aviso a quien debe, y es
      * lo más parecido a un aviso de morosidad que hay en la aplicación.
      *
-     * El civil queda fuera SIEMPRE, y si no se hace es un fallo seguro: nace
-     * con `cuotaAlDia: false` y nunca se le emite un recibo, así que se queda
-     * «pendiente» para siempre. Al administrativo contratado le llegarían
-     * todos los avisos de morosidad de la hermandad, uno tras otro, por una
-     * deuda que no existe.
+     * Ahora es literal: DEBE dinero, con recibos sin cobrar detrás. El civil y
+     * el de baja quedan fuera solos, sin caso aparte, porque su situación es
+     * `noAplica` — no se les emite ninguna cuota, que es lo que significa—.
+     * Antes hacía falta excluirlos a mano y era un fallo seguro si se olvidaba:
+     * al administrativo contratado le llegaban todos los avisos de morosidad
+     * de la hermandad, uno tras otro, por una deuda que no existe.
+     *
+     * Y quien no tiene ningún recibo emitido tampoco entra: no debe nada
+     * porque no se le ha pedido nada. Reclamarle sería reclamar un descuido de
+     * la tesorería.
      */
-    if (c.cuota === 'Pendiente' && (h.cuotaAlDia || h.civil)) return false
+    if (c.cuota === 'Pendiente' && situaciones.get(h.id) !== 'debe') return false
     if (c.edad !== 'Todos') {
       const e = edadDe(h.fechaNacimiento)
       if (e == null) return false

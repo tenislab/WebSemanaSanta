@@ -18,6 +18,7 @@ import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { enserToRow, rowToEnser } from '../../lib/db/enseres'
 import { useTramos, etiquetaTramo, type Tramo } from '../../lib/tramos'
+import { etiquetaDeSituacion, situacionDeTodos } from '../../lib/estadoCuotaHermano'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
@@ -70,10 +71,26 @@ function construirInformes(
   const activos = hermanosActuales.filter(esMiembro).length
   const nuevos = hermanosActuales.filter((h) => h.estado === 'Nuevo').length
   const bajas = hermanosActuales.filter((h) => h.estado === 'Baja').length
-  /* Los civiles no cuentan ni arriba ni abajo: no se les emite cuota, así que
-     contarlos como «no al día» bajaría el número del documento que se lleva al
-     cabildo por una deuda que no existe. */
-  const alDia = hermanosActuales.filter((h) => !h.civil && h.cuotaAlDia).length
+  /*
+   * QUIÉN ESTÁ AL DÍA, SACADO DE SUS RECIBOS.
+   *
+   * Antes salía de `h.cuotaAlDia`, un booleano guardado en la ficha que nadie
+   * actualizaba nunca al cobrar: se ponía en falso al dar de alta y ahí se
+   * quedaba. Así que el padrón que se lleva al cabildo decía que no estaba al
+   * día NADIE, con la caja llena.
+   *
+   * Los civiles siguen sin contar ni arriba ni abajo —su situación es
+   * `noAplica`—: no se les emite cuota, así que contarlos como morosos bajaría
+   * el número del documento por una deuda que no existe.
+   */
+  // Sin `useMemo`: esto NO es un componente, es la función que arma los
+  // informes con los datos que se le pasan. Un hook aquí dentro se saltaría el
+  // orden de llamada de React.
+  const situacionesDeCuota = new Map(
+    situacionDeTodos(cuotasActuales, hermanosActuales, new Date().getFullYear())
+      .map((x) => [x.hermano.id, x.situacion]),
+  )
+  const alDia = hermanosActuales.filter((h) => situacionesDeCuota.get(h.id) === 'alDia').length
   const sinIban = hermanosActuales.filter((h) => !h.iban).length
 
   const cobrado = cuotasActuales.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
@@ -145,12 +162,15 @@ function construirInformes(
       ],
       // Los campos propios de la hermandad se listan también: si se molestan en
       // apuntar la talla de túnica, el padrón tiene que poder sacarla.
-      columnas: ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota al día', ...camposPropios.map((c) => c.nombre)],
+      // «Cuota» y no «Cuota al día»: ya no es un sí/no. Un «No» no distinguía
+      // al que debe del que no tiene ningún recibo emitido, y en el padrón del
+      // cabildo esas dos cosas se arreglan de manera muy distinta.
+      columnas: ['Nº', 'Nombre', 'Estado', 'Antigüedad', 'Email', 'Teléfono', 'Cuota', ...camposPropios.map((c) => c.nombre)],
       filas: hermanosActuales.map((h) => [
         // Los de baja tienen numero 0, no un número real: en papel eso se lee
         // como «el hermano cero». Se pinta igual que en el resto de la app.
         h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, h.email, h.telefono,
-        h.civil ? '—' : h.cuotaAlDia ? 'Sí' : 'No',
+        etiquetaDeSituacion(situacionesDeCuota.get(h.id) ?? 'sinEmitir').texto,
         ...camposPropios.map((c) => valorLegible(c, h.campos?.[c.id])),
       ]),
     },

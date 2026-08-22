@@ -14,6 +14,7 @@ import { avisosPendientes, avisosPorTipo, type Aviso } from '../../lib/notificac
 import { hoyIso } from '../../lib/hoy'
 import { useConceptosCuota } from '../../lib/conceptosCuota'
 import { ultimoEjercicio } from '../../lib/cuotasEmision'
+import { resolverSolicitud, MOTIVOS_DE_RECHAZO } from '../../lib/familia'
 
 /**
  * NOTIFICACIONES — lo que espera a que la junta haga algo.
@@ -52,6 +53,9 @@ export default function Notificaciones() {
     ? solicitudes : solicitudesRemotas
 
   const [hecho, setHecho] = useState<string>('')
+  /* Qué aviso se está rechazando y con qué motivo. */
+  const [rechazando, setRechazando] = useState<string | null>(null)
+  const [motivo, setMotivo] = useState('')
 
   /*
    * Para poder avisar de quién no tiene cuota hacen falta el ejercicio y el
@@ -120,14 +124,24 @@ export default function Notificaciones() {
     setHecho('')
   }
 
-  function rechazar(a: Aviso) {
+  /**
+   * Rechazar PIDE EL PORQUÉ, igual que en Hermanos.
+   *
+   * Que las dos pantallas se comporten igual no es un capricho: si una de las
+   * dos rechazara sin preguntar, el hermano recibiría un «no» mudo o
+   * explicado según por dónde hubiera pasado la secretaría ese día. Las dos
+   * llaman a `resolverSolicitud`, que es quien decide qué se guarda.
+   */
+  function rechazar(a: Aviso, motivo: string) {
     if (a.tipo !== 'altaHermano') return
     const next = listaSolicitudes.map((s) => (
-      s.id === a.refId ? { ...s, estado: 'Rechazada' as const } : s
+      s.id === a.refId ? resolverSolicitud(s, 'Rechazada', motivo) : s
     ))
     setSolicitudes(next)
     void saveSolicitudes(next)
-    setHecho('Solicitud rechazada.')
+    setRechazando(null)
+    setMotivo('')
+    setHecho('Solicitud rechazada. Quien la mandó verá el motivo en su área.')
   }
 
   return (
@@ -167,7 +181,11 @@ export default function Notificaciones() {
                 </div>
                 <div className="aviso__acciones">
                   {a.rechazar && (
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => rechazar(a)}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => { setRechazando(a.id); setMotivo('') }}
+                    >
                       {a.rechazar}
                     </button>
                   )}
@@ -198,6 +216,52 @@ export default function Notificaciones() {
                     </Link>
                   )}
                 </div>
+                {/*
+                  EL PORQUÉ DEL RECHAZO. Lo va a leer quien mandó la solicitud,
+                  en «Mi familia» de su propia área: un «rechazada» a secas le
+                  obliga a llamar a la hermandad a preguntar qué ha pasado.
+                */}
+                {rechazando === a.id && (
+                  <div className="aviso__rechazo">
+                    <label htmlFor={`motivo-${a.id}`}>¿Por qué se rechaza?</label>
+                    <div className="filters">
+                      {MOTIVOS_DE_RECHAZO.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          className={`chip${motivo === m ? ' chip--active' : ''}`}
+                          onClick={() => setMotivo(m)}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      id={`motivo-${a.id}`}
+                      type="text"
+                      value={motivo}
+                      onChange={(e) => setMotivo(e.target.value)}
+                      placeholder="O escríbelo tú"
+                    />
+                    <div className="aviso__acciones">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={!motivo.trim()}
+                        onClick={() => rechazar(a, motivo)}
+                      >
+                        Rechazar y avisar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { setRechazando(null); setMotivo('') }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

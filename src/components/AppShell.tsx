@@ -391,9 +391,26 @@ export default function AppShell() {
             {/* Quien además es hermano —el Hermano Mayor, la secretaria, el
                 tesorero: casi todos— tiene que poder ver SU papeleta y SUS
                 cuotas sin cerrar sesión ni tener una segunda cuenta. */}
+            {/*
+              Cada uno con SU ICONO, y el texto envuelto en `app-topbar__texto`.
+              En el móvil el texto se esconde y queda el icono: a 390 px los
+              cuatro botones no caben, y sin esto la barra empujaba la página
+              entera 58 px a lo ancho —en todas las pantallas, no solo aquí—.
+              El `title` y el `aria-label` se quedan, así que quien navega con
+              lector de pantalla sigue oyendo lo que hace cada uno.
+            */}
             {papeles.esHermano && (
-              <Link to="/hermano" className="btn btn-ghost btn-sm" title="Tus cuotas, tu papeleta y tus datos">
-                Mi área de hermano
+              <Link
+                to="/hermano"
+                className="btn btn-ghost btn-sm"
+                title="Tus cuotas, tu papeleta y tus datos"
+                aria-label="Mi área de hermano"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" strokeLinecap="round" />
+                </svg>
+                <span className="app-topbar__texto">Mi área de hermano</span>
               </Link>
             )}
             {/* Contar un fallo, desde cualquier pantalla. Si hay que buscarlo
@@ -402,12 +419,27 @@ export default function AppShell() {
               className="btn btn-ghost btn-sm"
               onClick={() => setReporteAbierto(true)}
               title="Contar un fallo a quien mantiene Gobergo"
+              aria-label="Contar un fallo"
             >
-              Contar un fallo
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                <path d="M12 9v4" strokeLinecap="round" />
+                <path d="M12 17h.01" strokeLinecap="round" />
+                <path d="M10.3 3.9 2.6 17.3A1.6 1.6 0 0 0 4 19.7h16a1.6 1.6 0 0 0 1.4-2.4L13.7 3.9a1.6 1.6 0 0 0-2.8 0Z" strokeLinejoin="round" />
+              </svg>
+              <span className="app-topbar__texto">Contar un fallo</span>
             </button>
             <ThemeToggle />
-            <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>
-              Cerrar sesión
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={handleSignOut}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" strokeLinecap="round" />
+                <path d="M10 17 5 12l5-5M5 12h11" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="app-topbar__texto">Cerrar sesión</span>
             </button>
           </div>
         </header>

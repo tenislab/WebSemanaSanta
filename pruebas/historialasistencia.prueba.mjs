@@ -91,9 +91,12 @@ async function laFichaLoEnsena({ caso }) {
    * hermano al meterse en el perfil», y era eso: una sección que a veces no
    * está no se puede consultar.
    */
-  caso('hay una sección de participación', true, /className="ficha-asistencia"/.test(f))
+  caso('hay una sección de participación', true, /className="ficha-bloque ficha-asistencia"/.test(f))
   caso('con su título', true, /Participación en la estación de penitencia/.test(f))
   caso('y la lista año a año', true, /historialAsistencia\.map/.test(f))
+  // Y no comparte nombre con la de cuotas, que se añadió después y al copiarle
+  // la clase dejaba dos secciones distintas respondiendo al mismo selector.
+  caso('la sección tiene nombre propio', true, /"ficha-bloque ficha-asistencia"/.test(f))
 
   /*
    * Cuando no consta nada lo DICE, en vez de esconderse. «No consta ninguna

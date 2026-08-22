@@ -199,6 +199,18 @@ queda por conectar (correo, cobros, dominio) en [`CONECTAR.md`](CONECTAR.md).
 
 ---
 
+## Cobros: lo que falta para cobrar de verdad
+
+Las domiciliaciones SEPA y la suscripción de Stripe están a medias, y lo que
+falta de cada una está escrito en [`COBROS-LO-QUE-FALTA.md`](COBROS-LO-QUE-FALTA.md).
+En corto: el fichero SEPA se genera entero pero los mandatos firmados se
+sintetizan (bloqueante legal antes de la primera remesa real), y de Stripe está
+la parte que cobra pero **no el webhook**, así que la aplicación no se entera de
+que ha cobrado. No corre prisa; conviene leerlo antes de prometerle cobros a una
+hermandad.
+
+---
+
 ## Lo que hace falta del titular
 
 - **Precios reales** de cada pack.

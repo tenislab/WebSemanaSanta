@@ -10,6 +10,23 @@ export interface Hermano {
   email: string
   telefono: string
   direccion: string
+  /**
+   * DATO MUERTO. NO LO USES para saber si un hermano está al corriente.
+   *
+   * Nadie lo actualiza al cobrar: se pone en falso al dar de alta y ahí se
+   * queda para siempre. De él bebían el censo, Informes, la segmentación de
+   * comunicados y el área del propio hermano, y los cuatro decían «Pendiente»
+   * de gente que había pagado hacía meses. Llegó reportado como «las cuotas no
+   * se ponen en condiciones, no puedes ver si alguien tiene la cuota en
+   * orden», y era literalmente cierto.
+   *
+   * Para eso está `situacionDeHermano()` en `lib/estadoCuotaHermano.ts`, que
+   * mira los recibos de verdad. Distingue cuatro situaciones, no dos: al día,
+   * debe, SIN EMITIR (que no es lo mismo que estar al día) y no le toca pagar.
+   *
+   * La columna se queda porque hay censos importados que la traen y porque la
+   * tabla de Supabase la tiene. Se lee y se escribe, y no se mira.
+   */
   cuotaAlDia: boolean
   /** Cuenta bancaria del hermano, de donde se carga la domiciliación de sus cuotas. */
   iban: string | null

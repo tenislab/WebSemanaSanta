@@ -1140,7 +1140,28 @@ h1, h2, h3,
   backdrop-filter: blur(18px) saturate(1.5);
   -webkit-backdrop-filter: blur(18px) saturate(1.5);
 }
-.app-topbar__right { display: flex; align-items: center; gap: 0.8rem; }
+.app-topbar__right { display: flex; align-items: center; gap: 0.8rem; min-width: 0; }
+
+/*
+ * LA BARRA DE ARRIBA EN EL MÓVIL: sobresalía 58 px.
+ *
+ * Y no era de una pantalla: era de TODAS. A la derecha van hasta cuatro cosas
+ * —«Mi área de hermano», «Contar un fallo», el interruptor de tema y «Cerrar
+ * sesión»— y a 390 px no caben ni de lejos. Sin sitio, la barra empujaba la
+ * página entera 58 px a lo ancho: toda la aplicación se movía de lado al
+ * arrastrar, con una franja vacía a la derecha en cada pantalla.
+ *
+ * A partir de aquí los dos botones de texto se quedan en su icono, con el
+ * texto solo para quien lee la pantalla en voz alta. Los dos siguen ahí y
+ * siguen midiendo 44 px, que es lo que hay que poder tocar con el pulgar.
+ */
+@media (max-width: 720px) {
+  .app-topbar { gap: 0.5rem; padding-inline: 0.9rem; }
+  .app-topbar__right { gap: 0.35rem; }
+  .app-topbar__right .btn { padding-inline: 0.6rem; }
+  .app-topbar__right .app-topbar__texto { display: none; }
+  .app-topbar__right .btn svg { width: 20px; height: 20px; }
+}
 .app-menu-btn {
   display: none; width: 34px; height: 34px; border-radius: 8px;
   border: 1px solid var(--line); background: transparent; color: var(--text);
@@ -3832,19 +3853,44 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
    ========================================================================= */
 /* La sección de participación en la ficha. Va SIEMPRE, aunque esté vacía: una
    sección que a veces no está no se puede consultar. */
-.ficha-asistencia { margin: 1.2rem 0; }
-.ficha-asistencia h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
-.ficha-asistencia__anios { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; }
-.ficha-asistencia__anios li {
+/* La forma la comparten las dos secciones de la ficha —cuotas y
+   participación—: se leen seguidas y en dos formatos distintos costarían más
+   de leer. El nombre es neutro a propósito; antes la de cuotas se llamaba
+   `ficha-asistencia`, que era mentira y dejaba dos secciones distintas
+   respondiendo al mismo selector. */
+.ficha-bloque { margin: 1.2rem 0; }
+.ficha-bloque h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.ficha-bloque__filas { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; }
+.ficha-bloque__filas li {
   display: flex; align-items: center; gap: 0.6rem;
   padding: 0.4rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem;
 }
-.ficha-asistencia__anios li:last-child { border-bottom: 0; }
-.ficha-asistencia__anios b { font-variant-numeric: tabular-nums; min-width: 3rem; }
+.ficha-bloque__filas li:last-child { border-bottom: 0; }
+.ficha-bloque__filas b { font-variant-numeric: tabular-nums; min-width: 3rem; }
 
 /* El historial de asistencia en la cabecera de la ficha: dato de apoyo, no
    titular. Va del color apagado para que no compita con la antigüedad. */
 .ficha-hero__asistencia { color: var(--text-muted); font-style: italic; }
+
+/* Sus cuotas en la ficha, con la misma forma que la participación: las dos
+   contestan «¿cómo va este hermano?» y leerlas seguidas en dos formatos
+   distintos cuesta más que leerlas en uno. */
+.ficha-cuotas .btn { margin-top: 0.6rem; }
+/* La primera columna es una palabra («Atrasado», «Avisa»), no un año de cuatro
+   cifras: necesita más sitio o el importe se le monta encima. */
+.ficha-cuotas .ficha-bloque__filas b { min-width: 5.5rem; }
+
+/* El conmutador de Recibos / Por hermano. Va separado de los filtros de abajo
+   —con aire y una línea— porque no es un filtro más: cambia lo que se está
+   mirando, y confundirlo con un filtro es no encontrar nunca la otra vista. */
+.filters--vista {
+  margin: 1.2rem 0 0.4rem; padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+.filters--vista .chip { font-weight: 700; }
+.filters--vista .chip small {
+  margin-left: 0.35rem; opacity: 0.7; font-weight: 500; font-variant-numeric: tabular-nums;
+}
 
 .avisos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .aviso {
@@ -3857,6 +3903,16 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
 .aviso__que { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .aviso__que b { font-size: 0.95rem; }
 .aviso__acciones { display: flex; gap: 0.4rem; flex-shrink: 0; }
+/* El porqué del rechazo, desplegado bajo la fila. Va sangrado y con su propio
+   fondo para que se lea como «esto pertenece a este aviso» y no como el
+   siguiente de la lista. */
+.aviso__rechazo {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  margin: 0 0 0.8rem; padding: 0.8rem 0.9rem;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.aviso__rechazo label { font-size: 0.85rem; font-weight: 700; }
+.aviso__rechazo input { width: 100%; }
 /* En el móvil, los botones debajo y a lo ancho: en una fila de 390 px, el
    nombre del hermano se partía en cuatro líneas para dejarles sitio. */
 @media (max-width: 640px) {
@@ -5746,6 +5802,14 @@ html:has(.sitio) { scroll-behavior: smooth; }
   padding: 0.9rem 1rem; margin-bottom: 0.7rem; background: var(--bg-sunken);
 }
 .familia-ficha--espera { border-style: dashed; }
+/* Lo rechazado se distingue de lo que espera: el borde de aviso, no el mismo
+   punteado de «pendiente». Que las dos cosas se parezcan es lo que hacía que
+   un «no» pasara por un «todavía no». */
+.familia-ficha--no { border-color: var(--err, #b3261e); border-style: solid; }
+.familia-subtitulo {
+  margin: 1.4rem 0 0.6rem; font-size: 0.8rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700;
+}
 .familia-ficha__cabeza { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
 .familia-ficha__nombre { font-weight: 700; color: var(--text); }
 .familia-ficha__datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; margin: 0 0 0.5rem; }

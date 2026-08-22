@@ -6,6 +6,7 @@ import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import type { Cuota } from '../data/cuotas'
 import type { SolicitudAlta } from '../lib/solicitudes'
+import { etiquetaDeSolicitud, explicarSolicitud } from '../lib/familia'
 
 /**
  * La familia a cargo de este hermano: los menores que lleva él.
@@ -21,7 +22,7 @@ export default function MiFamilia({
   cuotas,
   tramos,
   anioCampana,
-  solicitudesPendientes,
+  solicitudesFamilia,
   onSolicitarAlta,
   bloqueado,
 }: {
@@ -32,8 +33,16 @@ export default function MiFamilia({
   cuotas: Cuota[]
   tramos: Tramo[]
   anioCampana: number
-  /** Altas que ya ha pedido y siguen sin tramitar. */
-  solicitudesPendientes: SolicitudAlta[]
+  /**
+   * TODAS las altas que ha pedido para su familia, resueltas incluidas.
+   *
+   * Antes llegaban solo las pendientes, y ese era el fallo: en cuanto
+   * secretaría resolvía una, desaparecía de aquí. Si se aprobaba, el niño
+   * aparecía arriba entre los que lleva —sin decir en ningún sitio que aquello
+   * venía de su solicitud—; y si se rechazaba, no quedaba nada de nada. Un día
+   * ya no estaba, y a llamar a la hermandad a preguntar qué había pasado.
+   */
+  solicitudesFamilia: SolicitudAlta[]
   /**
    * Manda la solicitud de alta de un menor a secretaría.
    *
@@ -87,7 +96,7 @@ export default function MiFamilia({
         Los hermanos que llevas tú. Aquí ves su papeleta y sus cuotas sin pasar por secretaría.
       </p>
 
-      {aCargo.length === 0 && solicitudesPendientes.length === 0 && (
+      {aCargo.length === 0 && solicitudesFamilia.length === 0 && (
         <p className="form-hint">Todavía no tienes a nadie a tu cargo.</p>
       )}
 
@@ -131,15 +140,31 @@ export default function MiFamilia({
         )
       })}
 
-      {solicitudesPendientes.map((s) => (
-        <div className="familia-ficha familia-ficha--espera" key={s.id}>
-          <div className="familia-ficha__cabeza">
-            <span className="familia-ficha__nombre">{s.nombre}</span>
-            <span className="pill pill--warn">Alta pendiente</span>
-          </div>
-          <p className="form-hint">Enviada el {s.fecha}. La secretaría la revisará y te avisará.</p>
-        </div>
-      ))}
+      {/*
+        LO QUE HA PEDIDO, ESPERE O NO. Se queda escrito con lo que pasó, y si
+        fue que no, con el porqué: un «rechazada» a secas obliga a llamar a la
+        hermandad, que es la llamada que esto tenía que ahorrar.
+      */}
+      {solicitudesFamilia.length > 0 && (
+        <>
+          <h3 className="familia-subtitulo">Lo que has pedido</h3>
+          {solicitudesFamilia.map((s) => {
+            const etiqueta = etiquetaDeSolicitud(s)
+            return (
+              <div
+                className={`familia-ficha${s.estado === 'Pendiente' ? ' familia-ficha--espera' : ''}${s.estado === 'Rechazada' ? ' familia-ficha--no' : ''}`}
+                key={s.id}
+              >
+                <div className="familia-ficha__cabeza">
+                  <span className="familia-ficha__nombre">{s.nombre}</span>
+                  <span className={`pill ${etiqueta.clase}`}>{etiqueta.texto}</span>
+                </div>
+                <p className="form-hint">{explicarSolicitud(s)}</p>
+              </div>
+            )
+          })}
+        </>
+      )}
 
       {enviada && (
         <div className="banner-inline banner-inline--ok">

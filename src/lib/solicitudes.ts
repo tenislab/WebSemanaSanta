@@ -30,6 +30,19 @@ export interface SolicitudAlta {
   tutorId?: string
   /** Fecha de nacimiento del menor, para que secretaría vea que lo es. */
   fechaNacimiento?: string
+  /**
+   * POR QUÉ SE RECHAZÓ. Lo escribe secretaría al rechazar, y lo lee quien la
+   * mandó, en su propia área.
+   *
+   * Sin esto, la solicitud se resolvía y desaparecía: quien había pedido el
+   * alta de su hijo veía un día que ya no estaba y no sabía si le habían dado
+   * de alta, si se había perdido o si se la habían denegado. Un «no» sin
+   * motivo obliga a llamar a la hermandad para preguntar, que es justo la
+   * llamada que esto tenía que ahorrar.
+   */
+  motivoRechazo?: string
+  /** Cuándo se aprobó o se rechazó (aaaa-mm-dd). Vacío mientras está pendiente. */
+  resueltaEl?: string
 }
 
 /** Se exporta para que el área del hermano pueda escuchar sus cambios. */
@@ -47,6 +60,8 @@ function solicitudToRow(s: SolicitudAlta): Record<string, unknown> {
     estado: s.estado,
     tutor_id: s.tutorId ?? null,
     fecha_nacimiento: s.fechaNacimiento ?? null,
+    motivo_rechazo: s.motivoRechazo ?? null,
+    resuelta_el: s.resueltaEl ?? null,
   }
 }
 
@@ -62,6 +77,8 @@ function rowToSolicitud(r: Record<string, unknown>): SolicitudAlta {
     estado: r.estado as EstadoSolicitud,
     tutorId: (r.tutor_id as string | null) ?? undefined,
     fechaNacimiento: (r.fecha_nacimiento as string | null) ?? undefined,
+    motivoRechazo: (r.motivo_rechazo as string | null) ?? undefined,
+    resueltaEl: (r.resuelta_el as string | null) ?? undefined,
   }
 }
 

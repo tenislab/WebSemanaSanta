@@ -120,7 +120,7 @@ async function correoAuditoria({ cargar, caso }) {
   // Los criterios guardados mandan sobre el texto legible, y se miran los
   // PRIMEROS: son la única verdad de a quién iba dirigido el comunicado.
   caso('los destinatarios salen de los criterios guardados', true,
-    /hermanos: filtrarSegmento\(hermanos, c\.criterios, rolesPorHermano, cargosPorHermano\)/.test(com))
+    /hermanos: filtrarSegmento\(hermanos, c\.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota\)/.test(com))
   caso('y los criterios se guardan en el comunicado', true, /criterios: criteriosGuardados,/.test(com))
   caso('no se guarda como enviado si no hay nadie', true,
     /if \(estado === 'Enviado' && cuantos === 0\)/.test(com))

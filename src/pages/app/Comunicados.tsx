@@ -41,6 +41,8 @@ import { cuerpoCorreo } from '../../lib/avisosCorreo'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
+import { CUOTAS_INICIALES } from '../../data/cuotas'
+import { situacionDeTodos } from '../../lib/estadoCuotaHermano'
 import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import {
   COLOR_RED,
@@ -115,6 +117,19 @@ export default function Comunicados() {
    * la hermandad. El alcance mentía y el envío también.
    */
   const hermanos = useMemo(() => leerDatos<Hermano>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  /**
+   * En qué situación de cuota está cada hermano, sacada de SUS RECIBOS.
+   *
+   * Es lo que hace de verdad el sesgo de «los que deben» y «los que están al
+   * día». Antes se miraba `h.cuotaAlDia`, un booleano de la ficha que nadie
+   * actualizaba al cobrar: el aviso de morosidad salía para el censo entero,
+   * gente que había pagado en febrero incluida. Ver lib/estadoCuotaHermano.ts.
+   */
+  const situacionesDeCuota = useMemo(() => {
+    const cuotas = leerDatos(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
+    const ejercicio = new Date().getFullYear()
+    return new Map(situacionDeTodos(cuotas, hermanos, ejercicio).map((s) => [s.hermano.id, s.situacion]))
+  }, [hermanos])
 
   /** Si el destinatario es una etiqueta, devuelve los hermanos que la tienen (con su email). */
   function hermanosDeDestinatario(destinatarios: string): Hermano[] {
@@ -163,7 +178,7 @@ export default function Comunicados() {
   ): Alcance {
     if (c.criterios) {
       return {
-        hermanos: filtrarSegmento(hermanos, c.criterios, rolesPorHermano, cargosPorHermano),
+        hermanos: filtrarSegmento(hermanos, c.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota),
         soloCorreo: personalDelSegmento(c.criterios, personal, hermanos),
         reconocido: true,
       }
@@ -180,7 +195,7 @@ export default function Comunicados() {
     const criterios = criteriosDeSegmento(c.destinatarios)
     if (papeleta || criterios) {
       const base = criterios ?? { ...CRITERIOS_POR_DEFECTO, soloConEmail: false }
-      let lista = filtrarSegmento(hermanos, base, rolesPorHermano, cargosPorHermano)
+      let lista = filtrarSegmento(hermanos, base, rolesPorHermano, cargosPorHermano, situacionesDeCuota)
       if (papeleta === 'con') lista = lista.filter((h) => conSitio.has(h.id))
       if (papeleta === 'sin') lista = lista.filter((h) => !conSitio.has(h.id))
       // Y la junta que tiene cuenta pero no ficha en el censo: sin esto,
@@ -282,8 +297,8 @@ export default function Comunicados() {
     [etiquetas, rolesDisponibles],
   )
   const segmentoHermanos = useMemo(
-    () => filtrarSegmento(hermanos, criterios, rolesPorHermano, cargosPorHermano),
-    [hermanos, criterios, rolesPorHermano, cargosPorHermano],
+    () => filtrarSegmento(hermanos, criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota),
+    [hermanos, criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota],
   )
   /**
    * A cuántos alcanza el destinatario elegido en el desplegable, para poder

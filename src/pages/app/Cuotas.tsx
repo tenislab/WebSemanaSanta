@@ -57,6 +57,12 @@ import {
 } from '../../lib/cuotasEmision'
 import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
+import {
+  etiquetaDeSituacion,
+  recuentoDeSituaciones,
+  situacionDeTodos,
+  type SituacionCuota,
+} from '../../lib/estadoCuotaHermano'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -127,6 +133,20 @@ export default function Cuotas() {
   // «Avisados» no es un estado del recibo: es el hermano que ha dicho desde su
   // área que ya ha pagado por Bizum o transferencia y espera confirmación.
   const [filter, setFilter] = useState<'Todas' | 'Avisados' | EstadoCuota>('Todas')
+  /*
+   * QUÉ SE ESTÁ MIRANDO: los recibos o los hermanos.
+   *
+   * La pantalla solo enseñaba RECIBOS, y esa es la vista que sirve para
+   * cuadrar el banco y no sirve para nada más. La pregunta que se hace en una
+   * hermandad —al repartir papeletas, al montar el cortejo, en el mostrador—
+   * no es «¿cómo está el recibo 1048?» sino «¿está Fulano al corriente?», y
+   * esa no se podía contestar: un hermano con tres recibos salía tres veces
+   * sin sumar, y uno SIN NINGÚN recibo no salía en absoluto —justo el que peor
+   * está—. Con cero recibos emitidos la pantalla se quedaba entera en blanco,
+   * que es la captura que llegó: «0 recibos» y cinco hermanos en el censo.
+   */
+  const [vista, setVista] = useState<'recibos' | 'hermanos'>('recibos')
+  const [filtroSituacion, setFiltroSituacion] = useState<'Todos' | SituacionCuota>('Todos')
   const [selected, setSelected] = useState<Cuota | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
@@ -183,6 +203,21 @@ export default function Cuotas() {
   const catalogoListo = conceptosCuota.length > 0
   const ejercicioEnCurso = useMemo(() => getCampana().anio, [])
   const ultimoEmitido = useMemo(() => ultimoEjercicio(cuotas), [cuotas])
+  /**
+   * EL EJERCICIO QUE SE ESTÁ MIRANDO, que NO es el de la campaña.
+   *
+   * Aquí estaba media captura que llegó. `ejercicioEnCurso` es el año de la
+   * campaña de papeletas —la Semana Santa que viene—, y los indicadores lo
+   * usaban para contar recibos. En agosto de 2026 eso significa 2027: la
+   * cabecera decía «0 recibos del ejercicio 2027 · 10 en total» y los cuatro
+   * indicadores salían a cero con la tesorería llena. Parecía roto y no lo
+   * estaba: estaba contando un año en el que todavía no se ha emitido nada.
+   *
+   * El ejercicio de cuotas es CONTABLE, no procesional: se mira el último con
+   * recibos, y si no hay ninguno, el año natural. La campaña se sigue usando
+   * para proponer la emisión del año que viene, que es otra cosa distinta.
+   */
+  const ejercicioMirado = ultimoEmitido ?? new Date().getFullYear()
   const [emisionOpen, setEmisionOpen] = useState(false)
   const [ejercicioEmision, setEjercicioEmision] = useState(ejercicioEnCurso)
   const [conceptoEmision, setConceptoEmision] = useState('')
@@ -240,10 +275,29 @@ export default function Cuotas() {
       .sort((a, b) => b.numero - a.numero)
   }, [cuotas, query, filter, hermanoDe])
 
+  /**
+   * EL CENSO CON SU SITUACIÓN, una fila por hermano.
+   *
+   * Sale de los recibos: no hay ningún dato guardado que diga si alguien está
+   * al corriente. (La ficha lleva un `cuotaAlDia`, pero nadie lo actualiza al
+   * cobrar — ver lib/estadoCuotaHermano.ts.)
+   */
+  const situaciones = useMemo(
+    () => situacionDeTodos(cuotas, hermanos, ejercicioMirado),
+    [cuotas, hermanos, ejercicioMirado],
+  )
+  const recuento = useMemo(() => recuentoDeSituaciones(situaciones), [situaciones])
+  const situacionesFiltradas = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return situaciones
+      .filter((x) => filtroSituacion === 'Todos' || x.situacion === filtroSituacion)
+      .filter((x) => !q || x.hermano.nombre.toLowerCase().includes(q) || String(x.hermano.numero).includes(q))
+  }, [situaciones, filtroSituacion, query])
+
   const stats = useMemo(() => {
     // Los indicadores hablan del EJERCICIO EN CURSO (antes mezclaban todos los
     // años, así que el «% al día» no significaba nada al pasar de ejercicio).
-    const base = cuotas.filter((c) => ejercicioDe(c) === ejercicioEnCurso)
+    const base = cuotas.filter((c) => ejercicioDe(c) === ejercicioMirado)
     const total = base.length
     const cobrado = base.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
     // Deuda viva: pendientes, devueltas y en mora de CUALQUIER ejercicio (la de
@@ -254,7 +308,7 @@ export default function Cuotas() {
     const pagadas = base.filter((c) => c.estado === 'Pagada').length
     const alDia = total ? Math.round((pagadas / total) * 100) : 0
     return { total, cobrado, pendiente, alDia }
-  }, [cuotas, ejercicioEnCurso])
+  }, [cuotas, ejercicioMirado])
 
   function marcarPagada(id: string) {
     setCuotas((prev) =>
@@ -576,7 +630,7 @@ export default function Cuotas() {
           <p className="eyebrow">Cuotas</p>
           <h1>Cuotas y recibos</h1>
           <p className="dash-head__lead">
-            {stats.total} recibos del ejercicio {ejercicioEnCurso} · {cuotas.length} en total ·
+            {stats.total} recibos del ejercicio {ejercicioMirado} · {cuotas.length} en total ·
             datos de ejemplo mientras conectamos la base de datos.{' '}
             <Link to="/app/configuracion" className="dash-head__link">
               Personalizar datos de la hermandad
@@ -659,37 +713,126 @@ export default function Cuotas() {
         </div>
       )}
 
+      {/*
+        CENSO METIDO Y SIN COBRARLE A NADIE. Es la pantalla de la captura: «0
+        recibos», tabla en blanco y cinco hermanos dentro. Sin decirlo, parece
+        que la aplicación está rota; y lo que pasa es que no se ha emitido
+        todavía, que tiene arreglo de un clic.
+      */}
+      {/*
+        Solo si NO está ya el aviso de nuevo ejercicio. Los dos decían casi lo
+        mismo, uno encima del otro, y el de arriba además trae el botón que lo
+        arregla: dos avisos seguidos para el mismo problema se leen como ruido
+        y se dejan de leer los dos. Este queda para el caso que el otro no
+        cubre: el ejercicio ya emitido y alguien que se quedó fuera —el que se
+        dio de alta en marzo—.
+      */}
+      {!hayNuevoEjercicio && recuento.sinEmitir > 0 && (
+        <div className="banner-inline banner-inline--accent">
+          <span>
+            <b>
+              {recuento.sinEmitir === 1
+                ? 'Hay un hermano sin ningún recibo'
+                : `Hay ${recuento.sinEmitir} hermanos sin ningún recibo`}{' '}
+              del ejercicio {ejercicioMirado}.
+            </b>{' '}
+            No es que estén al día: es que todavía no se les ha cobrado.
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setVista('hermanos'); setFiltroSituacion('sinEmitir') }}>
+            Ver quiénes son
+          </button>
+        </div>
+      )}
+
       <section className="stat-grid">
         <div className="stat-tile">
           <span className="stat-tile__label">Recibos emitidos</span>
           <span className="stat-tile__value">{stats.total}</span>
-          <span className="stat-tile__trend stat-tile__trend--neutral">Ejercicio {ejercicioEnCurso}</span>
+          <span className="stat-tile__trend stat-tile__trend--neutral">Ejercicio {ejercicioMirado}</span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Cobrado</span>
           <span className="stat-tile__value">{formatCurrency(stats.cobrado)}</span>
-          <span className="stat-tile__trend stat-tile__trend--ok">{stats.alDia}% al día · {ejercicioEnCurso}</span>
+          <span className="stat-tile__trend stat-tile__trend--ok">{stats.alDia}% al día · {ejercicioMirado}</span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Pendiente de cobro</span>
           <span className="stat-tile__value">{formatCurrency(stats.pendiente)}</span>
           <span className="stat-tile__trend stat-tile__trend--warn">Deuda viva (todos los años)</span>
         </div>
+        {/*
+          ESTE INDICADOR HABLA DE PERSONAS, no de recibos, y antes no.
+          Decía «% al corriente» y calculaba recibos pagados sobre recibos
+          emitidos: con cero recibos emitidos daba 0% —la captura que llegó— y
+          con un solo recibo pagado a un solo hermano daba 100% con el censo
+          entero sin cobrar. Ahora es lo que dice que es: cuántos hermanos de
+          los que pagan cuota están al día.
+        */}
         <div className="stat-tile">
           <span className="stat-tile__label">% al corriente</span>
-          <span className="stat-tile__value">{stats.alDia}%</span>
-          <span className="stat-tile__trend stat-tile__trend--neutral">De los recibos emitidos</span>
+          <span className="stat-tile__value">
+            {recuento.conCuota ? Math.round((recuento.alDia / recuento.conCuota) * 100) : 0}%
+          </span>
+          <span className="stat-tile__trend stat-tile__trend--neutral">
+            {recuento.alDia} de {recuento.conCuota} hermanos
+          </span>
         </div>
       </section>
+
+      {/*
+        LAS DOS MANERAS DE MIRAR LO MISMO. «Recibos» es la de cuadrar el banco;
+        «Por hermano» es la de contestar «¿está Fulano al corriente?», que es
+        la pregunta que se hace de verdad y la que no se podía contestar.
+      */}
+      <div className="filters filters--vista" role="tablist" aria-label="Cómo ver las cuotas">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={vista === 'recibos'}
+          className={`chip${vista === 'recibos' ? ' chip--active' : ''}`}
+          onClick={() => setVista('recibos')}
+        >
+          Recibos <small>{cuotas.length}</small>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={vista === 'hermanos'}
+          className={`chip${vista === 'hermanos' ? ' chip--active' : ''}`}
+          onClick={() => setVista('hermanos')}
+        >
+          Por hermano <small>{situaciones.length}</small>
+        </button>
+      </div>
 
       <div className="toolbar">
         <input
           className="search-box"
-          placeholder="Buscar por hermano o nº de recibo"
-          aria-label="Buscar recibos por hermano o número"
+          placeholder={vista === 'recibos' ? 'Buscar por hermano o nº de recibo' : 'Buscar por hermano o número'}
+          aria-label="Buscar por hermano o número"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {vista === 'hermanos' ? (
+          <div className="filters">
+            {(['Todos', 'debe', 'sinEmitir', 'alDia', 'noAplica'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`chip${filtroSituacion === f ? ' chip--active' : ''}`}
+                onClick={() => setFiltroSituacion(f)}
+              >
+                {f === 'Todos'
+                  ? 'Todos'
+                  : `${etiquetaDeSituacion(f).texto} (${
+                    f === 'debe' ? recuento.deben
+                      : f === 'sinEmitir' ? recuento.sinEmitir
+                        : f === 'alDia' ? recuento.alDia : recuento.noAplica
+                  })`}
+              </button>
+            ))}
+          </div>
+        ) : (
         <div className="filters">
           {/* El filtro de avisados solo aparece cuando hay alguno: si no, sería
               una pestaña siempre vacía. */}
@@ -721,8 +864,10 @@ export default function Cuotas() {
             </button>
           ))}
         </div>
+        )}
       </div>
 
+      {vista === 'recibos' ? (
       <div className="table-card">
         <table>
           <thead>
@@ -815,6 +960,90 @@ export default function Cuotas() {
           </tbody>
         </table>
       </div>
+      ) : (
+      /*
+        POR HERMANO. Una fila por persona, con lo que debe y desde cuándo.
+
+        Es la vista que faltaba. La de recibos no contesta «¿está Fulano al
+        corriente?»: quien tiene tres recibos sale tres veces sin sumar, y
+        quien no tiene ninguno —el que peor está— no sale. Aquí sale TODO el
+        censo, tenga recibos o no, con el que peor está arriba.
+      */
+      <div className="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th className="col-opcional">Nº</th>
+              <th>Hermano</th>
+              <th>Situación</th>
+              <th>Debe</th>
+              <th className="col-opcional">Recibos {ejercicioMirado}</th>
+              <th className="col-opcional">Desde</th>
+            </tr>
+          </thead>
+          <tbody>
+            {situacionesFiltradas.map((x) => {
+              const etiqueta = etiquetaDeSituacion(x.situacion)
+              return (
+                <tr key={x.hermano.id}>
+                  <td className="num col-opcional">{x.hermano.numero > 0 ? x.hermano.numero : '—'}</td>
+                  <td>
+                    <div className="row-person">
+                      <span className="row-avatar">{initials(x.hermano.nombre)}</span>
+                      <span>
+                        <span className="row-person__name">{x.hermano.nombre}</span>
+                        <span className="row-person__sub">Nº {x.hermano.numero > 0 ? x.hermano.numero : '—'}</span>
+                        {/*
+                          En el móvil, la línea de debajo del nombre lleva lo
+                          de las columnas QUE SE HAN ESCONDIDO —los recibos del
+                          ejercicio y desde cuándo arrastra—, no la situación:
+                          esa se ve en su propia columna, ahí al lado, y
+                          repetirla dejaba «Sin cuota emitida» dos veces en
+                          cada fila.
+                        */}
+                        <span className="row-person__sub solo-movil">
+                          {x.recibosDelEjercicio === 0
+                            ? `sin recibos de ${ejercicioMirado}`
+                            : `${x.recibosDelEjercicio} recibo${x.recibosDelEjercicio === 1 ? '' : 's'} de ${ejercicioMirado}`}
+                          {x.desde != null && x.desde < ejercicioMirado ? ` · debe desde ${x.desde}` : ''}
+                        </span>
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`pill ${etiqueta.clase}`}>{etiqueta.texto}</span>
+                    {x.avisa && (
+                      <span className="pill-avisado" title="Ha avisado desde su área de que ya ha pagado">
+                        Dice que ha pagado
+                      </span>
+                    )}
+                  </td>
+                  <td className="num">
+                    {x.deudaTotal > 0 ? formatCurrency(x.deudaTotal) : '—'}
+                    {/* Lo atrasado se separa: no es lo mismo deber el recibo de
+                        este mes que arrastrar dos ejercicios. */}
+                    {x.deudaAtrasada > 0 && (
+                      <span className="row-person__sub">{formatCurrency(x.deudaAtrasada)} de años anteriores</span>
+                    )}
+                  </td>
+                  <td className="num col-opcional">{x.recibosDelEjercicio}</td>
+                  <td className="num col-opcional">{x.desde ?? '—'}</td>
+                </tr>
+              )
+            })}
+            {situacionesFiltradas.length === 0 && (
+              <tr>
+                <td colSpan={6} className="table-empty">
+                  {hermanos.length === 0
+                    ? 'Todavía no hay hermanos en el censo. Impórtalo desde Hermanos y aquí aparecerá quién debe y quién no.'
+                    : 'Ningún hermano coincide con la búsqueda.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      )}
 
       {/* Recibo personalizado */}
       <Drawer
