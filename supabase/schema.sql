@@ -300,8 +300,23 @@ create table if not exists cuentas_sociales (
   conectada boolean not null default false,
   usuario text
 );
-insert into cuentas_sociales (red) values ('Facebook'), ('Instagram'), ('X'), ('YouTube'), ('TikTok')
-  on conflict (red) do nothing;
+--
+-- SIN SEMILLA, y esto es un arreglo, no un olvido.
+--
+-- Aquí había un `insert` con las cinco redes. Esas filas entran SIN
+-- `hermandad_id`, y la frontera de seguridad dice `hermandad_id =
+-- hermandad_actual()`: comparar con null nunca es cierto, así que esas cinco
+-- filas no las veía NADIE. Estaban en la tabla, ocupaban la clave primaria que
+-- las hermandades de verdad necesitaban, y eran invisibles. De ahí el «0 de 0»
+-- de la pantalla de comunicados.
+--
+-- Las cinco redes salen del programa (`src/lib/redesSociales.ts`), que es donde
+-- tienen que estar: Facebook existe aunque la hermandad no lo haya conectado.
+-- La fila se crea sola la primera vez que se conecta una.
+--
+-- Ver `supabase/redes-sociales.sql`, que además cambia la clave a
+-- (hermandad_id, red) — con la clave global de antes solo la primera hermandad
+-- de toda la base podía tener su Facebook.
 
 -- -----------------------------------------------------------------------------
 -- Personal con cargo (tesorero/a, secretaría…) y permisos por cargo

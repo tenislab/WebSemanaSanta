@@ -8,6 +8,14 @@ export interface CuentaSocial {
   red: RedSocial
   conectada: boolean
   usuario: string | null
+  /**
+   * La dirección de la página de la hermandad en esa red.
+   *
+   * Hace falta para dos cosas y no se guardaba en ninguna parte: los iconos
+   * del pie de la web pública, y que el botón de «abrir para publicar» lleve a
+   * SU página y no a la portada de Facebook.
+   */
+  enlace?: string | null
 }
 
 export interface Comunicado {
@@ -59,11 +67,11 @@ export const REDES_SOCIALES: RedSocial[] = ['Facebook', 'Instagram', 'X', 'YouTu
  * conectar. La conexión es simulada — no hay OAuth real todavía.
  */
 export const CUENTAS_SOCIALES_INICIALES: CuentaSocial[] = [
-  { red: 'Facebook', conectada: true, usuario: '@hermandaddemo' },
-  { red: 'Instagram', conectada: true, usuario: '@hermandaddemo' },
-  { red: 'X', conectada: false, usuario: null },
-  { red: 'YouTube', conectada: false, usuario: null },
-  { red: 'TikTok', conectada: false, usuario: null },
+  { red: 'Facebook', conectada: true, usuario: '@hermandaddemo', enlace: null },
+  { red: 'Instagram', conectada: true, usuario: '@hermandaddemo', enlace: null },
+  { red: 'X', conectada: false, usuario: null, enlace: null },
+  { red: 'YouTube', conectada: false, usuario: null, enlace: null },
+  { red: 'TikTok', conectada: false, usuario: null, enlace: null },
 ]
 
 export const COMUNICADOS_INICIALES: Comunicado[] = [

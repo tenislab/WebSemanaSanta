@@ -50,6 +50,7 @@
 --   25. seguridad-claves-y-registro.sql Fuera las contraseñas en claro; el registro lo escribe la base
 --   26. papeletas-simbolica-y-precio.sql El precio de la papeleta y la simbólica: de la hermandad, no del navegador
 --   27. buscar-hermandad-con-su-escudo.sql Que el hermano encuentre su hermandad por ciudad y la reconozca por su escudo
+--   28. redes-sociales.sql         Que cada hermandad tenga sus propias redes (la clave era global)
 --
 -- -----------------------------------------------------------------------------
 -- LO ÚNICO QUE HAY QUE LEER ANTES
@@ -376,8 +377,23 @@ create table if not exists cuentas_sociales (
   conectada boolean not null default false,
   usuario text
 );
-insert into cuentas_sociales (red) values ('Facebook'), ('Instagram'), ('X'), ('YouTube'), ('TikTok')
-  on conflict (red) do nothing;
+--
+-- SIN SEMILLA, y esto es un arreglo, no un olvido.
+--
+-- Aquí había un `insert` con las cinco redes. Esas filas entran SIN
+-- `hermandad_id`, y la frontera de seguridad dice `hermandad_id =
+-- hermandad_actual()`: comparar con null nunca es cierto, así que esas cinco
+-- filas no las veía NADIE. Estaban en la tabla, ocupaban la clave primaria que
+-- las hermandades de verdad necesitaban, y eran invisibles. De ahí el «0 de 0»
+-- de la pantalla de comunicados.
+--
+-- Las cinco redes salen del programa (`src/lib/redesSociales.ts`), que es donde
+-- tienen que estar: Facebook existe aunque la hermandad no lo haya conectado.
+-- La fila se crea sola la primera vez que se conecta una.
+--
+-- Ver `supabase/redes-sociales.sql`, que además cambia la clave a
+-- (hermandad_id, red) — con la clave global de antes solo la primera hermandad
+-- de toda la base podía tener su Facebook.
 
 -- -----------------------------------------------------------------------------
 -- Personal con cargo (tesorero/a, secretaría…) y permisos por cargo
@@ -3886,3 +3902,84 @@ grant execute on function hermandades_publicas() to anon, authenticated;
 comment on function hermandades_publicas() is
   'La lista de hermandades para la pantalla de entrar. Solo datos públicos: '
   'nombre, ciudad, colores y escudo. Nunca IBAN, CIF, teléfono ni correo.';
+
+-- =============================================================================
+--   REDES-SOCIALES.SQL — Que cada hermandad tenga sus propias redes (la clave era global)
+-- =============================================================================
+
+-- =============================================================================
+--   REDES-SOCIALES.SQL — Que cada hermandad tenga sus propias cuentas
+-- =============================================================================
+--
+-- EL FALLO QUE ARREGLA, y era el módulo entero: la tarjeta «Redes sociales
+-- conectadas» decía **0 de 0** y no salía ni una red. Ni conectadas ni sin
+-- conectar: ninguna. Con datos de ejemplo salían las cinco, así que se leía
+-- como «esto solo funciona en la demostración».
+--
+-- Son dos cosas, y las dos están aquí:
+--
+--   1) La tabla nació con `red text primary key`. Esa clave es GLOBAL. Al
+--      pasar a varias hermandades se le añadió `hermandad_id` como a todas las
+--      demás, pero la clave se quedó igual — a diferencia del DNI del hermano
+--      o del número de hermano, que sí se arreglaron en su día.
+--
+--      O sea que en toda la base de datos solo puede haber UNA fila
+--      «Facebook». La primera hermandad que la escribiera se la quedaba, y
+--      todas las demás se estrellaban contra la clave primaria al intentar
+--      guardar la suya. No es que fuera lento ni que fallara a veces: la
+--      segunda hermandad no podía tener redes sociales.
+--
+--   2) La semilla de `schema.sql` mete las cinco filas SIN hermandad:
+--
+--          insert into cuentas_sociales (red) values ('Facebook'), ...
+--
+--      Esa fila tiene `hermandad_id` a null, y la frontera de seguridad dice
+--      `hermandad_id = hermandad_actual()`. Comparar cualquier cosa con null
+--      nunca es cierto, así que esas cinco filas no las ve NADIE. Están en la
+--      tabla, ocupan la clave primaria que las demás necesitan, y son
+--      invisibles.
+--
+--      Ahí está el «0 de 0» exacto: la consulta no falla, devuelve cero filas.
+--
+-- Se puede ejecutar sobre una base ya en uso. No borra ninguna cuenta de
+-- ninguna hermandad: lo único que borra son las filas huérfanas de la semilla,
+-- que por definición no son de nadie y nadie podía ver.
+
+-- 1. La columna y su valor por defecto (por si esta base es anterior).
+alter table cuentas_sociales add column if not exists hermandad_id uuid references hermandades(id) on delete cascade;
+alter table cuentas_sociales alter column hermandad_id set default hermandad_actual();
+
+-- 2. Fuera las cinco filas huérfanas de la semilla. Son las que bloquean la
+--    clave primaria, y no tienen dueño: nadie las ha visto nunca.
+delete from cuentas_sociales where hermandad_id is null;
+
+-- 3. La clave, por hermandad y no global. Cada una tiene su Facebook.
+alter table cuentas_sociales drop constraint if exists cuentas_sociales_pkey;
+create unique index if not exists cuentas_sociales_por_hermandad
+  on cuentas_sociales (hermandad_id, red);
+
+-- 4. El enlace público, que antes no se guardaba en ninguna parte.
+--
+--    Hacía falta para dos cosas distintas: para poner los iconos en el pie de
+--    la web de la hermandad, y para que el botón de «abrir para publicar»
+--    lleve a SU página y no a la portada de Facebook.
+alter table cuentas_sociales add column if not exists enlace text;
+
+comment on table cuentas_sociales is
+  'Las redes de cada hermandad. La clave es (hermandad_id, red): con la clave '
+  'global de antes, solo la primera hermandad podía guardar las suyas. Las filas '
+  'sin hermandad_id no las ve nadie (la política las filtra) — no las vuelvas a '
+  'sembrar sin hermandad.';
+
+-- -----------------------------------------------------------------------------
+-- Comprobación
+-- -----------------------------------------------------------------------------
+-- Después de ejecutarlo, esto tiene que devolver una fila por cada red que
+-- hayas conectado, y ninguna sin hermandad:
+--
+--   select red, conectada, usuario, enlace, hermandad_id is null as huerfana
+--     from cuentas_sociales order by red;
+--
+-- Si sale vacío, es lo normal: las cinco redes salen igualmente en pantalla
+-- (son un catálogo fijo de la aplicación, no datos), y la fila se crea sola la
+-- primera vez que conectas una.

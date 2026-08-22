@@ -1,0 +1,31 @@
+﻿Nº Hermano;Apellidos y nombre;D.N.I.;Fecha de alta;Fecha nacimiento;Correo;Teléfono móvil;Domicilio;Nº de cuenta;¿Está de baja?
+1;Aguilar Ponce, María del Carmen;12345678Z;1978;12/03/1955;mcarmen.aguilar@ejemplo.es;655 100 201;C/ Pureza, 14;ES9121000418450200051332;No
+2;Bermúdez Cano, José Antonio;23456789J;1981;04/07/1958;ja.bermudez@ejemplo.es;600 214 887;C/ Betis, 3;ES9121000418450200051332;No
+3;Cordero Rueda, Ana Isabel;34567890W;1985;22/11/1962;ana.cordero@ejemplo.es;677 903 112;Avda. de la Palmera, 22;;No
+4;Delgado Nieto, Francisco Javier;45678901A;1990;30/01/1970;fj.delgado@ejemplo.es;622 445 019;C/ Feria, 90;ES6621000418401234567891;No
+5;Espinosa Gil, Rocío;56789012G;1992;17/05/1974;rocio.espinosa@ejemplo.es;699 320 774;C/ Sierpes, 8;;No
+6;Fernández Ojeda, Manuel;67890123M;1994;09/09/1968;manuel.fernandez@ejemplo.es;611 887 002;C/ Castilla, 61;ES9121000418450200051332;Sí
+7;Gálvez Cruz, Inmaculada;78901234Y;1996;25/12/1980;inma.galvez@ejemplo.es;688 112 330;C/ San Jacinto, 15;;No
+8;Herrera Pavón, Álvaro;89012345F;1998;03/02/1983;alvaro.herrera@ejemplo.es;644 550 918;C/ Pagés del Corro, 40;ES6621000418401234567891;No
+9;Ibáñez Muñoz, Nuria;90123456P;1999;14/06/1985;nuria.ibanez@ejemplo.es;633 201 456;C/ Alfarería, 12;;No
+10;Jiménez Roldán, Sergio;01234567L;2001;28/08/1979;sergio.jimenez@ejemplo.es;655 774 003;C/ Evangelista, 18;ES9121000418450200051332;No
+11;Lozano Vega, Beatriz;11223344D;2003;11/11/1988;bea.lozano@ejemplo.es;600 998 221;C/ Rodrigo de Triana, 9;;No
+12;Marín Ceballos, Juan Luis;22334455K;2004;19/04/1990;jl.marin@ejemplo.es;677 004 552;C/ Dos de Mayo, 7;ES6621000418401234567891;No
+13;Núñez Peña, Concepción;33445566B;2006;07/07/1965;concha.nunez@ejemplo.es;622 330 118;C/ Águilas, 6;;Sí
+14;Ortega Salas, Rafael;44556677N;2008;23/03/1992;rafa.ortega@ejemplo.es;699 112 447;C/ Bailén, 14;ES9121000418450200051332;No
+15;Pardo Quintero, Lucía;55667788J;2010;05/10/1994;lucia.pardo@ejemplo.es;611 220 903;C/ Pureza, 55;;No
+16;Quesada Rivas, Andrés;66778899Z;2011;16/01/1986;andres.quesada@ejemplo.es;688 445 220;C/ Feria, 12;ES6621000418401234567891;No
+17;Ramos Tirado, Encarnación;77889900S;2013;02/06/1971;encarni.ramos@ejemplo.es;644 009 331;C/ Betis, 40;;No
+18;Serrano Ubeda, Ignacio;88990011Q;2014;21/09/1996;nacho.serrano@ejemplo.es;633 887 114;Avda. de la Palmera, 5;ES9121000418450200051332;No
+19;Toledano Vargas, Mercedes;99001122V;2016;13/02/1999;merche.toledano@ejemplo.es;655 330 220;C/ Sierpes, 31;;No
+20;Utrera Zamora, Pablo;10111213H;2017;26/07/2001;pablo.utrera@ejemplo.es;600 447 998;C/ Castilla, 8;ES6621000418401234567891;No
+21;Vázquez Alcaide, Rosario;21222324E;2018;08/12/2003;charo.vazquez@ejemplo.es;677 220 115;C/ San Jacinto, 61;;No
+22;Zurita Bravo, Emilio;32333435T;2019;30/05/2005;emilio.zurita@ejemplo.es;622 118 004;C/ Alfarería, 3;ES9121000418450200051332;No
+23;Ávila Cintado, Josefa;43444546R;2020;17/03/2007;pepa.avila@ejemplo.es;699 003 227;C/ Pagés del Corro, 18;;No
+24;Barrera Durán, Alejandro;54555657W;2021;24/10/2009;alex.barrera@ejemplo.es;611 556 330;C/ Evangelista, 44;;No
+25;Cabello Espejo, Marta;65666768A;2022;19/06/2011;marta.cabello@ejemplo.es;688 220 447;C/ Bailén, 2;;No
+26;Aguilar Ponce, Mª del Carmen;12345678Z;1978;12/03/1955;mcarmen.aguilar@ejemplo.es;655 100 201;C/ Pureza, 14;;No
+27;Gómez Sin Documento, Antonio;;2015;01/01/1990;antonio.gomez@ejemplo.es;600 000 111;C/ Sin Número, 1;;No
+28;;76543210X;2015;;;;;;No
+29;Ledesma Ortiz, Fernando;87654321B;2023;03/04/1976;fernando.ledesma@ejemplo.es;655 001 998;C/ Feria, 77;ES91 2100 0418 4502 0005 1332;No
+30;Montero Ríos, Soledad;98765432M;15/09/2024;11/11/1998;sole.montero@ejemplo.es;677 445 003;C/ Betis, 15;;No

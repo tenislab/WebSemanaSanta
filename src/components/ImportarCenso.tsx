@@ -3,9 +3,10 @@ import Drawer from './Drawer'
 import { descargarArchivo } from '../lib/csv'
 import { nuevoId } from '../lib/supabaseSync'
 import {
-  CAMPOS_IMPORTABLES, aplicar, csvDeErrores, ensayar, leerCsv, pareceBinario, pareceExcel,
+  CAMPOS_IMPORTABLES, aplicar, csvDeErrores, ensayar, leerCsv, pareceBinario,
   proponerEmparejado, type CampoImportable, type Ensayo,
 } from '../lib/importar'
+import { ExcelIlegible, leerXlsx, pareceXlsx } from '../lib/leerExcel'
 import type { Hermano } from '../data/hermanos'
 import { isSupabaseConfigured } from '../lib/supabase'
 
@@ -60,17 +61,47 @@ export default function ImportarCenso({
   async function elegirArchivo(f: File | null) {
     if (!f) return
     setErrorArchivo('')
-    const texto = await f.text()
-    // Lo primero, decirle lo único que necesita saber si ha subido su hoja tal
-    // cual. El error de «columnas raras» no ayudaba a nadie.
-    if (pareceExcel(texto)) {
-      setErrorArchivo(
-        'Esto es un archivo de Excel (.xlsx). Ábrelo en Excel y usa Archivo → Guardar como → CSV (delimitado por punto y coma). Luego sube ese archivo.',
-      )
+
+    /*
+     * EL EXCEL SE LEE, NO SE MANDA CONVERTIR.
+     *
+     * Aquí había un mensaje que decía «ábrelo en Excel y guárdalo como CSV
+     * (delimitado por punto y coma)». O sea: el primer paso de la puesta en
+     * marcha —el que decide si siguen o lo dejan— era mandarles a hacer a mano
+     * una conversión que el programa puede hacer solo. Y no es un paso
+     * inocente: en el desplegable de Excel hay tres opciones que se llaman
+     * «CSV», y en dos de ellas los acentos llegan rotos.
+     *
+     * Se mira el CONTENIDO y no la extensión: hay quien renombra el archivo, y
+     * hay programas de gestión que sueltan un .xlsx llamándolo .csv.
+     */
+    const bytes = new Uint8Array(await f.arrayBuffer())
+    let filasDelExcel: string[][] | null = null
+    if (pareceXlsx(bytes)) {
+      try {
+        filasDelExcel = await leerXlsx(bytes)
+      } catch (e) {
+        setErrorArchivo(
+          e instanceof ExcelIlegible
+            ? e.message
+            : 'No se ha podido abrir el archivo de Excel. Guárdalo otra vez desde Excel y vuelve a subirlo.',
+        )
+        return
+      }
+      if (filasDelExcel.length < 2) {
+        setErrorArchivo('La primera hoja del Excel no tiene filas de datos, solo la cabecera (o está vacía).')
+        return
+      }
+      empezarCon(filasDelExcel, f.name)
       return
     }
+
+    const texto = new TextDecoder('utf-8').decode(bytes)
     if (pareceBinario(texto)) {
-      setErrorArchivo('Este archivo no es texto. Guárdalo como CSV desde el programa donde tengáis el censo.')
+      setErrorArchivo(
+        'Este archivo no es texto ni una hoja de Excel moderna. Si es un .xls de los antiguos, '
+        + 'ábrelo en Excel y usa Archivo → Guardar como → Libro de Excel (.xlsx).',
+      )
       return
     }
     const leidas = leerCsv(texto)
@@ -78,7 +109,12 @@ export default function ImportarCenso({
       setErrorArchivo('El archivo no tiene filas de datos, solo la cabecera (o está vacío).')
       return
     }
-    setNombreArchivo(f.name)
+    empezarCon(leidas, f.name)
+  }
+
+  /** Ya tenemos las filas, vengan del Excel o del CSV: el resto es igual. */
+  function empezarCon(leidas: string[][], nombre: string) {
+    setNombreArchivo(nombre)
     setFilas(leidas)
     setEmparejado(proponerEmparejado(leidas[0]))
     setPaso('columnas')
@@ -158,12 +194,13 @@ export default function ImportarCenso({
         <>
           <p className="form-hint">
             Lo que tiene una hermandad casi nunca es una base de datos: es un Excel o un listado de
-            un programa antiguo. Guardadlo como <b>CSV</b> (en Excel: Archivo → Guardar como → CSV)
-            y subidlo aquí. No se toca nada hasta que veáis qué va a pasar y lo confirméis.
+            un programa antiguo. Subid el <b>Excel tal cual</b> (.xlsx) o un CSV — se lee igual.
+            No se toca nada hasta que veáis qué va a pasar y lo confirméis.
           </p>
           <div className="importar-suelta">
             <input
-              ref={inputRef} id="importarArchivo" type="file" accept=".csv,text/csv,text/plain"
+              ref={inputRef} id="importarArchivo" type="file"
+              accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
               onChange={(e) => elegirArchivo(e.target.files?.[0] ?? null)}
             />
             <label htmlFor="importarArchivo" className="btn btn-primary">Elegir el archivo</label>

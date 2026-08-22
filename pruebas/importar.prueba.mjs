@@ -257,10 +257,8 @@ export default async function ({ cargar, caso }) {
   caso('no hay dos hermanos con el mismo número', nums.length, new Set(nums).size)
 
   // --- Un Excel subido tal cual ---
-  // Un .xlsx es un ZIP y todos empiezan por «PK». Sin esto, quien sube su hoja
-  // se encontraba un error incomprensible sobre columnas raras.
-  caso('un .xlsx se reconoce', true, m.pareceExcel('PK\u0003\u0004algo'))
-  caso('un CSV normal no', false, m.pareceExcel('nombre;dni\nAna;1'))
+  // Ya no se RECHAZA: se lee. Lo de reconocerlo y leerlo está en
+  // `pruebas/excel.prueba.mjs`, contra un .xlsx generado de verdad.
   caso('un binario se reconoce', true, m.pareceBinario('abc\u0000def'))
   caso('un CSV con tildes no es binario', false, m.pareceBinario('nombre;dni\nÑoño;1'))
 

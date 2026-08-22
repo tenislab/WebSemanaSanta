@@ -55,6 +55,7 @@ export const PIEZAS = [
   ['seguridad-claves-y-registro.sql', 'Fuera las contraseñas en claro; el registro lo escribe la base'],
   ['papeletas-simbolica-y-precio.sql', 'El precio de la papeleta y la simbólica: de la hermandad, no del navegador'],
   ['buscar-hermandad-con-su-escudo.sql', 'Que el hermano encuentre su hermandad por ciudad y la reconozca por su escudo'],
+  ['redes-sociales.sql', 'Que cada hermandad tenga sus propias redes (la clave era global)'],
 ]
 
 const CABECERA = `-- =============================================================================

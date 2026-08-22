@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Gobergo · La hermandad, en orden</title>
+<style>
+  /*
+   * El documento que se le enseña a una junta de gobierno.
+   *
+   * Está pensado para imprimirse y pasar de mano en mano en una reunión, no
+   * para leerse en el móvil: por eso va en A4, en serif, y con las cifras
+   * grandes donde importan. La paleta es la de la propia aplicación —vino,
+   * oro viejo, cera— porque es la de su mundo, no una elegida por bonita.
+   */
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  :root {
+    --tinta: #241a15;
+    --suave: #6b5d55;
+    --tenue: #93857c;
+    --linea: #e0d7cf;
+    --crema: #faf7f3;
+    --cera: #f3ece3;
+    --vino: #6A1A23;
+    --vino-hondo: #4a1119;
+    --oro: #9c7c3f;
+    --oro-claro: #c9a961;
+    --verde: #2f6b4f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--tinta); background: #fff;
+    font: 10.5pt/1.6 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3, h4, .etiqueta, .cifra, .modulo__n, table, .pie-nota, .paso__n {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  /* ---------------------------------------------------------------- Portada */
+  /* A sangre y en vino: es lo primero que se ve encima de la mesa. */
+  .portada {
+    background: var(--vino); color: #fff;
+    margin: -16mm -15mm 9mm; padding: 30mm 15mm 16mm;
+    position: relative; break-after: avoid;
+  }
+  .portada::after {
+    content: ''; position: absolute; left: 15mm; right: 15mm; bottom: 10mm;
+    height: 1.5pt; background: var(--oro-claro);
+  }
+  .marca { display: flex; align-items: center; gap: 4mm; margin-bottom: 22mm; }
+  .marca__escudo {
+    width: 13mm; height: 13mm; border: 1.2pt solid var(--oro-claro); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    font-size: 15pt; color: var(--oro-claro); font-weight: 700;
+  }
+  .marca__nombre { font-size: 13pt; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; }
+  .portada h1 {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 40pt; line-height: 1.06; margin: 0 0 6mm; font-weight: 400;
+    letter-spacing: -.015em; max-width: 150mm;
+  }
+  .portada .bajada { font-size: 12.5pt; line-height: 1.55; color: #f0e2d8; margin: 0; max-width: 132mm; }
+  .portada .quien {
+    margin: 14mm 0 0; font-size: 8pt; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--oro-claro); font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  /* -------------------------------------------------------------- Estructura */
+  .etiqueta {
+    font-size: 7.5pt; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--oro); font-weight: 700; margin: 0 0 2.5mm;
+  }
+  h2 {
+    font-size: 17pt; line-height: 1.2; margin: 0 0 4mm; font-weight: 700;
+    letter-spacing: -.01em; break-after: avoid;
+  }
+  h3 { font-size: 11pt; margin: 6mm 0 1.5mm; font-weight: 700; break-after: avoid; }
+  p { margin: 0 0 3mm; }
+  .lead { font-size: 11.5pt; color: var(--suave); max-width: 140mm; }
+  strong { font-weight: 700; }
+  section { margin-bottom: 9mm; }
+  .corte { break-before: page; padding-top: 2mm; }
+
+  /* Una regla de oro bajo el título de sección: el mismo gesto que la portada. */
+  .titulo-seccion { border-bottom: 1pt solid var(--linea); padding-bottom: 3.5mm; margin-bottom: 5mm; }
+
+  /* ------------------------------------------------------------- El problema */
+  .antes {
+    background: var(--cera); border-left: 2.5pt solid var(--oro);
+    padding: 5mm 6mm; margin: 0 0 5mm;
+  }
+  .antes p:last-child { margin-bottom: 0; }
+  .antes em { font-style: italic; color: var(--vino); }
+
+  /* --------------------------------------------------------------- Los módulos */
+  .bloques { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 6mm; }
+  .bloque { break-inside: avoid; }
+  .bloque__cab { display: flex; align-items: baseline; gap: 2.5mm; border-bottom: .75pt solid var(--linea); padding-bottom: 1.5mm; margin-bottom: 2mm; }
+  .bloque__n { font-size: 8pt; color: var(--oro); font-weight: 700; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .bloque h4 { font-size: 10.5pt; margin: 0; font-weight: 700; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .bloque ul { margin: 0; padding-left: 4mm; font-size: 9.5pt; color: var(--suave); }
+  .bloque li { margin-bottom: 1mm; }
+
+  /* ------------------------------------------------------------- Dos columnas */
+  .caras { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 5mm; }
+  .cara { border: 1pt solid var(--linea); border-top: 2.5pt solid var(--vino); padding: 5mm; break-inside: avoid; }
+  .cara--hermano { border-top-color: var(--oro); }
+  .cara h3 { margin-top: 0; }
+  .cara p { font-size: 9.5pt; color: var(--suave); }
+  .cara ul { margin: 0; padding-left: 4mm; font-size: 9.5pt; }
+  .cara li { margin-bottom: 1.2mm; }
+
+  /* ------------------------------------------------------------------ Cifras */
+  .cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; margin: 0 0 5mm; }
+  .dato { border-top: 2pt solid var(--vino); padding-top: 3mm; break-inside: avoid; }
+  .cifra { font-size: 25pt; line-height: 1; font-weight: 700; color: var(--vino); letter-spacing: -.02em; }
+  .dato p { font-size: 9pt; color: var(--suave); margin: 2mm 0 0; line-height: 1.45; }
+
+  /* ------------------------------------------------------------------- Pasos */
+  .pasos { list-style: none; margin: 0; padding: 0; counter-reset: paso; }
+  .pasos li {
+    display: flex; gap: 3.5mm; align-items: baseline;
+    padding: 2.2mm 0; border-bottom: .5pt solid var(--linea); break-inside: avoid;
+  }
+  .pasos li:last-child { border-bottom: 0; }
+  .paso__n {
+    counter-increment: paso; flex: none; width: 6mm; font-size: 8.5pt;
+    color: var(--oro); font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .paso__n::before { content: counter(paso, decimal-leading-zero); }
+  .pasos b { font-weight: 700; }
+  .pasos span { color: var(--suave); font-size: 9.5pt; }
+
+  /* ------------------------------------------------------------------ Tablas */
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 0 0 4mm; }
+  tr { break-inside: avoid; }
+  th {
+    text-align: left; font-size: 7.5pt; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--suave); border-bottom: 1pt solid var(--tinta); padding: 0 3mm 1.8mm 0; font-weight: 700;
+  }
+  td { padding: 2.2mm 3mm 2.2mm 0; border-bottom: .5pt solid var(--linea); vertical-align: top; }
+  th:last-child, td:last-child { padding-right: 0; }
+  .si { color: var(--verde); font-weight: 700; }
+  .no { color: var(--tenue); }
+
+  /* -------------------------------------------------------------------- Cajas */
+  .caja { background: var(--crema); border: 1pt solid var(--linea); padding: 5mm 6mm; margin: 0 0 5mm; break-inside: avoid; }
+  .caja__titulo { font-size: 10pt; font-weight: 700; margin: 0 0 2mm; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .caja p:last-child { margin-bottom: 0; }
+  .caja--franca { background: #fff; border-left: 2.5pt solid var(--vino); }
+
+  /* --------------------------------------------------------------------- Cita */
+  .cita {
+    border-left: 2.5pt solid var(--oro); padding: 1mm 0 1mm 6mm; margin: 0 0 5mm;
+    font-size: 12pt; line-height: 1.5; color: var(--vino); font-style: italic;
+  }
+
+  .pie-nota { font-size: 8.5pt; color: var(--tenue); line-height: 1.5; }
+  .cierre {
+    background: var(--vino-hondo); color: #fff; padding: 8mm; margin-top: 6mm; break-inside: avoid;
+  }
+  .cierre h2 { color: #fff; margin-bottom: 3mm; }
+  .cierre p { color: #f0e2d8; margin-bottom: 0; }
+  .cierre a { color: var(--oro-claro); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header class="portada">
+  <div class="marca">
+    <span class="marca__escudo">G</span>
+    <span class="marca__nombre">Gobergo</span>
+  </div>
+  <h1>La hermandad, en orden.</h1>
+  <p class="bajada">
+    El censo, las cuotas, las papeletas de sitio, el cortejo y la web pública.
+    Todo en el mismo sitio, cada uno viendo lo suyo, y sin que haga falta saber
+    de informática para llevarlo.
+  </p>
+  <p class="quien">Para juntas de gobierno · Semana Santa</p>
+</header>
+
+<section>
+  <p class="etiqueta">De qué va esto</p>
+  <h2 class="titulo-seccion">Lo que hay hoy en casi todas las hermandades</h2>
+
+  <div class="antes">
+    <p>
+      El censo, en un <em>Excel</em> que solo abre el secretario. Las cuotas, en <em>otro Excel</em>
+      que solo abre el tesorero, y que no cuadra con el primero. Las papeletas de sitio, en un
+      <em>cuaderno</em>. El cortejo, en <em>folios</em> que se rehacen a mano cada año. Y los avisos,
+      en un <em>grupo de WhatsApp</em> del que la mitad se ha salido.
+    </p>
+    <p>
+      Funciona. Lo lleva funcionando muchos años. El problema aparece el día que esa persona lo deja,
+      o se pone mala en Cuaresma, o el ordenador se estropea la semana antes del reparto.
+    </p>
+  </div>
+
+  <p class="lead">
+    Gobergo no es «pasarlo todo al ordenador». Es que el trabajo que ya se hace deje de depender de
+    una persona y de un archivo, y que cada hermano pueda ver lo suyo sin llamar a la casa hermandad.
+  </p>
+</section>
+
+<section>
+  <div class="cifras">
+    <div class="dato">
+      <div class="cifra">13</div>
+      <p>secciones, de la secretaría a la tesorería, del cortejo al archivo documental.</p>
+    </div>
+    <div class="dato">
+      <div class="cifra">2</div>
+      <p>maneras de entrar: la junta al panel de gestión, cada hermano a su área.</p>
+    </div>
+    <div class="dato">
+      <div class="cifra">1</div>
+      <p>sitio donde está todo. Se acabó el «eso lo tiene el otro Excel».</p>
+    </div>
+  </div>
+</section>
+
+<section class="corte">
+  <p class="etiqueta">Qué hace</p>
+  <h2 class="titulo-seccion">Ordenado como lo vive una hermandad</h2>
+  <p class="lead">
+    No por «módulos de software», sino por lo que se hace en cada época del año.
+  </p>
+
+  <div class="bloques">
+    <div class="bloque">
+      <div class="bloque__cab"><span class="bloque__n">I</span><h4>La gente</h4></div>
+      <ul>
+        <li>Censo completo, con su antigüedad y su número</li>
+        <li>Altas, bajas y solicitudes desde la web</li>
+        <li>Etiquetas: costaleros, acólitos, banda</li>
+        <li>Familias: quién paga por quién</li>
+        <li>Campos propios de cada hermandad</li>
+      </ul>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__cab"><span class="bloque__n">II</span><h4>El dinero</h4></div>
+      <ul>
+        <li>Cuotas: emisión, cobro y recibos</li>
+        <li>Remesas SEPA para el banco</li>
+        <li>Tesorería: ingresos, gastos y saldo</li>
+        <li>Los cobros llegan solos al libro</li>
+        <li>Inventario de enseres y su valor</li>
+      </ul>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__cab"><span class="bloque__n">III</span><h4>La salida</h4></div>
+      <ul>
+        <li>Papeletas de sitio, con su numeración</li>
+        <li>Renovación del sitio del año anterior</li>
+        <li>Tramos del cortejo y aforo de cada uno</li>
+        <li>Reparto por antigüedad, automático</li>
+        <li>Listado de cortejo para el día</li>
+      </ul>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__cab"><span class="bloque__n">IV</span><h4>La casa</h4></div>
+      <ul>
+        <li>Cultos y eventos, con sus tareas</li>
+        <li>Archivo documental: actas y contratos</li>
+        <li>Personal y permisos por cargo</li>
+        <li>Registro de quién hizo qué</li>
+        <li>Informes y documentos imprimibles</li>
+      </ul>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__cab"><span class="bloque__n">V</span><h4>La calle</h4></div>
+      <ul>
+        <li>Web pública propia, sin programar</li>
+        <li>Cultos, actualidad y galería</li>
+        <li>Formulario para pedir el alta</li>
+        <li>Comunicados por correo y al área</li>
+        <li>Dominio propio de la hermandad</li>
+      </ul>
+    </div>
+
+    <div class="bloque">
+      <div class="bloque__cab"><span class="bloque__n">VI</span><h4>Lo de debajo</h4></div>
+      <ul>
+        <li>Cada hermandad, aislada de las demás</li>
+        <li>Copias de seguridad y papelera</li>
+        <li>Datos personales bajo llave (RGPD)</li>
+        <li>Cada cargo ve solo lo que le toca</li>
+        <li>Funciona en el móvil igual que en el ordenador</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="etiqueta">Las dos caras</p>
+  <h2 class="titulo-seccion">La junta gestiona; el hermano consulta</h2>
+
+  <div class="caras">
+    <div class="cara">
+      <h3>El panel de la junta</h3>
+      <p>Cada uno entra con su cuenta y ve solo lo de su cargo.</p>
+      <ul>
+        <li>El tesorero, la tesorería y las cuotas</li>
+        <li>La secretaría, el censo y el archivo</li>
+        <li>El diputado mayor, el cortejo</li>
+        <li>El hermano mayor, todo</li>
+      </ul>
+      <p style="margin-top:3mm">
+        Los permisos se cambian en una pantalla, sin llamar a nadie. Cuando cambia la junta, se mueve
+        el cargo de una ficha a otra y ya está.
+      </p>
+    </div>
+
+    <div class="cara cara--hermano">
+      <h3>El área del hermano</h3>
+      <p>Cada hermano entra con su DNI y su clave.</p>
+      <ul>
+        <li>Su ficha, para corregir lo que cambie</li>
+        <li>Sus recibos y si está al día</li>
+        <li>Su sitio en el cortejo de este año</li>
+        <li>Su carné digital con código QR</li>
+        <li>Los avisos de la hermandad</li>
+      </ul>
+      <p style="margin-top:3mm">
+        Es lo que más descarga a la secretaría: la mitad de las llamadas son «¿estoy al día?» y
+        «¿dónde voy este año?».
+      </p>
+    </div>
+  </div>
+
+  <blockquote class="cita">
+    Un costalero acabaría viendo la tesorería porque sacó su papeleta. Eso no puede pasar, y por eso
+    los permisos van por cargo y no por lo que uno haga en la salida.
+  </blockquote>
+</section>
+
+<section class="corte">
+  <p class="etiqueta">Ponerlo en marcha</p>
+  <h2 class="titulo-seccion">Diez pasos, y el primero es traer vuestro Excel</h2>
+  <p class="lead">
+    La aplicación os lleva de la mano la primera vez: enseña estos pasos en orden, señala el que toca
+    y los va tachando solos según se hacen. No hay que terminarlo en un día.
+  </p>
+
+  <ol class="pasos">
+    <li><span class="paso__n"></span><div><b>Poner el nombre y el escudo.</b> <span>Salen en los recibos, en las papeletas y en los correos.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Traer el censo de hermanos.</b> <span>Se sube el Excel tal cual: no hay que convertirlo a nada.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Repartir los cargos de la junta.</b> <span>Cada uno entra con su cuenta y ve solo lo suyo.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Conectar el correo.</b> <span>Sin esto no sale ni un aviso ni una clave de acceso.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Poner la cuenta bancaria.</b> <span>Sin ella no se cobra ni una cuota ni una papeleta.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Decir cuánto se paga de cuota.</b> <span>Los conceptos y sus importes.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Montar los tramos del cortejo.</b> <span>Cruz de guía, insignias, cirios, costaleros, y el precio de cada uno.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Dar acceso a los hermanos.</b> <span>Se manda a todos de una vez, con su clave.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Publicar la web.</b> <span>Cultos, actualidad y el formulario de alta.</span></div></li>
+    <li><span class="paso__n"></span><div><b>Decir cuáles son vuestras redes.</b> <span>Salen en el pie de la web y sirven para los comunicados.</span></div></li>
+  </ol>
+
+  <div class="caja" style="margin-top:5mm">
+    <p class="caja__titulo">El censo se sube tal cual, y se ve antes de tocar nada</p>
+    <p>
+      Se sube el Excel de la hermandad como esté. La aplicación reconoce sola las columnas —«Nº
+      Hermano», «Apellidos y nombre», «D.N.I.», «Nº de cuenta»— y <strong>enseña fila a fila qué va a
+      pasar antes de importar nada</strong>: quién entra nuevo, a quién se le actualizan los datos, y
+      qué filas no se pueden traer y por qué (un DNI repetido, un nombre en blanco). Nada se guarda
+      hasta que alguien lo mira y lo confirma. Y si se confirma y no era, se deshace.
+    </p>
+  </div>
+</section>
+
+<section>
+  <p class="etiqueta">Con franqueza</p>
+  <h2 class="titulo-seccion">Qué está hecho y qué no</h2>
+  <p class="lead">
+    Una hermandad se juega su censo y su dinero. Conviene saber dónde están los límites antes de
+    entrar, y no el día que hacen falta.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Esto</th><th style="width:52%">Cómo está</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Censo, cuotas, papeletas, cortejo</td><td class="si">Funcionando</td></tr>
+      <tr><td>Área del hermano y carné digital</td><td class="si">Funcionando</td></tr>
+      <tr><td>Web pública con dominio propio</td><td class="si">Funcionando</td></tr>
+      <tr><td>Remesas SEPA para el banco</td><td class="si">Funcionando</td></tr>
+      <tr><td>Correos y comunicados</td><td class="si">Funcionando, hay que conectar el proveedor una vez</td></tr>
+      <tr><td>Publicar en redes sociales</td><td class="no">El texto se prepara y se abre la red para pegarlo. Publicar solo exige que cada plataforma apruebe la aplicación</td></tr>
+      <tr><td>Cobrar la cuota con tarjeta desde el área</td><td class="no">Todavía no. El cobro se lleva por banco y en efectivo</td></tr>
+    </tbody>
+  </table>
+
+  <div class="caja caja--franca">
+    <p class="caja__titulo">Los datos son de la hermandad, no nuestros</p>
+    <p>
+      Todo lo que entra se puede sacar: el censo, las cuotas y los movimientos se descargan en
+      cualquier momento en un archivo que abre Excel. Y hay copia de seguridad completa a un botón.
+      Nadie se queda atrapado por no poder llevarse lo suyo.
+    </p>
+  </div>
+
+  <p class="pie-nota">
+    Los datos personales del censo —DNI, cuenta bancaria, direcciones— están sujetos al Reglamento
+    General de Protección de Datos. La aplicación deja registro de quién consulta y modifica qué
+    (artículo 32), separa cada hermandad de las demás a nivel de base de datos, y permite exportar y
+    borrar los datos de un hermano cuando lo pide.
+  </p>
+</section>
+
+<div class="cierre">
+  <h2>¿Lo vemos con vuestro censo?</h2>
+  <p>
+    La forma más rápida de decidir es traer vuestro Excel y verlo con vuestros hermanos dentro. No
+    hace falta cambiar nada de cómo trabajáis hoy para probarlo.
+  </p>
+</div>
+
+</body>
+</html>

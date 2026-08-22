@@ -76,15 +76,13 @@ export function leerCsv(texto: string, separador?: string): string[][] {
   return filas.filter((f) => f.some((x) => x.trim() !== ''))
 }
 
-/**
- * ¿Esto es un Excel de verdad (.xlsx) en vez de un CSV? Un .xlsx es un ZIP, y
- * todos los ZIP empiezan por «PK». Sin comprobarlo, quien sube su hoja tal cual
- * se encontraba un error incomprensible sobre columnas raras, en vez de que se
- * le dijera lo único que necesita saber: que hay que guardarlo como CSV.
+/*
+ * `pareceExcel` vivía aquí y miraba si el texto empezaba por «PK». Ya no hace
+ * falta: el Excel se LEE (ver `src/lib/leerExcel.ts`), no se rechaza, y
+ * reconocerlo se hace sobre los bytes con `pareceXlsx` — mirar los primeros
+ * caracteres de un binario decodificado como texto es frágil y aquí no hay
+ * motivo para hacerlo así.
  */
-export function pareceExcel(texto: string): boolean {
-  return texto.startsWith('PK\u0003\u0004') || texto.startsWith('PK')
-}
 
 /** Un .xls antiguo, que tampoco es texto. */
 export function pareceBinario(texto: string): boolean {
@@ -126,6 +124,20 @@ export const CAMPOS_IMPORTABLES: {
  * lo confirma. Adivinar y tirar para adelante es como se importan mil fichas
  * con el teléfono en la casilla del DNI.
  */
+/**
+ * Cabeceras que preguntan AL REVÉS: «¿está de baja?» en vez de «¿está activo?».
+ *
+ * Está aquí arriba y no dentro de `cabeceraEsNegativa` porque hacen falta en
+ * dos sitios: para emparejar la columna, y para saber que su «Sí» significa
+ * baja. Teniéndolas dos veces se despegaban — una hoja con «¿Está de baja?» se
+ * reconocía como negativa pero NO se emparejaba con ningún campo, así que
+ * había que elegirla a mano o el censo entero entraba sin situación.
+ */
+const CABECERAS_AL_REVES = [
+  'baja', 'bajas', 'de baja', 'es baja', 'esta de baja', 'esta dado de baja',
+  'dado de baja', 'fallecido', 'fallecida', 'borrado', 'inactivo',
+]
+
 const SINONIMOS: Record<CampoImportable, string[]> = {
   nombre: ['nombre', 'nombre y apellidos', 'nombreapellidos', 'apellidos y nombre', 'hermano', 'nombre completo', 'titular'],
   dni: ['dni', 'nif', 'nie', 'documento', 'dni/nie', 'd.n.i.', 'identificacion'],
@@ -134,9 +146,16 @@ const SINONIMOS: Record<CampoImportable, string[]> = {
   email: ['email', 'correo', 'e-mail', 'correo electronico', 'mail'],
   telefono: ['telefono', 'tlf', 'movil', 'tel', 'telefono movil', 'contacto'],
   direccion: ['direccion', 'domicilio', 'calle', 'dir'],
-  iban: ['iban', 'cuenta', 'cuenta bancaria', 'ccc', 'banco', 'numero de cuenta'],
+  // «Nº de cuenta» queda en «n de cuenta» al normalizar, y tiene que estar en
+  // la lista SÍ O SÍ: si no, la segunda vuelta se la lleva «numero» —porque
+  // «n de cuenta» empieza por «n »— y los IBAN acabarían en la casilla del
+  // número de hermano.
+  iban: ['iban', 'cuenta', 'cuenta bancaria', 'cuenta corriente', 'ccc', 'banco',
+    'numero de cuenta', 'n de cuenta', 'no de cuenta', 'domiciliacion'],
   fechaNacimiento: ['fecha de nacimiento', 'nacimiento', 'fnac', 'fecha nacimiento', 'nacido'],
-  estado: ['estado', 'situacion', 'activo', 'baja', 'situacion actual'],
+  // Las de «al revés» también emparejan: la columna es la de la situación
+  // igualmente, solo que su «Sí» quiere decir lo contrario.
+  estado: ['estado', 'situacion', 'activo', 'situacion actual', 'alta baja', ...CABECERAS_AL_REVES],
 }
 
 /** Quita tildes, signos y mayúsculas para poder comparar nombres de columna. */
@@ -145,6 +164,20 @@ function normalizar(t: string): string {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
+    /*
+     * Fuera la ordinal y los signos de pregunta.
+     *
+     * En una hoja española esto NO es un adorno: las cabeceras se escriben
+     * «Nº de cuenta» y «¿Está de baja?», y sin quitar el «º» y los «¿?» ni una
+     * ni otra coincidían con nada. La del IBAN se quedaba sin emparejar —había
+     * que buscarla a mano en un desplegable de diez— y la de la baja no se
+     * reconocía como la que pregunta al revés, que es peor: importaba a los
+     * activos como bajas y a las bajas como activos.
+     *
+     * Se quitan en los DOS lados, cabecera y sinónimo, porque la lista de
+     * sinónimos se normaliza con esta misma función.
+     */
+    .replace(/[ºª°¿?¡!#]/g, '')
     .replace(/[._·/\\-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -351,7 +384,7 @@ export function estadoDe(v: string, cabeceraNegativa = false): EstadoHermano | n
  */
 export function cabeceraEsNegativa(cabecera: string): boolean {
   const t = normalizar(cabecera)
-  return ['baja', 'bajas', 'de baja', 'es baja', 'fallecido', 'fallecida', 'borrado', 'inactivo'].includes(t)
+  return CABECERAS_AL_REVES.includes(t)
 }
 
 /**

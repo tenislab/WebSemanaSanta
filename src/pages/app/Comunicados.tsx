@@ -41,6 +41,18 @@ import { cuerpoCorreo } from '../../lib/avisosCorreo'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
+import { copiarAlPortapapeles } from '../../lib/portapapeles'
+import {
+  COLOR_RED,
+  COMO_PUBLICAR,
+  INICIAL_RED,
+  enlaceDeLaCuenta,
+  enlaceParaPublicar,
+  normalizarUsuario,
+  sePasaDeLargo,
+  textoParaRedes,
+  LIMITE_X,
+} from '../../lib/redesSociales'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -69,22 +81,6 @@ function claseEstado(estado: EstadoComunicado) {
   if (estado === 'Enviado') return 'pill--ok'
   if (estado === 'Programado') return 'pill--warn'
   return 'pill--off'
-}
-
-const COLOR_RED: Record<RedSocial, string> = {
-  Facebook: '#3b5998',
-  Instagram: '#c1387c',
-  X: '#14171a',
-  YouTube: '#c4302b',
-  TikTok: '#25b0a4',
-}
-
-const INICIAL_RED: Record<RedSocial, string> = {
-  Facebook: 'f',
-  Instagram: 'IG',
-  X: 'X',
-  YouTube: '▶',
-  TikTok: '♪',
 }
 
 export default function Comunicados() {
@@ -301,6 +297,9 @@ export default function Comunicados() {
 
   const [conectando, setConectando] = useState<RedSocial | null>(null)
   const [usuarioInput, setUsuarioInput] = useState('')
+  const [errorRed, setErrorRed] = useState('')
+  /** Qué red acaba de copiarse, para poder decir «✓ Copiado» en su botón. */
+  const [copiado, setCopiado] = useState<RedSocial | null>(null)
 
   const cuentasConectadas = useMemo(() => cuentas.filter((c) => c.conectada), [cuentas])
 
@@ -341,15 +340,30 @@ export default function Comunicados() {
     setFormOpen(true)
   }
 
+  /**
+   * Conectar una red = decir cuál es la cuenta de la hermandad.
+   *
+   * Antes esto ponía «@hermandaddemo» si no se escribía nada, así que se
+   * pulsaba «Conectar» y quedaba conectada a una cuenta inventada. Ahora sin
+   * nombre no se conecta, y se acepta tanto «@hermandad» como la dirección
+   * entera pegada del navegador, que es lo que la gente tiene a mano.
+   */
   function conectar(red: RedSocial) {
-    const usuario = usuarioInput.trim() || '@hermandaddemo'
-    setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: true, usuario } : c)))
+    const usuario = normalizarUsuario(usuarioInput)
+    if (!usuario || usuario === '@') {
+      setErrorRed('Escribe el nombre de la cuenta (@lahermandad) o pega la dirección de su página.')
+      return
+    }
+    const escrito = usuarioInput.trim()
+    const enlace = /^https?:\/\//i.test(escrito) ? escrito : null
+    setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: true, usuario, enlace } : c)))
     setConectando(null)
     setUsuarioInput('')
+    setErrorRed('')
   }
 
   function desconectar(red: RedSocial) {
-    setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: false, usuario: null } : c)))
+    setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: false, usuario: null, enlace: null } : c)))
   }
 
   async function enviarAhora(c: Comunicado) {
@@ -543,11 +557,15 @@ export default function Comunicados() {
       <details className="redes-card">
         <summary className="redes-card__head">
           <h2>
-            Redes sociales conectadas
+            Redes sociales de la hermandad
             <span className="pill pill--info">{cuentas.filter((c) => c.conectada).length} de {cuentas.length}</span>
           </h2>
+          {/* Lo que hace y lo que no, dicho aquí y no en letra pequeña. Antes
+              ponía «conexión simulada», que no explicaba para qué servía
+              entonces conectar nada. */}
           <p className="table-subtle">
-            Conexión simulada — la publicación real llegará cuando enlacemos las cuentas oficiales de la hermandad.
+            Di cuál es la cuenta de la hermandad en cada red. Con eso, los comunicados salen con el texto
+            listo y un botón que abre la red para publicarlo, y los iconos aparecen en el pie de la web.
           </p>
         </summary>
         <div className="redes-grid">
@@ -559,7 +577,20 @@ export default function Comunicados() {
                 </span>
                 <div className="red-card__name">
                   <b>{c.red}</b>
-                  {c.conectada && <span className="table-subtle">{c.usuario}</span>}
+                  {c.conectada && (
+                    enlaceDeLaCuenta(c) ? (
+                      <a
+                        className="table-subtle"
+                        href={enlaceDeLaCuenta(c) as string}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {c.usuario} ↗
+                      </a>
+                    ) : (
+                      <span className="table-subtle">{c.usuario}</span>
+                    )
+                  )}
                 </div>
               </div>
               <div className="red-card__foot">
@@ -570,13 +601,20 @@ export default function Comunicados() {
                   <div className="red-card__connect-row">
                     <input
                       type="text"
-                      placeholder="@usuario"
+                      placeholder="@lahermandad o la dirección de su página"
                       value={usuarioInput}
-                      onChange={(e) => setUsuarioInput(e.target.value)}
+                      onChange={(e) => { setUsuarioInput(e.target.value); setErrorRed('') }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') conectar(c.red) }}
                       autoFocus
                     />
                     <button className="btn btn-primary btn-sm" onClick={() => conectar(c.red)}>
                       Guardar
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => { setConectando(null); setUsuarioInput(''); setErrorRed('') }}
+                    >
+                      Cancelar
                     </button>
                   </div>
                 ) : c.conectada ? (
@@ -585,17 +623,23 @@ export default function Comunicados() {
                       className="btn btn-ghost btn-sm"
                       onClick={() => {
                         setConectando(c.red)
-                        setUsuarioInput(c.usuario ?? '')
+                        setUsuarioInput(c.enlace ?? c.usuario ?? '')
+                        setErrorRed('')
                       }}
                     >
-                      Cambiar usuario
+                      Cambiar cuenta
                     </button>
                     <button className="btn btn-ghost btn-sm" onClick={() => desconectar(c.red)}>
-                      Desconectar
+                      Quitar
                     </button>
                   </>
                 ) : (
-                  <button className="btn btn-primary btn-sm" onClick={() => conectar(c.red)}>
+                  // Abre el campo; NO conecta a ciegas. Antes esto conectaba
+                  // con «@hermandaddemo» si no se había escrito nada.
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => { setConectando(c.red); setUsuarioInput(''); setErrorRed('') }}
+                  >
                     Conectar
                   </button>
                 )}
@@ -603,6 +647,21 @@ export default function Comunicados() {
             </div>
           ))}
         </div>
+        {errorRed && <p className="form-hint form-hint--error">{errorRed}</p>}
+        {/*
+          LA VERDAD SOBRE PUBLICAR SOLO, dicha donde se decide.
+          Publicar sin abrir la red exige una aplicación aprobada por cada
+          plataforma (Meta revisa a mano, X cobra por la API, TikTok y YouTube
+          auditan) y una clave secreta que no puede estar en el navegador: si
+          está en la web, cualquiera publica en nombre de la hermandad. Decirlo
+          aquí es mejor que un botón que diga «publicado» sin publicar nada.
+        */}
+        <p className="form-hint">
+          <b>Publicar se hace en dos pasos, y es de verdad.</b> El comunicado deja el texto preparado y
+          un botón que abre la red; se pega y se publica. Publicar sin salir de aquí exige que cada
+          plataforma apruebe la aplicación de la hermandad (Meta lo revisa a mano, X cobra por ello), así
+          que de momento no lo prometemos.
+        </p>
       </details>
 
       <section className="stat-grid">
@@ -773,8 +832,83 @@ export default function Comunicados() {
               })()}
               {selected.redes && selected.redes.length > 0 && (
                 <div>
-                  <dt>Redes sociales</dt>
-                  <dd>{selected.redes.join(', ')}</dd>
+                  <dt>Publicar en redes</dt>
+                  <dd>
+                    {/*
+                      AQUÍ SE PUBLICA DE VERDAD, en dos pasos.
+                      Antes esto era una línea de texto —«Facebook, Instagram»—
+                      y ahí se acababa: el comunicado quedaba marcado como
+                      enviado y nadie había publicado nada. Ahora se copia el
+                      texto y se abre la red, que es lo que se acaba haciendo a
+                      mano de todas formas.
+                    */}
+                    <p className="table-subtle" style={{ marginTop: 0 }}>
+                      Copia el texto y abre cada red. El comunicado no se publica solo — mira la nota de
+                      arriba, en «Redes sociales de la hermandad».
+                    </p>
+                    <textarea
+                      className="redes-publicar__texto"
+                      readOnly
+                      rows={5}
+                      value={textoParaRedes(selected.titulo, selected.cuerpo)}
+                      onFocus={(e) => e.currentTarget.select()}
+                      aria-label="Texto para publicar en redes"
+                    />
+                    <div className="redes-publicar">
+                      {selected.redes.map((r) => {
+                        const texto = textoParaRedes(selected.titulo, selected.cuerpo)
+                        const cuenta = cuentas.find((c) => c.red === r)
+                        const suyo = cuenta ? enlaceDeLaCuenta(cuenta) : null
+                        const componer = enlaceParaPublicar(r, texto)
+                        const largo = sePasaDeLargo(r, texto)
+                        return (
+                          <div className="redes-publicar__fila" key={r}>
+                            <span className="red-card__badge red-card__badge--sm" style={{ background: COLOR_RED[r] }}>
+                              {INICIAL_RED[r]}
+                            </span>
+                            <div className="redes-publicar__que">
+                              <b>{r}</b>
+                              <span className="table-subtle">{COMO_PUBLICAR[r].comoVa}</span>
+                              {/* X corta a los 280 y no avisa: corta y ya. */}
+                              {largo && (
+                                <span className="form-hint form-hint--error">
+                                  Son {texto.length} caracteres y en X caben {LIMITE_X}: acórtalo antes de publicar.
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                void copiarAlPortapapeles(texto).then((ok) =>
+                                  setCopiado(ok ? r : null))
+                              }}
+                            >
+                              {copiado === r ? '✓ Copiado' : 'Copiar texto'}
+                            </button>
+                            <a
+                              className="btn btn-primary btn-sm"
+                              href={componer ?? suyo ?? '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => {
+                                if (!componer && !suyo) {
+                                  e.preventDefault()
+                                  setErrorRed(`Conecta ${r} arriba para saber a qué cuenta abrir.`)
+                                  return
+                                }
+                                // Se copia al abrir: es lo primero que hace
+                                // falta al llegar allí.
+                                void copiarAlPortapapeles(texto)
+                              }}
+                            >
+                              Abrir {r}
+                            </a>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </dd>
                 </div>
               )}
               <div>

@@ -24,6 +24,16 @@ import { formatCurrency } from '../../lib/format'
 import { puedeVerModulo } from '../../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../../lib/suscripcion'
 import { esMiembro } from '../../lib/hermanoFicha'
+import GuiaPrimerosPasos from '../../components/GuiaPrimerosPasos'
+import type { EstadoDeLaHermandad } from '../../lib/primerosPasos'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
+import { useConceptosCuota } from '../../lib/conceptosCuota'
+import { useTramos } from '../../lib/tramos'
+import { getWebPublica } from '../../lib/webPublica'
+import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, type MiembroPersonal } from '../../lib/personal'
+import { personalToRow, rowToPersonal } from '../../lib/db/personal'
+import { useCuentasSociales } from '../../lib/db/comunicados'
+import { correoDisponible, getAjustesCorreo } from '../../lib/correo'
 
 const QUICK_ACTIONS = [
   { to: '/app/hermanos', label: 'Nuevo hermano', icon: 'user' as const, modulo: 'hermanos' },
@@ -84,6 +94,37 @@ export default function DashboardHome() {
   // primera pantalla que ve un cliente, y encima contradiciéndose entre sí.
   const [hermanos] = useSupabaseTable<Hermano>('hermanos', CLAVES_DATOS.hermanos, HERMANOS_INICIALES, hermanoToRow, rowToHermano, 'numero')
   const [cuotas] = useSupabaseTable<Cuota>('cuotas', CLAVES_DATOS.cuotas, CUOTAS_INICIALES, cuotaToRow, rowToCuota)
+
+  /* ---------------------------------------------------------------------
+     Lo que hace falta para el guiado de la primera vez.
+
+     Se mira el dato de VERDAD en cada caso —hay censo, hay tramos, está el
+     correo puesto— y no una marca guardada aparte. Con una marca, quien borra
+     su censo se queda con el paso tachado para siempre, y el guion pasa a
+     decir mentiras justo cuando más falta hace.
+     --------------------------------------------------------------------- */
+  const settings = useHermandadSettings()
+  const conceptos = useConceptosCuota()
+  const tramosCortejo = useTramos()
+  const [cuentasSociales] = useCuentasSociales()
+  const [personalGuia] = useSupabaseTable<MiembroPersonal>(
+    'personal', CLAVE_PERSONAL, getPersonal(), personalToRow, rowToPersonal,
+    undefined, { sinEspejo: true },
+  )
+  const estadoPuestaEnMarcha = useMemo<EstadoDeLaHermandad>(() => ({
+    tieneNombre: settings.nombreLegal.trim().length > 0,
+    tieneEscudo: !!settings.logoDataUrl,
+    hermanos: hermanos.length,
+    // El cargo puede estar en la ficha del censo o en la cuenta de acceso.
+    conCargo: cargosEfectivos(hermanos, personalGuia).size,
+    correoListo: correoDisponible(getAjustesCorreo()),
+    hayCuotas: conceptos.some((c) => c.importe > 0),
+    tramos: tramosCortejo.length,
+    tieneIban: settings.iban.trim().length > 0,
+    webPublicada: getWebPublica().publicada,
+    redesConectadas: cuentasSociales.filter((c) => c.conectada).length,
+    conAcceso: hermanos.filter((h) => h.authUserId).length,
+  }), [settings, hermanos, personalGuia, conceptos, tramosCortejo, cuentasSociales])
   const [papeletas] = useSupabaseTable<Papeleta>('papeletas', CLAVES_DATOS.papeletas, PAPELETAS_INICIALES, papeletaToRow, rowToPapeleta)
   const [movimientos] = useSupabaseTable<Movimiento>('movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento)
   const [documentos] = useSupabaseTable<Documento>('documentos', CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES, documentoToRow, rowToDocumento)
@@ -249,6 +290,14 @@ export default function DashboardHome() {
           </p>
         </div>
       </div>
+
+      {/*
+        EL GUIADO DE LA PRIMERA VEZ, arriba del todo y antes que las cifras.
+        Una hermandad recién creada tiene todas las cifras a cero, así que lo
+        primero que veía era un panel de ceros que no dice qué hacer. Se quita
+        solo en cuanto la puesta en marcha está terminada.
+      */}
+      <GuiaPrimerosPasos estado={estadoPuestaEnMarcha} />
 
       {statsVisibles.length > 0 && (
         <section className="stat-grid">

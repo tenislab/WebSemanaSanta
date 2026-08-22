@@ -932,7 +932,7 @@ export default function Hermanos() {
             {/* Importar vive aquí, junto a exportar: es la misma idea (entrar y
                 salir datos) y así se encuentra sin buscarla en Configuración. */}
             <button type="button" onClick={() => setImportarOpen(true)}>
-              Traer vuestro censo (CSV)
+              Traer vuestro censo (Excel o CSV)
             </button>
             <button type="button" className="no-print" onClick={() => window.print()} disabled={filtered.length === 0}>
               Imprimir el listado <small>{filtered.length}</small>
