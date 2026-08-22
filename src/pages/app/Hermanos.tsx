@@ -19,6 +19,8 @@ import { darLaBienvenida } from '../../lib/bienvenida'
 import { contarLaTanda, enviarAcceso, enviarAccesoEnTanda, porQueNoSePuede } from '../../lib/enviarAcceso'
 import { claveDeUnSoloUso } from '../../lib/claves'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
+import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, type MiembroPersonal } from '../../lib/personal'
+import { personalToRow, rowToPersonal } from '../../lib/db/personal'
 import { getCampana } from '../../lib/campana'
 import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
 import { toCsv, descargarArchivo } from '../../lib/csv'
@@ -178,9 +180,29 @@ export default function Hermanos() {
 
   const [criterios, setCriterios] = useState<CriteriosSegmento>(SIN_SESGO)
   const sesgoActivo = !mismosCriterios(criterios, SIN_SESGO)
+  /*
+   * El cargo que lleva cada uno de verdad, mirando también su fila de personal.
+   * Va aquí por lo mismo que en Comunicados: el cargo puede estar en la ficha
+   * del censo o en la cuenta con la que entra al panel, y si cada pantalla mira
+   * un sitio distinto, el mismo sesgo guardado devuelve gente distinta según
+   * dónde se abra.
+   */
+  const [personal] = useSupabaseTable<MiembroPersonal>(
+    'personal',
+    CLAVE_PERSONAL,
+    getPersonal(),
+    personalToRow,
+    rowToPersonal,
+    undefined,
+    // Solo se LEE: esta pantalla no da ni quita cargos, eso es cosa de Personal
+    // y permisos. `sinEspejo` evita que una consulta que vuelva vacía —por lo
+    // que sea— machaque la copia de personal que hay en el navegador.
+    { sinEspejo: true },
+  )
+  const cargosPorHermano = useMemo(() => cargosEfectivos(hermanos, personal), [hermanos, personal])
   const sesgados = useMemo(
-    () => (sesgoActivo ? filtrarSegmento(hermanos, limpiarCriterios(criterios), roles) : hermanos),
-    [hermanos, criterios, sesgoActivo, roles],
+    () => (sesgoActivo ? filtrarSegmento(hermanos, limpiarCriterios(criterios), roles, cargosPorHermano) : hermanos),
+    [hermanos, criterios, sesgoActivo, roles, cargosPorHermano],
   )
   const camposDeAlta = camposPropios.filter((c) => c.enAlta && c.nombre.trim())
   // Los campos propios del alta no van en el <form> (no son inputs con name):

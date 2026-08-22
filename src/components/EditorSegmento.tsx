@@ -206,9 +206,23 @@ export default function EditorSegmento({
         </label>
       )}
 
-      <p className="form-hint">
-        Ahora mismo: <b>{cuantos}</b> hermano{cuantos === 1 ? '' : 's'} — {etiquetaSegmento(criterios, campos)}.
-      </p>
+      {/* Un CERO no es un dato más: es que el comunicado no le va a llegar a
+          nadie. Pintado igual que un «43 hermanos», se lee por encima y se
+          sigue adelante. Y se nombran los dos filtros que lo causan casi
+          siempre, porque el sesgo tiene seis y mirarlos todos cansa. */}
+      {cuantos === 0 ? (
+        <p className="form-hint form-hint--error">
+          <b>Con este sesgo no le llega a nadie.</b> Casi siempre es una de dos: el estado
+          {criterios.estado !== 'Todos' && criterios.estado !== 'Cualquiera'
+            ? ` (ahora pide «${criterios.estado}», y los hermanos recién dados de alta son «Nuevo»)`
+            : ''}
+          {criterios.soloConEmail ? ', o que pides solo los que tienen correo' : ''}.
+        </p>
+      ) : (
+        <p className="form-hint">
+          Ahora mismo: <b>{cuantos}</b> hermano{cuantos === 1 ? '' : 's'} — {etiquetaSegmento(criterios, campos)}.
+        </p>
+      )}
 
       <div className="assign-box__row">
         {guardando ? (

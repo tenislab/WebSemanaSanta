@@ -117,12 +117,19 @@ async function correoAuditoria({ cargar, caso }) {
 
   // --- Los segmentos ---
   const com = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  // Los criterios guardados mandan sobre el texto legible, y se miran los
+  // PRIMEROS: son la única verdad de a quién iba dirigido el comunicado.
   caso('los destinatarios salen de los criterios guardados', true,
-    /if \(c\.criterios\) return filtrarSegmento\(hermanos, c\.criterios, rolesPorHermano\)/.test(com))
+    /hermanos: filtrarSegmento\(hermanos, c\.criterios, rolesPorHermano, cargosPorHermano\)/.test(com))
   caso('y los criterios se guardan en el comunicado', true, /criterios: criteriosGuardados,/.test(com))
   caso('no se guarda como enviado si no hay nadie', true,
-    /if \(estado === 'Enviado' && reciben\.length === 0\)/.test(com))
-  caso('el alcance sale de a quién se escribió', true, /alcance: reciben\.length/.test(com))
+    /if \(estado === 'Enviado' && cuantos === 0\)/.test(com))
+  // El alcance cuenta a los dos grupos: los del censo y las cuentas de la
+  // junta que no tienen ficha. Contando solo los primeros, un comunicado que
+  // había llegado a seis personas quedaba registrado con alcance cero.
+  caso('el alcance sale de a quién se escribió', true, /alcance: cuantosSon\(alcance\)/.test(com))
+  caso('y cuenta también a la junta sin ficha', true,
+    /return a\.hermanos\.length \+ a\.soloCorreo\.length/.test(com))
   // «Enviar ahora» del formulario tiene que mandar el correo, no solo el buzón.
   caso('«Enviar ahora» del formulario manda correo', true, /void enviarAhora\(nuevos\[0\]\)/.test(com))
 

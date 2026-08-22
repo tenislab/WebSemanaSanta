@@ -65,14 +65,23 @@ export const PRECIO_BASE_POR_DEFECTO = 18
  * uno, en ese orden — ver lib/cortejo.ts.
  */
 const TRAMOS_POR_DEFECTO: Tramo[] = [
-  { id: 't1', nombre: 'Cruz de guía', cuerpo: 'Cristo', capacidad: 3, tipo: 'Insignia', reparto: 'solicitud', precio: 22 },
-  { id: 't2', nombre: 'Insignias', cuerpo: 'Cristo', capacidad: 8, tipo: 'Insignia', reparto: 'solicitud' },
-  { id: 't3', nombre: 'Cirio 1º tramo', cuerpo: 'Cristo', capacidad: 40, tipo: 'Cirio', reparto: 'numero' },
-  { id: 't4', nombre: 'Cirio 2º tramo', cuerpo: 'Cristo', capacidad: 40, tipo: 'Cirio', reparto: 'numero' },
-  { id: 't5', nombre: 'Música', cuerpo: 'Único', capacidad: 25, tipo: 'Música', reparto: 'solicitud' },
-  { id: 't6', nombre: 'Cirio 1º tramo', cuerpo: 'Virgen', capacidad: 40, tipo: 'Cirio', reparto: 'numero' },
-  { id: 't7', nombre: 'Cirio 2º tramo', cuerpo: 'Virgen', capacidad: 40, tipo: 'Cirio', reparto: 'numero' },
-  { id: 't8', nombre: 'Presidencia', cuerpo: 'Virgen', capacidad: 8, tipo: 'Presidencia', reparto: 'solicitud' },
+  /*
+   * Con etiqueta, para que la demostración enseñe los roles automáticos.
+   *
+   * Sin ellas no se ve el mecanismo por ninguna parte: el desplegable de
+   * destinatarios de Comunicados ofrecía «Nazareno», «Acólito» y «Banda /
+   * Música» y las tres alcanzaban a cero personas, porque ningún tramo decía
+   * qué rol da. Se lee como que la segmentación por rol no funciona, y lo que
+   * pasaba es que en la demostración no había nada que etiquetar.
+   */
+  { id: 't1', nombre: 'Cruz de guía', cuerpo: 'Cristo', capacidad: 3, tipo: 'Insignia', reparto: 'solicitud', precio: 22, etiqueta: 'Nazareno' },
+  { id: 't2', nombre: 'Insignias', cuerpo: 'Cristo', capacidad: 8, tipo: 'Insignia', reparto: 'solicitud', etiqueta: 'Nazareno' },
+  { id: 't3', nombre: 'Cirio 1º tramo', cuerpo: 'Cristo', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't4', nombre: 'Cirio 2º tramo', cuerpo: 'Cristo', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't5', nombre: 'Música', cuerpo: 'Único', capacidad: 25, tipo: 'Música', reparto: 'solicitud', etiqueta: 'Banda / Música' },
+  { id: 't6', nombre: 'Cirio 1º tramo', cuerpo: 'Virgen', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't7', nombre: 'Cirio 2º tramo', cuerpo: 'Virgen', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't8', nombre: 'Presidencia', cuerpo: 'Virgen', capacidad: 8, tipo: 'Presidencia', reparto: 'solicitud', etiqueta: 'Acólito' },
 ]
 
 /**

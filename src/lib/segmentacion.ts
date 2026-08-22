@@ -49,8 +49,22 @@ export interface CondicionCampo {
   valor: string
 }
 
+/*
+ * EL SESGO DE PARTIDA.
+ *
+ * Empezaba en «Activo», y eso dejaba fuera a TODO el mundo en una hermandad
+ * recién montada: un hermano creado a mano nace como «Nuevo», y los importados
+ * con antigüedad de este año, también. Así que se abría el sesgo avanzado, se
+ * elegía lo que fuera, y alcanzaba a cero personas — no por lo elegido, sino
+ * por un filtro que ya venía puesto y que nadie había tocado.
+ *
+ * Se lee como «esto no funciona», y es lo que llegó reportado.
+ *
+ * «Todos» es todos menos las bajas, que es justo lo que se quiere al mandar un
+ * comunicado — lo dice el comentario del propio campo unas líneas más arriba.
+ */
 export const CRITERIOS_POR_DEFECTO: CriteriosSegmento = {
-  estado: 'Activo',
+  estado: 'Todos',
   cuota: 'Todos',
   edad: 'Todos',
   etiqueta: '',
@@ -78,11 +92,16 @@ export function edadDe(fechaNacimiento: string | undefined, hoy = new Date()): n
  * pura, pero **hay que pasarlas**: sin ellas, sesgar por «Costalero» no
  * encuentra a los costaleros de este año, que es justo el caso para el que se
  * inventaron los roles automáticos.
+ *
+ * `cargos` es lo mismo para los cargos de junta (ver `cargosEfectivos` en
+ * `personal.ts`): el cargo puede estar en la ficha del censo o en su fila de
+ * personal, y hay que mirar las dos.
  */
 export function filtrarSegmento(
   hermanos: Hermano[],
   c: CriteriosSegmento,
   roles: Map<string, string[]> = new Map(),
+  cargos: Map<string, string> = new Map(),
 ): Hermano[] {
   return hermanos.filter((h) => {
     // Las bajas nunca reciben salvo que se pidan explícitamente.
@@ -111,7 +130,17 @@ export function filtrarSegmento(
       if (!suyas.includes(c.etiqueta) && !automaticas.includes(c.etiqueta)) return false
     }
     if (c.cargo) {
-      const suyo = (h.cargo ?? '').trim()
+      /*
+       * El cargo puede venir de la ficha del censo o de su fila de personal, y
+       * cuando están las dos manda la de personal —es la que decide qué ve al
+       * entrar—. `cargosEfectivos` ya lo resuelve; aquí solo se usa.
+       *
+       * Mirando solo `h.cargo` se quedaba fuera media junta: quien lleva el
+       * cargo por su cuenta de acceso y no lo tiene escrito en su ficha del
+       * censo no recibía la convocatoria, y no había ningún aviso de que
+       * faltara.
+       */
+      const suyo = (cargos.get(h.id) ?? h.cargo ?? '').trim()
       // «Hermano de a pie» está en el catálogo de cargos pero no es junta: es
       // lo que se le pone a quien no lleva ninguno. Si contara, «solo a la
       // junta» sería «a todo el censo», que es exactamente lo contrario.
@@ -214,4 +243,84 @@ export function mismosCriterios(a: CriteriosSegmento, b: CriteriosSegmento): boo
 export function limpiarCriterios(c: CriteriosSegmento): CriteriosSegmento {
   const vigentes = new Set(getCamposPropios().map((x) => x.id))
   return { ...c, campos: (c.campos ?? []).filter((x) => vigentes.has(x.campoId)) }
+}
+
+/* --------------------- Los segmentos de siempre, resueltos --------------------- */
+
+/** Minúsculas y sin tildes, para que «al día» y «al dia» sean lo mismo. */
+function sinAcentos(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+/**
+ * EL DESPLEGABLE DE DESTINATARIOS, TRADUCIDO A CRITERIOS.
+ *
+ * EL FALLO QUE TAPA, y era el módulo entero. El desplegable ofrece cinco
+ * opciones de fábrica, y quien las resolvía solo sabía hacer dos cosas: las que
+ * empiezan por «Etiqueta: » y las que contienen la palabra «todos».
+ *
+ * O sea que de las cinco, CUATRO no alcanzaban a nadie:
+ *
+ *   · «Todos los hermanos»              ✓ funcionaba
+ *   · «Hermanos con cuota al día»       0 personas
+ *   · «Hermanos con cuota pendiente»    0 personas
+ *   · «Nazarenos con papeleta de sitio» 0 personas
+ *   · «Junta de Gobierno»               0 personas
+ *
+ * Y no fallaba con un error: el comunicado se guardaba, decía «Enviado», y no
+ * lo recibía nadie. Ofrecer una opción que no hace nada es peor que no
+ * ofrecerla.
+ *
+ * Se reconoce por partes y no por la frase entera a propósito: la lista de
+ * segmentos es un catálogo que la hermandad edita, así que ahí acaba habiendo
+ * «Junta de Gobierno saliente», «Hermanos que deben cuota» o «Mayores de edad»
+ * escritos a su manera. Cada trozo reconocido suma un criterio, de forma que un
+ * nombre compuesto —«Junta de Gobierno mayores de edad»— sale bien.
+ *
+ * Devuelve `null` si no reconoce NADA. Eso no es «no hay nadie»: es «no sé a
+ * quién te refieres», y quien llama tiene que decirlo en pantalla en vez de
+ * mandar el comunicado al vacío.
+ */
+export function criteriosDeSegmento(nombre: string): CriteriosSegmento | null {
+  /*
+   * `soloConEmail: false` a posta. Un comunicado llega SIEMPRE al buzón del
+   * área del hermano, tenga correo o no; el email es un extra que se manda
+   * después a los que sí lo tienen. Filtrar aquí por correo dejaría fuera del
+   * buzón a quien no lo ha dado, que es justo quien más depende del área.
+   */
+  const c: CriteriosSegmento = { ...CRITERIOS_POR_DEFECTO, soloConEmail: false }
+  const n = sinAcentos(nombre)
+  let reconocido = false
+
+  if (/\bal dia\b|al corriente|\bpagad/.test(n)) { c.cuota = 'AlDia'; reconocido = true }
+  if (/pendiente|moros|impagad|\bdeuda\b|\bdeben?\b/.test(n)) { c.cuota = 'Pendiente'; reconocido = true }
+  if (/junta|directiv|oficiales/.test(n)) { c.cargo = '__junta'; reconocido = true }
+  if (/mayores de edad|\badultos\b/.test(n)) { c.edad = 'Mayores'; reconocido = true }
+  if (/menores|\bninos\b|infantil/.test(n)) { c.edad = 'Menores'; reconocido = true }
+  const nombraTodos = /\btodos\b|\bcenso\b|\bgeneral\b/.test(n)
+  // Las bajas nunca entran salvo que se las nombre. Y «todos» + «bajas» no es
+  // solo las bajas: es el censo entero, bajas incluidas.
+  const nombraBajas = /\bbajas?\b/.test(n)
+  if (nombraBajas) c.estado = nombraTodos ? 'Cualquiera' : 'Baja'
+  if (nombraTodos || nombraBajas) reconocido = true
+
+  return reconocido ? c : null
+}
+
+/**
+ * ¿El segmento habla de la papeleta de sitio? `con` = los que la tienen,
+ * `sin` = los que no, `null` = no va de eso.
+ *
+ * Va aparte de `criteriosDeSegmento` porque no se puede resolver mirando solo
+ * el censo: hay que ir a las papeletas del año en curso. Los dos se combinan,
+ * así que «Junta de Gobierno sin papeleta» funciona.
+ */
+export function segmentoDePapeleta(nombre: string): 'con' | 'sin' | null {
+  const n = sinAcentos(nombre)
+  if (!/papeleta|nazaren|\bsitio\b|cortejo/.test(n)) return null
+  return /\bsin\b|\bno\b|\bfaltan?\b|aun no|todavia no/.test(n) ? 'sin' : 'con'
 }

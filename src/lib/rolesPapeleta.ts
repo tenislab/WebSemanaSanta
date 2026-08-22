@@ -97,3 +97,24 @@ export function etiquetasQueSonAutomaticas(
   )
   return [...todas].sort((a, b) => a.localeCompare(b, 'es'))
 }
+
+/**
+ * Los hermanos que tienen SITIO DE VERDAD en el cortejo de ese año.
+ *
+ * No vale `indiceRoles` para esto: ahí solo salen los tramos a los que la
+ * hermandad les ha puesto etiqueta, y la mayoría no la lleva. Con `indiceRoles`,
+ * «mandar a los que tienen papeleta» dejaba fuera a todo el que fuera en un
+ * tramo sin etiqueta — que suele ser el cortejo entero.
+ *
+ * Lleva tramo o no lleva nada: la papeleta simbólica NO da sitio (es
+ * justamente la de quien no sale), así que su titular no entra aquí.
+ */
+export function conPapeletaDeSitio(papeletas: Papeleta[], anio: number): Set<string> {
+  const salida = new Set<string>()
+  for (const p of papeletas) {
+    if (p.anio !== anio || !CUENTA.has(p.estado)) continue
+    if (!p.tramoId) continue
+    salida.add(p.hermanoId)
+  }
+  return salida
+}

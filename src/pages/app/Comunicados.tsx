@@ -20,14 +20,18 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { getCampana } from '../../lib/campana'
 import { useTramos } from '../../lib/tramos'
-import { etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
+import { conPapeletaDeSitio, etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
+import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, personalDelSegmento, type MiembroPersonal } from '../../lib/personal'
+import { personalToRow, rowToPersonal } from '../../lib/db/personal'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
 import { useEtiquetas } from '../../lib/etiquetas'
 import {
   CRITERIOS_POR_DEFECTO,
+  criteriosDeSegmento,
   filtrarSegmento,
   etiquetaSegmento,
+  segmentoDePapeleta,
   type CriteriosSegmento,
 } from '../../lib/segmentacion'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
@@ -40,6 +44,21 @@ import { hoyIso } from '../../lib/hoy'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
+
+/**
+ * A quién alcanza un destinatario.
+ *
+ *   · `hermanos`   los del censo: buzón en su área y, si hay correo, correo.
+ *   · `soloCorreo` la junta que tiene cuenta de acceso pero NO ficha en el
+ *                  censo. No tienen área, así que buzón no hay; correo sí.
+ *   · `reconocido` si sabemos siquiera a quién se refiere. `false` no es «no
+ *                  hay nadie»: es «no lo entiendo», y hay que decirlo.
+ */
+interface Alcance {
+  hermanos: Hermano[]
+  soloCorreo: MiembroPersonal[]
+  reconocido: boolean
+}
 
 function fmt(iso: string | null) {
   if (!iso) return '—'
@@ -110,12 +129,7 @@ export default function Comunicados() {
     )
   }
   /**
-   * A quién le llega de verdad al buzón. Por etiqueta, los que la tengan; y
-   * «Todos los hermanos», al censo activo entero. Un segmento que no sepamos
-   * resolver no avisa a nadie, en vez de avisar a todos por si acaso.
-   */
-  /**
-   * A quién le llega este comunicado.
+   * A QUIÉN LE LLEGA ESTE COMUNICADO, resuelto entero.
    *
    * Se mira PRIMERO `criterios`, que es la verdad: los criterios exactos con
    * los que se compuso el segmento. Antes solo se guardaba la etiqueta legible
@@ -125,15 +139,76 @@ export default function Comunicados() {
    * ninguna de las dos y devolvía lista VACÍA: 84 hermanos sin buzón, sin
    * correo y sin nada, con el comunicado guardado como «Enviado».
    *
-   * Lo de la etiqueta y lo de «todos» se conservan para los comunicados que ya
-   * estaban guardados antes de que existiera `criterios`.
+   * Y eso mismo se llevaba por delante CUATRO DE LAS CINCO opciones del
+   * desplegable de fábrica, que es lo que llegó reportado como «comunicados no
+   * funciona»:
+   *
+   *   · «Todos los hermanos»              ✓ la única que iba
+   *   · «Hermanos con cuota al día»       0 personas
+   *   · «Hermanos con cuota pendiente»    0 personas
+   *   · «Nazarenos con papeleta de sitio» 0 personas
+   *   · «Junta de Gobierno»               0 personas
+   *
+   * Ahora el orden es: criterios guardados → etiqueta → nombre del segmento
+   * (`criteriosDeSegmento`, que además se combina con la papeleta) → y, de
+   * último recurso, el nombre entendido como etiqueta suelta, porque el
+   * catálogo de segmentos lo edita la hermandad y ahí acaba escrito «Costaleros»
+   * a secas.
+   *
+   * `reconocido` distingue las dos cosas que antes se confundían: «no hay nadie
+   * que cumpla» (bien, se avisa) y «no sé a quién te refieres» (mal, hay que
+   * decirlo en pantalla). Sin esa distinción, un segmento inventado se mandaba
+   * al vacío y quedaba guardado como enviado.
    */
-  function hermanosAAvisar(c: Pick<Comunicado, 'destinatarios' | 'criterios'>): Hermano[] {
-    if (c.criterios) return filtrarSegmento(hermanos, c.criterios, rolesPorHermano)
-    const porEtiqueta = hermanosDeDestinatario(c.destinatarios)
-    if (porEtiqueta.length > 0) return porEtiqueta
-    if (/todos/i.test(c.destinatarios)) return hermanos.filter((h) => h.estado !== 'Baja')
-    return []
+  function resolverDestinatario(
+    c: Pick<Comunicado, 'destinatarios' | 'criterios'>,
+  ): Alcance {
+    if (c.criterios) {
+      return {
+        hermanos: filtrarSegmento(hermanos, c.criterios, rolesPorHermano, cargosPorHermano),
+        soloCorreo: personalDelSegmento(c.criterios, personal, hermanos),
+        reconocido: true,
+      }
+    }
+
+    // La etiqueta se comprueba por el prefijo, no por si encuentra a alguien:
+    // «Etiqueta: Junta» sin nadie dentro NO puede caer luego en la regla de la
+    // junta y acabar mandándoselo a los doce de la junta.
+    if (c.destinatarios.startsWith(PREFIJO_ETIQUETA)) {
+      return { hermanos: hermanosDeDestinatario(c.destinatarios), soloCorreo: [], reconocido: true }
+    }
+
+    const papeleta = segmentoDePapeleta(c.destinatarios)
+    const criterios = criteriosDeSegmento(c.destinatarios)
+    if (papeleta || criterios) {
+      const base = criterios ?? { ...CRITERIOS_POR_DEFECTO, soloConEmail: false }
+      let lista = filtrarSegmento(hermanos, base, rolesPorHermano, cargosPorHermano)
+      if (papeleta === 'con') lista = lista.filter((h) => conSitio.has(h.id))
+      if (papeleta === 'sin') lista = lista.filter((h) => !conSitio.has(h.id))
+      // Y la junta que tiene cuenta pero no ficha en el censo: sin esto,
+      // «Junta de Gobierno» no alcanzaba a nadie en las hermandades que dan de
+      // alta a su junta por Personal, que son muchas.
+      const soloCorreo = papeleta ? [] : personalDelSegmento(base, personal, hermanos)
+      return { hermanos: lista, soloCorreo, reconocido: true }
+    }
+
+    // Un segmento que la hermandad se ha inventado en el catálogo y que coincide
+    // con una etiqueta del censo (o con un rol de papeleta), escrito sin el
+    // «Etiqueta: » delante.
+    const suelta = c.destinatarios.trim()
+    const porNombre = suelta
+      ? hermanos.filter(
+        (h) => h.estado !== 'Baja' && etiquetasDe(h, rolesPorHermano.get(h.id) ?? []).includes(suelta),
+      )
+      : []
+    if (porNombre.length > 0) return { hermanos: porNombre, soloCorreo: [], reconocido: true }
+
+    return { hermanos: [], soloCorreo: [], reconocido: false }
+  }
+
+  /** Cuánta gente recibe el comunicado en total: censo y cuentas sueltas. */
+  function cuantosSon(a: Alcance): number {
+    return a.hermanos.length + a.soloCorreo.length
   }
 
   const [query, setQuery] = useState('')
@@ -147,6 +222,13 @@ export default function Comunicados() {
     setCanalesNuevos((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]))
   const [estadoNuevo, setEstadoNuevo] = useState<EstadoComunicado>('Borrador')
   const [segmentarAvanzado, setSegmentarAvanzado] = useState(false)
+  /**
+   * El destinatario elegido, en estado y no solo en el `<select>`. Hace falta
+   * para poder decir DEBAJO del desplegable a cuántos hermanos alcanza lo que
+   * se acaba de elegir. Antes no se sabía hasta después de guardar —y con
+   * cuatro de las cinco opciones alcanzando a cero, no se sabía nunca.
+   */
+  const [destinatarioNuevo, setDestinatarioNuevo] = useState('')
   const [criterios, setCriterios] = useState<CriteriosSegmento>(CRITERIOS_POR_DEFECTO)
   /**
    * Los roles que salen de la papeleta (costalero, acólito, mantilla). Sin
@@ -157,11 +239,41 @@ export default function Comunicados() {
   // en el navegador: con la foto, «mandar solo a los costaleros» buscaba los
   // roles de los tramos de EJEMPLO y no encontraba a ninguno de los de verdad.
   const tramosReales = useTramos()
-  const rolesPorHermano = useMemo(() => {
-    const anio = getCampana().anio
-    const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
-    return indiceRoles(papeletas, tramosReales, anio)
-  }, [tramosReales])
+  const papeletasDelAnio = useMemo(() => leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES), [])
+  const rolesPorHermano = useMemo(
+    () => indiceRoles(papeletasDelAnio, tramosReales, getCampana().anio),
+    [papeletasDelAnio, tramosReales],
+  )
+  /**
+   * Quién tiene sitio de verdad en el cortejo de este año, para «Nazarenos con
+   * papeleta de sitio». No se saca de `rolesPorHermano` a propósito: ahí solo
+   * están los tramos con etiqueta puesta, y casi ninguno la lleva.
+   */
+  const conSitio = useMemo(
+    () => conPapeletaDeSitio(papeletasDelAnio, getCampana().anio),
+    [papeletasDelAnio],
+  )
+  /**
+   * El cargo que lleva cada hermano DE VERDAD, mirando también su fila de
+   * personal. Sin esto, «Junta de Gobierno» se dejaba fuera a quien lleva el
+   * cargo por su cuenta de acceso y no lo tiene escrito en su ficha del censo
+   * —que en una hermandad que empezó dando de alta a la junta por Personal son
+   * todos—. Es el fallo que se reportó como «no puedo mandárselo solo a la
+   * junta».
+   */
+  const [personal] = useSupabaseTable<MiembroPersonal>(
+    'personal',
+    CLAVE_PERSONAL,
+    getPersonal(),
+    personalToRow,
+    rowToPersonal,
+    undefined,
+    // Solo se LEE: esta pantalla no da ni quita cargos, eso es cosa de Personal
+    // y permisos. `sinEspejo` evita que una consulta que vuelva vacía —por lo
+    // que sea— machaque la copia de personal que hay en el navegador.
+    { sinEspejo: true },
+  )
+  const cargosPorHermano = useMemo(() => cargosEfectivos(hermanos, personal), [hermanos, personal])
   const rolesDisponibles = useMemo(
     () => etiquetasQueSonAutomaticas(tramosReales),
     [tramosReales],
@@ -172,9 +284,20 @@ export default function Comunicados() {
     [etiquetas, rolesDisponibles],
   )
   const segmentoHermanos = useMemo(
-    () => filtrarSegmento(hermanos, criterios, rolesPorHermano),
-    [hermanos, criterios, rolesPorHermano],
+    () => filtrarSegmento(hermanos, criterios, rolesPorHermano, cargosPorHermano),
+    [hermanos, criterios, rolesPorHermano, cargosPorHermano],
   )
+  /**
+   * A cuántos alcanza el destinatario elegido en el desplegable, para poder
+   * enseñarlo debajo. Se calcula solo con el formulario abierto: es un recorrido
+   * del censo entero y no hace falta hacerlo mientras se mira la lista.
+   *
+   * Va aquí abajo y no arriba del todo porque `resolverDestinatario` usa
+   * `conSitio` y `rolesPorHermano`, que se declaran unas líneas más arriba.
+   */
+  const alcanceNuevo: Alcance = formOpen && !segmentarAvanzado
+    ? resolverDestinatario({ destinatarios: destinatarioNuevo, criterios: null })
+    : { hermanos: [], soloCorreo: [], reconocido: true }
 
   const [conectando, setConectando] = useState<RedSocial | null>(null)
   const [usuarioInput, setUsuarioInput] = useState('')
@@ -212,7 +335,9 @@ export default function Comunicados() {
   function abrirNuevo() {
     setCanalesNuevos([canales[0] ?? 'Email'])
     setSegmentarAvanzado(false)
+    setDestinatarioNuevo(segmentos[0] ?? '')
     setEstadoNuevo('Borrador')
+    setEnvioCorreo(null)
     setFormOpen(true)
   }
 
@@ -231,13 +356,14 @@ export default function Comunicados() {
     const hoy = hoyIso()
     // Al buzón de cada hermano en su área, SIEMPRE. Es lo que no depende de que
     // haya proveedor de correo contratado.
-    const reciben = hermanosAAvisar(c)
+    const alcance = resolverDestinatario(c)
+    const reciben = alcance.hermanos
 
     // El alcance sale de a quién se le ha escrito DE VERDAD. Antes se calculaba
     // aparte con `hermanosDeDestinatario`, que no sabe resolver un segmento, así
     // que un comunicado que no había llegado a nadie podía quedar registrado
     // con 84 personas alcanzadas.
-    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance: reciben.length }
+    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance: cuantosSon(alcance) }
     setComunicados((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)))
     setSelected(actualizado)
 
@@ -248,10 +374,14 @@ export default function Comunicados() {
     // la hermandad active el correo no le quita a nadie su decisión.
     const ajustes = getAjustesCorreo()
     if (!correoDisponible(ajustes) || !ajustes.avisaDe.comunicados) return
-    const direcciones = reciben
-      .filter((h) => quiereAviso(getPreferenciasAvisos(h.id), 'comunicado'))
-      .map((h) => h.email)
-      .filter((e) => e && e.includes('@'))
+    const direcciones = [
+      ...reciben
+        .filter((h) => quiereAviso(getPreferenciasAvisos(h.id), 'comunicado'))
+        .map((h) => h.email),
+      // La junta con cuenta pero sin ficha en el censo. No tiene área donde
+      // apagar los avisos, así que no hay preferencia que respetar: se le manda.
+      ...alcance.soloCorreo.map((p) => p.email),
+    ].filter((e) => e && e.includes('@'))
     if (direcciones.length === 0) return
     setEnvioCorreo({ estado: 'enviando' })
     // El mismo membrete que los demás avisos: la banda con el color y el
@@ -279,7 +409,7 @@ export default function Comunicados() {
     const canalesSel = canalesNuevos.length > 0 ? canalesNuevos : [canales[0] ?? 'Email']
     const destinatarios = segmentarAvanzado
       ? etiquetaSegmento(criterios)
-      : String(data.get('destinatarios') ?? segmentos[0])
+      : (destinatarioNuevo || segmentos[0] || '')
     const estado = String(data.get('estado') ?? 'Borrador') as EstadoComunicado
     /*
      * LOS AVISOS, EN VOZ ALTA.
@@ -318,13 +448,31 @@ export default function Comunicados() {
     // Los criterios se guardan, no solo su etiqueta: es lo único que permite
     // volver a resolver a quién iba dirigido.
     const criteriosGuardados = segmentarAvanzado ? criterios : null
-    const reciben = hermanosAAvisar({ destinatarios, criterios: criteriosGuardados })
+    const resuelto = resolverDestinatario({ destinatarios, criterios: criteriosGuardados })
+    const cuantos = cuantosSon(resuelto)
+
+    /*
+     * Un destinatario que no sabemos resolver no sale del borrador. No es lo
+     * mismo que «hoy no hay nadie que cumpla»: eso cambia mañana, y un aviso de
+     * cuota pendiente programado es legítimo aunque hoy no deba nadie. Esto
+     * otro no cambia nunca — el nombre no significa nada para el programa— y si
+     * se deja pasar, se manda al vacío y queda guardado como enviado.
+     */
+    if (estado !== 'Borrador' && !resuelto.reconocido) {
+      setEnvioCorreo({
+        estado: 'error',
+        texto: `No sabemos a quién se refiere «${destinatarios}»: no coincide con ninguna etiqueta `
+          + 'del censo ni con ningún criterio que sepamos leer. Elige otro destinatario, o marca '
+          + '«Segmentación avanzada» y di a quién por criterios.',
+      })
+      return
+    }
 
     // Si va a salir AHORA y no hay a quién, no se guarda como enviado: eso
     // dejaba un comunicado «Enviado» con su fecha y su alcance sin que nadie
     // hubiera recibido nada, y sin manera de volver a intentarlo porque el
     // botón de mandar solo sale en los borradores.
-    if (estado === 'Enviado' && reciben.length === 0) {
+    if (estado === 'Enviado' && cuantos === 0) {
       setEnvioCorreo({
         estado: 'error',
         texto: 'Con ese sesgo no sale ningún hermano, así que no hay a quién mandarlo. '
@@ -333,7 +481,7 @@ export default function Comunicados() {
       return
     }
 
-    const alcance = estado === 'Enviado' ? reciben.length : null
+    const alcance = estado === 'Enviado' ? cuantos : null
     // Un comunicado por cada canal elegido (así cada uno aparece en su canal).
     const nuevos: Comunicado[] = canalesSel.map((canal, idx) => ({
       id: nuevoId(),
@@ -583,15 +731,23 @@ export default function Comunicados() {
                 <dd>{selected.destinatarios}</dd>
               </div>
               {(() => {
-                const receptores = hermanosDeDestinatario(selected.destinatarios)
-                if (receptores.length === 0) return null
+                /*
+                 * Con el resolver entero, no solo con la etiqueta. Antes esta
+                 * lista solo aparecía si el destinatario empezaba por
+                 * «Etiqueta: », así que en «Junta de Gobierno» o «cuota
+                 * pendiente» no se veía a quién le había llegado — que es
+                 * justo cuando hace falta comprobarlo.
+                 */
+                const alcance = resolverDestinatario(selected)
+                const receptores = alcance.hermanos
+                const total = cuantosSon(alcance)
+                if (total === 0) return null
                 return (
                   <div>
                     <dt>Aviso por email (simulado)</dt>
                     <dd>
                       Se {selected.estado === 'Enviado' ? 'ha enviado' : 'enviaría'} a{' '}
-                      <b>{receptores.length}</b> hermano{receptores.length === 1 ? '' : 's'} con esta
-                      etiqueta:
+                      <b>{total}</b> persona{total === 1 ? '' : 's'}:
                       <div className="etiquetas-chips" style={{ marginTop: '0.4rem' }}>
                         {receptores.slice(0, 12).map((h) => (
                           <span key={h.id} className="etiqueta-pill">
@@ -601,6 +757,14 @@ export default function Comunicados() {
                         {receptores.length > 12 && (
                           <span className="etiqueta-pill">+{receptores.length - 12} más</span>
                         )}
+                        {/* La junta con cuenta pero sin ficha en el censo: solo
+                            les llega el correo, porque no tienen área donde
+                            recibir el aviso. Se marcan para que se vea. */}
+                        {alcance.soloCorreo.map((p) => (
+                          <span key={p.id} className="etiqueta-pill" title="Solo por correo: no tiene ficha en el censo">
+                            {p.nombre} · {p.email} (solo correo)
+                          </span>
+                        ))}
                       </div>
                       <AvisoFalta compacto requisito={requisito('correo')} />
                     </dd>
@@ -717,7 +881,13 @@ export default function Comunicados() {
             </div>
             <div className="form-row">
               <label htmlFor="destinatarios">Destinatarios</label>
-              <select id="destinatarios" name="destinatarios" defaultValue={segmentos[0]} disabled={segmentarAvanzado}>
+              <select
+                id="destinatarios"
+                name="destinatarios"
+                value={destinatarioNuevo}
+                onChange={(e) => setDestinatarioNuevo(e.target.value)}
+                disabled={segmentarAvanzado}
+              >
                 {segmentos.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -731,6 +901,40 @@ export default function Comunicados() {
                   </optgroup>
                 )}
               </select>
+              {/*
+                EL ALCANCE, ANTES DE MANDARLO. Es el aviso que faltaba: se
+                elegía «Junta de Gobierno», se enviaba, y la pantalla decía
+                «Enviado» sin que le hubiera llegado a nadie. Ahora se ve el
+                número al elegir, y si el segmento no se entiende se dice.
+              */}
+              {!segmentarAvanzado && (
+                alcanceNuevo.reconocido ? (
+                  <p className={`form-hint${cuantosSon(alcanceNuevo) === 0 ? ' form-hint--error' : ''}`}>
+                    {cuantosSon(alcanceNuevo) === 0
+                      ? 'Ahora mismo no hay ningún hermano que encaje aquí, así que no le llegaría a nadie.'
+                      : [
+                        alcanceNuevo.hermanos.length > 0
+                          && `Le llegará a ${alcanceNuevo.hermanos.length} hermano${alcanceNuevo.hermanos.length === 1 ? '' : 's'}`
+                            + ` (${alcanceNuevo.hermanos.filter((h) => h.email?.includes('@')).length} con correo).`,
+                        // La junta que entra al panel con su cuenta pero no
+                        // tiene ficha en el censo: no tiene área donde recibir
+                        // el aviso, así que se le manda solo por correo. Se
+                        // dice, para que nadie cuente mal el alcance.
+                        alcanceNuevo.soloCorreo.length > 0
+                          && `${alcanceNuevo.hermanos.length > 0 ? 'Y por correo' : 'Le llegará por correo'}`
+                            + ` a ${alcanceNuevo.soloCorreo.length} cuenta${alcanceNuevo.soloCorreo.length === 1 ? '' : 's'}`
+                            + ' de la junta sin ficha en el censo'
+                            + ` (${alcanceNuevo.soloCorreo.map((p) => p.nombre).join(', ')}).`,
+                      ].filter(Boolean).join(' ')}
+                  </p>
+                ) : (
+                  <p className="form-hint form-hint--error">
+                    No sabemos a quién se refiere «{destinatarioNuevo}». Es un segmento del catálogo que no
+                    coincide con ninguna etiqueta ni con ningún criterio del censo: elige otro, o usa la
+                    segmentación avanzada de aquí abajo.
+                  </p>
+                )
+              )}
             </div>
           </div>
 
