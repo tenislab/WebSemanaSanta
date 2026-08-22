@@ -20,7 +20,6 @@ import {
   useTramos,
   etiquetaTramo,
   cuerposPresentes,
-  getPrecioBase,
 } from '../lib/tramos'
 import { repartoCompleto, repartoPorTramo, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
 import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
@@ -238,7 +237,8 @@ export default function HermanoPortal() {
   const [ajustesCuotas] = useAjustesCuotas()
   const tramos = useTramos()
   const campana = useMemo(() => getCampana(), [])
-  const precioBase = useMemo(() => getPrecioBase(), [])
+  // El precio de la hermandad, no el de este navegador (ver hermandadSettings).
+  const precioBase = hermandadPrincipal.precioPapeleta
   // El modelo con el que la hermandad imprime sus papeletas. Se trae de la
   // base: en el móvil del hermano no hay nada guardado, así que sin esto veía
   // siempre la papeleta genérica en vez de la de su hermandad.

@@ -23,11 +23,9 @@ import {
   esAutomatico,
   gruposAutomaticos,
   cuerposPresentes,
-  getPrecioBase,
   precioDeTramo,
   type Tramo,
 } from '../../lib/tramos'
-import { useOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
 import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../../lib/cortejo'
 import {
   getCampana,
@@ -70,7 +68,15 @@ function claseEstado(estado: EstadoRenovacion) {
 const FILTROS = ['Todos', 'Por renovar', 'Renovadas', 'Nuevas', 'No renovadas', 'Sin papeleta'] as const
 
 /** Valor centinela del selector para «papeleta personalizada» (no puede chocar con un nombre de cuerpo). */
-const PERSONALIZADA = '__personalizada'
+/*
+ * Valor centinela del selector para la PAPELETA SIMBÓLICA.
+ *
+ * Es la de quien tiene su sitio y ese año no sale. Es una sola: aquí hubo una
+ * lista de «papeletas personalizadas» con nombre y precio libres, y era un
+ * tramo pobre —dos hermanos del mismo sitio podían pagar distinto según por
+ * dónde se les emitiera—. Todo lo que camina es un tramo.
+ */
+const SIMBOLICA = '__simbolica'
 
 interface ItemImpresion {
   papeleta: Papeleta
@@ -101,8 +107,8 @@ export default function Papeletas() {
   const [, setMovimientos] = useSupabaseTable<Movimiento>(
     'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
   )
-  const opcionesPersonalizadas = useOpcionesPapeleta()
-  const precioBase = useMemo(() => getPrecioBase(), [])
+  // El precio de la hermandad, no el de este navegador (ver hermandadSettings).
+  const precioBase = hermandad.precioPapeleta
   const [ajustes, setAjustes] = useAjustesCuotas()
 
   // Deuda (cuotas sin pagar) de cada hermano, para avisar al emitir su papeleta.
@@ -170,7 +176,7 @@ export default function Papeletas() {
 
   const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
   const tramosDelCuerpoElegido = useMemo(
-    () => (pendingCuerpo && pendingCuerpo !== PERSONALIZADA ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
+    () => (pendingCuerpo && pendingCuerpo !== SIMBOLICA ? tramosDeCuerpo(pendingCuerpo, tramos) : []),
     [pendingCuerpo, tramos],
   )
 
@@ -364,25 +370,25 @@ export default function Papeletas() {
   }
 
   /**
-   * Emite una papeleta propia de la hermandad (mantilla, nazareno cirio, la
-   * simbólica…).
+   * Emite la PAPELETA SIMBÓLICA: la de quien tiene su sitio y este año no sale.
    *
-   * Si la opción tiene un puesto asignado en Ajustes, quien la saca ENTRA EN EL
-   * CORTEJO como cualquier otro. Antes no: iba siempre sin tramo, y una
-   * hermandad que llamaba «nazareno cirio» a una de sus papeletas la emitía, la
-   * cobraba, y el tramo seguía marcando 0/40 sin que nada dijera por qué.
+   * No ocupa puesto en el cortejo, y ese es todo su sentido. Si el hermano
+   * quisiera salir, sitio hay: se le emite en un tramo como a cualquiera.
    *
-   * Sin puesto se queda fuera del cortejo, que para la simbólica de quien no
-   * procesiona es justo lo que se quiere.
+   * El nombre se guarda en la papeleta —no una referencia a una lista— para que
+   * las papeletas de años pasados sigan diciendo lo que eran aunque la
+   * hermandad cambie el precio o el texto.
    */
-  function sacarConOpcion(hermanoId: string, opcion: OpcionPapeleta) {
-    const tramoId = opcion.tramoId || null
+  const NOMBRE_SIMBOLICA = 'Papeleta simbólica'
+
+  function sacarSimbolica(hermanoId: string) {
+    const importe = hermandad.precioSimbolica
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
         return prev.map((p) =>
           p.id === actual.id
-            ? { ...p, tramoId, opcion: opcion.nombre, estado: 'Asignada', importe: opcion.importe, pagoComunicado: null }
+            ? { ...p, tramoId: null, opcion: NOMBRE_SIMBOLICA, estado: 'Asignada', importe, pagoComunicado: null }
             : p,
         )
       }
@@ -391,15 +397,15 @@ export default function Papeletas() {
         numero: siguienteNumero(prev),
         hermanoId,
         anio: campana.anio,
-        tramoId,
-        opcion: opcion.nombre,
-        importe: opcion.importe,
+        tramoId: null,
+        opcion: NOMBRE_SIMBOLICA,
+        importe,
         estado: 'Asignada',
         fechaSolicitud: hoy(),
       }
       return [nueva, ...prev]
     })
-    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, opcion.nombre, tramoId)
+    avisarDeSitio(hermanoId, null, NOMBRE_SIMBOLICA)
     setPendingCuerpo('')
   }
 
@@ -935,8 +941,10 @@ export default function Papeletas() {
                       </>
                     ) : r.papeletaActual?.opcion && r.papeletaActual.estado !== 'Renuncia' ? (
                       <>
+                        {/* La pregunta de quien mira esta columna es si esa
+                            persona camina o no. Se responde. */}
                         {r.papeletaActual.opcion}
-                        <span className="table-subtle"> · personalizada</span>
+                        <span className="table-subtle"> · no sale en el cortejo</span>
                       </>
                     ) : (
                       <span className="table-muted">—</span>
@@ -1051,9 +1059,9 @@ export default function Papeletas() {
                         {cuerposDisponibles.map((c) => (
                           <option key={c} value={c}>{c}</option>
                         ))}
-                        {opcionesPersonalizadas.length > 0 && (
-                          <option value={PERSONALIZADA}>Papeleta personalizada</option>
-                        )}
+                        {/* Va la última y separada: no es «otro cuerpo más»,
+                            es la excepción — el que no sale. */}
+                        <option value={SIMBOLICA}>No sale · papeleta simbólica</option>
                       </select>
                       <select
                         id="tramoSacar"
@@ -1062,27 +1070,28 @@ export default function Papeletas() {
                         key={pendingCuerpo}
                         onChange={(e) => {
                           if (!e.target.value) return
-                          if (pendingCuerpo === PERSONALIZADA) {
-                            const op = opcionesPersonalizadas.find((o) => o.id === e.target.value)
-                            if (op) sacarConOpcion(h.id, op)
+                          if (pendingCuerpo === SIMBOLICA) {
+                            sacarSimbolica(h.id)
                           } else {
                             sacarEnTramo(h.id, e.target.value)
                           }
                         }}
                       >
                         <option value="" disabled>
-                          {pendingCuerpo === PERSONALIZADA
-                            ? 'Mantilla, simbólica…'
+                          {pendingCuerpo === SIMBOLICA
+                            ? 'Confirma…'
                             : pendingCuerpo
                               ? 'Elige el puesto…'
                               : 'Elige antes un cuerpo'}
                         </option>
-                        {pendingCuerpo === PERSONALIZADA
-                          ? opcionesPersonalizadas.map((o) => (
-                              <option key={o.id} value={o.id}>
-                                {o.nombre} — {o.importe} €
+                        {/* La simbólica no tiene puesto que elegir, así que el
+                            segundo desplegable solo sirve para confirmar. */}
+                        {pendingCuerpo === SIMBOLICA
+                          ? (
+                              <option value="si">
+                                Papeleta simbólica — {hermandad.precioSimbolica} €
                               </option>
-                            ))
+                            )
                           : (() => {
                               const grupos = gruposAutomaticos(tramosDelCuerpoElegido)
                               const designados = tramosDelCuerpoElegido.filter((t) => !esAutomatico(t))

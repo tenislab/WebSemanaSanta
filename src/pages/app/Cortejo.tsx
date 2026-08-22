@@ -15,7 +15,6 @@ import {
   useTramos,
   tramosDeCuerpo,
   cuerposPresentes as cuerposDeTramos,
-  getPrecioBase,
   precioDeTramo,
   type Cuerpo,
   type Tramo,
@@ -170,7 +169,8 @@ export default function Cortejo() {
   }, [papeletas, tramos, edicionActual])
 
   const cuerposPresentes = useMemo(() => cuerposDeTramos(tramos), [tramos])
-  const precioBase = useMemo(() => getPrecioBase(), [])
+  // El precio de la hermandad, no el de este navegador (ver hermandadSettings).
+  const precioBase = hermandad.precioPapeleta
   const tiposIncidencia = useLista(CLAVES_CATALOGOS.tiposIncidencia, TIPOS_INCIDENCIA_POR_DEFECTO)
 
   const stats = useMemo(() => {

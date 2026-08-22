@@ -126,13 +126,10 @@ export default async function ({ caso }) {
        (id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, hermandad_id)
        values (gen_random_uuid(), 1, '2026-08-22', 'Donativo', 'Donativos', 'Ingreso',
                50, 'Caja', 'Conciliado', ${H})`],
-    ['una papeleta personalizada', `insert into opciones_papeleta
-       (id, nombre, importe, etiqueta, orden, hermandad_id)
-       values (gen_random_uuid(), 'Mantilla', 10, null, 0, ${H})`],
-    // Y una que SÍ ocupa puesto: «nazareno cirio» no es simbólica, camina.
-    ['una papeleta personalizada con puesto en el cortejo', `insert into opciones_papeleta
-       (id, nombre, importe, etiqueta, orden, tramo_id, hermandad_id)
-       values (gen_random_uuid(), 'Nazareno de cirio', 10, null, 1, ${T}, ${H})`],
+    // Los dos precios de la hermandad. Vivían en el localStorage de quien los
+    // escribía, así que cada persona emitía las papeletas a un precio distinto.
+    ['los precios de la papeleta', `update hermandad_settings
+       set precio_papeleta = 18, precio_simbolica = 5 where hermandad_id = ${H}`],
   ]
 
   for (const [que, consulta] of escrituras) {
@@ -198,6 +195,21 @@ export default async function ({ caso }) {
     caso(`${restriccion}: la base y el código dicen lo mismo`,
       enElCodigo.join(', '), enLaBase.join(', '))
   }
+
+  /*
+   * EL ARREGLO RÁPIDO tiene que dejar la misma función que el fichero grande.
+   * Si se quedaran distintos, quien use el atajo se llevaría una versión vieja
+   * sin saberlo — y este atajo existe justo para quien tiene prisa.
+   */
+  const rapido = await readFile('supabase/ARREGLO-RAPIDO-DISPARADOR.sql', 'utf8')
+  const grande = await readFile('supabase/seguridad-claves-y-registro.sql', 'utf8')
+  const cuerpoDe = (t) => {
+    const i = t.indexOf('create or replace function apuntar_cambio()')
+    return i < 0 ? '' : t.slice(i, t.indexOf('$$;', i) + 3)
+  }
+  caso('el arreglo rápido lleva la misma función que el fichero grande',
+    cuerpoDe(grande), cuerpoDe(rapido))
+  caso('y no está vacío', true, cuerpoDe(rapido).includes('to_jsonb'))
 
   // Y el diagnóstico, sobre una base recién instalada, no puede encontrar nada.
   const diag = await readFile('supabase/DIAGNOSTICO.sql', 'utf8')

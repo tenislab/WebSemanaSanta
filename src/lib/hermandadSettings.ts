@@ -25,6 +25,17 @@ export interface HermandadSettings {
   colorSecundario: string
   /** Texto legal del pie de recibos y justificantes (exención fiscal, registro…); si está vacío se usa uno genérico. */
   textoPieDocumentos: string
+  /**
+   * Precio de la papeleta cuando el tramo no fija el suyo.
+   *
+   * Vivía en el `localStorage` de quien lo escribía, así que el tesorero ponía
+   * 18 € en su ordenador y la secretaria, desde el suyo, emitía todo el año al
+   * precio de fábrica. No fallaba nada y no avisaba nada: cada uno cobraba una
+   * cosa. Es de la hermandad, así que va con la hermandad.
+   */
+  precioPapeleta: number
+  /** Precio de la papeleta simbólica: la de quien tiene sitio y ese año no sale. */
+  precioSimbolica: number
 }
 
 const STORAGE_KEY = 'cabildo-hermandad-settings'
@@ -50,6 +61,8 @@ export const AJUSTES_VACIOS: HermandadSettings = {
   colorPrimario: '#6A1A23',
   colorSecundario: '#C5A059',
   textoPieDocumentos: '',
+  precioPapeleta: 18,
+  precioSimbolica: 5,
 }
 
 function rowToSettings(r: Record<string, unknown>, fallbackNombre?: string): HermandadSettings {
@@ -69,6 +82,8 @@ function rowToSettings(r: Record<string, unknown>, fallbackNombre?: string): Her
     colorPrimario: (r.color_primario as string) || '#6A1A23',
     colorSecundario: (r.color_secundario as string) || '#C5A059',
     textoPieDocumentos: (r.texto_pie_documentos as string) ?? '',
+    precioPapeleta: Number(r.precio_papeleta ?? 18),
+    precioSimbolica: Number(r.precio_simbolica ?? 5),
   }
 }
 
@@ -89,6 +104,8 @@ function settingsToRow(s: HermandadSettings): Record<string, unknown> {
     color_primario: s.colorPrimario,
     color_secundario: s.colorSecundario,
     texto_pie_documentos: s.textoPieDocumentos,
+    precio_papeleta: s.precioPapeleta,
+    precio_simbolica: s.precioSimbolica,
   }
 }
 

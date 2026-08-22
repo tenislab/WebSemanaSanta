@@ -1,7 +1,6 @@
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import type { Tramo } from './tramos'
-import type { OpcionPapeleta } from './opcionesPapeleta'
 
 /**
  * Los roles que salen SOLOS de la papeleta que cada uno saca: quien va en el
@@ -34,18 +33,14 @@ export function etiquetasAutomaticas(
   hermanoId: string,
   papeletas: Papeleta[],
   tramos: Pick<Tramo, 'id' | 'etiqueta'>[],
-  opciones: Pick<OpcionPapeleta, 'nombre' | 'etiqueta'>[],
   anio: number,
 ): string[] {
   const porTramo = new Map(tramos.filter((t) => t.etiqueta?.trim()).map((t) => [t.id, t.etiqueta as string]))
-  const porOpcion = new Map(opciones.filter((o) => o.etiqueta?.trim()).map((o) => [o.nombre, o.etiqueta as string]))
   const salida = new Set<string>()
   for (const p of papeletas) {
     if (p.hermanoId !== hermanoId || p.anio !== anio || !CUENTA.has(p.estado)) continue
     const porT = p.tramoId ? porTramo.get(p.tramoId) : undefined
     if (porT) salida.add(porT)
-    const porO = p.opcion ? porOpcion.get(p.opcion) : undefined
-    if (porO) salida.add(porO)
   }
   return [...salida].sort((a, b) => a.localeCompare(b, 'es'))
 }
@@ -70,19 +65,15 @@ export function etiquetasDe(hermano: Pick<Hermano, 'etiquetas'>, automaticas: st
 export function indiceRoles(
   papeletas: Papeleta[],
   tramos: Pick<Tramo, 'id' | 'etiqueta'>[],
-  opciones: Pick<OpcionPapeleta, 'nombre' | 'etiqueta'>[],
   anio: number,
 ): Map<string, string[]> {
   const porTramo = new Map(tramos.filter((t) => t.etiqueta?.trim()).map((t) => [t.id, t.etiqueta as string]))
-  const porOpcion = new Map(opciones.filter((o) => o.etiqueta?.trim()).map((o) => [o.nombre, o.etiqueta as string]))
   const acumulado = new Map<string, Set<string>>()
   for (const p of papeletas) {
     if (p.anio !== anio || !CUENTA.has(p.estado)) continue
     const etiquetas: string[] = []
     const porT = p.tramoId ? porTramo.get(p.tramoId) : undefined
     if (porT) etiquetas.push(porT)
-    const porO = p.opcion ? porOpcion.get(p.opcion) : undefined
-    if (porO) etiquetas.push(porO)
     if (etiquetas.length === 0) continue
     const set = acumulado.get(p.hermanoId) ?? new Set<string>()
     etiquetas.forEach((e) => set.add(e))
@@ -96,10 +87,13 @@ export function indiceRoles(
 /** Las etiquetas que alguna vez se ponen solas, para poder distinguirlas en la interfaz. */
 export function etiquetasQueSonAutomaticas(
   tramos: Pick<Tramo, 'etiqueta'>[],
-  opciones: Pick<OpcionPapeleta, 'etiqueta'>[],
 ): string[] {
   const todas = new Set(
-    [...tramos, ...opciones].map((x) => x.etiqueta?.trim()).filter((x): x is string => !!x),
+    /* Solo los tramos. Las papeletas que daban rol eran las «personalizadas»,
+       y ya no existen: lo que camina es un tramo, y el rol se define ahí. La
+       simbólica no da ninguno, que es lo suyo — quien no sale no es costalero
+       de este año. */
+    tramos.map((x) => x.etiqueta?.trim()).filter((x): x is string => !!x),
   )
   return [...todas].sort((a, b) => a.localeCompare(b, 'es'))
 }

@@ -8,7 +8,6 @@ import CamposPropiosForm from '../../components/CamposPropios'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { isPlausibleIban, maskIban } from '../../lib/format'
-import { useOpcionesPapeleta } from '../../lib/opcionesPapeleta'
 import { useTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
@@ -155,7 +154,6 @@ export default function Hermanos() {
   }
   // Los tramos y las opciones, que son de donde salen los roles automáticos.
   const tramosRoles = useTramos()
-  const opcionesRoles = useOpcionesPapeleta()
   /**
    * Las etiquetas que salen SOLAS de la papeleta de cada uno (costalero,
    * acólito, mantilla). Se calculan una vez y se reparten por índice: en un
@@ -164,11 +162,11 @@ export default function Hermanos() {
   const roles = useMemo(() => {
     const anio = getCampana().anio
     const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
-    return indiceRoles(papeletas, tramosRoles, opcionesRoles, anio)
-  }, [tramosRoles, opcionesRoles])
+    return indiceRoles(papeletas, tramosRoles, anio)
+  }, [tramosRoles])
   const rolesAutomaticos = useMemo(
-    () => etiquetasQueSonAutomaticas(tramosRoles, opcionesRoles),
-    [tramosRoles, opcionesRoles],
+    () => etiquetasQueSonAutomaticas(tramosRoles),
+    [tramosRoles],
   )
 
   /** Todo lo que se puede elegir para filtrar: las de la hermandad y las de la papeleta. */

@@ -212,7 +212,11 @@ async function guardadosQueSeVen({ caso }) {
   // sale pase lo que pase no informa: engaña.
   const conf = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
   caso('el verde de los tramos depende del resultado', true,
-    /if \(!r\.ok\) \{[\s\S]{0,260}setTramosSaved\(false\)/.test(conf))
+    /if \(!r\.ok \|\| !rAjustes\.ok\) \{[\s\S]{0,420}setTramosSaved\(false\)/.test(conf))
+  // El precio se edita en la tarjeta de los tramos, así que lo tiene que
+  // guardar SU botón. Colgado del botón de otra tarjeta, se perdía.
+  caso('y ese botón guarda también el precio', true,
+    /const rAjustes = await saveHermandadSettings\(settings\)/.test(conf))
   caso('y el fallo se pinta', true, /tramosError && <span/.test(conf))
 
   /*
@@ -256,6 +260,14 @@ async function guardadosQueSeVen({ caso }) {
   }
   caso('el verde de los catálogos depende del resultado', true,
     /if \(fallos\.length > 0\) \{[\s\S]{0,200}setCatalogosSaved\(false\)/.test(conf))
-  caso('y el de los tipos de papeleta', true,
-    /if \(!r\.ok\) \{[\s\S]{0,220}setOpcionesSaved\(false\)/.test(conf))
+  /*
+   * Y QUE NO VUELVA LA LISTA DE «PAPELETAS PERSONALIZADAS».
+   *
+   * Era un tramo pobre: con su propio nombre y su propio precio, así que dos
+   * hermanos del mismo sitio podían acabar pagando distinto según por dónde se
+   * les hubiera emitido. Lo que camina es un tramo; lo único que no lo es, la
+   * papeleta simbólica de quien tiene sitio y ese año no sale.
+   */
+  caso('no vuelve la lista de papeletas personalizadas', false, /saveOpcionesPapeleta/.test(conf))
+  caso('y la simbólica tiene su precio', true, /precioSimbolica/.test(conf))
 }

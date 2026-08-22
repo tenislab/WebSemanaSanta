@@ -20,7 +20,6 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { getCampana } from '../../lib/campana'
 import { useTramos } from '../../lib/tramos'
-import { useOpcionesPapeleta } from '../../lib/opcionesPapeleta'
 import { etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
@@ -158,15 +157,14 @@ export default function Comunicados() {
   // en el navegador: con la foto, «mandar solo a los costaleros» buscaba los
   // roles de los tramos de EJEMPLO y no encontraba a ninguno de los de verdad.
   const tramosReales = useTramos()
-  const opcionesReales = useOpcionesPapeleta()
   const rolesPorHermano = useMemo(() => {
     const anio = getCampana().anio
     const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES)
-    return indiceRoles(papeletas, tramosReales, opcionesReales, anio)
-  }, [tramosReales, opcionesReales])
+    return indiceRoles(papeletas, tramosReales, anio)
+  }, [tramosReales])
   const rolesDisponibles = useMemo(
-    () => etiquetasQueSonAutomaticas(tramosReales, opcionesReales),
-    [tramosReales, opcionesReales],
+    () => etiquetasQueSonAutomaticas(tramosReales),
+    [tramosReales],
   )
   /** Todo por lo que se puede mandar: el catálogo de la hermandad y los roles de la papeleta. */
   const etiquetasParaEnviar = useMemo(

@@ -13,8 +13,6 @@ import {
   aforoDeCuerpo,
   getCuerpos,
   saveCuerpos,
-  getPrecioBase,
-  savePrecioBase,
   repartoDe,
   gruposAutomaticos,
   precioDeTramo,
@@ -24,7 +22,6 @@ import {
   type Tramo,
 } from '../../lib/tramos'
 import { TIPOS_CAMPO, useCamposPropios, type CampoPropio } from '../../lib/camposPropios'
-import { useOpcionesPapeleta, saveOpcionesPapeleta, type OpcionPapeleta } from '../../lib/opcionesPapeleta'
 import { useConceptosCuota, saveConceptosCuota, type ConceptoCuotaConfig } from '../../lib/conceptosCuota'
 import { CLAVES_CATALOGOS, useCatalogos, saveLista } from '../../lib/catalogos'
 import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO, CUENTAS_POR_DEFECTO } from '../../data/movimientos'
@@ -167,7 +164,15 @@ export default function Configuracion() {
     () => leerDatos<Papeleta>(CLAVES_DATOS.papeletas, []).filter((p) => p.anio === getCampana().anio),
     [],
   )
-  const [precioBase, setPrecioBase] = useState<number>(() => getPrecioBase())
+  /*
+   * El precio de la papeleta es de la HERMANDAD, no de este navegador.
+   *
+   * Estaba en `localStorage`: el tesorero ponía 18 € en su ordenador y la
+   * secretaria, desde el suyo, emitía todo el año al precio de fábrica. Ni
+   * fallaba ni avisaba — cada uno cobraba una cosa. Ahora sale de los ajustes,
+   * que viajan con la hermandad.
+   */
+  const precioBase = settings.precioPapeleta
   const [copiaEstado, setCopiaEstado] = useState<string | null>(null)
   const backupRef = useRef<HTMLInputElement>(null)
 
@@ -411,7 +416,9 @@ export default function Configuracion() {
     const explicitos = tramos.map((t) => ({ ...t, reparto: repartoDe(t) }))
     setTramos(explicitos)
     const r = await saveTramos(explicitos)
-    savePrecioBase(precioBase)
+    // El precio se edita en ESTA tarjeta, así que lo guarda ESTE botón. Dejarlo
+    // colgando del botón de «Identidad y datos» era pedir que se perdiera.
+    const rAjustes = await saveHermandadSettings(settings)
     /*
      * EL VERDE SOLO SI DE VERDAD SE HA GUARDADO.
      *
@@ -425,9 +432,11 @@ export default function Configuracion() {
      * misma razón: un visto bueno que sale pase lo que pase no informa de
      * nada, engaña.
      */
-    if (!r.ok) {
+    if (!r.ok || !rAjustes.ok) {
       setTramosError(
-        `No se han podido guardar los tramos: ${r.error ?? 'la base de datos los ha rechazado.'}`,
+        !r.ok
+          ? `No se han podido guardar los tramos: ${r.error ?? 'la base de datos los ha rechazado.'}`
+          : `Los tramos se han guardado, pero el precio no: ${rAjustes.error ?? 'la base de datos lo ha rechazado.'}`,
       )
       setTramosSaved(false)
       return
@@ -436,58 +445,6 @@ export default function Configuracion() {
     setTramosTocado(false)
     setTramosSaved(true)
     setTimeout(() => setTramosSaved(false), 3000)
-  }
-
-  // ---- Papeletas personalizadas de la hermandad (nombre + precio propios) ----
-  const opcionesRemotas = useOpcionesPapeleta()
-  const [opciones, setOpciones] = useState<OpcionPapeleta[]>(opcionesRemotas)
-  const [opcionesTocado, setOpcionesTocado] = useState(false)
-  useEffect(() => {
-    if (!opcionesTocado) setOpciones(opcionesRemotas)
-  }, [opcionesRemotas, opcionesTocado])
-  const [opcionesSaved, setOpcionesSaved] = useState(false)
-
-  function updateOpcion<K extends keyof OpcionPapeleta>(id: string, key: K, value: OpcionPapeleta[K]) {
-    setOpciones((prev) => prev.map((o) => (o.id === id ? { ...o, [key]: value } : o)))
-    setOpcionesTocado(true)
-    setOpcionesSaved(false)
-  }
-
-  function addOpcion() {
-    setOpciones((prev) => [...prev, { id: nuevoId(), nombre: 'Nueva papeleta', importe: 10 }])
-    setOpcionesTocado(true)
-    setOpcionesSaved(false)
-  }
-
-  function removeOpcion(id: string) {
-    const posicion = opciones.findIndex((o) => o.id === id)
-    const opcion = opciones[posicion]
-    setOpciones((prev) => prev.filter((o) => o.id !== id))
-    if (opcion) {
-      ofrecerDeshacer(`Papeleta «${opcion.nombre}» quitada`, () => {
-        setOpciones((prev) => reinsertar(prev, opcion, posicion))
-        setOpcionesTocado(true)
-      })
-    }
-    setOpcionesTocado(true)
-    setOpcionesSaved(false)
-  }
-
-  const [opcionesError, setOpcionesError] = useState<string | null>(null)
-
-  async function handleSaveOpciones() {
-    const r = await saveOpcionesPapeleta(opciones)
-    // Mismo caso que los catálogos: borra y reinserta, así que un fallo no
-    // deja las cosas como estaban — deja la lista de papeletas vacía.
-    if (!r.ok) {
-      setOpcionesError(`No se han podido guardar las papeletas: ${r.error ?? 'la base las ha rechazado.'}`)
-      setOpcionesSaved(false)
-      return
-    }
-    setOpcionesError(null)
-    setOpcionesTocado(false)
-    setOpcionesSaved(true)
-    setTimeout(() => setOpcionesSaved(false), 3000)
   }
 
   // ---- Catálogos de la hermandad (conceptos de cuota + listas simples) ----
@@ -953,7 +910,7 @@ export default function Configuracion() {
               step="0.5"
               value={precioBase}
               onChange={(e) => {
-                setPrecioBase(Number(e.target.value) || 0)
+                update('precioPapeleta', Number(e.target.value) || 0)
                 setTramosSaved(false)
               }}
             />
@@ -964,114 +921,147 @@ export default function Configuracion() {
 
         <div className="tramos-editor">
           {/*
-            DIEZ cabeceras para DIEZ campos. Antes había nueve y la fila tenía
-            diez: la rejilla definía nueve columnas, así que el botón de quitar
-            se caía a una segunda línea él solo y cada título quedaba encima
-            del campo equivocado. Y a «Rol» no le correspondía ninguno, que era
-            lo que hacía que nadie supiera para qué servía esa casilla.
+            UNA FICHA POR TRAMO, NO UNA FILA DE DIEZ COLUMNAS.
+            ------------------------------------------------------------------
+            Esto era una tabla de diez columnas con `min-width: 1020px`: para
+            rellenar un tramo había que arrastrar la barra horizontal, y al
+            hacerlo se perdían de vista las cabeceras, así que ya no se sabía
+            qué era cada casilla. Los títulos, además, iban abreviados
+            («Citación», «Rol»), que en una columna estrecha no explican nada.
+
+            Ahora cada tramo es una ficha con sus campos etiquetados uno a uno y
+            agrupados por la pregunta que responden: QUÉ ES este tramo, CÓMO SE
+            LLENA, y QUÉ PASA EL DÍA DE LA SALIDA. Se lee de arriba abajo y cabe
+            en un móvil sin mover nada.
           */}
-          <div className="tramo-row tramo-row--head">
-            <span>Nombre del tramo</span>
-            <span>Cuerpo</span>
-            <span>Tipo de puesto</span>
-            <span>Reparto</span>
-            <span>Aforo</span>
-            <span>Precio €</span>
-            <span>Citación</span>
-            <span>Rol</span>
-            <span>Orden</span>
-            <span></span>
-          </div>
           {tramos.map((t, i) => (
-            <div className="tramo-row" key={t.id}>
-              <input
-                type="text"
-                value={t.nombre}
-                onChange={(e) => updateTramo(t.id, 'nombre', e.target.value)}
-                placeholder="Ej. Cirio 1º tramo"
-              />
-              <select value={t.cuerpo} onChange={(e) => updateTramo(t.id, 'cuerpo', e.target.value as Cuerpo)}>
-                {(cuerposGuardados.includes(t.cuerpo) ? cuerposGuardados : [t.cuerpo, ...cuerposGuardados]).map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                value={t.tipo ?? ''}
-                onChange={(e) => updateTramo(t.id, 'tipo', e.target.value)}
-                placeholder="Cirio, Insignia…"
-              />
-              <select
-                value={repartoDe(t)}
-                onChange={(e) => updateTramo(t.id, 'reparto', e.target.value as ModoReparto)}
-                aria-label="Modo de reparto"
-              >
-                <option value="numero">Por número</option>
-                <option value="solicitud">Por solicitud</option>
-              </select>
-              <input
-                type="number"
-                min="1"
-                value={t.capacidad}
-                onChange={(e) => updateTramo(t.id, 'capacidad', Number(e.target.value) || 0)}
-              />
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={t.precio ?? ''}
-                placeholder={String(precioBase)}
-                onChange={(e) => updateTramo(t.id, 'precio', e.target.value === '' ? null : Number(e.target.value) || 0)}
-                aria-label="Precio de la papeleta del tramo"
-              />
-              {/* A qué hora se cita ESTE tramo el día de la salida: cada uno
-                  entra a una hora, y es la pregunta de la semana antes. */}
-              <input
-                type="time"
-                value={t.horaCitacion ?? ''}
-                onChange={(e) => updateTramo(t.id, 'horaCitacion', e.target.value)}
-                aria-label="Hora de citación del tramo"
-              />
-              {/* El rol que da ir en este tramo. Se le pone SOLO al hermano
-                  mientras tenga aquí su papeleta, y se le quita si la anula. */}
-              <input
-                type="text"
-                value={t.etiqueta ?? ''}
-                onChange={(e) => updateTramo(t.id, 'etiqueta', e.target.value)}
-                placeholder="Rol (opcional)"
-                aria-label="Rol que da este tramo"
-                list="rolesSugeridos"
-              />
-              <span className="tramo-row__mover">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  title="Mover antes"
-                  disabled={i === 0}
-                  onClick={() => moveTramo(t.id, -1)}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 15 12 9l-6 6" /></svg>
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  title="Mover después"
-                  disabled={i === tramos.length - 1}
-                  onClick={() => moveTramo(t.id, 1)}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 9 12 15l6-6" /></svg>
-                </button>
-              </span>
-              <button
-                type="button"
-                className="icon-btn"
-                title="Quitar tramo"
-                onClick={() => removeTramo(t.id)}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
-              </button>
+            <div className="tramo-ficha" key={t.id}>
+              <div className="tramo-ficha__head">
+                <span className="tramo-ficha__orden">{i + 1}</span>
+                <input
+                  className="tramo-ficha__nombre"
+                  type="text"
+                  value={t.nombre}
+                  onChange={(e) => updateTramo(t.id, 'nombre', e.target.value)}
+                  placeholder="Ej. Cirio 1º tramo"
+                  aria-label="Nombre del tramo"
+                />
+                <span className="tramo-ficha__acciones">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Subir: va antes en el cortejo"
+                    disabled={i === 0}
+                    onClick={() => moveTramo(t.id, -1)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 15 12 9l-6 6" /></svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Bajar: va después en el cortejo"
+                    disabled={i === tramos.length - 1}
+                    onClick={() => moveTramo(t.id, 1)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 9 12 15l6-6" /></svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Quitar tramo"
+                    onClick={() => removeTramo(t.id)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                  </button>
+                </span>
+              </div>
+
+              <div className="tramo-ficha__grupo">
+                <p className="tramo-ficha__titulo">Qué es</p>
+                <div className="tramo-ficha__campos">
+                  <label>
+                    <span>Cuerpo</span>
+                    <select value={t.cuerpo} onChange={(e) => updateTramo(t.id, 'cuerpo', e.target.value as Cuerpo)}>
+                      {(cuerposGuardados.includes(t.cuerpo) ? cuerposGuardados : [t.cuerpo, ...cuerposGuardados]).map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Qué se lleva</span>
+                    <input
+                      type="text"
+                      value={t.tipo ?? ''}
+                      onChange={(e) => updateTramo(t.id, 'tipo', e.target.value)}
+                      placeholder="Cirio, insignia, vara…"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="tramo-ficha__grupo">
+                <p className="tramo-ficha__titulo">Cómo se llena</p>
+                <div className="tramo-ficha__campos">
+                  <label>
+                    <span>Reparto</span>
+                    <select
+                      value={repartoDe(t)}
+                      onChange={(e) => updateTramo(t.id, 'reparto', e.target.value as ModoReparto)}
+                    >
+                      <option value="numero">Por número de hermano</option>
+                      <option value="solicitud">Se pide (gana el más antiguo)</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Cuántos caben</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={t.capacidad}
+                      onChange={(e) => updateTramo(t.id, 'capacidad', Number(e.target.value) || 0)}
+                    />
+                  </label>
+                  <label>
+                    <span>Precio de la papeleta</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={t.precio ?? ''}
+                      placeholder={`${precioBase} (el general)`}
+                      onChange={(e) => updateTramo(t.id, 'precio', e.target.value === '' ? null : Number(e.target.value) || 0)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="tramo-ficha__grupo">
+                <p className="tramo-ficha__titulo">El día de la salida</p>
+                <div className="tramo-ficha__campos">
+                  {/* A qué hora se cita ESTE tramo: cada uno entra a una hora, y
+                      es LA pregunta del hermano la semana antes. */}
+                  <label>
+                    <span>Hora de citación</span>
+                    <input
+                      type="time"
+                      value={t.horaCitacion ?? ''}
+                      onChange={(e) => updateTramo(t.id, 'horaCitacion', e.target.value)}
+                    />
+                  </label>
+                  {/* El rol que da ir en este tramo. Se le pone SOLO al hermano
+                      mientras tenga aquí su papeleta, y se le quita si la anula. */}
+                  <label>
+                    <span>Rol que da (opcional)</span>
+                    <input
+                      type="text"
+                      value={t.etiqueta ?? ''}
+                      onChange={(e) => updateTramo(t.id, 'etiqueta', e.target.value)}
+                      placeholder="Costalero, acólito…"
+                      list="rolesSugeridos"
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           ))}
           {tramos.length === 0 && (
@@ -1101,88 +1091,53 @@ export default function Configuracion() {
       {seccion === 'papeletas' && (
       <section className="settings-card">
         <div className="settings-card__head">
-          <h2 className="settings-card__title">Papeletas personalizadas</h2>
-          <button type="button" className="btn btn-outline btn-sm" onClick={addOpcion}>
-            + Añadir papeleta
-          </button>
+          <h2 className="settings-card__title">La papeleta simbólica</h2>
         </div>
+        {/*
+          * UNA SOLA, Y SE LLAMA ASÍ.
+          *
+          * Aquí hubo una lista de «papeletas personalizadas» con nombre y precio
+          * libres, y fue un error mío. Era un tramo pobre: tenía su propio
+          * nombre y su propio precio, así que dos hermanos del mismo sitio
+          * podían acabar pagando distinto según por dónde se les hubiera
+          * emitido. Y se usaba para cosas que sí caminan —una mantilla, un
+          * nazareno de cirio—, que son TRAMOS y ya tienen dónde definirse, con
+          * su aforo, su hora de citación y su precio.
+          *
+          * Lo único que de verdad no es un tramo es esto: quien tiene derecho a
+          * su sitio y ese año no sale. Si quiere salir, sitio hay.
+          */}
         <p className="form-hint">
-          Además de los puestos del cortejo, tu hermandad puede ofrecer sus propias papeletas con
-          nombre y precio libres: mantilla, papeleta simbólica de quien no procesiona, monaguillo,
-          recuerdo… Aparecerán al emitir una papeleta en gestión y en el área del hermano.
+          Es la papeleta de quien <b>tiene su sitio y este año no sale</b>: la saca por
+          costumbre, por acompañar a la hermandad o por ayudar, pero no camina y no ocupa
+          puesto en el cortejo.
+        </p>
+        <p className="form-hint">
+          Todo lo que <b>sí camina</b> —una mantilla, un nazareno de cirio, un monaguillo—
+          es un tramo, y se define en <b>Cuerpos y tramos</b> con su aforo, su precio y su
+          hora de citación. Ahí es donde se monta el cortejo.
         </p>
 
-        <div className="opciones-editor">
-          {opciones.map((o) => (
-            <div className="opcion-row" key={o.id}>
-              <input
-                type="text"
-                value={o.nombre}
-                onChange={(e) => updateOpcion(o.id, 'nombre', e.target.value)}
-                placeholder="Ej. Mantilla"
-                aria-label="Nombre de la papeleta"
-              />
-              <div className="opcion-row__importe">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={o.importe}
-                  onChange={(e) => updateOpcion(o.id, 'importe', Number(e.target.value) || 0)}
-                  aria-label="Importe en euros"
-                />
-                <span>€</span>
-              </div>
-              <input
-                type="text"
-                value={o.etiqueta ?? ''}
-                onChange={(e) => updateOpcion(o.id, 'etiqueta', e.target.value)}
-                placeholder="Rol (opcional)"
-                aria-label="Rol que da esta papeleta"
-                list="rolesSugeridos"
-              />
-              {/* El puesto del cortejo. Es lo que separa una papeleta que
-                  CAMINA —un nazareno de cirio, una mantilla— de la simbólica de
-                  quien no procesiona. Sin esto, todas se trataban como
-                  simbólicas: se emitían, se cobraban, y el tramo seguía a 0. */}
-              <select
-                value={o.tramoId ?? ''}
-                onChange={(e) => updateOpcion(o.id, 'tramoId', e.target.value || null)}
-                aria-label="Puesto que ocupa en el cortejo"
-              >
-                <option value="">No sale en el cortejo</option>
-                {tramos.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.cuerpo} · {t.nombre}
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="icon-btn" title="Quitar papeleta" onClick={() => removeOpcion(o.id)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
-              </button>
-            </div>
-          ))}
-          {opciones.length === 0 && (
-            <p className="form-hint">No hay papeletas personalizadas. Añade la primera si tu hermandad las usa.</p>
-          )}
-          {opciones.length > 0 && (
-            <p className="form-hint">
-              Si la papeleta es de alguien que <b>camina</b> —un nazareno de cirio, una
-              mantilla—, dile qué puesto ocupa: quien la saque entrará en ese tramo del
-              cortejo. Déjalo en «No sale en el cortejo» para la papeleta simbólica de
-              quien no procesiona.
-              {tramos.length === 0 && (
-                <> Todavía no tienes tramos: se montan en <b>Cuerpos y tramos</b>.</>
-              )}
-            </p>
-          )}
+        <div className="form-row">
+          <label htmlFor="precioSimbolica">Precio de la papeleta simbólica</label>
+          <div className="opcion-row__importe">
+            <input
+              id="precioSimbolica"
+              type="number"
+              min="0"
+              step="0.5"
+              value={settings.precioSimbolica}
+              onChange={(e) => update('precioSimbolica', Number(e.target.value) || 0)}
+            />
+            <span>€</span>
+          </div>
         </div>
 
         <div className="settings-actions">
-          {opcionesSaved && <span className="alert-item alert-item--ok">Papeletas guardadas</span>}
-          {opcionesError && <span className="alert-item alert-item--alerta">{opcionesError}</span>}
-          <button type="button" className="btn btn-primary" onClick={handleSaveOpciones}>
-            Guardar papeletas
+          {saved && <span className="alert-item alert-item--ok">Guardado</span>}
+          {errorGuardar && <span className="alert-item alert-item--alerta">{errorGuardar}</span>}
+          <button type="button" className="btn btn-primary" onClick={handleSubmit}>
+            Guardar
           </button>
         </div>
       </section>

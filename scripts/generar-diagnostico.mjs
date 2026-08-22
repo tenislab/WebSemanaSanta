@@ -62,12 +62,11 @@ for (const t of ['hermanos', 'cuotas', 'papeletas', 'tramos', 'movimientos', 'ev
 pares.add('tramos|hora_citacion')
 pares.add('solicitudes_alta|tutor_id')
 pares.add('solicitudes_alta|fecha_nacimiento')
-// `opciones_papeleta` no tiene `toRow` (se escribe con un objeto suelto), así
-// que sus columnas se apuntan aquí. La de `tramo_id` es la que decide si una
-// papeleta propia de la hermandad ocupa puesto en el cortejo.
-for (const c of ['nombre', 'importe', 'etiqueta', 'orden', 'tramo_id', 'hermandad_id']) {
-  pares.add(`opciones_papeleta|${c}`)
-}
+// Los precios de la papeleta viven en los ajustes de la hermandad, no en el
+// navegador de quien los escribe. Sin estas columnas, cada persona emite a un
+// precio distinto y nadie se entera.
+pares.add('hermandad_settings|precio_papeleta')
+pares.add('hermandad_settings|precio_simbolica')
 
 const filas = [...pares].sort().map((p) => {
   const [t, c] = p.split('|')

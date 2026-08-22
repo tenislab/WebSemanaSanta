@@ -1305,32 +1305,60 @@ h1, h2, h3,
  * campos y el botón de quitar se caía solo a otra fila.
  */
 .tramos-editor { display: flex; flex-direction: column; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.25rem; }
-.tramo-row {
-  display: grid;
-  grid-template-columns:
-    minmax(170px, 1.5fr)  /* nombre    */
-    116px                 /* cuerpo    */
-    minmax(110px, 1fr)    /* tipo      */
-    128px                 /* reparto   */
-    70px                  /* aforo     */
-    82px                  /* precio    */
-    106px                 /* citación  */
-    minmax(110px, 1fr)    /* rol       */
-    62px                  /* orden     */
-    34px;                 /* quitar    */
-  gap: 0.55rem; align-items: center; min-width: 1020px;
-}
+/* =========================================================================
+   Tramos del cortejo: una ficha por tramo
+   -------------------------------------------------------------------------
+   Esto era una rejilla de diez columnas con `min-width: 1020px`. Para
+   rellenar un tramo había que arrastrar la barra horizontal, y al arrastrarla
+   se perdían de vista las cabeceras: ya no se sabía qué era cada casilla.
+   Ahora cada campo lleva su etiqueta encima y la ficha cabe en un móvil.
+   ========================================================================= */
 .tramos-precio-base { max-width: 300px; margin-bottom: 1.1rem; }
-.tramo-row--head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-.tramo-row input, .tramo-row select {
-  width: 100%; padding: 0.55rem 0.65rem; font: inherit; font-size: 0.86rem;
-  color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+
+.tramo-ficha {
+  border: 1px solid var(--linea); border-radius: 12px;
+  padding: 0.85rem 1rem 1rem; background: var(--surface);
 }
-.tramo-row input:focus, .tramo-row select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
-.tramo-row input[type='number'] { font-variant-numeric: tabular-nums; text-align: right; }
-.tramo-row__mover { display: flex; gap: 0.25rem; }
-.tramo-row__mover .icon-btn { width: 26px; height: 26px; }
-.tramo-row__mover .icon-btn svg { width: 13px; height: 13px; }
+.tramo-ficha + .tramo-ficha { margin-top: 0.75rem; }
+
+.tramo-ficha__head {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 0.6rem;
+  align-items: center; margin-bottom: 0.85rem;
+}
+/* El número es el ORDEN REAL DE DESFILE, no un adorno: por eso va delante del
+   nombre y por eso las flechas están al lado, que es lo que lo cambia. */
+.tramo-ficha__orden {
+  display: grid; place-items: center; width: 1.7rem; height: 1.7rem;
+  border-radius: 50%; background: var(--gold); color: var(--tinta, #2a1b14);
+  font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.tramo-ficha__nombre { font-weight: 600; font-size: 1rem; }
+.tramo-ficha__acciones { display: flex; gap: 0.25rem; }
+
+.tramo-ficha__grupo + .tramo-ficha__grupo {
+  margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--linea);
+}
+.tramo-ficha__titulo {
+  margin: 0 0 0.5rem; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted);
+}
+.tramo-ficha__campos {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 0.6rem;
+}
+.tramo-ficha__campos label { display: grid; gap: 0.22rem; }
+.tramo-ficha__campos label > span {
+  font-size: 0.78rem; color: var(--text-muted);
+}
+.tramo-ficha input, .tramo-ficha select {
+  width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--linea);
+  border-radius: 8px; background: var(--fondo); color: inherit; font: inherit;
+}
+.tramo-ficha input:focus, .tramo-ficha select:focus {
+  outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring);
+}
+.tramo-ficha input[type='number'] { font-variant-numeric: tabular-nums; }
+.tramo-ficha__acciones .icon-btn { width: 30px; height: 30px; }
+.tramo-ficha__acciones .icon-btn svg { width: 15px; height: 15px; }
 
 /* editor de papeletas personalizadas (nombre + precio libres por hermandad) */
 .opciones-editor { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -1345,6 +1373,69 @@ h1, h2, h3,
 .opcion-row__importe { display: flex; align-items: center; gap: 0.4rem; }
 .opcion-row__importe input { text-align: right; font-variant-numeric: tabular-nums; }
 .opcion-row__importe span { color: var(--text-muted); font-size: 0.9rem; }
+
+/* =========================================================================
+   Papeletas propias de la hermandad: de salida o simbólica
+   -------------------------------------------------------------------------
+   La distinción es LO que se decide aquí, así que se ve antes de leer: una
+   franja de color a la izquierda de la fila y dos botones con nombre. Antes
+   era un desplegable que decía «No sale en el cortejo» y había que deducir lo
+   demás — y quien no lo deducía emitía papeletas que no ocupaban puesto.
+   ========================================================================= */
+.opcion-row--papeleta {
+  display: block; padding: 0.9rem 1rem 0.9rem 1.15rem;
+  border: 1px solid var(--linea); border-radius: 12px;
+  border-left-width: 5px; background: var(--surface);
+}
+.opcion-row--papeleta + .opcion-row--papeleta { margin-top: 0.7rem; }
+/* Verde = camina y ocupa sitio. Gris = no sale. El color no va solo: cada una
+   lleva además su texto, para quien no distinga los tonos. */
+.opcion-row--papeleta.es-salida { border-left-color: var(--ok, #2f6b4f); }
+.opcion-row--papeleta.es-simbolica { border-left-color: var(--text-muted); }
+
+.opcion-row__cabecera {
+  display: grid; grid-template-columns: 1fr 130px 34px; gap: 0.6rem; align-items: center;
+}
+
+.opcion-tipo {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem;
+  border: 0; padding: 0; margin: 0.75rem 0 0;
+}
+.opcion-tipo legend {
+  padding: 0; margin-bottom: 0.4rem; font-size: 0.75rem; font-weight: 600;
+  color: var(--text-muted);
+}
+.opcion-tipo label {
+  display: grid; gap: 0.1rem; cursor: pointer;
+  padding: 0.5rem 0.7rem; border: 1px solid var(--linea); border-radius: 9px;
+  /* La rejilla coloca el radio a la izquierda y los dos textos apilados a su
+     derecha, sin que el pie se meta debajo del círculo. */
+  grid-template-columns: auto 1fr; grid-template-areas: 'radio titulo' '. pie';
+  align-items: center; column-gap: 0.5rem;
+}
+.opcion-tipo label input { grid-area: radio; margin: 0; }
+.opcion-tipo__titulo { grid-area: titulo; font-size: 0.88rem; font-weight: 600; }
+.opcion-tipo__pie { grid-area: pie; font-size: 0.76rem; color: var(--text-muted); }
+.opcion-tipo label.es-elegida { border-color: var(--gold); background: var(--surface-2, rgba(0, 0, 0, 0.03)); }
+.opcion-tipo label:focus-within { outline: 2px solid var(--gold); outline-offset: 2px; }
+.opcion-tipo label:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+
+.opcion-row__detalle {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.6rem; margin-top: 0.7rem;
+}
+.opcion-row__campo { display: grid; gap: 0.22rem; }
+.opcion-row__campo > span {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* En el móvil los dos botones se apilan: en 360 px, uno al lado del otro deja
+   el texto en dos líneas y se pierde justo lo que hay que leer. */
+@media (max-width: 560px) {
+  .opcion-tipo { grid-template-columns: 1fr; }
+  .opcion-row__cabecera { grid-template-columns: 1fr 100px 34px; }
+}
 
 /* catálogos configurables de la hermandad */
 .catalogo-bloque { margin-bottom: 1.4rem; }
@@ -3434,8 +3525,8 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   .recibo-doc__head { flex-direction: column; }
   .recibo-doc__meta { text-align: left; }
 
-  .tramo-row { grid-template-columns: 1fr; gap: 0.4rem; padding: 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); }
-  .tramo-row--head { display: none; }
+  /* La ficha ya se apila sola: los campos van en `auto-fit`. */
+  .tramo-ficha__campos { grid-template-columns: 1fr; }
   .settings-card__head { flex-direction: column; align-items: stretch; }
   .tramos-grid { grid-template-columns: 1fr; }
   .dash-head__actions { flex-direction: column; align-items: stretch; }
@@ -5745,9 +5836,9 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
   .icon-btn { width: 44px; height: 44px; }
   .icon-btn svg { width: 19px; height: 19px; }
   .btn-sm { min-height: 44px; }
-  /* Las flechas de reordenar tramos van pegadas dentro de una fila estrecha:
-     ahí 44 px las descuadra, pero 26 se falla siempre. */
-  .tramo-row__mover .icon-btn { width: 34px; height: 34px; }
+  /* Las flechas de reordenar van en la cabecera de la ficha, junto al nombre:
+     ahí 44 px la descuadran, pero 30 se fallan con el pulgar. */
+  .tramo-ficha__acciones .icon-btn { width: 38px; height: 38px; }
 
   /* --- casillas de marcar --- */
   /* La matriz de permisos son 104 casillas de 18 px en una tabla; la columna

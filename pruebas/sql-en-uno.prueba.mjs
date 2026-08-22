@@ -44,6 +44,10 @@ export default async function ({ caso }) {
     // Este solo MIRA: dice qué le falta a una base de datos de verdad y no
     // cambia nada. Meterlo en el de instalar no tendría sentido.
     'DIAGNOSTICO.sql',
+    // Un trozo de `seguridad-claves-y-registro.sql`, suelto, para quien
+    // necesita salir del paso sin ejecutar el fichero entero. Meterlo en el de
+    // instalar definiría la misma función dos veces.
+    'ARREGLO-RAPIDO-DISPARADOR.sql',
   ])
   const todos = (await readdir('supabase')).filter((f) => f.endsWith('.sql') && !FUERA.has(f))
   const olvidados = todos.filter((f) => !nombres.includes(f))

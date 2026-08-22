@@ -8,20 +8,23 @@ export default async function ({ cargar, caso }) {
     { id: 't3' },                        // un tramo de cirio: no da rol
     { id: 't4', etiqueta: '   ' },       // espacios: tampoco
   ]
-  const opciones = [
-    { nombre: 'Mantilla', etiqueta: 'Mantilla' },
-    { nombre: 'Papeleta simbólica', etiqueta: '' },
-  ]
+  /*
+   * Los roles salen SOLO de los tramos.
+   *
+   * Hubo una lista de «papeletas personalizadas» que también daba roles, y ya
+   * no existe: lo que camina es un tramo, y el rol se define ahí. La papeleta
+   * simbólica no da ninguno, y es lo suyo — quien no sale no es costalero de
+   * este año.
+   */
   const p = (o) => ({ hermanoId: 'h1', anio: 2027, estado: 'Asignada', tramoId: null, opcion: null, ...o })
-  const auto = (papeletas, id = 'h1', anio = 2027) => m.etiquetasAutomaticas(id, papeletas, tramos, opciones, anio)
+  const auto = (papeletas, id = 'h1', anio = 2027) => m.etiquetasAutomaticas(id, papeletas, tramos, anio)
 
   // --- Lo básico ---
   caso('sin papeletas, ningún rol', 0, auto([]).length)
   caso('el tramo da su rol', 'Costalero', auto([p({ tramoId: 't1' })])[0])
-  caso('la opción da el suyo', 'Mantilla', auto([p({ opcion: 'Mantilla' })])[0])
   caso('un tramo sin rol no da nada', 0, auto([p({ tramoId: 't3' })]).length)
   caso('un rol en blanco tampoco', 0, auto([p({ tramoId: 't4' })]).length)
-  caso('una opción sin rol tampoco', 0, auto([p({ opcion: 'Papeleta simbólica' })]).length)
+  caso('la simbólica no da ningún rol', 0, auto([p({ opcion: 'Papeleta simbólica' })]).length)
 
   // --- Qué estados cuentan ---
   // Una solicitud todavía no es un sitio: no da rol hasta que se asigna.
@@ -47,8 +50,8 @@ export default async function ({ cargar, caso }) {
   caso('dos papeletas, dos roles', 2, dos.length)
   caso('y en orden', 'Acólito,Costalero', dos.join(','))
   caso('el mismo rol dos veces no se repite', 1, auto([p({ tramoId: 't1' }), p({ tramoId: 't1' })]).length)
-  // Una papeleta con tramo Y opción da los dos.
-  caso('tramo y opción a la vez dan los dos', 2, auto([p({ tramoId: 't1', opcion: 'Mantilla' })]).length)
+  // El nombre de la papeleta no aporta rol por su cuenta: solo el tramo.
+  caso('el nombre de la papeleta no añade rol', 1, auto([p({ tramoId: 't1', opcion: 'Mantilla' })]).length)
 
   // --- Mezclar con las puestas a mano ---
   caso('se juntan sin repetir', 'Banda,Costalero',
@@ -61,7 +64,7 @@ export default async function ({ cargar, caso }) {
   // --- El índice, que es lo que usan las tablas ---
   const idx = m.indiceRoles(
     [p({ tramoId: 't1' }), p({ tramoId: 't2', hermanoId: 'h2' }), p({ tramoId: 't3', hermanoId: 'h3' })],
-    tramos, opciones, 2027,
+    tramos, 2027,
   )
   caso('el índice trae a los que tienen rol', 2, idx.size)
   caso('con el suyo', 'Costalero', idx.get('h1').join(','))
@@ -71,9 +74,9 @@ export default async function ({ cargar, caso }) {
   caso('el índice coincide con el cálculo suelto', auto([p({ tramoId: 't1' })]).join(','), idx.get('h1').join(','))
 
   // --- Qué roles existen, para la lista de filtrar ---
-  const cuales = m.etiquetasQueSonAutomaticas(tramos, opciones)
-  caso('los roles configurados', 'Acólito,Costalero,Mantilla', cuales.join(','))
-  caso('sin tramos ni opciones, ninguno', 0, m.etiquetasQueSonAutomaticas([], []).length)
+  const cuales = m.etiquetasQueSonAutomaticas(tramos)
+  caso('los roles configurados', 'Acólito,Costalero', cuales.join(','))
+  caso('sin tramos, ninguno', 0, m.etiquetasQueSonAutomaticas([]).length)
 
   await cargoPorCuenta({ cargar, caso })
 

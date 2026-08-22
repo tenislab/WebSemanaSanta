@@ -53,7 +53,7 @@ export const PIEZAS = [
   // De todas las definiciones de una función, manda la última que se ejecuta.
   ['hermano-con-cargo.sql', 'Una persona, una ficha: el cargo va en la ficha del hermano'],
   ['seguridad-claves-y-registro.sql', 'Fuera las contraseñas en claro; el registro lo escribe la base'],
-  ['papeleta-personalizada-en-el-cortejo.sql', 'Que una papeleta propia de la hermandad ocupe puesto en el cortejo'],
+  ['papeletas-simbolica-y-precio.sql', 'El precio de la papeleta y la simbólica: de la hermandad, no del navegador'],
 ]
 
 const CABECERA = `-- =============================================================================
