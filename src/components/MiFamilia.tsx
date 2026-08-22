@@ -34,25 +34,48 @@ export default function MiFamilia({
   anioCampana: number
   /** Altas que ya ha pedido y siguen sin tramitar. */
   solicitudesPendientes: SolicitudAlta[]
-  /** Manda la solicitud de alta de un menor a secretaría. */
-  onSolicitarAlta: (datos: { nombre: string; dni: string; fechaNacimiento: string }) => void
+  /**
+   * Manda la solicitud de alta de un menor a secretaría.
+   *
+   * DEVUELVE SI HA SALIDO. Antes no devolvía nada y esta pantalla ponía
+   * «solicitud enviada» pase lo que pase: si la base la rechazaba, el hermano
+   * se quedaba convencido de haber pedido el alta de su hijo y en secretaría
+   * no había entrado nada. Nadie se enteraba hasta que preguntaba, semanas
+   * después, por qué su hijo no salía en el cortejo.
+   */
+  onSolicitarAlta: (datos: { nombre: string; dni: string; fechaNacimiento: string })
+    => Promise<{ ok: boolean; error?: string }>
   /** Motivo por el que no puede pedir nada ahora mismo (baja, deuda…). */
   bloqueado?: string | null
 }) {
   const [abriendo, setAbriendo] = useState(false)
   const [enviada, setEnviada] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [enviando, setEnviando] = useState(false)
 
-  function enviar(e: FormEvent<HTMLFormElement>) {
+  async function enviar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    const d = new FormData(e.currentTarget)
+    const form = e.currentTarget
+    const d = new FormData(form)
     const nombre = String(d.get('nombre') ?? '').trim()
     const dni = String(d.get('dni') ?? '').trim()
     const fechaNacimiento = String(d.get('nacimiento') ?? '')
-    if (!nombre) return
-    onSolicitarAlta({ nombre, dni, fechaNacimiento })
-    setAbriendo(false)
-    setEnviada(true)
-    e.currentTarget.reset()
+    if (!nombre || enviando) return
+    setEnviando(true)
+    try {
+      const r = await onSolicitarAlta({ nombre, dni, fechaNacimiento })
+      // El «solicitud enviada» SOLO si de verdad ha salido: ver `onSolicitarAlta`.
+      if (!r.ok) {
+        setError(r.error ?? 'No se ha podido enviar la solicitud. Inténtalo otra vez en un momento.')
+        return
+      }
+      setError(null)
+      setAbriendo(false)
+      setEnviada(true)
+      form.reset()
+    } finally {
+      setEnviando(false)
+    }
   }
 
   const tramoDe = (id: string | null) => (id ? tramos.find((t) => t.id === id) ?? null : null)
@@ -147,13 +170,20 @@ export default function MiFamilia({
             La secretaría lo revisará antes de darlo de alta. Quedará a tu cargo, y sus cuotas y su
             papeleta las verás aquí.
           </p>
+          {error && (
+            <div className="banner banner--error" role="alert">
+              {error}
+            </div>
+          )}
           <div className="assign-box__row">
-            <button type="submit" className="btn btn-primary">Enviar la solicitud</button>
+            <button type="submit" className="btn btn-primary" disabled={enviando}>
+              {enviando ? 'Enviando…' : 'Enviar la solicitud'}
+            </button>
             <button type="button" className="btn btn-ghost" onClick={() => setAbriendo(false)}>Cancelar</button>
           </div>
         </form>
       ) : (
-        <button type="button" className="btn btn-outline" onClick={() => { setAbriendo(true); setEnviada(false) }}>
+        <button type="button" className="btn btn-outline" onClick={() => { setAbriendo(true); setEnviada(false); setError(null) }}>
           + Dar de alta a un hijo o hija
         </button>
       )}

@@ -10,7 +10,8 @@
  * Si no hay base de datos o la web no existe, se devuelve lo más prudente:
  * un robots que no deja indexar nada y un sitemap vacío. Nunca un error.
  */
-import { robotsTxt, sitemapXml } from '../src/lib/seoWeb'
+/* Nada se importa arriba: ver la nota de api/w.ts. Un import de arriba que
+   falle tumba la función antes de que exista ninguna red de seguridad. */
 import type { WebPublica } from '../src/lib/webPublica'
 
 interface Peticion { url?: string; headers: Record<string, string | string[] | undefined> }
@@ -71,7 +72,35 @@ function esCasa(host: string): boolean {
   return !!propio && h === propio
 }
 
+/*
+ * La red de seguridad, igual que en `api/w.ts`.
+ *
+ * Esta función sirve `robots.txt` y `sitemap.xml`. Si revienta, Google se
+ * encuentra un 500 donde espera un fichero de texto — y un 500 repetido en el
+ * robots.txt hace que deje de rastrear el sitio entero durante días.
+ *
+ * Pase lo que pase se devuelve algo válido: un robots que no cierra nada y un
+ * sitemap vacío. Peor para el posicionamiento durante un rato; nada roto.
+ */
 export default async function handler(req: Peticion, res: Respuesta) {
+  try {
+    await servir(req, res)
+  } catch (e) {
+    console.error('La función de SEO ha fallado; se devuelve lo básico:', e)
+    const esRobots = (req.url ?? '').includes('robots')
+    res.status(200)
+    res.setHeader('Cache-Control', 'no-store')
+    if (esRobots) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.send('User-agent: *\nAllow: /\n')
+    } else {
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+      res.send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>\n')
+    }
+  }
+}
+
+async function servir(req: Peticion, res: Respuesta) {
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
   const origen = `https://${host}`
   const esRobots = (req.url ?? '').includes('robots')
@@ -107,6 +136,8 @@ export default async function handler(req: Peticion, res: Respuesta) {
     return
   }
 
+  /* Se piden aquí, no arriba: ver la nota de api/w.ts. */
+  const { robotsTxt, sitemapXml } = await import('../src/lib/seoWeb')
   const base = (web.dominio ?? '').trim() ? `https://${web.dominio!.trim()}` : `${origen}/w/${web.slug}`
   res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400')
   if (esRobots) {

@@ -256,7 +256,26 @@ export default function Hermanos() {
       ...(sol.tutorId ? { tutorId: sol.tutorId } : {}),
       ...(sol.fechaNacimiento ? { fechaNacimiento: sol.fechaNacimiento } : {}),
     }
-    const acceso = await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
+    /*
+     * A UN MENOR NO SE LE CREA CUENTA, y no hacerlo es el arreglo.
+     *
+     * Cuando un hermano pide el alta de un hijo desde su área, del menor no se
+     * piden ni correo ni contraseña: entra su tutor por él, desde su propia
+     * cuenta. La solicitud viaja con `clavePropuesta: ''` y con el correo DEL
+     * PADRE, que es a quien hay que escribir.
+     *
+     * Y aquí se le intentaba crear una cuenta igualmente. Fallaba siempre, y
+     * por partida doble: la contraseña vacía no la acepta Supabase, y el
+     * correo del padre ya tiene cuenta. Así que aprobar el alta de un hijo
+     * terminaba SIEMPRE con la banda de aviso «la ficha se ha guardado, pero
+     * NO se ha creado su acceso: el correo ya lo usa otra cuenta» — un aviso
+     * que no significa nada aquí, porque ese menor no necesita ninguna cuenta,
+     * y que hacía pensar que el alta no había funcionado.
+     */
+    const esMenorACargo = Boolean(sol.tutorId) || !sol.clavePropuesta.trim()
+    const acceso = esMenorACargo
+      ? { id: null, error: null }
+      : await crearAccesoHermano(sol.email, sol.clavePropuesta, sol.dni, sol.nombre)
     nuevo.authUserId = acceso.id
     // Si no se ha podido crear su acceso, se DICE. Ver crearAccesoHermano().
     if (acceso.error) setAvisoAcceso(acceso.error)
@@ -283,11 +302,30 @@ export default function Hermanos() {
      * La contraseña NO va escrita en el correo: ver src/lib/bienvenida.ts.
      */
     if (!duplicado) {
-      void darLaBienvenida({
-        id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
-        numero: suNumero, claveEsElDni: nuevo.claveAcceso === nuevo.dni,
-        hermandad: hermandad.nombreLegal,
-      })
+      if (esMenorACargo) {
+        /* Al menor no se le manda «entra con tu DNI»: no tiene cuenta. Se
+           avisa a QUIEN LO PIDIÓ, que es quien va a gestionarlo. */
+        const tutor = hermanos.find((h) => h.id === sol.tutorId)
+        if (tutor?.email) {
+          void avisarPorCorreo(
+            [{ id: tutor.id, nombre: tutor.nombre, email: tutor.email }],
+            'ficha',
+            'Ya está dado de alta',
+            [
+              `${nuevo.nombre} ya está en el censo de la hermandad, con el número ${suNumero}.`,
+              'Lo gestionas desde tu propia área de hermano, en «Mi familia»: desde ahí puedes '
+              + 'ver sus cuotas y sacarle la papeleta de sitio.',
+            ],
+            'Este aviso lo puedes apagar desde tu área de hermano.',
+          )
+        }
+      } else {
+        void darLaBienvenida({
+          id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
+          numero: suNumero, claveEsElDni: nuevo.claveAcceso === nuevo.dni,
+          hermandad: hermandad.nombreLegal,
+        })
+      }
     }
     // Sobre el estado más reciente de las solicitudes, no sobre el de antes del
     // await: si no, aprobar dos seguidas revertía la primera a «Pendiente».
@@ -579,6 +617,7 @@ export default function Hermanos() {
       suNumero = Math.max(0, ...prev.map((h) => h.numero)) + 1
       return [...prev, { ...nuevo, numero: suNumero }]
     })
+    // La bienvenida, igual que en el alta desde solicitud.
     // La bienvenida, igual que en el alta desde solicitud.
     if (!duplicado) {
       void darLaBienvenida({

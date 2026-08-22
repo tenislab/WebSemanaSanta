@@ -1108,8 +1108,10 @@ export default function HermanoPortal() {
    * queda en el mismo buzón de solicitudes que ya revisa la hermandad, con la
    * marca de quién lo pide para que al aprobarla quede a su cargo.
    */
-  function solicitarAltaFamilia(datos: { nombre: string; dni: string; fechaNacimiento: string }) {
-    if (!hermanoPrincipal) return
+  async function solicitarAltaFamilia(
+    datos: { nombre: string; dni: string; fechaNacimiento: string },
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!hermanoPrincipal) return { ok: false, error: 'No se sabe quién eres. Vuelve a entrar e inténtalo otra vez.' }
     const nueva: SolicitudAlta = {
       id: nuevoId(),
       nombre: datos.nombre,
@@ -1123,7 +1125,21 @@ export default function HermanoPortal() {
       tutorId: hermanoPrincipal.id,
       fechaNacimiento: datos.fechaNacimiento || undefined,
     }
-    crearSolicitudPrincipal(nueva).then(() => setSolicitudesAlta(getSolicitudes()))
+    /*
+     * SE ESPERA EL RESULTADO Y SE DEVUELVE.
+     *
+     * `crearSolicitudPrincipal` devuelve `{ ok, error }` a propósito —está
+     * escrito así justamente para que se pueda decir cuándo falla— y aquí se
+     * tiraba a la basura con un `.then()` que solo refrescaba la lista. La
+     * pantalla ponía «solicitud enviada» pasara lo que pasara.
+     *
+     * Resultado: un hermano pedía el alta de su hijo, se quedaba convencido de
+     * haberla pedido, y en secretaría no entraba nada. Se descubría semanas
+     * después preguntando por qué el niño no salía en el cortejo.
+     */
+    const r = await crearSolicitudPrincipal(nueva)
+    setSolicitudesAlta(getSolicitudes())
+    return r
   }
 
   /** Todas sus papeletas, de cualquier año: el histórico, no solo la de ahora. */

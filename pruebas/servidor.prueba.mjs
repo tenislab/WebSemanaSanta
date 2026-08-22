@@ -28,6 +28,7 @@
  */
 export default async function ({ caso }) {
   const { build } = await import('esbuild')
+  const { readFile } = await import('node:fs/promises')
   const { tmpdir } = await import('node:os')
   const { mkdtempSync } = await import('node:fs')
   const { join } = await import('node:path')
@@ -84,8 +85,38 @@ export default async function ({ caso }) {
     caso(`api/${funcion}.ts pesa poco (${kb} kB)`, true, kb < 100)
 
     /*
+     * Y QUE NO SE COLARA UN IMPORT DE ARRIBA.
+     *
+     * Un `import` de la cabecera se resuelve AL CARGAR el módulo, antes de que
+     * exista la red de seguridad de dentro. Si falla, Vercel devuelve un 500 y
+     * no hay nada que lo pare. Por eso lo que hace falta se pide con
+     * `await import(...)` dentro del try: si algún día vuelve a arrastrar
+     * código de navegador, la página se sirve sin adornar en vez de caerse.
+     *
+     * Los `import type` no cuentan: los borra el compilador.
+     */
+    const fuente = await readFile(`api/${funcion}.ts`, 'utf8')
+    caso(`api/${funcion}.ts no importa nada de src arriba`, false,
+      /^import (?!type )[^\n]*from '\.\.\/src\//m.test(fuente))
+    caso(`api/${funcion}.ts lo pide dentro del manejador`, true,
+      /await import\('\.\.\/src\/lib\/seoWeb'\)/.test(fuente))
+    // Y que el manejador esté envuelto: sin eso, la red no existe.
+    caso(`api/${funcion}.ts tiene red de seguridad`, true,
+      /export default async function handler[\s\S]{0,200}try \{\s*await servir\(req, res\)/.test(fuente))
+
+    /*
      * Y que RESPONDA, no solo que cargue. Un fallo dentro del manejador no se
      * ve al importar: se ve cuando entra alguien.
+     *
+     * SE PRUEBA DE DOS MANERAS: sin variables de entorno y CON ellas. La
+     * primera vez que se probó esto solo se hizo sin ellas, y con eso la
+     * función ni siquiera llega a consultar Supabase —`consulta()` se sale en
+     * la primera línea— así que la mitad del código no se ejecutaba. En
+     * producción esas variables SÍ están puestas.
+     *
+     * El servidor de mentira apunta a una dirección que no existe: eso obliga
+     * a recorrer el camino de «la consulta falla», que es justo el que no se
+     * había probado nunca.
      */
     for (const url of ['/', '/w/una-hermandad', '/n/una-noticia']) {
       const r = { code: 0, body: '' }
@@ -108,11 +139,37 @@ export default async function ({ caso }) {
       // página sin adornar, pero se sirve.
       caso(`api/${funcion}.ts no devuelve 500 en ${url}`, false, r.code >= 500)
     }
+
+    // Y ahora CON credenciales, que es como está en producción.
+    const antes = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_ANON_KEY }
+    process.env.SUPABASE_URL = 'https://no-existe-a-proposito.supabase.co'
+    process.env.SUPABASE_ANON_KEY = 'clave-de-mentira'
+    try {
+      for (const url of ['/', '/w/una-hermandad']) {
+        const r = { code: 0, body: '' }
+        const res = { status(c) { r.code = c; return this }, setHeader() {}, send(b) { r.body = b ?? '' } }
+        let respondio = true
+        let fallo = ''
+        try {
+          const modulo = await import(destino)
+          await modulo.default({ url, headers: { host: 'gobergo.com' } }, res)
+        } catch (e) {
+          respondio = false
+          fallo = String(e).split('\n')[0]
+        }
+        caso(`api/${funcion}.ts responde a ${url} con credenciales${fallo ? ' — ' + fallo : ''}`, true, respondio)
+        caso(`api/${funcion}.ts no devuelve 500 en ${url} con credenciales`, false, r.code >= 500)
+      }
+    } finally {
+      if (antes.url === undefined) delete process.env.SUPABASE_URL
+      else process.env.SUPABASE_URL = antes.url
+      if (antes.key === undefined) delete process.env.SUPABASE_ANON_KEY
+      else process.env.SUPABASE_ANON_KEY = antes.key
+    }
   }
 
   // Y que no se vuelva a colar el import que lo rompió. Las funciones de
   // servidor solo pueden tocar ficheros que no sepan nada del navegador.
-  const { readFile } = await import('node:fs/promises')
   for (const funcion of ['w', 'seo']) {
     const fuente = await readFile(`api/${funcion}.ts`, 'utf8')
     caso(`api/${funcion}.ts no importa webPublica en tiempo de ejecución`, false,

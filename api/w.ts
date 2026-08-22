@@ -21,7 +21,35 @@
  *   2. Define SUPABASE_URL y SUPABASE_ANON_KEY en el despliegue.
  *   3. Deja los `rewrites` de `vercel.json` como están.
  */
-import { cabeceraHtml } from '../src/lib/seoWeb'
+/*
+ * NADA SE IMPORTA ARRIBA, y esto es a propósito.
+ *
+ * Un `import` de arriba se resuelve AL CARGAR el módulo, antes de que se
+ * ejecute una sola línea nuestra — antes incluso de que exista la red de
+ * seguridad de más abajo. Si ese import falla, Vercel no tiene a quién
+ * preguntar: devuelve «This Serverless Function has crashed · 500».
+ *
+ * Y ya pasó. `seoWeb` arrastraba `webPublica`, que arrastraba `supabase`, cuya
+ * primera línea es `import.meta.env.VITE_SUPABASE_URL`. `import.meta.env` es
+ * cosa de Vite: en el navegador existe y en el servidor NO. La función
+ * reventaba al arrancar con
+ *
+ *     TypeError: Cannot read properties of undefined (reading 'VITE_SUPABASE_URL')
+ *
+ * y como `vercel.json` manda a esta función la RAÍZ del dominio y todas las
+ * webs de hermandad, lo que se veía en gobergo.com era la pantalla de error de
+ * Vercel. La puerta principal caída sin que nada de la aplicación estuviera mal.
+ *
+ * Se arregló el import. Pero arreglar EL CASO no arregla LA CLASE: cualquiera
+ * puede volver a colar mañana un import de navegador en `seoWeb`, y volveríamos
+ * aquí. Así que ahora lo que se trae se pide DENTRO del manejador, con
+ * `await import(...)`, y por tanto dentro del try. Si algún día vuelve a
+ * fallar, se sirve la página sin las etiquetas de la hermandad —se comparte
+ * peor por WhatsApp, nada más— en vez de caerse la casa entera.
+ *
+ * Los `import type` sí se quedan: los borra el compilador y no existen en
+ * tiempo de ejecución.
+ */
 import type { WebPublica } from '../src/lib/webPublica'
 import type { HermandadSettings } from '../src/lib/hermandadSettings'
 import type { CultoWeb } from '../src/lib/webPublica'
@@ -196,6 +224,8 @@ async function servir(req: Peticion, res: Respuesta) {
     res.send(html)
     return
   }
+  /* Se pide aquí, no arriba: ver la nota del principio del fichero. */
+  const { cabeceraHtml } = await import('../src/lib/seoWeb')
   const slug = web.slug || slugRuta
 
   // Los datos de la hermandad (nombre legal, dirección, logo) salen de una
