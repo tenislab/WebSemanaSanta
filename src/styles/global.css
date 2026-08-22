@@ -1213,6 +1213,18 @@ h1, h2, h3,
   background: var(--bg-sunken); overflow: hidden;
 }
 .guia__barra span { display: block; height: 100%; background: var(--gold); transition: width 0.4s ease; }
+/* Los dos botones de la cabecera: retraer y apartar. */
+.guia__acciones { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+/* Plegada: lo que toca ahora, en una línea. Sin esto, retraer deja un cajón
+   cerrado que no dice nada — y un cajón que no dice nada no se vuelve a abrir. */
+.guia__siguiente {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.8rem; flex-wrap: wrap; margin: 0;
+  font-size: 0.92rem; color: var(--text-muted);
+}
+.guia__siguiente b { color: var(--text); font-weight: 600; }
+
 .guia__pasos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
 .guia__paso {
   display: flex; align-items: center; gap: 0.8rem; padding: 0.6rem 0.5rem;
@@ -3671,18 +3683,6 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.15rem; color: var(--text-muted);
 }
 
-/* La puerta de la junta. Es un botón entero, no un enlace de pie: quien lleva
-   la hermandad llega aquí constantemente y antes tenía que volverse atrás. */
-.portal__acceso-gestion {
-  display: block; text-align: center; text-decoration: none;
-  padding: 0.82rem 1.2rem; margin-bottom: 1.4rem; border-radius: 999px;
-  background: linear-gradient(180deg, #7d1f2a, #5d1620);
-  color: var(--marfil-100); font-weight: 600; font-size: 0.95rem;
-  border: 1px solid rgba(0,0,0,0.25);
-  box-shadow: 0 6px 16px rgba(106,26,35,0.32), inset 0 1px 0 rgba(255,255,255,0.18);
-}
-.portal__acceso-gestion:hover { filter: brightness(1.08); }
-.portal__acceso-gestion:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
 /* El buscador, con la lupa dentro. */
 .portal__buscador { position: relative; margin-bottom: 0.9rem; }

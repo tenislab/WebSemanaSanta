@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { leerPersistido } from '../lib/persistencia'
+import { guardarConAviso, leerPersistido } from '../lib/persistencia'
 import {
   estaTodoHecho,
   pasosPuestaEnMarcha,
@@ -37,6 +37,21 @@ import {
  */
 
 const CLAVE_APARTADO = 'cabildo-guia-apartada'
+/*
+ * Plegar NO es lo mismo que apartar, y por eso son dos cosas distintas:
+ *
+ *   · «Seguir luego» la esconde entera y vuelve mañana. Es para el día que no
+ *     se va a tocar la puesta en marcha.
+ *   · «Retraer» deja el resumen y la barra, y esconde los diez pasos. Es para
+ *     el día que sí se está trabajando, pero la lista estorba en medio del
+ *     panel — que es como llegó dicho: «que no esté en medio todo esto».
+ *
+ * Y plegar SÍ se recuerda entre sesiones: quien la ha plegado ya sabe lo que
+ * hay dentro, y volver a encontrársela abierta cada mañana es exactamente lo
+ * que se quería quitar. Lo que no se pierde es el resumen, así que sigue
+ * viéndose cuánto queda sin tener que abrir nada.
+ */
+const CLAVE_PLEGADA = 'cabildo-guia-plegada'
 
 export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHermandad }) {
   // Apartar es para esta sesión, no para siempre: la puesta en marcha se hace
@@ -44,6 +59,8 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
   const [apartada, setApartada] = useState(
     () => leerPersistido<string>(CLAVE_APARTADO, '') === new Date().toDateString(),
   )
+
+  const [plegada, setPlegada] = useState(() => leerPersistido<boolean>(CLAVE_PLEGADA, false))
 
   const pasos = useMemo(() => pasosPuestaEnMarcha(estado), [estado])
   const resumen = useMemo(() => resumirPasos(pasos), [pasos])
@@ -60,6 +77,11 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
     }
   }
 
+  function plegar(valor: boolean) {
+    setPlegada(valor)
+    guardarConAviso(CLAVE_PLEGADA, valor)
+  }
+
   const empezando = resumen.hechos === 0
 
   return (
@@ -71,7 +93,9 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
             {empezando ? 'Vamos a poner en marcha vuestra hermandad' : '¿Por dónde ibais?'}
           </h2>
           <p className="guia__lead">
-            {empezando
+            {/* Plegada, la explicación larga sobra: lo que hace falta es cuánto
+                queda. Abierta, la primera vez, sí hace falta. */}
+            {empezando && !plegada
               ? 'Son diez pasos y se hacen en cualquier orden, aunque este es el que menos vueltas da. '
                 + 'No hace falta terminarlo hoy: cada paso se tacha solo en cuanto está hecho.'
               : `Lleváis ${resumen.hechos} de ${resumen.total}.`}
@@ -88,9 +112,20 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
             )}
           </p>
         </div>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={apartar}>
-          Seguir luego
-        </button>
+        <div className="guia__acciones">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => plegar(!plegada)}
+            aria-expanded={!plegada}
+            aria-controls="guia-pasos"
+          >
+            {plegada ? 'Ver los pasos' : 'Retraer'}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={apartar}>
+            Seguir luego
+          </button>
+        </div>
       </div>
 
       {/* La barra dice cuánto queda de un vistazo, que es lo que se mira al volver. */}
@@ -98,7 +133,23 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
         <span style={{ width: `${resumen.porcentaje}%` }} />
       </div>
 
-      <ol className="guia__pasos">
+      {plegada ? (
+        /*
+         * Plegada sigue diciendo qué toca AHORA. Esconderlo del todo dejaría un
+         * cajón cerrado que no dice nada y que nadie vuelve a abrir; con el
+         * paso que toca a la vista, sigue sirviendo aunque ocupe cuatro líneas.
+         */
+        resumen.siguiente && (
+          <p className="guia__siguiente">
+            <span>Lo siguiente: <b>{resumen.siguiente.titulo}</b></span>
+            <Link className="btn btn-sm btn-primary" to={resumen.siguiente.donde}>
+              Empezar aquí
+              <span className="sr-only"> — {resumen.siguiente.comoLlegar}</span>
+            </Link>
+          </p>
+        )
+      ) : (
+      <ol className="guia__pasos" id="guia-pasos">
         {pasos.map((p, i) => {
           const esElQueToca = !p.hecho && resumen.siguiente?.id === p.id
           return (
@@ -126,6 +177,7 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
           )
         })}
       </ol>
+      )}
     </section>
   )
 }

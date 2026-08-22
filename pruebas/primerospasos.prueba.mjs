@@ -131,4 +131,46 @@ async function laPantallaLoEnsena({ caso }) {
 
   caso('se va solo al terminar', true, /estaTodoHecho\(pasos\)/.test(guia))
   caso('señala el paso que toca', true, /Empezar aquí/.test(guia))
+
+  await retraerNoEsApartar({ caso })
 }
+
+/**
+ * RETRAER NO ES APARTAR.
+ *
+ * Llegó dicho así: «ponle un botón de retraer para que no esté en medio todo
+ * esto». Y son dos cosas distintas a propósito: «Seguir luego» esconde la guía
+ * entera y vuelve mañana; «Retraer» deja el resumen y esconde los diez pasos,
+ * para el día que sí se trabaja pero la lista estorba.
+ */
+async function retraerNoEsApartar({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const g = (await readFile('src/components/GuiaPrimerosPasos.tsx', 'utf8'))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+
+  caso('se puede retraer', true, /Retraer/.test(g))
+  caso('y volver a abrir', true, /Ver los pasos/.test(g))
+  caso('sin perder «Seguir luego», que hace otra cosa', true, /Seguir luego/.test(g))
+
+  /*
+   * Y son DOS claves distintas. Con una sola, retraer escondería la guía un día
+   * entero —o apartarla dejaría los pasos plegados para siempre—, que es
+   * justo la confusión que se quería evitar.
+   */
+  caso('apartar y plegar se guardan aparte', true,
+    /cabildo-guia-apartada/.test(g) && /cabildo-guia-plegada/.test(g))
+  // La convención de nombres del almacenamiento no se toca: todo `cabildo-`.
+  caso('la clave sigue la convención de la casa', true, /'cabildo-guia-plegada'/.test(g))
+
+  /*
+   * Plegada SIGUE diciendo qué toca ahora. Si se escondiera todo quedaría un
+   * cajón cerrado que no dice nada, y un cajón que no dice nada no se vuelve a
+   * abrir: sería apartar con otro nombre.
+   */
+  caso('plegada sigue diciendo lo siguiente', true, /guia__siguiente/.test(g))
+  caso('y con su botón para ir', true, /resumen\.siguiente\.donde/.test(g))
+
+  // Que el lector de pantalla sepa si está abierta o cerrada.
+  caso('el botón dice si está abierta', true, /aria-expanded=\{!plegada\}/.test(g))
+}
+

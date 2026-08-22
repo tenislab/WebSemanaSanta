@@ -1226,19 +1226,6 @@ export default function HermanoPortal() {
                   <span className="portal__card-head-marca">Gobergo</span>
                 </div>
 
-                {/*
-                  LA PUERTA DE LA JUNTA, dicha aquí y no escondida.
-
-                  Quien lleva la hermandad llega a `/hermano` constantemente —es
-                  la dirección que se sabe— y desde aquí no había forma de pasar
-                  al panel sin volver atrás y buscar otra puerta. No promete
-                  acceso a nadie: quien no lleve cargo se encontrará su área, que
-                  es donde tiene que estar.
-                */}
-                <Link to="/entrar" className="portal__acceso-gestion">
-                  Acceso al panel de gestión completo
-                </Link>
-
                 <h1>Encuentra tu hermandad</h1>
                 <p className="portal__lead">
                   Escribe el nombre completo o la ciudad para acceder a tu área personal.

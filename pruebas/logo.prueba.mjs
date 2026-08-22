@@ -38,6 +38,38 @@ export default async function ({ caso }) {
   caso('todos los atributos van entrecomillados', false, / \w[\w-]*=[^"]/.test(svg))
   caso('lleva el espacio de nombres, o no se pinta suelto', true, /xmlns=/.test(svg))
 
+  /*
+   * Y QUE SEA XML VÁLIDO DE VERDAD, no solo que «parezca» un SVG.
+   *
+   * Llegó como «el icono de la pestaña no sale, se ve el globo gris». El
+   * dibujo estaba entero y bien metido en el `index.html`; lo que pasaba es
+   * que al meterlo en la dirección `data:` las comillas dobles se cambian por
+   * simples —el `href="…"` va entre dobles—, y se cambiaban TODAS, incluidas
+   * las de este valor:
+   *
+   *     font-family="'Cormorant Garamond', 'Playfair Display', Georgia, serif"
+   *
+   * que quedaba `font-family=''Cormorant Garamond', …'`. El atributo se cierra
+   * en la primera comilla de dentro, el resto del SVG pasa a ser basura y el
+   * navegador no pinta nada. Y no avisa: ni error en la consola, ni imagen
+   * rota. Solo el globo, que es lo que se ve cuando una página no tiene icono.
+   *
+   * Se comprueba quitando de cada etiqueta su nombre y sus atributos bien
+   * formados: si sobra algo, es que un atributo cerró donde no debía.
+   */
+  const dibujo = decodeURIComponent(faviconDataUri().replace('data:image/svg+xml,', ''))
+  const malFormadas = (dibujo.match(/<[a-zA-Z][^>]*>/g) ?? [])
+    .filter((etiqueta) => etiqueta
+      .replace(/^<[\w:.-]+/, '')
+      .replace(/[\w-]+='[^']*'/g, '')
+      .replace(/[\w-]+="[^"]*"/g, '')
+      .replace(/[\s/>]/g, '') !== '')
+    .map((e) => e.slice(0, 70))
+  caso('cada atributo cierra donde debe', [], malFormadas)
+  // Las comillas de dentro de un valor van escapadas, que es lo que lo arregla.
+  caso('las comillas de dentro van escapadas', true,
+    !/font-family/.test(dibujo) || dibujo.includes('&apos;'))
+
   // El icono va metido en la dirección, y tiene que caber sin volverse enorme.
   const uri = faviconDataUri()
   caso('el icono va en la propia dirección', true, uri.startsWith('data:image/svg+xml,'))

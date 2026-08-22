@@ -86,7 +86,22 @@ export function faviconDataUri() {
   // Solo se escapan los caracteres que romperían el atributo HTML. Codificarlo
   // entero triplica el tamaño por nada.
   const limpio = svgDelLogo()
-    .replace(/"/g, "'")
+    /*
+     * Las comillas dobles pasan a simples porque el `href="…"` de la etiqueta
+     * va entre dobles. Pero NO se puede hacer a lo bruto: hay valores que YA
+     * llevan comillas simples dentro, y el ejemplo es justo el peor,
+     *
+     *     font-family="'Playfair Display', Georgia, 'Times New Roman', serif"
+     *
+     * que cambiado sin mirar queda `font-family=''Playfair Display', …'`: el
+     * atributo se cierra en la primera comilla de dentro, el SVG deja de ser
+     * XML válido y el navegador NO PINTA NADA —pone el globo gris de «esta
+     * página no tiene icono»— sin dar ningún error en la consola.
+     *
+     * Así que se va atributo por atributo: las de dentro se escapan y solo se
+     * cambian las que delimitan.
+     */
+    .replace(/([\w-]+)="([^"]*)"/g, (_, nombre, valor) => `${nombre}='${valor.replace(/'/g, '&apos;')}'`)
     .replace(/#/g, '%23')
     .replace(/</g, '%3C')
     .replace(/>/g, '%3E')
