@@ -4,6 +4,14 @@ import { isSupabaseConfigured, supabase } from './supabase'
 import { hermandadActualId } from './multiHermandad'
 import type { HermandadSettings } from './hermandadSettings'
 
+/*
+ * Estas cuatro viven en `webPublicaPuro.ts` porque las necesita también la
+ * función de servidor, y desde el servidor no se puede importar este fichero
+ * (arrastra React y el cliente de Supabase). Se reexportan para que el resto
+ * de la aplicación las siga pidiendo aquí, como siempre.
+ */
+export { aSlug, slugNoticia, slugTitular, noticiasPublicadas } from './webPublicaPuro'
+
 /**
  * Web pública de la hermandad, creada y personalizada desde la propia app.
  * La hermandad elige una plantilla, ajusta colores, tipografía, portada y qué
@@ -302,10 +310,6 @@ export interface Titular {
 }
 
 /** El enlace propio de la ficha de un titular, ya resuelto. */
-export function slugTitular(t: Titular): string {
-  return t.slug?.trim() || aSlug(t.nombre) || t.id
-}
-
 /** ¿Hay ficha que abrir, o el titular es solo nombre y foto? */
 export function titularConFicha(t: Titular): boolean {
   return (
@@ -423,21 +427,6 @@ export interface Noticia {
 }
 
 /** El enlace propio de una noticia, ya resuelto (el guardado o el del título). */
-export function slugNoticia(n: Noticia): string {
-  return n.slug?.trim() || aSlug(n.titulo) || n.id
-}
-
-/** Las noticias que se ven en la web, la destacada primero y por fecha. */
-export function noticiasPublicadas(noticias: Noticia[]): Noticia[] {
-  return noticias
-    .filter((n) => n.publicada)
-    .sort((a, b) => {
-      // La destacada manda sobre la fecha: es la que la hermandad quiere arriba.
-      if (Boolean(a.destacada) !== Boolean(b.destacada)) return a.destacada ? -1 : 1
-      return (b.fecha || '').localeCompare(a.fecha || '')
-    })
-}
-
 /**
  * Fotos publicadas sin decir qué se ve en ellas. Quien navega con un lector de
  * pantalla se encuentra un hueco mudo; y una foto sin describir tampoco dice
@@ -1176,15 +1165,6 @@ export function esDeGoogleMaps(url: string): boolean {
 }
 
 /** Convierte un texto en un slug válido para la URL (minúsculas, sin acentos, con guiones). */
-export function aSlug(texto: string): string {
-  return texto
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-}
 
 /**
  * Acepta tanto el formato nuevo (contenido con formato) como el antiguo (un

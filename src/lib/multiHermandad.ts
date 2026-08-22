@@ -354,13 +354,17 @@ export async function papelesDeLaCuenta(): Promise<PapelesDeLaCuenta> {
 }
 
 /**
- * ¿Hay que echar a esta cuenta del panel?
+ * ¿Esta cuenta es SOLO de hermano, sin nada que gestionar?
  *
- * Solo si es hermano y NO gestiona. Quien hace las dos cosas se queda.
+ * Ya no se usa para echar a nadie del panel —eso se quitó, ver el comentario
+ * de ProtectedRoute— pero sí para saber qué enseñarle: a quien solo es hermano
+ * no se le ofrece el enlace de «ir al panel», y a quien gestiona sí.
+ *
+ * `seguro` manda: si no se ha podido averiguar, contesta que NO. Ante la duda
+ * no se le quita nada a nadie; las políticas de la base de datos siguen ahí y
+ * no enseñan lo que no toca.
  */
 export async function soloEsHermano(): Promise<boolean> {
   const p = await papelesDeLaCuenta()
-  // `seguro` manda: si no se ha podido averiguar, esto contesta que NO, que es
-  // lo mismo que decir «no lo eches». Ver el comentario de `PapelesDeLaCuenta`.
   return p.seguro && p.esHermano && !p.gestiona
 }

@@ -86,7 +86,46 @@ function esCasa(host: string): boolean {
   return !!propio && host === propio
 }
 
+/*
+ * La red de seguridad.
+ *
+ * `vercel.json` manda a esta función la RAÍZ del dominio y todas las webs de
+ * hermandad. O sea que cualquier cosa que reviente aquí dentro no rompe una
+ * página: rompe la puerta principal de Gobergo, con un «This Serverless
+ * Function has crashed · 500» delante de quien entre.
+ *
+ * Ya pasó, y por un motivo tonto: un `import` que arrastraba código de
+ * navegador (ver webPublicaPuro.ts). Se arregló el import, pero la lección es
+ * la otra: esto NUNCA debería haber podido devolver un 500. Lo que hace esta
+ * función es adornar el HTML con las etiquetas de la hermandad para que la
+ * vista previa de WhatsApp salga bien. Si el adorno falla, se sirve la página
+ * sin adornar y ya está. Que se vea peor al compartirla es un problema
+ * pequeño; que no se vea, no.
+ */
 export default async function handler(req: Peticion, res: Respuesta) {
+  try {
+    await servir(req, res)
+  } catch (e) {
+    console.error('La función de la web ha fallado; se sirve la página sin adornar:', e)
+    try {
+      const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
+      const r = await fetch(`https://${host}/index.html`)
+      res.status(200)
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-store')
+      res.send(await r.text())
+    } catch {
+      // Ni el HTML de siempre se ha podido pedir. Aquí ya no queda nada que
+      // hacer, pero al menos se dice en cristiano y sin pantalla de error.
+      res.status(503)
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-store')
+      res.send('<!doctype html><meta charset="utf-8"><title>No disponible</title><p>La página no está disponible ahora mismo. Vuelve a intentarlo en unos minutos.</p>')
+    }
+  }
+}
+
+async function servir(req: Peticion, res: Respuesta) {
   const host = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
   const origen = `https://${host}`
   const ruta = new URL(req.url ?? '/', origen)

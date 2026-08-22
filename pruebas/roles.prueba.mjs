@@ -203,7 +203,21 @@ async function unaCuentaDosPuertas({ cargar, caso }) {
   // Hermano Mayor fuera de su hermandad.
   caso('sin saberlo, no se le cierra la puerta', true, /sabemosSiGestiona \? gestiona : true/.test(fuente))
   // Y lo que de verdad protege: echar a alguien exige estar seguro.
-  caso('echar del panel exige estar seguro', true, /return p\.seguro && p\.esHermano && !p\.gestiona/.test(fuente))
+  caso('saber si es solo hermano exige estar seguro', true, /return p\.seguro && p\.esHermano && !p\.gestiona/.test(fuente))
+
+  // Y del panel ya no se echa a nadie. Hubo dos versiones y las dos estaban
+  // mal: redirigir en silencio —pulsas «gestiono la hermandad», parpadea y
+  // apareces en otro sitio— y preguntar «¿a dónde quieres ir?», que es peor,
+  // porque ya lo habías dicho al entrar. Si pide el panel, se le da el panel:
+  // lo que vea dentro lo deciden las políticas de la base de datos, que son
+  // las que mandan y no enseñan un solo dato que no toque.
+  const guardia = await (await import('node:fs/promises'))
+    .readFile('src/components/ProtectedRoute.tsx', 'utf8')
+  caso('el panel ya no redirige al área del hermano', false, /Navigate to="\/hermano"/.test(guardia))
+  caso('ni pregunta a dónde quieres ir', false, /A dónde quieres ir/.test(guardia))
+  // Lo que sí sigue: sin sesión no se entra.
+  caso('sin sesión, al login', true, /if \(!session && configured\)/.test(guardia))
+  caso('y con el segundo paso pendiente, también', true, /mfaPendiente/.test(guardia))
 
   // ---------------------------------------------------------------------
   // «Entra como un cargo concreto y comprueba qué ve cada uno»

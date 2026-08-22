@@ -82,21 +82,18 @@ export default function Archivo() {
   const [query, setQuery] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState<'Todos' | CategoriaDocumento>('Todos')
   /**
-   * EL CARGO DE VERDAD, no uno elegido a mano.
+   * EL CARGO DE VERDAD, y solo ese.
    *
-   * Este desplegable se llamaba «simulador de permisos» y lo tenía cualquiera.
-   * O sea: al vocal al que se le habían restringido las actas del cabildo le
-   * bastaba con cambiar el desplegable a «Hermano Mayor» y leerlas. No era una
-   * restricción, era una sugerencia.
-   *
-   * Ahora la vista arranca SIEMPRE en el cargo real de quien ha entrado, y solo
-   * el titular —que ya lo ve todo— puede mover el desplegable, que para él sí
-   * es lo que decía ser: una forma de comprobar qué verá su junta.
+   * Aquí hubo un desplegable de «simulador de permisos» que lo tenía
+   * cualquiera: al vocal al que se le habían restringido las actas del cabildo
+   * le bastaba con cambiarlo a «Hermano Mayor» y leerlas. No era una
+   * restricción, era una sugerencia. Se limitó al titular, y ahora se quita
+   * del todo: para saber qué ve cada cargo está Personal y permisos, que es
+   * donde se decide, y no en medio del archivo estorbando a quien viene a
+   * buscar un acta.
    */
   const cargoReal = useCargoDeLaSesion()
-  const puedeSimular = cargoReal === null
-  const [simulado, setSimulado] = useState<Cargo>('Hermano Mayor')
-  const viewAsCargo: Cargo = puedeSimular ? simulado : ((cargoReal ?? 'Vocal') as Cargo)
+  const viewAsCargo: Cargo = (cargoReal ?? 'Vocal') as Cargo
   const [selected, setSelected] = useState<Documento | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
@@ -278,28 +275,15 @@ export default function Archivo() {
         </button>
       </div>
 
-      <div className="banner-inline banner-inline--accent">
-        {puedeSimular ? 'Simulador de permisos — así vería el archivo un/a ' : 'Estás viendo el archivo como '}
-        {puedeSimular ? (
-          <select
-            aria-label="Ver el archivo como"
-            value={simulado}
-            onChange={(e) => setSimulado(e.target.value as Cargo)}
-          >
-            {CARGOS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <b>{viewAsCargo}</b>
-        )}
-.{' '}
-        {ocultosPorCargo > 0
-          ? `${ocultosPorCargo} documento${ocultosPorCargo === 1 ? '' : 's'} no le aparece${ocultosPorCargo === 1 ? '' : 'n'} (los ve solo quien tiene acceso).`
-          : 'Ve todos los documentos actuales.'}
-      </div>
+      {/* Solo se dice algo si de verdad falta algo. Un aviso que siempre pone
+          «ves todo» es ruido en todas las visitas para no decir nada. */}
+      {ocultosPorCargo > 0 && (
+        <div className="banner-inline banner-inline--accent">
+          {ocultosPorCargo === 1
+            ? 'Hay 1 documento que no te aparece: lo ve solo quien tiene acceso.'
+            : `Hay ${ocultosPorCargo} documentos que no te aparecen: los ve solo quien tiene acceso.`}
+        </div>
+      )}
 
       <section className="stat-grid">
         <div className="stat-tile">

@@ -1,5 +1,9 @@
 import type { CultoWeb, WebPublica } from './webPublica'
-import { noticiasPublicadas, slugNoticia, slugTitular } from './webPublica'
+// DEL FICHERO PURO, no de `webPublica`. Esto lo importan las funciones de
+// servidor de `api/`, y `webPublica` arrastra React y el cliente de Supabase
+// —que lee `import.meta.env`, inexistente en el servidor—. Por ahí se cayó la
+// portada de gobergo.com con un 500. Ver el comentario de webPublicaPuro.ts.
+import { noticiasPublicadas, slugNoticia, slugTitular } from './webPublicaPuro'
 import type { HermandadSettings } from './hermandadSettings'
 
 /**
