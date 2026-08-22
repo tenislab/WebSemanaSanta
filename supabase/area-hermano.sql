@@ -188,6 +188,18 @@ comment on column hermanos.avisos_preferencias is
 alter table hermanos add column if not exists tutor_id uuid references hermanos(id) on delete set null;
 create index if not exists hermanos_tutor_idx on hermanos (tutor_id) where tutor_id is not null;
 
+-- Y LO MISMO EN LA SOLICITUD, que es donde el vínculo se apunta PRIMERO.
+--
+-- Esto se quedó a medias y costó caro. Arriba se arregló `hermanos.tutor_id`,
+-- que es donde el vínculo ACABA; pero el hermano no escribe en `hermanos`,
+-- escribe una solicitud, y `solicitudes_alta` no tenía ni `tutor_id` ni
+-- `fecha_nacimiento`. Postgres no descarta la columna que le sobra: rechaza el
+-- INSERT ENTERO. Así que no es que el hijo se quedara sin tutor —es que NINGUNA
+-- solicitud llegaba, ni la del hijo ni la de un adulto desde la web pública—.
+-- En pantalla se veía «No se pudo enviar la solicitud», sin más pistas.
+alter table solicitudes_alta add column if not exists tutor_id uuid references hermanos(id) on delete set null;
+alter table solicitudes_alta add column if not exists fecha_nacimiento date;
+
 -- Y que el tutor pueda ver la ficha de quien tiene a cargo.
 drop policy if exists "hermanos_a_mi_cargo_select" on hermanos;
 create policy "hermanos_a_mi_cargo_select" on hermanos for select to authenticated

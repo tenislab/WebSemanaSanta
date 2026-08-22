@@ -53,32 +53,59 @@ export default async function ({ caso }) {
   caso('se han leído las tablas del SQL', true, tablas.size >= 15)
   caso('y sus columnas', true, (tablas.get('hermanos')?.size ?? 0) >= 20)
 
-  /* 2. Lo que la aplicación ESCRIBE. */
-  const ficheros = (await readdir('src/lib/db')).filter((f) => f.endsWith('.ts'))
+  /* 2. Lo que la aplicación ESCRIBE.
+   *
+   * OJO CON EL ALCANCE. Esto miraba solo `src/lib/db/` y solo funciones con
+   * `export`, y por esas dos rendijas se coló el fallo que dejó sin funcionar
+   * las solicitudes de alta durante días: `solicitudToRow` vive en
+   * `src/lib/solicitudes.ts` y no se exporta, así que era invisible por
+   * partida doble. Escribía `tutor_id` y `fecha_nacimiento`, columnas que la
+   * tabla no tenía, y Postgres rechazaba el INSERT entero.
+   *
+   * Se mira TODO `src/lib`, exportadas o no. Un mapeo no vigilado no es un
+   * mapeo más seguro: es el sitio donde se esconde el siguiente. */
+  const ficheros = [
+    ...(await readdir('src/lib/db')).filter((f) => f.endsWith('.ts')).map((f) => `src/lib/db/${f}`),
+    ...(await readdir('src/lib')).filter((f) => f.endsWith('.ts')).map((f) => `src/lib/${f}`),
+  ]
   caso('hay mapeos que comprobar', true, ficheros.length >= 10)
 
   let comprobadas = 0
+  const vistas = []
   for (const f of ficheros) {
-    const src = await readFile(`src/lib/db/${f}`, 'utf8')
-    for (const m of src.matchAll(/export function (\w*[Tt]oRow)\s*\([^)]*\)[^{]*\{\s*return\s*\{([\s\S]*?)\n  \}/g)) {
+    const src = await readFile(f, 'utf8')
+    for (const m of src.matchAll(/(?:export )?function (\w*[Tt]oRow)\s*\([^)]*\)[^{]*\{\s*return\s*\{([\s\S]*?)\n  \}/g)) {
       const cuerpo = m[2].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
       const escritas = [...cuerpo.matchAll(/^\s{4}([a-z_][a-z0-9_]*)\s*:/gm)].map((x) => x[1])
       if (!escritas.length) continue
-      const base = f.replace('.ts', '')
-      const tabla = [...tablas.keys()]
+      const base = f.split('/').pop().replace('.ts', '')
+      // Los que no se llaman como su tabla. El resto se adivina por el nombre
+      // del fichero, que es la costumbre en `src/lib/db`.
+      const ALIAS = {
+        solicitudToRow: 'solicitudes_alta',
+        mensajeToRow: 'mensajes_web',
+        settingsToRow: 'hermandad_settings',
+      }
+      const tabla = ALIAS[m[1]] ?? [...tablas.keys()]
         .filter((t) => t === base || t === `${base}s` || base.startsWith(t))
         .sort((a, b) => b.length - a.length)[0]
-      caso(`${f}:${m[1]} apunta a una tabla conocida`, true, Boolean(tabla))
+      vistas.push(m[1])
+      caso(`${m[1]} apunta a una tabla conocida`, true, Boolean(tabla))
       if (!tabla) continue
       const tiene = tablas.get(tabla)
       const faltan = escritas.filter((c) => !tiene.has(c))
       // El texto del fallo dice QUÉ columna falta y en qué tabla: sin eso, el
       // aviso obliga a buscar a mano entre veinte ficheros.
-      caso(`${f}:${m[1]} → la tabla "${tabla}" tiene todas sus columnas`, '', faltan.join(', '))
+      caso(`${m[1]} → la tabla "${tabla}" tiene todas sus columnas`, '', faltan.join(', '))
       comprobadas++
     }
   }
   caso('se ha comprobado cada mapeo', true, comprobadas >= 10)
+  // Los tres que viven fuera de `src/lib/db` y antes no se miraban. Si alguien
+  // los mueve o los renombra, que salte aquí y no en producción.
+  for (const n of ['solicitudToRow', 'mensajeToRow', 'settingsToRow']) {
+    caso(`se vigila ${n}`, true, vistas.includes(n))
+  }
 
   await guardadoDeLaHermandad({ caso })
   await guardadosQueSeVen({ caso })
