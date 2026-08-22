@@ -22,6 +22,18 @@ export interface CriteriosSegmento {
   edad: 'Todos' | 'Mayores' | 'Menores'
   /** Etiqueta concreta, o '' para cualquiera. */
   etiqueta: string
+  /**
+   * El cargo de junta.
+   *
+   *   ''          no se mira (lo normal)
+   *   '__junta'   cualquiera que lleve un cargo — «solo a la junta»
+   *   'Tesorero/a' ese cargo y solo ese
+   *
+   * FALTABA, y era el sesgo que más se pide. Una hermandad convoca a su junta
+   * cada mes, y sin esto había que ir marcando a mano quién es de la junta cada
+   * vez, o mandarlo a los 800. Lo primero se abandona y lo segundo no se hace.
+   */
+  cargo: string
   /** Solo quien tenga correo (para envíos por email). */
   soloConEmail: boolean
   /**
@@ -42,6 +54,7 @@ export const CRITERIOS_POR_DEFECTO: CriteriosSegmento = {
   cuota: 'Todos',
   edad: 'Todos',
   etiqueta: '',
+  cargo: '',
   soloConEmail: true,
   campos: [],
 }
@@ -97,6 +110,18 @@ export function filtrarSegmento(
       const automaticas = roles.get(h.id) ?? []
       if (!suyas.includes(c.etiqueta) && !automaticas.includes(c.etiqueta)) return false
     }
+    if (c.cargo) {
+      const suyo = (h.cargo ?? '').trim()
+      // «Hermano de a pie» está en el catálogo de cargos pero no es junta: es
+      // lo que se le pone a quien no lleva ninguno. Si contara, «solo a la
+      // junta» sería «a todo el censo», que es exactamente lo contrario.
+      const esDeJunta = suyo !== '' && suyo !== 'Hermano de a pie'
+      if (c.cargo === '__junta') {
+        if (!esDeJunta) return false
+      } else if (suyo !== c.cargo) {
+        return false
+      }
+    }
     for (const cond of c.campos ?? []) {
       if (!cond.valor) continue
       if ((h.campos?.[cond.campoId] ?? '') !== cond.valor) return false
@@ -119,6 +144,8 @@ export function etiquetaSegmento(c: CriteriosSegmento, campos: CampoPropio[] = [
   if (c.cuota === 'AlDia') partes.push('al día de cuota')
   if (c.cuota === 'Pendiente') partes.push('con cuota pendiente')
   if (c.etiqueta) partes.push(`etiqueta «${c.etiqueta}»`)
+  if (c.cargo === '__junta') partes.push('de la junta')
+  else if (c.cargo) partes.push(`cargo «${c.cargo}»`)
   for (const cond of c.campos ?? []) {
     if (!cond.valor) continue
     const campo = campos.find((x) => x.id === cond.campoId)

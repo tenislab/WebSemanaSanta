@@ -51,7 +51,7 @@ const COLUMNAS: { id: OrdenCampo | 'tramo'; label: string; orden: boolean; opcio
 ]
 
 const SIN_SESGO: CriteriosSegmento = {
-  estado: 'Cualquiera', cuota: 'Todos', edad: 'Todos', etiqueta: '', soloConEmail: false, campos: [],
+  estado: 'Cualquiera', cuota: 'Todos', edad: 'Todos', etiqueta: '', cargo: '', soloConEmail: false, campos: [],
 }
 import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'

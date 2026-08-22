@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { nuevoId } from '../lib/supabaseSync'
 import { useEtiquetas } from '../lib/etiquetas'
 import { useCamposPropios } from '../lib/camposPropios'
+import { CARGOS } from '../data/documentos'
 import {
   etiquetaSegmento,
   limpiarCriterios,
@@ -18,6 +19,9 @@ import {
  * Lo comparten Comunicados (a quién le llega) y Hermanos (qué se ve en la
  * lista), para que un sesgo guardado sirva en los dos sitios.
  */
+/** Los cargos que son junta: «Hermano de a pie» no lo es, es el que no lleva ninguno. */
+const CARGOS_DE_JUNTA = CARGOS.filter((c) => c !== 'Hermano de a pie')
+
 export default function EditorSegmento({
   criterios,
   onChange,
@@ -145,6 +149,20 @@ export default function EditorSegmento({
               <option key={et} value={et}>
                 {et}{etiquetasExtra.includes(et) && !etiquetasManuales.includes(et) ? ' (por papeleta)' : ''}
               </option>
+            ))}
+          </select>
+        </div>
+        {/* EL CARGO. Faltaba, y era el sesgo que más se pide: una hermandad
+            convoca a su junta cada mes. Sin esto había que ir marcando a mano
+            quién es de la junta cada vez, o mandárselo a los 800 — lo primero
+            se abandona y lo segundo no se hace. */}
+        <div className="form-row">
+          <label>Cargo</label>
+          <select value={criterios.cargo} onChange={(e) => editar({ cargo: e.target.value })}>
+            <option value="">Cualquiera</option>
+            <option value="__junta">Toda la junta</option>
+            {CARGOS_DE_JUNTA.map((c) => (
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </div>

@@ -281,15 +281,37 @@ export default function Comunicados() {
       ? etiquetaSegmento(criterios)
       : String(data.get('destinatarios') ?? segmentos[0])
     const estado = String(data.get('estado') ?? 'Borrador') as EstadoComunicado
-    if (!titulo || !cuerpo || canalesSel.length === 0) return
+    /*
+     * LOS AVISOS, EN VOZ ALTA.
+     *
+     * Aquí había tres `return` mudos: faltaba el título, o el cuerpo, o no se
+     * había elegido red social, y el formulario NO HACÍA NADA. Se pulsaba
+     * Guardar, no pasaba nada, y no había forma de saber qué faltaba — se leía
+     * como «la aplicación está rota».
+     */
+    if (!titulo || !cuerpo || canalesSel.length === 0) {
+      setEnvioCorreo({
+        estado: 'error',
+        texto: !titulo ? 'Ponle un título al comunicado.'
+          : !cuerpo ? 'El comunicado está vacío: escribe el texto.'
+            : 'Elige al menos un canal por el que mandarlo.',
+      })
+      return
+    }
 
     const redes = canalesSel.includes('Redes sociales')
       ? (data.getAll('redes').map((v) => String(v)) as RedSocial[])
       : null
-    if (canalesSel.includes('Redes sociales') && (!redes || redes.length === 0)) return
+    if (canalesSel.includes('Redes sociales') && (!redes || redes.length === 0)) {
+      setEnvioCorreo({ estado: 'error', texto: 'Has elegido redes sociales: marca en cuáles se publica.' })
+      return
+    }
 
     const fechaProgramada = estado === 'Programado' ? String(data.get('fechaProgramada') ?? '') || null : null
-    if (estado === 'Programado' && !fechaProgramada) return
+    if (estado === 'Programado' && !fechaProgramada) {
+      setEnvioCorreo({ estado: 'error', texto: 'Has elegido programarlo: dile para qué día.' })
+      return
+    }
 
     const hoy = hoyIso()
     const nextNumero = Math.max(0, ...comunicados.map((c) => c.numero)) + 1
@@ -305,7 +327,8 @@ export default function Comunicados() {
     if (estado === 'Enviado' && reciben.length === 0) {
       setEnvioCorreo({
         estado: 'error',
-        texto: 'Ese destinatario no corresponde a ningún hermano. Guárdalo como borrador y revisa el segmento.',
+        texto: 'Con ese sesgo no sale ningún hermano, así que no hay a quién mandarlo. '
+          + 'Revísalo, o guárdalo como borrador y ajústalo luego.',
       })
       return
     }
