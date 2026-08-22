@@ -93,6 +93,58 @@ la aplicación en Configuración → Puesta en marcha.
 En el panel de Supabase puedes activar/desactivar la **confirmación por email**
 en *Authentication → Providers → Email*. La interfaz contempla ambos casos.
 
+## Desplegar en Vercel
+
+El proyecto **no es un sitio estático**: tiene funciones de servidor (`api/w.ts`
+sirve las webs públicas de las hermandades, `api/seo.ts` el sitemap y el
+robots), y en `vercel.json` hasta la portada `/` está redirigida a una de
+ellas. Subir solo la carpeta `dist/` deja la web sin portada.
+
+### El repositorio tiene que ser público
+
+En el plan **Hobby**, Vercel bloquea los despliegues de un repositorio
+**privado** cuando el commit lo firma alguien que no es el dueño de la cuenta
+—lo llama «colaboración», y es de pago—. Aquí se cumple: el repositorio es de
+`tenislab` y los commits los firma `JRRjaime`, que son dos cuentas distintas.
+
+Mientras el repositorio es **público** esa regla no se aplica y despliega solo
+con cada push. En cuanto se pone en privado, se bloquean todos los despliegues
+con el mensaje:
+
+> The deployment was blocked because the commit author did not have
+> contributing access to the project on Vercel.
+
+Y **no basta con volver a ponerlo público y darle a «Redeploy»**: los
+despliegues ya bloqueados se quedan bloqueados. Hay que hacer un commit nuevo
+para que Vercel lo evalúe otra vez.
+
+Alternarlo público/privado para colar cada despliegue no vale: al pasar de
+público a privado GitHub **no borra los forks**, los deja como repositorios
+públicos independientes de quien los hizo. Basta un fork en esa ventana —hay
+bots que clonan repositorios nuevos en segundos— para que el código quede
+público para siempre.
+
+### Si hace falta que siga privado
+
+Desplegar a mano, que se salta la comprobación porque no pasa por Git:
+
+```bash
+npm i -g vercel
+vercel login
+vercel link      # elegir el proyecto
+vercel --prod
+```
+
+Hay que repetirlo en cada actualización. La otra salida es el plan Pro, que
+admite varios autores en repositorios privados.
+
+### Las claves no están en el repositorio
+
+`.env` está en `.gitignore` y nunca se ha subido. El build de Vercel necesita
+`VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` puestas en *Settings →
+Environment Variables* del proyecto. Si la web despliega pero sale sin datos,
+es que faltan.
+
 ## Estructura
 
 ```
