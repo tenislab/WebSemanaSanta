@@ -41,4 +41,29 @@ export default async function ({ cargar, caso }) {
     repartoDeCuerpo('Cristo', tramos, [P('p1', 'a', 't1', 'Solicitada')], hDe, new Set())[0].estado)
   caso('un tramo de aforo 0 no coloca a nadie', 'Excede aforo',
     repartoDeCuerpo('Cristo', [T('z', 'Cristo', 'Cirio', 0)], [P('p1', 'a', 'z')], hDe, new Set())[0].estado)
+
+  /*
+   * LAS PAPELETAS PROPIAS DE LA HERMANDAD.
+   *
+   * Nacieron para lo que NO sale en el cortejo (la simbólica de quien no
+   * procesiona). Pero una hermandad llama «nazareno cirio» a una de las suyas,
+   * la emite, la cobra… y el tramo seguía marcando 0/40. Ahora, si la opción
+   * tiene puesto, quien la saca entra como cualquier otro.
+   */
+  const conOpcion = (id, hermanoId, tramoId, opcion) => ({
+    id, hermanoId, tramoId, opcion, estado: 'Asignada', anio: 2027,
+  })
+  const conPuesto = repartoDeCuerpo(
+    'Cristo', [T('t1', 'Cristo', 'Cirio', 2)],
+    [conOpcion('x1', 'a', 't1', 'Nazareno de cirio')], hDe, new Set(),
+  )
+  caso('una papeleta propia con puesto entra en el cortejo', 1, conPuesto.length)
+  caso('y en su tramo', 't1', conPuesto[0]?.tramo.id)
+
+  // Y la simbólica NO entra: quien no procesiona no puede ocupar un sitio.
+  const sinPuesto = repartoDeCuerpo(
+    'Cristo', [T('t1', 'Cristo', 'Cirio', 2)],
+    [conOpcion('x2', 'b', null, 'Papeleta simbólica')], hDe, new Set(),
+  )
+  caso('la simbólica se queda fuera', 0, sinPuesto.length)
 }

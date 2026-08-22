@@ -129,6 +129,10 @@ export default async function ({ caso }) {
     ['una papeleta personalizada', `insert into opciones_papeleta
        (id, nombre, importe, etiqueta, orden, hermandad_id)
        values (gen_random_uuid(), 'Mantilla', 10, null, 0, ${H})`],
+    // Y una que SÍ ocupa puesto: «nazareno cirio» no es simbólica, camina.
+    ['una papeleta personalizada con puesto en el cortejo', `insert into opciones_papeleta
+       (id, nombre, importe, etiqueta, orden, tramo_id, hermandad_id)
+       values (gen_random_uuid(), 'Nazareno de cirio', 10, null, 1, ${T}, ${H})`],
   ]
 
   for (const [que, consulta] of escrituras) {
@@ -199,4 +203,22 @@ export default async function ({ caso }) {
   const diag = await readFile('supabase/DIAGNOSTICO.sql', 'utf8')
   const faltan = await sql(diag)
   caso('el diagnóstico no ve nada que falte en una base al día', '', faltan)
+
+  /*
+   * Y VA EN UNA SOLA CONSULTA.
+   *
+   * No es manía: el editor de Supabase enseña solo el resultado de la ÚLTIMA
+   * consulta que le mandas. Con el diagnóstico partido en dos, la primera —la
+   * de las columnas que faltan, que es la que importa— no se veía, y un «No
+   * rows returned» podía estar tapando justo lo que se buscaba.
+   */
+  const puntoYComa = (diag.match(/;/g) ?? []).length
+  caso('el diagnóstico es UNA consulta, no dos', 1, puntoYComa)
+
+  // Y encuentra lo que tiene que encontrar. Una prueba que solo comprueba que
+  // no da falsos positivos no comprueba nada: un fichero vacío la pasaría.
+  await sql('alter table tramos drop column hora_citacion')
+  const conFallo = await sql(diag)
+  caso('y ve la columna que falta', true, /tramos\|hora_citacion/.test(conFallo))
+  await sql("alter table tramos add column hora_citacion text")
 }

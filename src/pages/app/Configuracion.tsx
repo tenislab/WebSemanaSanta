@@ -1141,6 +1141,22 @@ export default function Configuracion() {
                 aria-label="Rol que da esta papeleta"
                 list="rolesSugeridos"
               />
+              {/* El puesto del cortejo. Es lo que separa una papeleta que
+                  CAMINA —un nazareno de cirio, una mantilla— de la simbólica de
+                  quien no procesiona. Sin esto, todas se trataban como
+                  simbólicas: se emitían, se cobraban, y el tramo seguía a 0. */}
+              <select
+                value={o.tramoId ?? ''}
+                onChange={(e) => updateOpcion(o.id, 'tramoId', e.target.value || null)}
+                aria-label="Puesto que ocupa en el cortejo"
+              >
+                <option value="">No sale en el cortejo</option>
+                {tramos.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.cuerpo} · {t.nombre}
+                  </option>
+                ))}
+              </select>
               <button type="button" className="icon-btn" title="Quitar papeleta" onClick={() => removeOpcion(o.id)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
@@ -1148,6 +1164,17 @@ export default function Configuracion() {
           ))}
           {opciones.length === 0 && (
             <p className="form-hint">No hay papeletas personalizadas. Añade la primera si tu hermandad las usa.</p>
+          )}
+          {opciones.length > 0 && (
+            <p className="form-hint">
+              Si la papeleta es de alguien que <b>camina</b> —un nazareno de cirio, una
+              mantilla—, dile qué puesto ocupa: quien la saque entrará en ese tramo del
+              cortejo. Déjalo en «No sale en el cortejo» para la papeleta simbólica de
+              quien no procesiona.
+              {tramos.length === 0 && (
+                <> Todavía no tienes tramos: se montan en <b>Cuerpos y tramos</b>.</>
+              )}
+            </p>
           )}
         </div>
 

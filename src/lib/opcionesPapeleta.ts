@@ -19,6 +19,19 @@ export interface OpcionPapeleta {
    * Se pone sola mientras tenga la papeleta y desaparece al anularla.
    */
   etiqueta?: string
+  /**
+   * El puesto del cortejo que ocupa quien la saca.
+   *
+   * Estas papeletas nacieron para lo que NO sale en el cortejo: la simbólica de
+   * quien no procesiona, un recuerdo, un donativo. Pero en cuanto una hermandad
+   * las usa de verdad les pone nombres como «nazareno cirio», que sí es un
+   * puesto: gente que camina, ocupa sitio y tiene que salir en la lista del
+   * diputado de tramo. Sin esto se emitía la papeleta, se cobraba, y el cortejo
+   * seguía diciendo 0/40 sin que nada avisara de por qué.
+   *
+   * Vacío = no sale en el cortejo, que para la simbólica es lo correcto.
+   */
+  tramoId?: string | null
 }
 
 const STORAGE_KEY = 'cabildo-papeletas-opciones'
@@ -48,6 +61,7 @@ function rowToOpcion(r: Record<string, unknown>): OpcionPapeleta {
     nombre: r.nombre as string,
     importe: Number(r.importe),
     etiqueta: (r.etiqueta as string | null) ?? undefined,
+    tramoId: (r.tramo_id as string | null) ?? null,
   }
 }
 
@@ -81,6 +95,9 @@ export async function saveOpcionesPapeleta(
   if (!isSupabaseConfigured) return { ok: true }
   return reemplazarTablaCompleta(
     'opciones_papeleta',
-    opciones.map((o, orden) => ({ id: o.id, nombre: o.nombre, importe: o.importe, etiqueta: o.etiqueta ?? null, orden })),
+    opciones.map((o, orden) => ({
+      id: o.id, nombre: o.nombre, importe: o.importe,
+      etiqueta: o.etiqueta ?? null, tramo_id: o.tramoId || null, orden,
+    })),
   )
 }

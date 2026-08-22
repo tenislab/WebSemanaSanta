@@ -20,8 +20,12 @@
 --
 --   1. Supabase → SQL Editor → New query
 --   2. Pega esto entero y dale a RUN
---   3. Si no sale ninguna fila, no falta nada: el problema es otro
+--   3. Si dice «No rows returned», no falta nada: el problema es otro
 --      Si salen filas, ejecuta `TODO-EN-UNO.sql` y vuelve a pasar esto
+--
+-- Va TODO en una sola consulta a propósito. Con dos, el editor de Supabase
+-- enseña solo el resultado de la última, y un «no falta nada» podía estar
+-- escondiendo la lista de columnas que sí faltaban.
 --
 -- =============================================================================
 
@@ -174,6 +178,12 @@ with esperado (tabla, columna) as (
     ('movimientos', 'numero'),
     ('movimientos', 'origen'),
     ('movimientos', 'tipo'),
+    ('opciones_papeleta', 'etiqueta'),
+    ('opciones_papeleta', 'hermandad_id'),
+    ('opciones_papeleta', 'importe'),
+    ('opciones_papeleta', 'nombre'),
+    ('opciones_papeleta', 'orden'),
+    ('opciones_papeleta', 'tramo_id'),
     ('papeletas', 'anio'),
     ('papeletas', 'estado'),
     ('papeletas', 'fecha_entrega'),
@@ -220,46 +230,29 @@ with esperado (tabla, columna) as (
     ('tramos', 'precio'),
     ('tramos', 'reparto'),
     ('tramos', 'tipo')
+), tablas_que_hay as (
+  select table_name from information_schema.tables where table_schema = 'public'
+), columnas_que_hay as (
+  select table_name, column_name from information_schema.columns where table_schema = 'public'
 )
-select
-  e.tabla    as "Tabla",
-  e.columna  as "Columna que falta"
-from esperado e
-left join information_schema.columns c
-  on c.table_schema = 'public'
- and c.table_name   = e.tabla
- and c.column_name  = e.columna
-where c.column_name is null
-  -- Si la tabla entera no existe todavía, no es «una columna que falta»: es
-  -- que no se ha ejecutado el SQL. Se dice aparte, abajo.
-  and exists (
-    select 1 from information_schema.tables t
-    where t.table_schema = 'public' and t.table_name = e.tabla
-  )
-order by 1, 2;
+select * from (
+  -- Las tablas que no existen. Van primero porque si falta la tabla entera, lo
+  -- de las columnas es ruido: lo que pasa es que no se ha ejecutado el SQL.
+  select
+    'FALTA LA TABLA ENTERA' as "Qué pasa",
+    e.tabla                 as "Tabla",
+    ''                      as "Columna"
+  from (select distinct tabla from esperado) e
+  where e.tabla not in (select table_name from tablas_que_hay)
 
--- Y las tablas que no existen siquiera.
-with esperado (tabla) as (
-  values
-    ('comunicados'),
-    ('cuotas'),
-    ('documentos'),
-    ('enseres'),
-    ('eventos'),
-    ('hermandad_settings'),
-    ('hermanos'),
-    ('incidencias'),
-    ('mensajes_web'),
-    ('movimientos'),
-    ('papeletas'),
-    ('personal'),
-    ('solicitudes_alta'),
-    ('tramos')
-)
-select e.tabla as "Tabla que no existe"
-from esperado e
-where not exists (
-  select 1 from information_schema.tables t
-  where t.table_schema = 'public' and t.table_name = e.tabla
-)
-order by 1;
+  union all
+
+  select
+    'falta una columna' as "Qué pasa",
+    e.tabla             as "Tabla",
+    e.columna           as "Columna"
+  from esperado e
+  where e.tabla in (select table_name from tablas_que_hay)
+    and (e.tabla, e.columna) not in (select table_name, column_name from columnas_que_hay)
+) todo
+order by "Qué pasa", "Tabla", "Columna";

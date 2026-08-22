@@ -62,6 +62,12 @@ for (const t of ['hermanos', 'cuotas', 'papeletas', 'tramos', 'movimientos', 'ev
 pares.add('tramos|hora_citacion')
 pares.add('solicitudes_alta|tutor_id')
 pares.add('solicitudes_alta|fecha_nacimiento')
+// `opciones_papeleta` no tiene `toRow` (se escribe con un objeto suelto), así
+// que sus columnas se apuntan aquí. La de `tramo_id` es la que decide si una
+// papeleta propia de la hermandad ocupa puesto en el cortejo.
+for (const c of ['nombre', 'importe', 'etiqueta', 'orden', 'tramo_id', 'hermandad_id']) {
+  pares.add(`opciones_papeleta|${c}`)
+}
 
 const filas = [...pares].sort().map((p) => {
   const [t, c] = p.split('|')
@@ -90,45 +96,44 @@ const sql = `-- ================================================================
 --
 --   1. Supabase → SQL Editor → New query
 --   2. Pega esto entero y dale a RUN
---   3. Si no sale ninguna fila, no falta nada: el problema es otro
+--   3. Si dice «No rows returned», no falta nada: el problema es otro
 --      Si salen filas, ejecuta \`TODO-EN-UNO.sql\` y vuelve a pasar esto
+--
+-- Va TODO en una sola consulta a propósito. Con dos, el editor de Supabase
+-- enseña solo el resultado de la última, y un «no falta nada» podía estar
+-- escondiendo la lista de columnas que sí faltaban.
 --
 -- =============================================================================
 
 with esperado (tabla, columna) as (
   values
 ${filas}
+), tablas_que_hay as (
+  select table_name from information_schema.tables where table_schema = 'public'
+), columnas_que_hay as (
+  select table_name, column_name from information_schema.columns where table_schema = 'public'
 )
-select
-  e.tabla    as "Tabla",
-  e.columna  as "Columna que falta"
-from esperado e
-left join information_schema.columns c
-  on c.table_schema = 'public'
- and c.table_name   = e.tabla
- and c.column_name  = e.columna
-where c.column_name is null
-  -- Si la tabla entera no existe todavía, no es «una columna que falta»: es
-  -- que no se ha ejecutado el SQL. Se dice aparte, abajo.
-  and exists (
-    select 1 from information_schema.tables t
-    where t.table_schema = 'public' and t.table_name = e.tabla
-  )
-order by 1, 2;
+select * from (
+  -- Las tablas que no existen. Van primero porque si falta la tabla entera, lo
+  -- de las columnas es ruido: lo que pasa es que no se ha ejecutado el SQL.
+  select
+    'FALTA LA TABLA ENTERA' as "Qué pasa",
+    e.tabla                 as "Tabla",
+    ''                      as "Columna"
+  from (select distinct tabla from esperado) e
+  where e.tabla not in (select table_name from tablas_que_hay)
 
--- Y las tablas que no existen siquiera.
-with esperado (tabla) as (
-  values
-${[...new Set([...pares].map((p) => p.split('|')[0]))].sort().map((t) => `    ('${t}')`).join(',\n')}
-)
-select e.tabla as "Tabla que no existe"
-from esperado e
-where not exists (
-  select 1 from information_schema.tables t
-  where t.table_schema = 'public' and t.table_name = e.tabla
-)
-order by 1;
+  union all
+
+  select
+    'falta una columna' as "Qué pasa",
+    e.tabla             as "Tabla",
+    e.columna           as "Columna"
+  from esperado e
+  where e.tabla in (select table_name from tablas_que_hay)
+    and (e.tabla, e.columna) not in (select table_name, column_name from columnas_que_hay)
+) todo
+order by "Qué pasa", "Tabla", "Columna";
 `
 await writeFile('supabase/DIAGNOSTICO.sql', sql)
-const cuantas = pares.size
-console.log(`DIAGNOSTICO.sql generado: ${cuantas} columnas vigiladas.`)
+console.log(`DIAGNOSTICO.sql generado: ${pares.size} columnas vigiladas.`)

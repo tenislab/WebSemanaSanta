@@ -363,14 +363,26 @@ export default function Papeletas() {
     setPendingCuerpo('')
   }
 
-  /** Emite una papeleta personalizada de la hermandad (mantilla, simbólica…), sin tramo en el cortejo. */
+  /**
+   * Emite una papeleta propia de la hermandad (mantilla, nazareno cirio, la
+   * simbólica…).
+   *
+   * Si la opción tiene un puesto asignado en Ajustes, quien la saca ENTRA EN EL
+   * CORTEJO como cualquier otro. Antes no: iba siempre sin tramo, y una
+   * hermandad que llamaba «nazareno cirio» a una de sus papeletas la emitía, la
+   * cobraba, y el tramo seguía marcando 0/40 sin que nada dijera por qué.
+   *
+   * Sin puesto se queda fuera del cortejo, que para la simbólica de quien no
+   * procesiona es justo lo que se quiere.
+   */
   function sacarConOpcion(hermanoId: string, opcion: OpcionPapeleta) {
+    const tramoId = opcion.tramoId || null
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
       if (actual) {
         return prev.map((p) =>
           p.id === actual.id
-            ? { ...p, tramoId: null, opcion: opcion.nombre, estado: 'Asignada', importe: opcion.importe, pagoComunicado: null }
+            ? { ...p, tramoId, opcion: opcion.nombre, estado: 'Asignada', importe: opcion.importe, pagoComunicado: null }
             : p,
         )
       }
@@ -379,7 +391,7 @@ export default function Papeletas() {
         numero: siguienteNumero(prev),
         hermanoId,
         anio: campana.anio,
-        tramoId: null,
+        tramoId,
         opcion: opcion.nombre,
         importe: opcion.importe,
         estado: 'Asignada',
@@ -387,7 +399,7 @@ export default function Papeletas() {
       }
       return [nueva, ...prev]
     })
-    avisarDeSitio(hermanoId, null, opcion.nombre)
+    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, opcion.nombre, tramoId)
     setPendingCuerpo('')
   }
 
