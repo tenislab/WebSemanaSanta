@@ -86,6 +86,11 @@ function estadoClass(estado: EstadoHermano) {
   return 'pill--off'
 }
 
+
+/** Solicitudes ya aprobadas al llegar con `?aprobar=`. A nivel de módulo para
+ *  sobrevivir al remontaje que React hace en desarrollo. */
+const YA_APROBADAS = new Set<string>()
+
 export default function Hermanos() {
   // Antes de mandar nada, traer de la base la configuración de correo de
   // la hermandad y lo que cada hermano tenga apagado. Sin esto, quien
@@ -143,10 +148,11 @@ export default function Hermanos() {
   /* Su historial de asistencia, dicho en una frase. Se lee del mapa completo
      —va por `año:hermano`, así que lo de cada edición sigue ahí— y se recalcula
      solo al cambiar de ficha. */
-  const fraseAsistencia = useMemo(
-    () => (selected ? asistenciaEnUnaFrase(historialDeAsistencia(getAsistencias(), selected.id)) : ''),
+  const historialAsistencia = useMemo(
+    () => (selected ? historialDeAsistencia(getAsistencias(), selected.id) : []),
     [selected],
   )
+  const fraseAsistencia = useMemo(() => asistenciaEnUnaFrase(historialAsistencia), [historialAsistencia])
   const [etiquetas, setEtiquetas] = useEtiquetas()
   const [camposPropios] = useCamposPropios()
   // Con el nombre de la cuenta de reserva, igual que Cuotas, Tesorería,
@@ -308,6 +314,53 @@ export default function Hermanos() {
     setSolicitudesState(next)
     saveSolicitudes(next)
   }
+
+  /*
+   * APROBAR AL LLEGAR DESDE NOTIFICACIONES.
+   *
+   * Allí el botón pone «Dar de alta», y antes solo traía aquí: llegó dicho
+   * como «si le doy a dar de alta en notificaciones no funciona, tengo que
+   * irme a Hermanos». Y tenía razón — un botón que promete un alta y solo
+   * cambia de pantalla es una promesa rota.
+   *
+   * Se hace así, con un parámetro, y NO copiando la lógica al otro lado: dar
+   * de alta a un hermano son cincuenta líneas con número correlativo, control
+   * de DNI repetido, creación de la cuenta de acceso y correo de bienvenida
+   * —y un caso aparte para los menores a cargo—. Duplicarlo sería tener dos
+   * altas distintas, y la copia se quedaría atrás a la primera.
+   *
+   * `hecho` evita repetirlo si React vuelve a montar el efecto: aprobar dos
+   * veces daría de alta a la misma persona dos veces.
+   */
+  useEffect(() => {
+    const id = params.get('aprobar')
+    if (!id || YA_APROBADAS.has(id)) return
+    const sol = solicitudes.find((x) => x.id === id && x.estado === 'Pendiente')
+    if (!sol) return
+    /*
+     * Se apunta ANTES de empezar, y en el módulo, no en un `useRef`.
+     *
+     * Con el ref se daba de alta DOS VECES: React monta, desmonta y vuelve a
+     * montar los componentes en desarrollo, y en el remontaje el ref vuelve a
+     * empezar. Se veía en el censo — la misma persona repetida— y el control
+     * de DNI de dentro no lo pillaba porque las dos aprobaciones leían la
+     * lista antes de que ninguna hubiera terminado.
+     *
+     * Un `Set` del módulo sobrevive al remontaje y a las dos llamadas del
+     * mismo tirón, que es lo único que hace falta aquí.
+     */
+    YA_APROBADAS.add(id)
+    void aprobarSolicitud(sol).then(() => {
+      const limpio = new URLSearchParams(params)
+      limpio.delete('aprobar')
+      setParams(limpio, { replace: true })
+    })
+    /* Sin `aprobarSolicitud` ni `setParams` en las dependencias: la primera se
+       recrea en cada pintado y volvería a ejecutar el efecto en bucle. Lo que
+       hace seguro dejarlas fuera es el `aprobadaAlLlegar`, que no deja aprobar
+       dos veces el mismo identificador. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, solicitudes])
 
   async function aprobarSolicitud(sol: SolicitudAlta) {
     // Limpio, igual que en el alta a mano: si no, el mismo señor con puntos y
@@ -1377,6 +1430,45 @@ export default function Hermanos() {
             {esSuCumpleHoy(selected.fechaNacimiento) && (
               <p className="ficha-cumple">🎂 Hoy es su cumpleaños.</p>
             )}
+
+            {/*
+              SU HISTORIAL DE PARTICIPACIÓN, año a año.
+
+              Estaba solo como una línea en la cabecera y desaparecía cuando no
+              constaba nada — que es el caso de casi todo el censo el primer
+              año—. Llegó dicho como «no hay el historial de participación del
+              hermano al meterse en el perfil»: y tenía razón, porque una
+              sección que a veces no está no se puede consultar.
+
+              Ahora la sección está SIEMPRE. Cuando no consta nada lo dice, que
+              es información distinta de «no ha salido nunca» y hay que
+              distinguirla: casi todos los hermanos entraron antes de que esto
+              existiera.
+            */}
+            <section className="ficha-asistencia">
+              <h4>Participación en la estación de penitencia</h4>
+              {historialAsistencia.length === 0 ? (
+                <p className="table-subtle">
+                  Todavía no consta ninguna edición. Se va llenando solo: lo que se marque el día
+                  de la salida, en Cortejo, queda aquí para los años siguientes.
+                </p>
+              ) : (
+                <>
+                  <p className="table-subtle">{fraseAsistencia}</p>
+                  <ul className="ficha-asistencia__anios">
+                    {historialAsistencia.map((a) => (
+                      <li key={a.anio}>
+                        <b>{a.anio}</b>
+                        <span className={`pill ${a.estado === 'asiste' ? 'pill--ok' : a.estado === 'no_asiste' ? 'pill--warn' : 'pill--off'}`}>
+                          {a.estado === 'asiste' ? 'Salió' : a.estado === 'no_asiste' ? 'No salió' : 'Sin cerrar'}
+                        </span>
+                        {a.motivo && <span className="table-subtle">{a.motivo}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </section>
 
             <dl className="ficha__list ficha__list--dos">
               <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>

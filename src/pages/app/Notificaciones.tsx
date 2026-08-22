@@ -64,7 +64,22 @@ export default function Notificaciones() {
    * asustarla con un problema que no tiene.
    */
   const conceptos = useConceptosCuota()
-  const ejercicio = useMemo(() => ultimoEjercicio(cuotas), [cuotas])
+  /*
+   * El último ejercicio con recibos, y si no hay NINGUNO, el año en curso.
+   *
+   * Ese respaldo es el que arregla el caso peor. Dije que una hermandad sin
+   * cuotas emitidas «no tiene a nadie sin cuota porque no le toca aún», y es
+   * falso: una hermandad con el censo metido y cero recibos es EXACTAMENTE la
+   * que necesita que se lo digan. Sin el respaldo, el aviso callaba justo ahí
+   * —que es donde llegó reportado como «cuotas sigue sin actualizarse bien»—.
+   *
+   * Y no aparece de la nada en una hermandad recién creada: sin hermanos,
+   * `hermanosSinCuota()` no devuelve a nadie y no hay aviso.
+   */
+  const ejercicio = useMemo(
+    () => ultimoEjercicio(cuotas) ?? new Date().getFullYear(),
+    [cuotas],
+  )
   const conceptoCuota = conceptos[0]?.nombre ?? null
 
   const avisos = useMemo(
@@ -167,7 +182,20 @@ export default function Notificaciones() {
                       {a.aceptar}
                     </button>
                   ) : (
-                    <Link className="btn btn-primary btn-sm" to={a.donde}>{a.aceptar}</Link>
+                    /*
+                      El alta se completa de verdad: se va a Hermanos con el
+                      identificador y allí se aprueba sola, reutilizando la
+                      misma función que ya lo hacía —número correlativo,
+                      control de DNI repetido, cuenta de acceso y correo de
+                      bienvenida—. Copiar aquí esa lógica sería tener dos altas
+                      distintas y una se quedaría atrás.
+                    */
+                    <Link
+                      className="btn btn-primary btn-sm"
+                      to={a.tipo === 'altaHermano' ? `${a.donde}?aprobar=${a.refId}` : a.donde}
+                    >
+                      {a.aceptar}
+                    </Link>
                   )}
                 </div>
               </li>

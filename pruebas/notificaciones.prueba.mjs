@@ -104,6 +104,20 @@ export default async function ({ cargar, caso }) {
   caso('ni sin concepto', 0,
     m.avisosPendientes({ ...vacio, ejercicio: 2027 }).length)
 
+  /*
+   * EL CASO QUE SE ME ESCAPÓ: censo metido y CERO recibos emitidos.
+   *
+   * Razoné que una hermandad sin cuotas «no tiene a nadie sin cuota porque no
+   * le toca aún». Es falso: una hermandad con hermanos y cero recibos es
+   * justo la que necesita que se lo digan. Llegó reportado como «cuotas sigue
+   * sin actualizarse bien», con 0 recibos y 5 hermanos en pantalla.
+   */
+  const sinNingunRecibo = m.avisosPendientes({
+    ...vacio, cuotas: [], ejercicio: 2027, conceptoCuota: 'Cuota anual',
+  })
+  caso('con censo y cero recibos, avisa de los dos', 1, sinNingunRecibo.length)
+  caso('y los cuenta a todos', true, /2 hermanos/.test(sinNingunRecibo[0].titulo))
+
   // --- 5. Todo junto y ordenado ---
   const todo = m.avisosPendientes({
     ...vacio, solicitudes, cuotas, papeletas,

@@ -83,10 +83,28 @@ async function laFichaLoEnsena({ caso }) {
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 
   caso('la ficha calcula el historial', true, /historialDeAsistencia\(getAsistencias\(\), selected\.id\)/.test(f))
-  caso('y lo pinta', true, /fraseAsistencia &&/.test(f))
+
   /*
-   * Con la condición delante: sin ella, a quien no consta nada le saldría una
-   * línea vacía en la ficha —o peor, un «0 salidas» que parece un dato.
+   * Y LA SECCIÓN ESTÁ SIEMPRE. Estaba solo como una línea en la cabecera, que
+   * desaparecía cuando no constaba nada —o sea, en casi todo el censo el
+   * primer año—. Llegó dicho como «no hay el historial de participación del
+   * hermano al meterse en el perfil», y era eso: una sección que a veces no
+   * está no se puede consultar.
    */
-  caso('solo si consta algo', true, /\{fraseAsistencia && </.test(f))
+  caso('hay una sección de participación', true, /className="ficha-asistencia"/.test(f))
+  caso('con su título', true, /Participación en la estación de penitencia/.test(f))
+  caso('y la lista año a año', true, /historialAsistencia\.map/.test(f))
+
+  /*
+   * Cuando no consta nada lo DICE, en vez de esconderse. «No consta ninguna
+   * edición» es información distinta de «no ha salido nunca», y hay que
+   * distinguirlas: casi todos los hermanos entraron antes de que esto
+   * existiera.
+   */
+  caso('vacía, explica que todavía no consta nada', true, /Todavía no consta ninguna edición/.test(f))
+  caso('y dice cómo se llena', true, /el día\s+de la salida, en Cortejo/.test(f))
+
+  // Cada año con su estado en palabras, no con el valor interno.
+  caso('los estados se dicen en cristiano', true, /'Salió'/.test(f) && /'No salió'/.test(f))
+  caso('y lo no cerrado se distingue de una falta', true, /'Sin cerrar'/.test(f))
 }

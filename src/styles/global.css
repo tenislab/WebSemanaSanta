@@ -3830,6 +3830,18 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
 /* =========================================================================
    Notificaciones: lo que espera a que la junta haga algo
    ========================================================================= */
+/* La sección de participación en la ficha. Va SIEMPRE, aunque esté vacía: una
+   sección que a veces no está no se puede consultar. */
+.ficha-asistencia { margin: 1.2rem 0; }
+.ficha-asistencia h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.ficha-asistencia__anios { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; }
+.ficha-asistencia__anios li {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.4rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem;
+}
+.ficha-asistencia__anios li:last-child { border-bottom: 0; }
+.ficha-asistencia__anios b { font-variant-numeric: tabular-nums; min-width: 3rem; }
+
 /* El historial de asistencia en la cabecera de la ficha: dato de apoyo, no
    titular. Va del color apagado para que no compita con la antigüedad. */
 .ficha-hero__asistencia { color: var(--text-muted); font-style: italic; }
