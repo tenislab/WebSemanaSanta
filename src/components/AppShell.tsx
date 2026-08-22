@@ -152,6 +152,19 @@ export default function AppShell() {
   const { user, signOut } = useAuth()
   // Aviso cuando un guardado no llega a la base de datos (ver supabaseSync).
   const [errorSync, setErrorSync] = useState<string | null>(null)
+  /*
+   * EL MOTIVO, no solo la tabla.
+   *
+   * Esto costó tres rondas de idas y venidas. El aviso decía «no se ha podido
+   * guardar (papeletas)» y se quedaba ahí; el mensaje de Postgres —que decía
+   * exactamente qué columna faltaba o qué referencia no existía— se iba a la
+   * consola, donde nadie mira. Sin él hay que adivinar, y adivinar sobre una
+   * base de datos que no se puede abrir es perder el día.
+   *
+   * Va plegado: quien lleva la hermandad no tiene por qué leer esto, pero
+   * puede abrirlo y copiarlo tal cual para mandarlo, que es lo que hace falta.
+   */
+  const [detalleSync, setDetalleSync] = useState<string>('')
   // Si esta cuenta tiene además ficha en el censo, se le ofrece su área.
   const [papeles, setPapeles] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: true, seguro: false })
   useEffect(() => {
@@ -159,8 +172,9 @@ export default function AppShell() {
   }, [])
   useEffect(() => {
     function alFallar(e: Event) {
-      const detalle = (e as CustomEvent<{ tabla: string }>).detail
+      const detalle = (e as CustomEvent<{ tabla: string; fallos?: string[] }>).detail
       setErrorSync(detalle?.tabla ?? '')
+      setDetalleSync((detalle?.fallos ?? []).join('\n'))
     }
     window.addEventListener('cabildo-sync-error', alFallar)
     return () => window.removeEventListener('cabildo-sync-error', alFallar)
@@ -382,6 +396,13 @@ export default function AppShell() {
             <button className="btn btn-ghost btn-sm" onClick={() => setErrorSync(null)}>
               Entendido
             </button>
+            {detalleSync && (
+              <details className="sync-error-detalle">
+                <summary>Ver el motivo exacto</summary>
+                <p>Si tienes que pedir ayuda, copia esto tal cual:</p>
+                <pre>{detalleSync}</pre>
+              </details>
+            )}
           </div>
         )}
 

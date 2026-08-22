@@ -101,6 +101,35 @@ export default async function ({ caso }) {
     }
   }
   caso('se ha comprobado cada mapeo', true, comprobadas >= 10)
+
+  /*
+   * Y QUE NO SE SALTE NINGUNA EN SILENCIO.
+   *
+   * Esto es la lección de verdad. La prueba no fallaba: es que ni miraba.
+   * `solicitudToRow` no entraba porque estaba fuera de la carpeta, y
+   * `cuentaToRow` no entra porque no devuelve un objeto literal —lo va
+   * montando campo a campo— y el patrón no sabe leerlo.
+   *
+   * Saltarse una en silencio es peor que no tener la prueba, porque el verde
+   * dice «mirado» cuando quiere decir «no he sabido». Así que se cuentan las
+   * que hay y las que se han leído: si no cuadra, salta.
+   *
+   * `cuentaToRow` se apunta aparte, con su motivo. Escribe dos columnas fijas
+   * (`conectada`, `usuario`) sobre `cuentas_sociales`, comprobadas a mano. Si
+   * alguien la cambia para devolver un literal, entrará sola y esta lista se
+   * queda corta — que también salta.
+   */
+  const NO_LEGIBLES = ['cuentaToRow']
+  let declaradas = 0
+  for (const f of ficheros) {
+    const src = await readFile(f, 'utf8')
+    for (const m of src.matchAll(/(?:export )?function (\w*[Tt]oRow)\s*\(/g)) {
+      declaradas++
+      const conocida = vistas.includes(m[1]) || NO_LEGIBLES.includes(m[1])
+      caso(`${m[1]} no se cuela sin mirar`, true, conocida)
+    }
+  }
+  caso('se han visto todas las que hay', declaradas, vistas.length + NO_LEGIBLES.length)
   // Los tres que viven fuera de `src/lib/db` y antes no se miraban. Si alguien
   // los mueve o los renombra, que salte aquí y no en producción.
   for (const n of ['solicitudToRow', 'mensajeToRow', 'settingsToRow']) {
@@ -185,6 +214,22 @@ async function guardadosQueSeVen({ caso }) {
   caso('el verde de los tramos depende del resultado', true,
     /if \(!r\.ok\) \{[\s\S]{0,260}setTramosSaved\(false\)/.test(conf))
   caso('y el fallo se pinta', true, /tramosError && <span/.test(conf))
+
+  /*
+   * Y QUE EL AVISO DIGA POR QUÉ.
+   *
+   * El aviso rojo decía «no se ha podido guardar (papeletas)» y se quedaba
+   * ahí. El mensaje de Postgres —el que dice qué columna falta o qué
+   * referencia no existe— se iba a la consola, donde no mira nadie. Costó tres
+   * rondas de preguntas averiguar algo que la propia pantalla ya sabía.
+   */
+  const shell = await readFile('src/components/AppShell.tsx', 'utf8')
+  caso('el aviso recoge el motivo, no solo la tabla', true, /fallos\?: string\[\]/.test(shell))
+  caso('y lo guarda para enseñarlo', true, /setDetalleSync/.test(shell))
+  caso('y lo pinta donde se pueda copiar', true, /<pre>\{detalleSync\}<\/pre>/.test(shell))
+  // Plegado: quien lleva la hermandad no tiene por qué leer un error de
+  // Postgres, pero tiene que poder abrirlo y copiarlo si le piden ayuda.
+  caso('plegado, no en la cara', true, /<details className="sync-error-detalle">/.test(shell))
 
   /*
    * LOS QUE BORRAN ANTES DE INSERTAR son los peores de todos: si el alta falla

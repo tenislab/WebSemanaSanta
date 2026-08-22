@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import QrCode from './QrCode'
 import { datosCarneDe, urlCarne } from '../lib/verificacion'
 import { aniosDeHermandad } from '../lib/hermanoFicha'
+import { codigoDeHermano } from '../lib/codigoHermano'
 import type { Hermano } from '../data/hermanos'
 
 /**
@@ -82,6 +83,14 @@ export default function CarneHermano({
               carné del hermano, que es lo que enseña en la puerta. */}
           <b>{anios === null ? '—' : `${anios} años`}</b>
         </div>
+      </div>
+      {/* El código de pago, en el carné.
+          Es donde tiene que estar: el hermano abre el carné para enseñarlo y
+          de paso ve el código que le piden cuando paga por Bizum, sin buscarlo
+          por menús. Es el mismo todo el año, así que acaba aprendiéndoselo. */}
+      <div className="carne__codigo">
+        <span>Código para tus pagos</span>
+        <b>{codigoDeHermano(hermano)}</b>
       </div>
       <div className="carne__qr">
         <QrCode value={enlace} size={grande ? 240 : 120} />

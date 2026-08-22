@@ -112,28 +112,41 @@ declare
   que text;
   sobre text;
   quien uuid;
+  -- La fila, en JSON. Es la clave de que esto funcione en las cuatro tablas.
+  --
+  -- Escrito como `new.nombre`, PL/pgSQL revienta en las tablas que no tienen
+  -- esa columna —papeletas, cuotas, movimientos— con «record "new" has no
+  -- field "nombre"». Y no revienta al crear el disparador, sino al guardar la
+  -- primera fila: el SQL se instala sin una queja y lo que deja de funcionar
+  -- es emitir papeletas, cobrar cuotas y apuntar en tesorería.
+  --
+  -- Con `->>` no hay tal cosa: la columna que no existe vale NULL y ya está.
+  fila jsonb;
 begin
   quien := auth.uid();
   -- Sin sesión es el editor SQL o una función interna. Se apunta igual, pero
   -- sin autor: es información, no una acusación.
   que := lower(tg_argv[0]) || '_' || lower(tg_op);
+  fila := to_jsonb(case tg_op when 'DELETE' then old else new end);
+  -- Cómo se llama la fila, según lo que tenga cada tabla: el censo tiene
+  -- `nombre`; una cuota o un apunte, `concepto`; una papeleta, su número.
   sobre := coalesce(
-    case tg_op when 'DELETE' then old.nombre else new.nombre end,
+    fila->>'nombre',
+    fila->>'concepto',
+    fila->>'titulo',
+    nullif(fila->>'numero', ''),
     ''
   );
 
   insert into registro_actividad
     (hermandad_id, autor_id, autor_nombre, accion, sobre_tipo, sobre_id, sobre_nombre, detalle, origen)
   values (
-    coalesce(
-      case tg_op when 'DELETE' then old.hermandad_id else new.hermandad_id end,
-      hermandad_actual()
-    ),
+    coalesce((fila->>'hermandad_id')::uuid, hermandad_actual()),
     quien,
     quien_soy_ahora(),
     que,
     tg_argv[0],
-    (case tg_op when 'DELETE' then old.id else new.id end)::text,
+    fila->>'id',
     sobre,
     case tg_op
       when 'INSERT' then 'Creado desde la base de datos'

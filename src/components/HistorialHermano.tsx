@@ -14,6 +14,7 @@ import { requisito, requisitoActual } from '../lib/requisitos'
 import type { MetodoPago, Papeleta } from '../data/papeletas'
 import type { Hermano } from '../data/hermanos'
 import type { HermandadSettings } from '../lib/hermandadSettings'
+import { codigoDeHermano } from '../lib/codigoHermano'
 
 function claseCuota(estado: Cuota['estado']) {
   if (estado === 'Pagada') return 'pill--ok'
@@ -258,8 +259,10 @@ export default function HistorialHermano({
             <div className="pago-box">
               <b>{formatCurrency(pagando.importe)}</b>
               <p className="form-hint">
-                Pon en el concepto <code>{`Recibo ${pagando.numero} - ${hermano.nombre}`}</code> para
-                que la tesorería lo identifique.
+                {/* El código del hermano, no «Recibo 3 - Fulano de Tal»: en el
+                    concepto de un Bizum eso se escribe mal siempre. */}
+                Pon en el concepto tu código de hermano,{' '}
+                <code>{codigoDeHermano(hermano)}</code>, y la tesorería sabrá que es tuyo.
               </p>
               <div className="pago-metodos">
                 {hermandad.bizumTelefono && (

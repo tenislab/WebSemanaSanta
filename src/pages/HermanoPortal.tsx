@@ -69,6 +69,7 @@ import {
 } from '../lib/hermandades'
 import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
 import { fijarHermandadDeLaPagina, hermandadesPublicas, type HermandadPublica } from '../lib/multiHermandad'
+import { codigoDeHermano } from '../lib/codigoHermano'
 
 const SESION_KEY = 'cabildo-hermano-portal'
 const CONSENT_KEY = 'cabildo-hermano-consent'
@@ -1673,7 +1674,7 @@ export default function HermanoPortal() {
                     bizum={hermandadMuestra.bizum}
                     iban={hermandadMuestra.iban}
                     nombreHermandad={nombreHermandadActiva}
-                    hermanoNombre={hermanoMuestra.nombre}
+                    hermano={hermanoMuestra}
                     onComunicar={comunicarPagoMuestra}
                   />
                 ) : (
@@ -1932,7 +1933,7 @@ export default function HermanoPortal() {
                         bizum={hermandadPrincipal.bizumTelefono}
                         iban={hermandadPrincipal.iban}
                         nombreHermandad={nombreHermandadActiva}
-                        hermanoNombre={hermanoPrincipal.nombre}
+                        hermano={hermanoPrincipal}
                         onComunicar={comunicarPago}
                       />
                     )}
@@ -2153,17 +2154,25 @@ function PagoPapeleta({
   bizum,
   iban,
   nombreHermandad,
-  hermanoNombre,
+  hermano,
   onComunicar,
 }: {
   papeleta: Papeleta
   bizum: string
   iban: string
   nombreHermandad: string
-  hermanoNombre: string
+  hermano: { nombre: string; numero: number }
   onComunicar: (metodo: MetodoPago) => void
 }) {
-  const concepto = `Papeleta ${papeleta.numero} - ${hermanoNombre}`
+  /*
+   * El concepto del pago: un código corto, no una frase.
+   *
+   * Antes decía «Papeleta 1 - Jaime Rivas». Eso no lo escribe nadie entero
+   * desde un móvil, de pie y con el pulgar: se acorta, se come el apellido, y
+   * a la tesorería le llega un ingreso que no sabe de quién es. Y si en la
+   * hermandad hay dos que se llaman igual, el nombre tampoco distingue.
+   */
+  const concepto = codigoDeHermano(hermano)
 
   if (papeleta.pagoComunicado) {
     return (
@@ -2185,8 +2194,9 @@ function PagoPapeleta({
     <div className="pago-box">
       <b>Pagar mi papeleta · {formatCurrency(papeleta.importe)}</b>
       <p className="form-hint">
-        El pago llega directamente a {nombreHermandad}. Pon en el concepto <code>{concepto}</code> para que la
-        secretaría lo identifique.
+        El pago llega directamente a {nombreHermandad}. Pon en el concepto tu código
+        de hermano, <code>{concepto}</code>, y la secretaría sabrá que es tuyo. Es el
+        mismo todo el año: te lo puedes aprender.
       </p>
       <div className="pago-metodos">
         {bizum && (

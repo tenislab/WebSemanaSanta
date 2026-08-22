@@ -41,6 +41,9 @@ export default async function ({ caso }) {
     'PRUEBA-AISLAMIENTO.sql', 'PRUEBA-MUDANZA.sql', 'BORRAR-PRUEBAS.sql',
     'DATOS-DE-PRUEBA.sql', 'seed-hermanos-prueba.sql', 'seed-usuarios-ejemplo.sql',
     'reset-antes-de-actualizar.sql', 'migracion-2026-08.sql',
+    // Este solo MIRA: dice qué le falta a una base de datos de verdad y no
+    // cambia nada. Meterlo en el de instalar no tendría sentido.
+    'DIAGNOSTICO.sql',
   ])
   const todos = (await readdir('supabase')).filter((f) => f.endsWith('.sql') && !FUERA.has(f))
   const olvidados = todos.filter((f) => !nombres.includes(f))

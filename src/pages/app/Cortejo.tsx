@@ -237,6 +237,10 @@ export default function Cortejo() {
     return true
   }
 
+  // Si hay algo escrito o filtrado. Sirve para distinguir «no encuentro nada»
+  // de «no hay nada», que no son lo mismo y no se arreglan igual.
+  const hayFiltroPuesto = cuerpoFiltro !== 'Todos' || estadoFiltro !== 'Todos' || query.trim() !== ''
+
   const tramosFiltrados = useMemo(() => {
     return tramos.filter((t) => {
       const reparto = repartos.get(t.id) ?? []
@@ -545,7 +549,26 @@ export default function Cortejo() {
             />
           ))}
           {tramosFiltrados.length === 0 && (
-            <p className="table-empty">No hay tramos que coincidan con la búsqueda.</p>
+            /*
+             * Tres motivos distintos para una lista vacía, y antes los tres
+             * decían «no hay tramos que coincidan con la búsqueda». Con el
+             * cortejo sin montar, eso es directamente mentira: no es que la
+             * búsqueda no encuentre nada, es que no hay nada. Y quien lo lee se
+             * queda sin saber qué hacer, que es lo peor de un hueco vacío.
+             */
+            <p className="table-empty">
+              {tramos.length === 0 ? (
+                <>
+                  Todavía no hay tramos. El cortejo se monta en{' '}
+                  <Link to="/app/configuracion">Ajustes → Cuerpos y tramos</Link>: allí se
+                  dicen los tramos, su aforo y cómo se reparten.
+                </>
+              ) : hayFiltroPuesto ? (
+                'Ningún tramo coincide con lo que has buscado o filtrado.'
+              ) : (
+                'No hay tramos que enseñar.'
+              )}
+            </p>
           )}
         </>
       ) : (
@@ -962,7 +985,16 @@ function TramoFicha({
         <div>
           <dt>Roster, por número de hermano</dt>
           <dd>
-            {reparto.length === 0 && <span className="table-muted">Nadie asignado todavía.</span>}
+            {/* No basta con decir que está vacío: hay que decir de dónde sale
+                lo que lo llena. El reparto no se teclea aquí —se calcula solo
+                a partir de las papeletas emitidas—, y sin decirlo parece que
+                la pantalla no funciona en vez de que falta el paso de antes. */}
+            {reparto.length === 0 && (
+              <span className="table-muted">
+                Nadie asignado todavía. Este tramo se llena solo según se van emitiendo
+                papeletas: cada papeleta de este tramo coloca a su hermano aquí.
+              </span>
+            )}
             <ul className="cortejo-roster">
               {reparto.map((a) => (
                 <li key={a.papeleta.id}>

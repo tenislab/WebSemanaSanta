@@ -2767,6 +2767,21 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
   margin: 0.9rem 2rem 0;
 }
 
+/* El motivo exacto del fallo, plegado. Ocupa la fila entera porque un mensaje
+   de Postgres es largo y partido en dos columnas no se puede ni leer ni
+   copiar. */
+.sync-error-detalle { flex-basis: 100%; font-size: 0.85rem; }
+.sync-error-detalle summary { cursor: pointer; font-weight: 600; }
+.sync-error-detalle p { margin: 0.5rem 0 0.3rem; color: var(--text-muted); }
+.sync-error-detalle pre {
+  margin: 0; padding: 0.6rem 0.75rem; border-radius: var(--radio-sm, 8px);
+  background: var(--surface-2, rgba(0, 0, 0, 0.05));
+  /* Se parte por donde haga falta: si no, un mensaje largo saca una barra
+     horizontal a toda la aplicación. */
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem;
+}
+
 /* =========================================================================
    Eventos y tareas (calendario + trabajadores)
    ========================================================================= */
@@ -4966,6 +4981,23 @@ html:has(.sitio) { scroll-behavior: smooth; }
   color: rgba(246,239,228,0.6);
 }
 .carne__datos b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+/* El código de pago. Va en su propia caja y no en la fila de datos porque no
+   es un dato más: es lo que hay que COPIAR, y tiene que encontrarse solo. */
+.carne__codigo {
+  margin-bottom: 1rem; padding: 0.55rem 0.8rem; border-radius: 10px;
+  background: rgba(246, 239, 228, 0.08);
+  border: 1px dashed rgba(246, 239, 228, 0.28);
+}
+.carne__codigo span {
+  display: block; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: rgba(246, 239, 228, 0.6);
+}
+.carne__codigo b {
+  font-size: 1.15rem; letter-spacing: 0.09em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 .carne__qr { display: flex; align-items: center; gap: 0.9rem; }
 .carne__qr span { font-size: 0.72rem; color: rgba(246,239,228,0.66); }
 .carne__qr .qr-preview { background: #fff; padding: 5px; border: 0; }
