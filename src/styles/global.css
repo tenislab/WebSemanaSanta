@@ -410,6 +410,28 @@ h1, h2, h3,
 .hero-copy h1 { font-size: clamp(2.5rem, 4.8vw, 3.6rem); line-height: 1.08; margin-top: 1rem; color: #f3ede2; }
 .hero-copy h1 em { font-style: italic; color: #d6bc8a; }
 .lede { margin-top: 1.3rem; max-width: 48ch; color: rgba(245, 237, 230, 0.7); font-size: 1.08rem; }
+/* -------------------------------------------------------------------------
+   Las tres claves del hero.
+
+   Antes eran tres líneas con una palomita delante. Una lista de tres puntos se
+   salta con la vista: en tarjeta se leen, que es lo que decide si la hermandad
+   sigue bajando.
+   ------------------------------------------------------------------------- */
+.hero-claves {
+  list-style: none; padding: 0; margin: 2rem 0 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem;
+}
+.hero-clave {
+  display: flex; flex-direction: column; gap: 0.3rem;
+  padding: 0.9rem 0.95rem; border-radius: 12px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+}
+.hero-clave__ic { width: 20px; height: 20px; color: #d6bc8a; margin-bottom: 0.15rem; }
+.hero-clave__ic svg { width: 100%; height: 100%; }
+.hero-clave b { font-size: 0.86rem; color: #f3ede2; line-height: 1.25; }
+.hero-clave span:last-child { font-size: 0.79rem; color: rgba(245,237,230,0.62); line-height: 1.35; }
+@media (max-width: 720px) { .hero-claves { grid-template-columns: minmax(0, 1fr); } }
+
 .bullets { list-style: none; padding: 0; margin: 1.8rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
 .bullets li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; color: rgba(245, 237, 230, 0.9); }
 .bullets svg { width: 18px; height: 18px; color: #d6bc8a; flex: none; }
@@ -428,6 +450,69 @@ h1, h2, h3,
   -webkit-backdrop-filter: blur(26px) saturate(1.6);
   box-shadow: 0 44px 90px -34px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
+/* -------------------------------------------------------------------------
+   El panel de ejemplo del hero.
+
+   Enseña de qué se está hablando sin pedirle a nadie que se registre. Los
+   números son los de una hermandad mediana; no prometen nada.
+   ------------------------------------------------------------------------- */
+.panel-demo {
+  width: 100%; max-width: 400px; padding: 1.5rem 1.5rem 1.3rem; border-radius: 20px;
+  background: linear-gradient(158deg, rgba(255,255,255,0.13), rgba(255,255,255,0.035));
+  border: 1px solid rgba(214,188,138,0.3);
+  backdrop-filter: blur(26px) saturate(1.6);
+  -webkit-backdrop-filter: blur(26px) saturate(1.6);
+  box-shadow: 0 44px 90px -34px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.28);
+}
+.panel-demo__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.panel-demo__puntos { display: flex; gap: 0.28rem; }
+.panel-demo__puntos i { width: 4px; height: 4px; border-radius: 50%; background: rgba(245,237,230,0.4); }
+.panel-demo__label {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: rgba(245,237,230,0.6); display: block;
+}
+.panel-demo__cifra {
+  font-family: 'Iowan Old Style', Palatino, Georgia, serif; font-size: 3.1rem; line-height: 1;
+  color: #f3ede2; font-variant-numeric: tabular-nums; margin: 0.35rem 0 1.15rem;
+}
+.panel-demo__rejilla { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin-bottom: 0.9rem; align-items: stretch; }
+.panel-demo__mini {
+  padding: 0.75rem 0.85rem; border-radius: 13px;
+  background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.09);
+}
+.panel-demo__mini--ancha { grid-column: 1 / -1; }
+.panel-demo__linea { width: 100%; height: 34px; margin-top: 0.35rem; overflow: visible; }
+.panel-demo__linea path { fill: none; stroke: #d6bc8a; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.panel-demo__linea circle { fill: #f3ede2; }
+/* El hueco de abajo es para la cifra: sin él, el número caía ENCIMA del arco y
+   no se leía ni una cosa ni la otra. */
+.panel-demo__aguja { position: relative; margin-top: 0.3rem; padding-bottom: 1.5rem; }
+.panel-demo__aguja svg { width: 100%; height: 38px; display: block; }
+.panel-demo__aguja-fondo { fill: none; stroke: rgba(255,255,255,0.12); stroke-width: 7; stroke-linecap: round; }
+/* 94 % del arco: la longitud del semicírculo de radio 42 es π·42 ≈ 132. */
+.panel-demo__aguja-valor {
+  fill: none; stroke: #d6bc8a; stroke-width: 7; stroke-linecap: round;
+  stroke-dasharray: 124 132; stroke-dashoffset: 0;
+}
+.panel-demo__aguja b {
+  position: absolute; left: 0; right: 0; bottom: 0; text-align: center;
+  font-size: 1.05rem; color: #f3ede2; font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.panel-demo__fila-valor { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-top: 0.3rem; }
+.panel-demo__fila-valor b { font-size: 1.5rem; color: #f3ede2; font-variant-numeric: tabular-nums; }
+.panel-demo__pastilla {
+  font-size: 0.7rem; padding: 0.16rem 0.5rem; border-radius: 999px;
+  background: rgba(214,188,138,0.16); color: #d6bc8a; border: 1px solid rgba(214,188,138,0.3);
+}
+.panel-demo__listas { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+.panel-demo__lista {
+  padding: 0.7rem 0.8rem; border-radius: 13px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+}
+.panel-demo__lista p { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin: 0.45rem 0 0; }
+.panel-demo__lista b { font-size: 0.78rem; color: rgba(245,237,230,0.92); font-weight: 500; }
+.panel-demo__lista small { font-size: 0.68rem; color: rgba(245,237,230,0.5); white-space: nowrap; }
+
 .glass-card__head { display: flex; gap: 0.4rem; margin-bottom: 1.3rem; }
 .glass-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); }
 .glass-stat { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 1.2rem; }
@@ -3268,7 +3353,10 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
      de máximo más 2,2 rem de relleno) ensanchaba la pista y el navegador tenía
      que alejar el zoom para que cupiera todo. */
   flex: 1; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 2.4rem;
-  align-items: center; justify-items: center; padding: 2.4rem 1.6rem; max-width: 1040px;
+  /* `start`, no `center`: la columna de la derecha crece con la lista de
+     hermandades, y centrando se llevaba la tarjeta de oro hasta abajo del
+     todo — quedaba media pantalla vacía arriba. */
+  align-items: start; justify-items: center; padding: 2.4rem 1.6rem; max-width: 1040px;
   margin: 0 auto; width: 100%;
 }
 @media (max-width: 860px) { .portal__stage { grid-template-columns: minmax(0, 1fr); gap: 1.4rem; } }
@@ -3279,35 +3367,117 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
   .portal__card { padding: 1.4rem; }
 }
 
-/* Panel decorativo con escudo y ventajas: da a la entrada aspecto de producto */
+/* -------------------------------------------------------------------------
+   La entrada al área del hermano.
+
+   Dos tarjetas: la de la izquierda es la que se mira —lacre, oro y las cuatro
+   cosas que se pueden hacer— y la de la derecha la que se usa. La primera
+   existe para que quien llega por primera vez sepa dónde está antes de tener
+   que escribir nada.
+   ------------------------------------------------------------------------- */
 .portal__aside {
   --portal-accent: var(--morado-900);
-  align-self: stretch; width: 100%; max-width: 460px; border-radius: 22px; padding: 2.6rem 2.2rem;
-  display: flex; flex-direction: column; justify-content: center; gap: 0.9rem; color: #fff;
+  position: relative; overflow: hidden;
+  /* `start`, no `stretch`. Con `stretch` la tarjeta se estiraba hasta la altura
+     de la columna de al lado —que crece con la lista de hermandades— y el lacre
+     acababa flotando en medio de medio metro de oro vacío. Y con `center` se
+     iba al fondo de la pantalla, que es lo mismo pero al revés: `align-self`
+     manda sobre el `align-items` de la rejilla. */
+  align-self: start; width: 100%; max-width: 460px; border-radius: 22px; padding: 2.6rem 2.4rem;
+  display: flex; flex-direction: column; justify-content: center; gap: 0.9rem; color: #4a2f12;
+  /* Latón bruñido: tres pasadas de oro en distinto ángulo. Un degradado de dos
+     tonos se lee como plástico; lo que da el metal son las bandas cruzadas. */
   background:
-    radial-gradient(120% 120% at 10% 0%, color-mix(in srgb, var(--portal-accent) 35%, transparent), transparent 60%),
-    linear-gradient(150deg, color-mix(in srgb, var(--portal-accent) 90%, #000), color-mix(in srgb, var(--portal-accent) 50%, #000));
-  box-shadow: 0 18px 48px rgba(0,0,0,0.22);
+    linear-gradient(115deg, transparent 34%, rgba(255,255,255,0.42) 47%, transparent 60%),
+    linear-gradient(200deg, rgba(120,80,20,0.28), transparent 45%),
+    linear-gradient(150deg, #d9b45e 0%, #c9a04a 28%, #e6cd8b 52%, #bf9440 78%, #d4ae59 100%);
+  box-shadow: 0 18px 48px rgba(74,17,25,0.28), inset 0 1px 0 rgba(255,255,255,0.55);
 }
+/* El ornamento grabado del fondo. Va en un pseudoelemento y muy tenue: es
+   textura, no dibujo — si se lee, compite con el lacre. */
+.portal__aside::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.16;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(90,60,10,0.9) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 88% 82%, rgba(90,60,10,0.9) 0 2px, transparent 2.5px),
+    repeating-conic-gradient(from 0deg at 50% 50%, rgba(120,80,20,0.5) 0deg 2deg, transparent 2deg 24deg);
+  -webkit-mask-image: radial-gradient(circle at 50% 45%, transparent 0 34%, #000 62%);
+  mask-image: radial-gradient(circle at 50% 45%, transparent 0 34%, #000 62%);
+}
+.portal__aside > * { position: relative; }
 @media (max-width: 860px) { .portal__aside { display: none; } }
-.portal__aside-badge {
-  width: 66px; height: 66px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
-  background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.25); color: var(--oro-300); margin-bottom: 0.4rem;
+
+/* El lacre: disco de cera granate con el escudo dentro y el borde irregular. */
+.portal__sello { display: flex; justify-content: center; margin-bottom: 0.6rem; }
+.portal__sello-disco {
+  width: 108px; height: 108px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 34% 28%, #8d2733, #6a1a23 58%, #4a1119);
+  box-shadow: 0 8px 20px rgba(74,17,25,0.45), inset 0 2px 6px rgba(255,255,255,0.22), inset 0 -4px 10px rgba(0,0,0,0.4);
+  /* El borde de un lacre no es un círculo: es la cera que se ha ido por donde
+     ha querido. Un círculo perfecto se lee como una pegatina. */
+  border-radius: 46% 54% 52% 48% / 50% 46% 54% 50%;
 }
-.portal__aside-title { font-size: 1.7rem; line-height: 1.15; margin: 0; color: #fff; }
-.portal__aside-sub { color: rgba(255,255,255,0.82); margin: 0 0 0.6rem; font-size: 0.98rem; }
+.portal__sello-disco img { width: 62%; height: 62%; object-fit: contain; }
+.portal__aside-title {
+  font-size: 1.8rem; line-height: 1.15; margin: 0; color: #3d240d; text-align: center;
+  font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-weight: 600;
+}
+.portal__aside-sub { color: rgba(61,36,13,0.78); margin: 0 0 0.6rem; font-size: 0.98rem; text-align: center; }
 .portal__aside-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.55rem; }
-.portal__aside-list li { position: relative; padding-left: 1.6rem; font-size: 0.95rem; color: rgba(255,255,255,0.94); }
+.portal__aside-list li { position: relative; padding-left: 1.9rem; font-size: 0.95rem; color: #40260e; }
 .portal__aside-list li::before {
-  content: '✓'; position: absolute; left: 0; top: -1px; width: 1.1rem; height: 1.1rem; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;
-  background: var(--oro-300); color: var(--portal-accent);
+  content: '✓'; position: absolute; left: 0; top: 0; width: 1.25rem; height: 1.25rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700;
+  border: 1px solid rgba(74,17,25,0.55); color: #6a1a23;
 }
 .portal__card {
   width: 100%; max-width: 440px; background: var(--bg-raised);
   border: 1px solid var(--line); border-radius: 18px; padding: 2.2rem; box-shadow: 0 16px 40px rgba(0,0,0,0.12);
 }
-.portal__card h1 { font-size: 1.6rem; margin: 0.3rem 0 0.5rem; }
+.portal__card h1 {
+  font-size: 1.75rem; margin: 0.3rem 0 0.5rem;
+  font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-weight: 600; letter-spacing: -0.01em;
+}
+
+/* La cabecera de la tarjeta: dónde estás (izquierda) y de quién es (derecha). */
+.portal__card-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+  padding-bottom: 0.9rem; margin-bottom: 1.1rem; border-bottom: 1px solid var(--line);
+}
+.portal__card-head-titulo { font-weight: 600; font-size: 0.98rem; color: var(--text); }
+.portal__card-head-marca {
+  font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.15rem; color: var(--text-muted);
+}
+
+/* La puerta de la junta. Es un botón entero, no un enlace de pie: quien lleva
+   la hermandad llega aquí constantemente y antes tenía que volverse atrás. */
+.portal__acceso-gestion {
+  display: block; text-align: center; text-decoration: none;
+  padding: 0.82rem 1.2rem; margin-bottom: 1.4rem; border-radius: 999px;
+  background: linear-gradient(180deg, #7d1f2a, #5d1620);
+  color: var(--marfil-100); font-weight: 600; font-size: 0.95rem;
+  border: 1px solid rgba(0,0,0,0.25);
+  box-shadow: 0 6px 16px rgba(106,26,35,0.32), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.portal__acceso-gestion:hover { filter: brightness(1.08); }
+.portal__acceso-gestion:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+/* El buscador, con la lupa dentro. */
+.portal__buscador { position: relative; margin-bottom: 0.9rem; }
+.portal__buscador input {
+  width: 100%; padding: 0.78rem 2.8rem 0.78rem 1rem; font: inherit;
+  color: var(--text); background: var(--bg-raised);
+  border: 1px solid var(--line-strong); border-radius: 999px;
+}
+.portal__buscador input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+/* La lista, con tope. Una hermandad no se busca entre doscientas a rueda de
+   ratón: se escribe el nombre. Sin tope, la tarjeta crecía hasta descolgar el
+   pie de la pantalla. */
+.portal__picker { max-height: 21rem; overflow-y: auto; }
+.portal__buscador svg {
+  position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+  width: 1.15rem; height: 1.15rem; color: var(--text-muted); pointer-events: none;
+}
 .portal__lead { color: var(--text-muted); margin: 0 0 1.2rem; font-size: 0.92rem; }
 .portal__note { font-size: 0.82rem; color: var(--text-muted); margin-top: 1.2rem; text-align: center; }
 .portal__note a, .portal__lead a { color: var(--gold); }

@@ -18,6 +18,16 @@ export default async function ({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const html = await readFile('index.html', 'utf8')
 
+  /** Los colores de la marca, sacados del propio logo. */
+  const logo = await readFile('src/components/Logo.tsx', 'utf8')
+  const colorDe = (nombre) => logo.match(new RegExp(`const ${nombre} = '([^']+)'`))?.[1]
+  const coloresDeLaMarca = {
+    verde: colorDe('VERDE'),
+    rojo: colorDe('ROJO'),
+    oro: colorDe('ORO'),
+  }
+  caso('se encuentran los colores de la marca', 3, Object.values(coloresDeLaMarca).filter(Boolean).length)
+
   const iconos = [...html.matchAll(/href="(data:image\/svg\+xml,[^"]+)"/g)].map((m) => m[1])
   caso('hay iconos declarados', true, iconos.length >= 2)
 
@@ -30,9 +40,17 @@ export default async function ({ caso }) {
     // Y que lo que llega sea un SVG completo, no un trozo.
     const svg = decodeURIComponent(href.slice(href.indexOf(',') + 1))
     caso(`icono ${i + 1}: abre y cierra el svg`, true, svg.startsWith('<svg') && svg.trimEnd().endsWith('</svg>'))
-    // Los colores tienen que seguir ahí: si se perdieron, el dibujo sale negro.
-    caso(`icono ${i + 1}: conserva el granate`, true, /7B1520/i.test(svg))
-    caso(`icono ${i + 1}: conserva el oro`, true, /C9A55C/i.test(svg))
+    /*
+     * Los colores tienen que seguir ahí: si se perdieron, el dibujo sale negro.
+     *
+     * Y se leen del LOGO, no escritos aquí. Estaban escritos a mano —el
+     * granate y el oro de la marca antigua— y al cambiar el logo esta prueba
+     * se puso roja pidiendo unos colores que ya no existían. Una prueba que
+     * hay que ir actualizando a mano cada vez acaba borrándose.
+     */
+    for (const [nombre, valor] of Object.entries(coloresDeLaMarca)) {
+      caso(`icono ${i + 1}: conserva el ${nombre}`, true, new RegExp(valor.slice(1), 'i').test(svg))
+    }
   }
 
   // El color de la barra del navegador en el móvil, que va aparte.

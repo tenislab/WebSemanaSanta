@@ -56,6 +56,40 @@ const FEATURES = [
   },
 ]
 
+/**
+ * Las tres cosas por las que una hermandad se acerca a esto. No son «los
+ * módulos»: son lo que se dice cuando alguien pregunta para qué sirve.
+ */
+const CLAVES = [
+  {
+    titulo: 'Censo de hermanos',
+    sub: 'siempre al día',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+        <rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M3.5 9h17M8 4v16" />
+      </svg>
+    ),
+  },
+  {
+    titulo: 'Cuotas y papeletas',
+    sub: 'cobradas sin perseguir a nadie',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+        <rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M2.5 10h19" /><path d="M6 14.5h4" />
+      </svg>
+    ),
+  },
+  {
+    titulo: 'Área propia',
+    sub: 'para cada hermano',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+        <circle cx="12" cy="8" r="3.4" /><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
+      </svg>
+    ),
+  },
+]
+
 const AUDIENCE = [
   {
     n: '01',
@@ -117,10 +151,19 @@ export default function Landing() {
               Hermanos, cuotas, papeletas de sitio, cortejo, tesorería y comunicaciones. Todo lo
               que antes vivía en carpetas y hojas de cálculo, ordenado en una única plataforma.
             </p>
-            <ul className="bullets">
-              <li><Check /> Censo de hermanos siempre al día</li>
-              <li><Check /> Cobro de cuotas y papeletas online</li>
-              <li><Check /> Portal propio para cada hermano</li>
+            {/*
+              LAS TRES COSAS, en tarjetas y no en una lista de tres rayitas.
+              Son lo que decide si una hermandad sigue leyendo, y una lista de
+              puntos se salta con la vista.
+            */}
+            <ul className="hero-claves">
+              {CLAVES.map((c) => (
+                <li className="hero-clave" key={c.titulo}>
+                  <span className="hero-clave__ic">{c.icon}</span>
+                  <b>{c.titulo}</b>
+                  <span>{c.sub}</span>
+                </li>
+              ))}
             </ul>
             <div className="hero-actions">
               <Link className="btn btn-primary btn-glass-dynamic" to="/registro">
@@ -132,23 +175,61 @@ export default function Landing() {
             </div>
           </div>
 
+          {/*
+            EL PANEL, con la pinta que tiene de verdad.
+            Es la única forma de enseñar de qué se está hablando sin pedirle a
+            nadie que se registre para verlo. Los números son de ejemplo y no
+            hay ninguno que prometa nada: son el tamaño de una hermandad
+            mediana.
+          */}
           <div className="hero-visual" aria-hidden="true">
-            <div className="glass-card">
-              <div className="glass-card__head">
-                <span className="glass-dot" />
-                <span className="glass-dot" />
-                <span className="glass-dot" />
+            <div className="panel-demo">
+              <div className="panel-demo__head">
+                <span className="panel-demo__label">Papeletas emitidas</span>
+                <span className="panel-demo__puntos"><i /><i /><i /></span>
               </div>
-              <div className="glass-stat">
-                <span className="glass-stat__label">Papeletas emitidas</span>
-                <span className="glass-stat__value">812</span>
+              <div className="panel-demo__cifra">812</div>
+
+              <div className="panel-demo__rejilla">
+                <div className="panel-demo__mini">
+                  <span className="panel-demo__label">Cuotas al corriente</span>
+                  {/* La línea del año: sube en Cuaresma, que es cuando se paga. */}
+                  <svg className="panel-demo__linea" viewBox="0 0 120 40" preserveAspectRatio="none">
+                    <path d="M2 32 L16 27 L30 30 L44 20 L58 24 L72 14 L86 17 L100 8 L114 6" />
+                    <circle cx="114" cy="6" r="3.2" />
+                  </svg>
+                </div>
+                <div className="panel-demo__mini">
+                  <span className="panel-demo__label">Recaudado</span>
+                  <div className="panel-demo__aguja">
+                    <svg viewBox="0 0 100 54">
+                      <path d="M8 50a42 42 0 0 1 84 0" className="panel-demo__aguja-fondo" />
+                      <path d="M8 50a42 42 0 0 1 84 0" className="panel-demo__aguja-valor" />
+                    </svg>
+                    <b>18.420 €</b>
+                  </div>
+                </div>
+                <div className="panel-demo__mini panel-demo__mini--ancha">
+                  <span className="panel-demo__label">Hermanos activos</span>
+                  <div className="panel-demo__fila-valor">
+                    <b>1.204</b>
+                    <span className="panel-demo__pastilla">94% al día</span>
+                  </div>
+                </div>
               </div>
-              <div className="glass-rows">
-                <div className="glass-row"><span>Cuotas al corriente</span><b>94%</b></div>
-                <div className="glass-row"><span>Recaudado</span><b>18.420 €</b></div>
-                <div className="glass-row"><span>Hermanos activos</span><b>1.204</b></div>
+
+              <div className="panel-demo__listas">
+                <div className="panel-demo__lista">
+                  <span className="panel-demo__label">Avisos recientes</span>
+                  <p><b>Cabildo de cuentas</b><small>hace 2 min</small></p>
+                  <p><b>Reparto de papeletas</b><small>ayer</small></p>
+                </div>
+                <div className="panel-demo__lista">
+                  <span className="panel-demo__label">Próximos cultos</span>
+                  <p><b>Triduo al Titular</b><small>12 mar</small></p>
+                  <p><b>Besamanos</b><small>21 mar</small></p>
+                </div>
               </div>
-              <div className="glass-bar"><span style={{ width: '94%' }} /></div>
             </div>
           </div>
         </div>

@@ -1163,15 +1163,18 @@ export default function HermanoPortal() {
         />
         <main className="portal__stage">
           <aside className="portal__aside" style={{ ['--portal-accent' as string]: hermandadElegida?.color ?? colorActivo }}>
-            <div className="portal__aside-badge">
-              {/* El escudo de SU hermandad si lo ha subido. La marca de Gobergo
-                  solo mientras no ha elegido ninguna: a partir de ahí, el
-                  hermano tiene que ver lo suyo, no lo nuestro. */}
-              {hermandadElegida?.logoDataUrl ? (
-                <img src={hermandadElegida.logoDataUrl} alt="" className="portal__aside-escudo" />
-              ) : (
-                <LogoMark size={40} claro />
-              )}
+            {/* El lacre. Es lo primero que se ve al entrar, así que lleva el
+                escudo de SU hermandad si lo ha subido; la marca de Gobergo solo
+                mientras no ha elegido ninguna, porque a partir de ahí el
+                hermano tiene que ver lo suyo, no lo nuestro. */}
+            <div className="portal__sello">
+              <span className="portal__sello-disco">
+                {hermandadElegida?.logoDataUrl ? (
+                  <img src={hermandadElegida.logoDataUrl} alt="" className="portal__aside-escudo" />
+                ) : (
+                  <LogoMark size={54} />
+                )}
+              </span>
             </div>
             <h2 className="portal__aside-title">Tu hermandad, en tu bolsillo</h2>
             <p className="portal__aside-sub">Entra en tu área personal y gestiona todo sin pasar por secretaría.</p>
@@ -1211,12 +1214,31 @@ export default function HermanoPortal() {
                 el hermano leía «Busca tu hermandad» y se paraba ahí. */}
             {paso === 'buscar' && !poniendoClaveNueva && (
               <>
-                <p className="eyebrow">Área del hermano</p>
-                <h1>Busca tu hermandad</h1>
-                <p className="portal__lead">Escribe el nombre o la ciudad para encontrarla y entrar en tu área.</p>
+                <div className="portal__card-head">
+                  <span className="portal__card-head-titulo">Tu espacio personal</span>
+                  <span className="portal__card-head-marca">Gobergo</span>
+                </div>
 
-                <div className="form-row">
-                  <label htmlFor="buscarHermandad">Tu hermandad</label>
+                {/*
+                  LA PUERTA DE LA JUNTA, dicha aquí y no escondida.
+
+                  Quien lleva la hermandad llega a `/hermano` constantemente —es
+                  la dirección que se sabe— y desde aquí no había forma de pasar
+                  al panel sin volver atrás y buscar otra puerta. No promete
+                  acceso a nadie: quien no lleve cargo se encontrará su área, que
+                  es donde tiene que estar.
+                */}
+                <Link to="/entrar" className="portal__acceso-gestion">
+                  Acceso al panel de gestión completo
+                </Link>
+
+                <h1>Encuentra tu hermandad</h1>
+                <p className="portal__lead">
+                  Escribe el nombre completo o la ciudad para acceder a tu área personal.
+                </p>
+
+                <div className="portal__buscador">
+                  <label htmlFor="buscarHermandad" className="sr-only">Tu hermandad</label>
                   <input
                     id="buscarHermandad"
                     type="text"
@@ -1225,6 +1247,9 @@ export default function HermanoPortal() {
                     placeholder="Nombre o ciudad…"
                     autoFocus
                   />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" />
+                  </svg>
                 </div>
                 <ul className="portal__picker">
                   {opcionesHermandad.map((h) => (
