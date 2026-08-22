@@ -2853,6 +2853,18 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
   margin-bottom: 1.1rem;
 }
 .cuotas-nuevo-ejercicio .btn { flex: none; }
+/* El bloque de «darle acceso» en la ficha del hermano. Separado del resto
+   porque no es un dato suyo: es una acción, y de las que se hacen una vez. */
+.ficha-acceso {
+  margin: 0.9rem 0; padding: 0.75rem 0.9rem;
+  border: 1px dashed var(--linea); border-radius: 10px;
+}
+.ficha-acceso .form-hint { margin: 0 0 0.55rem; }
+.ficha-acceso .form-hint:last-child { margin-bottom: 0; }
+
+/* La nota de «ninguno necesita acceso», en la barra de acciones en tanda. */
+.masiva__nota { font-size: 0.85rem; color: var(--text-muted); }
+
 .app-sync-error {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   margin: 0.9rem 2rem 0;

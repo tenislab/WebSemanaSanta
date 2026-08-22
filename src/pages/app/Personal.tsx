@@ -669,8 +669,22 @@ export default function Personal() {
               {conCargo.length === 0 && (
                 <tr>
                   <td colSpan={5} className="table-empty">
-                    Ningún hermano lleva cargo todavía. Con «Poner un cargo» le das acceso al
-                    panel a alguien que ya está en el censo, sin crearle una segunda ficha.
+                    {/* El botón, AQUÍ. Estaba solo arriba del todo, en la
+                        cabecera de la pantalla, y quien mira una tabla vacía
+                        mira la tabla, no la cabecera. Un hueco que explica lo
+                        que hay que hacer pero no deja hacerlo obliga a buscar
+                        el botón, y ese rato es donde se abandona. */}
+                    <p>
+                      Ningún hermano lleva cargo todavía. Con un cargo, alguien que ya está en el
+                      censo entra en el panel — sin crearle una segunda ficha.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => { setError(null); setCargoElegido(null); setElegidoId(null); setCargoOpen(true) }}
+                    >
+                      Poner el primer cargo
+                    </button>
                   </td>
                 </tr>
               )}

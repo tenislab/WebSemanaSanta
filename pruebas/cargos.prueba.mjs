@@ -348,4 +348,47 @@ export default async function ({ caso }) {
   // Y volver a ejecutar el SQL no puede devolver permisos que la junta quitó.
   caso('no se resiembra encima de lo ya tocado', true,
     /if not exists \(select 1 from permisos_cargo where hermandad_id = h\)/.test(sql))
+
+  await permisosQueSeRestablecian({ caso })
+}
+
+/**
+ * EL BUG: cambias los permisos, le das a Guardar, sale el visto bueno verde…
+ * y las casillas vuelven solas a como estaban.
+ *
+ * En la base se guardaban BIEN. Era la pantalla la que se pisaba a sí misma:
+ *
+ *  1. `usePermisosPorCargo` lee los permisos al abrir la pantalla y se los
+ *     queda.
+ *  2. Al guardar, Personal marca el formulario como «ya no tocado».
+ *  3. Su efecto de sincronizar salta —porque esa marca ha cambiado— y vuelve a
+ *     poner encima lo que el hook tiene guardado… que es de ANTES de guardar.
+ *
+ * El hook no se había enterado porque el evento `storage` del navegador solo
+ * lo reciben las OTRAS pestañas: la que escribe nunca oye su propio cambio.
+ */
+async function permisosQueSeRestablecian({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const permisos = await readFile('src/lib/permisos.ts', 'utf8')
+
+  caso('al guardar se avisa a esta misma pestaña', true, /avisarDeQueCambiaron\(\)/.test(permisos))
+  caso('y el aviso se manda de verdad', true,
+    /window\.dispatchEvent\(new CustomEvent\(AVISO_CAMBIO\)\)/.test(permisos))
+  caso('y el hook lo escucha', true,
+    /window\.addEventListener\(AVISO_CAMBIO, alGuardar\)/.test(permisos))
+  caso('y al oírlo relee lo guardado', true,
+    /function alGuardar\(\) \{\s*setPermisos\(getPermisosPorCargo\(\)\)/.test(permisos))
+  // Y se desengancha al salir: si no, cada visita a la pantalla deja un oyente
+  // más y acaban actualizándose todos a la vez.
+  caso('y se quita el oyente al salir', true,
+    /removeEventListener\(AVISO_CAMBIO, alGuardar\)/.test(permisos))
+
+  // La otra mitad, que ya estaba: lo que cambie en OTRA pestaña también entra.
+  caso('lo de otras pestañas sigue entrando', true, /useEscuchaOtrasPestanas\(STORAGE_KEY/.test(permisos))
+
+  // Y el efecto de Personal que causaba el pisotón sigue ahí, que es correcto:
+  // lo que estaba mal no era sincronizar, era sincronizar con datos viejos.
+  const pantalla = await readFile('src/pages/app/Personal.tsx', 'utf8')
+  caso('Personal sigue sincronizando con lo remoto', true,
+    /if \(!permisosTocado\) setPermisos\(permisosRemotos\)/.test(pantalla))
 }

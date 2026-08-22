@@ -93,6 +93,14 @@ export function usePermisosPorCargo(): Record<Cargo, string[]> {
   // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
   // la vez) se refleja aquí sin recargar.
   useEscuchaOtrasPestanas(STORAGE_KEY, () => setPermisos(getPermisosPorCargo()))
+  // Y lo que cambie en ESTA, que el evento `storage` no cuenta.
+  useEffect(() => {
+    function alGuardar() {
+      setPermisos(getPermisosPorCargo())
+    }
+    window.addEventListener(AVISO_CAMBIO, alGuardar)
+    return () => window.removeEventListener(AVISO_CAMBIO, alGuardar)
+  }, [])
 
   return permisos
 }
@@ -109,8 +117,30 @@ export async function savePermisosPorCargo(
 ): Promise<{ ok: boolean; error?: string }> {
   // Primero el navegador, para que al menos quede aquí si la red falla.
   localStorage.setItem(STORAGE_KEY, JSON.stringify(permisos))
+  avisarDeQueCambiaron()
   if (!isSupabaseConfigured) return { ok: true }
   return guardarPermisosPorCargoRemoto(permisos)
+}
+
+/** Nombre del aviso de «los permisos han cambiado EN ESTA pestaña». */
+const AVISO_CAMBIO = 'cabildo-permisos-guardados'
+
+/**
+ * Avisa a esta misma pestaña de que los permisos han cambiado.
+ *
+ * POR QUÉ HACE FALTA, que es lo que no era evidente. El evento `storage` del
+ * navegador solo lo reciben las OTRAS pestañas: la que escribe nunca se entera
+ * de su propio cambio. Así que `usePermisosPorCargo` se quedaba con lo que
+ * leyó al abrir la pantalla, y en cuanto Personal marcaba el formulario como
+ * «ya guardado», su efecto de sincronizar volvía a poner ESOS valores viejos
+ * encima de los recién guardados.
+ *
+ * Lo que se veía: cambias los permisos, le das a Guardar, sale el visto bueno
+ * verde… y las casillas vuelven solas a como estaban. En la base estaban bien
+ * guardados; era la pantalla la que se pisaba a sí misma.
+ */
+function avisarDeQueCambiaron() {
+  window.dispatchEvent(new CustomEvent(AVISO_CAMBIO))
 }
 
 /**

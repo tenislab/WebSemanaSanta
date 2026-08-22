@@ -16,6 +16,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { crearAccesoHermano } from '../../lib/accesos'
 import { darLaBienvenida } from '../../lib/bienvenida'
+import { contarLaTanda, enviarAcceso, enviarAccesoEnTanda, porQueNoSePuede } from '../../lib/enviarAcceso'
 import { claveDeUnSoloUso } from '../../lib/claves'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { getCampana } from '../../lib/campana'
@@ -205,6 +206,59 @@ export default function Hermanos() {
    * guardar: si el aviso viviera dentro, se cerraría con él y nadie lo vería.
    */
   const [avisoAcceso, setAvisoAcceso] = useState<string | null>(null)
+  /** Id del hermano al que se le está mandando el acceso ahora mismo. */
+  const [enviandoAcceso, setEnviandoAcceso] = useState<string | null>(null)
+  /** Por dónde va una tanda: «120 de 800». Sin esto parece colgada. */
+  const [tandaAcceso, setTandaAcceso] = useState<{ hechos: number; total: number } | null>(null)
+
+  /**
+   * Le crea la cuenta a un hermano del censo y le manda su clave.
+   *
+   * Se anota `authUserId` en su ficha en cuanto se crea: es lo que hace que el
+   * botón se apague solo y que no se le mande una segunda clave que, además, no
+   * funcionaría —la cuenta ya existe—.
+   */
+  async function mandarAcceso(h: Hermano) {
+    setEnviandoAcceso(h.id)
+    setAvisoAcceso(null)
+    const r = await enviarAcceso(
+      {
+        id: h.id, nombre: h.nombre, email: h.email, dni: h.dni,
+        numero: h.numero, estado: h.estado, authUserId: h.authUserId,
+      },
+      hermandad.nombreLegal,
+    )
+    setEnviandoAcceso(null)
+    if (r.ok) {
+      setHermanos((prev) => prev.map((x) => (x.id === h.id ? { ...x, authUserId: r.authUserId ?? null } : x)))
+      setAvisoAcceso(`Acceso enviado a ${h.nombre}. Le llega una clave de un solo uso a ${h.email}.`)
+      return
+    }
+    setAvisoAcceso(r.error ?? 'No se ha podido enviar el acceso.')
+  }
+
+  /** A todos los seleccionados. Los que no pueden se cuentan y se dicen. */
+  async function mandarAccesoATodos(seleccionados: Hermano[]) {
+    setTandaAcceso({ hechos: 0, total: seleccionados.length })
+    setAvisoAcceso(null)
+    const r = await enviarAccesoEnTanda(
+      seleccionados.map((h) => ({
+        id: h.id, nombre: h.nombre, email: h.email, dni: h.dni,
+        numero: h.numero, estado: h.estado, authUserId: h.authUserId,
+      })),
+      hermandad.nombreLegal,
+      (hechos, total) => setTandaAcceso({ hechos, total }),
+    )
+    setTandaAcceso(null)
+    if (r.cuentas.length > 0) {
+      const porId = new Map(r.cuentas.map((c) => [c.id, c.authUserId]))
+      setHermanos((prev) => prev.map((x) => (porId.has(x.id) ? { ...x, authUserId: porId.get(x.id) ?? null } : x)))
+    }
+    // Los fallos van con nombre: en una tanda de 800, «3 han fallado» sin decir
+    // cuáles no sirve para nada.
+    const detalle = r.fallos.length > 0 ? ` Han fallado: ${r.fallos.map((f) => f.nombre).join(', ')}.` : ''
+    setAvisoAcceso(contarLaTanda(r) + detalle)
+  }
 
   const [ibanDraft, setIbanDraft] = useState('')
   const [ibanError, setIbanError] = useState<string | null>(null)
@@ -1011,6 +1065,51 @@ export default function Hermanos() {
           >
             Exportar los {marcados.size}
           </button>
+          {/*
+            * El acceso, en tanda. Es la forma en que se usa de verdad: una
+            * hermandad importa su censo y quiere que entren todos, no ir ficha
+            * por ficha ochocientas veces.
+            *
+            * Se dice CUÁNTOS van a recibirlo antes de pulsar. De los
+            * seleccionados, muchos pueden estar ya con acceso o sin correo, y
+            * pulsar a ciegas para que luego diga «enviados: 0» es la peor
+            * versión de esto.
+            */}
+          {(() => {
+            const puedenRecibir = hermanos.filter(
+              (h) => marcados.has(h.id) && porQueNoSePuede({
+                id: h.id, nombre: h.nombre, email: h.email, dni: h.dni,
+                numero: h.numero, estado: h.estado, authUserId: h.authUserId,
+              }) === null,
+            )
+            if (puedenRecibir.length === 0) {
+              return (
+                <span className="masiva__nota">
+                  Ninguno de los seleccionados necesita acceso: o ya lo tienen, o no tienen correo.
+                </span>
+              )
+            }
+            return (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={tandaAcceso !== null}
+                onClick={() => {
+                  const cuantos = puedenRecibir.length
+                  if (window.confirm(
+                    `Se va a crear la cuenta de ${cuantos} hermano${cuantos === 1 ? '' : 's'} y a `
+                    + 'enviarles su clave por correo. ¿Seguimos?',
+                  )) {
+                    void mandarAccesoATodos(puedenRecibir)
+                  }
+                }}
+              >
+                {tandaAcceso
+                  ? `Enviando… ${tandaAcceso.hechos} de ${tandaAcceso.total}`
+                  : `Enviar acceso a ${puedenRecibir.length}`}
+              </button>
+            )
+          })()}
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setMarcados(new Set()); setAvisoMasivo(null) }}>
             Quitar selección
           </button>
@@ -1474,6 +1573,47 @@ export default function Hermanos() {
                 <div className="banner-inline banner-inline--warn" style={{ marginBottom: '0.7rem' }}>
                   <b>{selected.nombre.split(' ')[0]} ha solicitado la baja</b> desde su área de
                   hermano. Tramítala aquí abajo si procede.
+                </div>
+              )}
+              {/*
+                * DARLE ACCESO A SU ÁREA.
+                *
+                * La cuenta se creaba al darlo de alta a mano y al aprobar su
+                * solicitud. Pero una hermandad entra IMPORTANDO su censo, y la
+                * importación no crea cuentas —ni debe: 800 altas serían 800
+                * correos de golpe—. Sin este botón, la hermandad tenía su censo
+                * entero y ni un hermano podía entrar en su área.
+                */}
+              {selected.estado !== 'Baja' && (
+                <div className="ficha-acceso">
+                  {selected.authUserId ? (
+                    <p className="form-hint">
+                      <b>Ya tiene acceso.</b> Si no recuerda su contraseña, que use
+                      «he olvidado mi contraseña» en la pantalla de entrar: desde aquí no se le
+                      puede poner otra.
+                    </p>
+                  ) : !selected.email?.includes('@') ? (
+                    <p className="form-hint">
+                      <b>No puede entrar todavía.</b> Para darle acceso hace falta su correo:
+                      ponlo arriba y guarda.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="form-hint">
+                        <b>Todavía no puede entrar en su área.</b> Al enviarle el acceso se le crea
+                        su cuenta y se le manda por correo una clave de un solo uso, que cambiará al
+                        entrar.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={enviandoAcceso === selected.id}
+                        onClick={() => mandarAcceso(selected)}
+                      >
+                        {enviandoAcceso === selected.id ? 'Enviando…' : 'Enviar acceso por correo'}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
               {selected.estado !== 'Baja' ? (
