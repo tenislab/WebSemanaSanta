@@ -100,7 +100,17 @@ async function elImportadorLoUsa({ cargar, caso, xlsx }) {
 
   caso('el importador lee el Excel', true, /leerXlsx\(/.test(comp))
   caso('lo reconoce por el contenido', true, /pareceXlsx\(/.test(comp))
-  caso('y acepta .xlsx en el selector', true, /accept="[^"]*\.xlsx/.test(comp))
+  /*
+   * SIN filtro de tipos en el selector.
+   *
+   * Con `accept` puesto, el cuadro de «abrir archivo» del sistema GRISEA todo
+   * lo demás: se ve el archivo, se pincha y no pasa nada, sin ningún mensaje.
+   * Llegó reportado como «no me deja seleccionar el archivo», y en el peor
+   * momento: el primer paso de la puesta en marcha. Basta con que el ordenador
+   * tenga el .xlsx registrado con otro tipo para que el filtro lo tape.
+   */
+  caso('el selector no filtra por tipo', false, /accept=/.test(comp))
+  caso('y lo decide la aplicación mirando el contenido', true, /pareceXlsx\(bytes\)/.test(comp))
   // El mensaje de «conviértelo a CSV a mano» ya no tiene sentido.
   caso('ya no manda convertir a CSV a mano', false, /usa Archivo → Guardar como → CSV/.test(comp))
 

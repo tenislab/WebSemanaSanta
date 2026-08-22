@@ -45,13 +45,27 @@ export default async function ({ caso }) {
   caso('sin comillas dobles que rompan el atributo', false, uri.includes('"'))
   caso('y el icono de iOS es el mismo', 2, (enDisco.match(/data:image\/svg\+xml,%3Csvg/g) ?? []).length)
 
-  // --- La marca, en sus dos versiones ---
-  // Sin comentarios: el propio archivo EXPLICA que no usa `currentColor`, y
-  // buscándolo a pelo la prueba se caza a sí misma en su explicación.
+  /*
+   * --- La marca, en sus dos versiones ---
+   *
+   * Aquí había comprobaciones atadas a UN logo concreto: que existiera la
+   * constante de los clavos, que las letras no fueran `<text>`, que no
+   * quedaran los colores del logo anterior. Al volver atrás de logo, media
+   * prueba se puso roja sin que nada estuviera mal.
+   *
+   * Lo que se comprueba ahora es lo que vale para cualquier marca que se
+   * ponga: que se vea sobre fondo claro y sobre oscuro, que los colores no se
+   * hereden del texto, y que el icono salga de ella.
+   */
   const logoCrudo = await readFile('src/components/Logo.tsx', 'utf8')
   const logo = logoCrudo.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
-  caso('hay versión para fondo oscuro', true, /VERDE_CLARO/.test(logo))
-  caso('y para el rojo de los clavos', true, /ROJO_CLARO/.test(logo))
+
+  // La marca se pide en claro y en oscuro: la cabecera es granate y el papel
+  // es blanco, y tiene que verse en los dos.
+  caso('la marca tiene versión clara', true, /claro\s*=\s*false/.test(logo))
+  caso('y quien la pide puede elegirla', true, /LogoMark size=\{size\} claro=\{light\}/.test(logo))
+  caso('la versión oscura cambia algo', true, /claro \?/.test(logo))
+
   /*
    * Los colores NO son `currentColor`: son la marca, y tienen que salir
    * iguales sobre fondo claro, sobre fondo oscuro y en un papel impreso.
@@ -59,21 +73,12 @@ export default async function ({ caso }) {
    */
   caso('la marca no hereda el color del texto', false, /currentColor/.test(logo))
 
-  // Los tres clavos son la misma figura girada. Dibujados por separado
-  // acabarían con grosores distintos y se notaría.
-  caso('los clavos son un solo dibujo', 1, (logo.match(/const CLAVO =/g) ?? []).length)
-  caso('y se usa tres veces', 3, (logo.match(/d=\{CLAVO\}/g) ?? []).length)
-
-  // Las letras no son texto: una tipografía que no esté instalada cambiaría la
-  // marca de sitio en sitio, y en un recibo impreso desde otro ordenador
-  // saldría otra letra.
-  caso('las iniciales van dibujadas, no escritas', false, /<text/.test(logo))
-
-  // --- Que no quede nada del logo viejo ---
-  const viejos = ['#7B1520', '#C9A55C']
-  for (const c of viejos) {
-    caso(`ya no queda el color viejo ${c}`, false, logo.includes(c))
-  }
+  // Y los colores están escritos UNA vez, no repartidos por el dibujo: es lo
+  // que permite cambiarlos sin ir path por path.
+  const constantes = [...logo.matchAll(/const ([A-Z][A-Z_]*) = '(#[0-9A-Fa-f]{3,8})'/g)]
+  caso('los colores están en constantes', true, constantes.length >= 2)
+  const sueltos = (logo.match(/["'{]#[0-9A-Fa-f]{6}/g) ?? []).length - constantes.length
+  caso('y no hay colores sueltos por el dibujo', true, sueltos <= 1)
 
   await todoElMundoPideLaMarcaAqui({ caso })
 }

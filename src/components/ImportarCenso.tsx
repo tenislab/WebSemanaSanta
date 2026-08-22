@@ -200,7 +200,25 @@ export default function ImportarCenso({
           <div className="importar-suelta">
             <input
               ref={inputRef} id="importarArchivo" type="file"
-              accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
+              /*
+               * SIN `accept`, y es a propósito.
+               *
+               * Con la lista de tipos puesta, el cuadro de «abrir archivo» del
+               * sistema GRISEA todo lo demás: se ve el archivo, se pincha, y no
+               * pasa nada. Sin ningún mensaje, porque el navegador no deja
+               * elegirlo siquiera. Eso se lee como «la aplicación está rota», y
+               * es lo que llegó reportado: «no me deja seleccionar el archivo».
+               *
+               * Pasa además en el peor momento: el primer paso de la puesta en
+               * marcha. Y basta con que el ordenador tenga registrado el .xlsx
+               * con otro tipo —lo hace media España con LibreOffice— para que
+               * el filtro lo tape.
+               *
+               * Se deja elegir cualquier cosa y lo mira la aplicación, que ya
+               * sabe distinguir un Excel de un CSV por su contenido y decir en
+               * cristiano qué pasa si no es ninguno de los dos. Vale más un
+               * mensaje claro que un archivo que no se puede ni seleccionar.
+               */
               onChange={(e) => elegirArchivo(e.target.files?.[0] ?? null)}
             />
             <label htmlFor="importarArchivo" className="btn btn-primary">Elegir el archivo</label>

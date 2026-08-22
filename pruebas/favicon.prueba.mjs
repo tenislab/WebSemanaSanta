@@ -18,15 +18,19 @@ export default async function ({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const html = await readFile('index.html', 'utf8')
 
-  /** Los colores de la marca, sacados del propio logo. */
+  /*
+   * Los colores de la marca, sacados del propio logo — y LOS QUE HAYA.
+   *
+   * Estaban escritos aquí a mano, uno por uno. Al cambiar de logo esta prueba
+   * se puso roja pidiendo unos colores que ya no existían; y al listarlos por
+   * nombre (`VERDE`, `ROJO`…) volvió a pasar lo mismo al volver al anterior.
+   * Una prueba que hay que actualizar a mano cada vez acaba borrándose.
+   */
   const logo = await readFile('src/components/Logo.tsx', 'utf8')
-  const colorDe = (nombre) => logo.match(new RegExp(`const ${nombre} = '([^']+)'`))?.[1]
-  const coloresDeLaMarca = {
-    verde: colorDe('VERDE'),
-    rojo: colorDe('ROJO'),
-    oro: colorDe('ORO'),
-  }
-  caso('se encuentran los colores de la marca', 3, Object.values(coloresDeLaMarca).filter(Boolean).length)
+  const coloresDeLaMarca = Object.fromEntries(
+    [...logo.matchAll(/const ([A-Z][A-Z_]*) = '(#[0-9A-Fa-f]{3,8})'/g)].map((m) => [m[1], m[2]]),
+  )
+  caso('se encuentran los colores de la marca', true, Object.keys(coloresDeLaMarca).length >= 2)
 
   const iconos = [...html.matchAll(/href="(data:image\/svg\+xml,[^"]+)"/g)].map((m) => m[1])
   caso('hay iconos declarados', true, iconos.length >= 2)

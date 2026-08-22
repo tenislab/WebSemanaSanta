@@ -21,38 +21,58 @@ const RAIZ = new URL('..', import.meta.url).pathname
 export function svgDelLogo() {
   const src = readFileSync(`${RAIZ}src/components/Logo.tsx`, 'utf8')
 
-  const color = (nombre) => {
-    const m = src.match(new RegExp(`const ${nombre} = '([^']+)'`))
-    if (!m) throw new Error(`No se encuentra el color ${nombre} en Logo.tsx`)
-    return m[1]
-  }
-  const clavo = src.match(/const CLAVO = '([^']+)'/)[1]
-
   let svg = src.slice(src.indexOf('<svg viewBox="0 0 120 120"'), src.indexOf('</svg>') + 6)
 
-  // Fuera los comentarios de JSX: en un `data:` cada byte cuenta, y además el
-  // icono se descarga en cada visita.
+  // Fuera los comentarios de JSX: en un `data:` cada byte cuenta, y el icono se
+  // descarga en cada visita.
   svg = svg.replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 
   /*
-   * La versión del icono es la de fondo CLARO. La pestaña puede ser clara u
-   * oscura según el navegador y el sistema, y el verde con las letras en blanco
-   * aguanta las dos; la variante para fondo oscuro cala las letras en granate y
-   * sobre una pestaña clara desaparecerían.
+   * LAS VARIABLES DEL DIBUJO, RESUELTAS SOLAS.
+   *
+   * El SVG del componente lleva cosas como `fill={ORO}` o `d={CLAVO}`, y aquí
+   * hay que dejarlas en valores. Estaban escritas a mano —una lista con los
+   * nombres del logo de aquel momento—, y al cambiar de logo el generador
+   * reventó porque buscaba una constante que ya no existía. Eso es justo lo
+   * contrario de para lo que se hizo: sobrevivir a los cambios de logo.
+   *
+   * Así que se buscan las que HAYA. Dos formas:
+   *
+   *   const ORO = '#C9A55C'                  → el valor, tal cual
+   *   const tinta = claro ? '#FFF' : GRANATE → la rama de fondo CLARO
+   *
+   * La rama clara porque la pestaña puede ser clara u oscura según el navegador
+   * y el sistema, y la versión pensada para fondo claro aguanta las dos; la de
+   * fondo oscuro está pensada para verse sobre el granate de la cabecera y
+   * sobre una pestaña blanca desaparecería.
    */
-  const reemplazos = {
-    '={verde}': color('VERDE'),
-    '={rojo}': color('ROJO'),
-    '={calado}': '#FFFFFF',
-    '={ORO}': color('ORO'),
-    '={CLAVO}': clavo,
+  const valorDe = (nombre, vistos = new Set()) => {
+    if (vistos.has(nombre)) throw new Error(`La constante ${nombre} se refiere a sí misma`)
+    vistos.add(nombre)
+    const ternario = src.match(new RegExp(`const ${nombre} = claro \\? [^:]+: ([A-Za-z_$][\\w$]*|'[^']*')`))
+    if (ternario) {
+      const rama = ternario[1]
+      return rama.startsWith("'") ? rama.slice(1, -1) : valorDe(rama, vistos)
+    }
+    const directo = src.match(new RegExp(`const ${nombre} = '([^']+)'`))
+    if (directo) return directo[1]
+    throw new Error(`No se encuentra la constante ${nombre} en Logo.tsx`)
   }
-  for (const [de, a] of Object.entries(reemplazos)) svg = svg.split(de).join(`="${a}"`)
+
+  for (const nombre of new Set([...svg.matchAll(/=\{([A-Za-z_$][\w$]*)\}/g)].map((m) => m[1]))) {
+    svg = svg.split(`={${nombre}}`).join(`="${valorDe(nombre)}"`)
+  }
 
   // JSX escribe los atributos en minúsculas-camello; el SVG los quiere con guion.
   svg = svg
     .replace(/strokeWidth=/g, 'stroke-width=')
     .replace(/strokeLinecap=/g, 'stroke-linecap=')
+    .replace(/strokeLinejoin=/g, 'stroke-linejoin=')
+    .replace(/strokeDasharray=/g, 'stroke-dasharray=')
+    .replace(/textAnchor=/g, 'text-anchor=')
+    .replace(/fontFamily=/g, 'font-family=')
+    .replace(/fontSize=/g, 'font-size=')
+    .replace(/fontWeight=/g, 'font-weight=')
     .replace(/aria-hidden="true"/, 'xmlns="http://www.w3.org/2000/svg"')
     .replace(/\s+/g, ' ')
     .replace(/> </g, '><')

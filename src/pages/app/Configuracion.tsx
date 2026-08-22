@@ -42,6 +42,12 @@ import {
   correoDePrueba, correoDisponible, enviarCorreo, useAjustesCorreo, type AjustesCorreo,
 } from '../../lib/correo'
 import { hoyIso } from '../../lib/hoy'
+import { conexiones, resumenConexiones } from '../../lib/conexiones'
+import { useCuentasSociales } from '../../lib/db/comunicados'
+import { getWebPublica } from '../../lib/webPublica'
+import { getAjustesCorreo } from '../../lib/correo'
+import { tieneCapacidad, useSuscripcion } from '../../lib/suscripcion'
+import { Link } from 'react-router-dom'
 
 const MAX_LOGO_BYTES = 800_000
 
@@ -62,7 +68,7 @@ const CATALOGOS_DEF = [
   { k: 'segmentos', clave: CLAVES_CATALOGOS.segmentosComunicado, titulo: 'Destinatarios de comunicados', porDefecto: SEGMENTOS },
 ] as const
 
-type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos' | 'puesta' | 'correo'
+type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos' | 'puesta' | 'correo' | 'conexiones'
 
 /** Las secciones de los ajustes, agrupadas como el editor de la web. */
 const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; icono: ReactNode }[] }[] = [
@@ -84,6 +90,9 @@ const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; i
   {
     titulo: 'Mantenimiento',
     items: [
+      /* «Conexiones» va el primero del grupo a propósito: es lo que se viene a
+         buscar a Ajustes, y hasta ahora no estaba en ninguna parte. */
+      { id: 'conexiones', label: 'Conexiones', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M9 15 4.5 19.5a3.2 3.2 0 0 1-4.5-4.5" transform="translate(2 -1)" /><path d="M14.5 9.5 19 5a3.2 3.2 0 0 1 4.5 4.5L19 14" transform="translate(-1 1)" /><path d="M9.5 14.5 14.5 9.5" /></svg> },
       { id: 'correo', label: 'Correo', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> },
       { id: 'puesta', label: 'Puesta en marcha', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 2v6M12 16v6M2 12h6M16 12h6" /><circle cx="12" cy="12" r="3.2" /></svg> },
       { id: 'datos', label: 'Copias y datos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></svg> },
@@ -1236,6 +1245,7 @@ export default function Configuracion() {
 
       {seccion === 'ficha' && <CamposPropiosCard />}
 
+      {seccion === 'conexiones' && <ConexionesCard />}
       {seccion === 'correo' && <CorreoCard />}
 
       {seccion === 'puesta' && <PuestaEnMarchaCard />}
@@ -1489,6 +1499,82 @@ function PuestaEnMarchaCard() {
  * mandarse una prueba a uno mismo. Sin el botón de prueba, que algo falla se
  * descubre el día que se manda la convocatoria de cabildo a mil personas.
  */
+/**
+ * QUÉ HAY CONECTADO Y QUÉ FALTA.
+ *
+ * Llegó dicho así: «no hay apartado que dé opción de conectar, no está en
+ * ajustes». Y era verdad: cada cosa se conectaba en su módulo —el correo aquí,
+ * las redes en Comunicados, el dominio dentro de un desplegable de la Web— así
+ * que no había ningún sitio donde preguntar «¿qué me queda?». Y ese sitio, para
+ * cualquiera, es Ajustes.
+ *
+ * No mueve nada: cada cosa se sigue configurando donde estaba, porque ahí es
+ * donde tiene sentido mientras se trabaja. Esto da la lista, el estado y el
+ * camino.
+ */
+function ConexionesCard() {
+  const settings = useHermandadSettings()
+  const { suscripcion } = useSuscripcion()
+  const [cuentas] = useCuentasSociales()
+  const web = getWebPublica()
+  const ajustesCorreo = getAjustesCorreo()
+
+  const lista = conexiones({
+    correoListo: correoDisponible(ajustesCorreo),
+    // No hay «remitente» configurable: lo que se guarda es a dónde
+    // contestan los hermanos si le dan a «responder».
+    remitente: ajustesCorreo.responderA || undefined,
+    redesConectadas: cuentas.filter((c) => c.conectada).length,
+    totalRedes: cuentas.length,
+    dominio: (web.dominio ?? '').trim() || undefined,
+    webPublicada: web.publicada,
+    dominioEnElPack: tieneCapacidad(suscripcion, 'premium'),
+    tieneIban: settings.iban.trim().length > 0,
+    bizum: settings.bizumTelefono.trim() || undefined,
+  })
+  const resumen = resumenConexiones(lista)
+
+  return (
+    <section className="cfg-card">
+      <div className="cfg-card__head">
+        <div>
+          <h2>Conexiones</h2>
+          <p className="cfg-card__lead">
+            Todo lo que se enchufa desde fuera, junto. Cada cosa se configura en su pantalla —el
+            enlace de al lado lleva— y aquí se ve de un vistazo qué falta.
+          </p>
+        </div>
+        <span className="pill pill--info">{resumen.conectadas} de {resumen.posibles}</span>
+      </div>
+
+      <ul className="conexiones">
+        {lista.map((c) => (
+          <li className={`conexion conexion--${c.estado}`} key={c.id}>
+            <div className="conexion__texto">
+              <h3>
+                {c.nombre}
+                <span className={`pill ${c.estado === 'conectado' ? 'pill--ok' : c.estado === 'noDisponible' ? 'pill--off' : 'pill--warn'}`}>
+                  {c.estado === 'conectado' ? 'Conectado' : c.estado === 'noDisponible' ? 'Todavía no' : 'Sin conectar'}
+                </span>
+                {c.detalle && <span className="conexion__detalle">{c.detalle}</span>}
+              </h3>
+              <p>{c.estado === 'noDisponible' ? c.porQueNo : c.paraQue}</p>
+              {/* Se dice el camino ADEMÁS de enlazarlo: quien lo lea en el móvil
+                  o se lo apunte para hacerlo luego necesita el nombre. */}
+              {c.estado !== 'noDisponible' && <small>{c.comoLlegar}</small>}
+            </div>
+            {c.estado !== 'noDisponible' && (
+              <Link className="btn btn-ghost btn-sm" to={c.donde}>
+                {c.estado === 'conectado' ? 'Cambiar' : 'Conectar'}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function CorreoCard() {
   const { user } = useAuth()
   const hermandad = useHermandadSettings()
