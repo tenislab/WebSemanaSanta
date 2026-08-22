@@ -117,7 +117,10 @@ export function enlaceParaPublicar(red: RedSocial, texto: string, enlaceDeLaWeb?
   const t = encodeURIComponent(texto.trim())
   if (red === 'X') {
     const url = enlaceDeLaWeb ? `&url=${encodeURIComponent(enlaceDeLaWeb)}` : ''
-    return `https://twitter.com/intent/tweet?text=${t}${url}`
+    // `x.com/intent/post` es la dirección de ahora. La vieja
+    // (`twitter.com/intent/tweet`) todavía redirige, pero una redirección más
+    // en el móvil es medio segundo de pantalla en blanco por nada.
+    return `https://x.com/intent/post?text=${t}${url}`
   }
   if (red === 'Facebook') {
     /*
@@ -196,4 +199,107 @@ export function textoParaRedes(titulo: string, cuerpo: string): string {
 
 export function sePasaDeLargo(red: RedSocial, texto: string): boolean {
   return red === 'X' && texto.length > LIMITE_X
+}
+
+/**
+ * LA ACCIÓN QUE TOCA EN CADA RED, que es UNA sola.
+ *
+ * Llegó dicho así: «hay que ponerlo fácil; si es copiar el texto, que le salte
+ * ya en Twitter». Y tenía razón en lo de fácil: había dos botones —«Copiar
+ * texto» y «Abrir X»— y quien llega no sabe cuál de los dos es el que publica.
+ * Son dos porque por dentro son dos cosas, pero por fuera es UNA: publicar
+ * esto en esta red.
+ *
+ * Así que cada red devuelve su acción, y el botón se llama por lo que va a
+ * pasar de verdad. «Publicar en X» abre X con el mensaje escrito; «Copiar y
+ * abrir Instagram» hace eso, ni más ni menos. Un botón que promete más de lo
+ * que hace se paga la primera vez.
+ */
+export type ModoDePublicar =
+  /** Se abre la red con el texto ya escrito: solo hay que darle a publicar. */
+  | 'componer'
+  /** No deja escribir desde fuera: se copia el texto y se abre la red. */
+  | 'copiarYAbrir'
+  /** Ni una cosa ni la otra —falta conectar la cuenta—: solo se copia. */
+  | 'soloCopiar'
+
+export interface AccionDePublicar {
+  modo: ModoDePublicar
+  /** A dónde lleva el botón. `null` en `soloCopiar`. */
+  url: string | null
+  /** Lo que pone el botón. Dice lo que va a pasar, no «Ir». */
+  boton: string
+  /**
+   * Y la explicación de al lado, que sale de AQUÍ y no de una frase fija por
+   * red. Con la frase fija, Facebook decía «se abre la página con el texto
+   * copiado: solo hay que pegarlo» mientras el botón ponía «Publicar en
+   * Facebook» y abría el cuadro de publicar. Lo que hace el botón y lo que
+   * dice el texto tienen que decidirse en el mismo sitio o se separan al
+   * primer cambio.
+   */
+  explica: string
+}
+
+export function accionDePublicar(
+  red: RedSocial,
+  texto: string,
+  cuenta: CuentaSocial | undefined,
+  enlaceDeLaWeb?: string | null,
+): AccionDePublicar {
+  const componer = enlaceParaPublicar(red, texto, enlaceDeLaWeb)
+  if (componer) {
+    return {
+      modo: 'componer',
+      url: componer,
+      boton: `Publicar en ${red}`,
+      explica: red === 'X'
+        ? 'Se abre X con el mensaje escrito y el enlace de la web. Solo hay que darle a publicar.'
+        : 'Se abre el cuadro de publicar de Facebook con el texto y el enlace de la web puestos.',
+    }
+  }
+
+  const suyo = cuenta ? enlaceDeLaCuenta(cuenta) : null
+  if (suyo) {
+    return {
+      modo: 'copiarYAbrir',
+      url: suyo,
+      boton: `Copiar y abrir ${red}`,
+      /*
+       * Facebook aquí es un caso aparte: no es que no pueda, es que le falta
+       * la web publicada. Decirlo evita que se lea como «Facebook va peor».
+       */
+      explica: red === 'Facebook'
+        ? 'Facebook necesita una dirección que compartir y la web no está publicada todavía. '
+          + 'Se abre la página de la hermandad con el texto copiado.'
+        : COMO_PUBLICAR[red].comoVa,
+    }
+  }
+
+  /*
+   * Sin cuenta conectada no hay a dónde ir. Antes el botón se pintaba igual y
+   * al pulsarlo salía un aviso de «conecta la red primero», que es enterarse
+   * tarde: mejor que el botón diga desde el principio lo único que puede hacer.
+   */
+  return {
+    modo: 'soloCopiar',
+    url: null,
+    boton: 'Copiar el texto',
+    explica: `Conecta ${red} arriba y desde aquí se abrirá su cuenta directamente.`,
+  }
+}
+
+/**
+ * ¿Se puede usar el «compartir» del propio teléfono?
+ *
+ * Es lo que de verdad arregla Instagram y TikTok. Ninguna de las dos deja
+ * abrir una publicación desde un enlace, así que por ordenador no hay más
+ * remedio que copiar y pegar. Pero en el móvil —que es desde donde se publica
+ * en Instagram— el sistema tiene su propio menú de compartir: se pulsa, se
+ * elige Instagram y el texto entra solo. Un toque, sin pegar nada.
+ *
+ * Se comprueba en el momento, no al cargar: el mismo usuario abre la
+ * aplicación en el ordenador y en el móvil.
+ */
+export function sePuedeCompartirConElMovil(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 }

@@ -77,7 +77,13 @@ export function conexiones(e: EstadoDeLasConexiones): Conexion[] {
     {
       id: 'redes',
       nombre: 'Redes sociales',
-      paraQue: 'Los iconos del pie de la web, y los comunicados salen con el texto listo para publicar.',
+      /*
+       * Decía «los iconos del pie de la web, y los comunicados…». Lo primero
+       * era falso: el pie de la web sale de OTRA lista, la del editor de la
+       * web pública. Conectar Instagram aquí no pone su icono allí. Mientras
+       * las dos listas sigan separadas, esto tiene que decir solo lo que hace.
+       */
+      paraQue: 'Los comunicados salen con el texto listo para publicar y el botón que abre cada red.',
       donde: '/app/comunicados',
       comoLlegar: 'Comunicados → Redes sociales de la hermandad',
       estado: e.redesConectadas > 0 ? 'conectado' : 'sinConectar',

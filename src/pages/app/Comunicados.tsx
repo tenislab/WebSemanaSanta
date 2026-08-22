@@ -44,15 +44,17 @@ import { hoyIso } from '../../lib/hoy'
 import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import {
   COLOR_RED,
-  COMO_PUBLICAR,
   INICIAL_RED,
   enlaceDeLaCuenta,
-  enlaceParaPublicar,
+  accionDePublicar,
+  sePuedeCompartirConElMovil,
   normalizarUsuario,
   sePasaDeLargo,
   textoParaRedes,
   LIMITE_X,
 } from '../../lib/redesSociales'
+import { getWebPublica } from '../../lib/webPublica'
+import { baseDeLaWeb } from '../../lib/seoWeb'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -302,6 +304,24 @@ export default function Comunicados() {
   const [copiado, setCopiado] = useState<RedSocial | null>(null)
 
   const cuentasConectadas = useMemo(() => cuentas.filter((c) => c.conectada), [cuentas])
+
+  /*
+   * La dirección pública de la hermandad, para que la publicación lleve enlace.
+   * Solo si la web está PUBLICADA: mandar a la gente a una web sin publicar es
+   * mandarla a una página que no existe.
+   */
+  const enlaceDeLaWeb = useMemo(() => {
+    const web = getWebPublica()
+    if (!web.publicada) return null
+    const origen = typeof window !== 'undefined' ? window.location.origin : ''
+    return baseDeLaWeb(web, origen)
+  }, [])
+
+  /*
+   * Se mira una vez al pintar y no en cada fila: `navigator.share` no cambia a
+   * media sesión, y llamarlo cinco veces por comunicado no aporta nada.
+   */
+  const compartirMovil = useMemo(() => sePuedeCompartirConElMovil(), [])
 
   const filtered = useMemo(() => {
     return comunicados
@@ -843,8 +863,10 @@ export default function Comunicados() {
                       mano de todas formas.
                     */}
                     <p className="table-subtle" style={{ marginTop: 0 }}>
-                      Copia el texto y abre cada red. El comunicado no se publica solo — mira la nota de
-                      arriba, en «Redes sociales de la hermandad».
+                      En X y Facebook se abre la publicación ya escrita y solo hay que confirmarla. En
+                      Instagram, TikTok y YouTube el texto va copiado para pegarlo, porque ninguna de las
+                      tres deja publicar desde fuera. En todo caso el comunicado no se publica solo: el
+                      último clic siempre lo dais vosotros.
                     </p>
                     <textarea
                       className="redes-publicar__texto"
@@ -858,8 +880,14 @@ export default function Comunicados() {
                       {selected.redes.map((r) => {
                         const texto = textoParaRedes(selected.titulo, selected.cuerpo)
                         const cuenta = cuentas.find((c) => c.red === r)
-                        const suyo = cuenta ? enlaceDeLaCuenta(cuenta) : null
-                        const componer = enlaceParaPublicar(r, texto)
+                        /*
+                         * El enlace de la web va en la publicación, y no es un
+                         * adorno: en X ocupa su sitio del tuit y en Facebook es
+                         * lo ÚNICO que permite abrir el cuadro de compartir
+                         * —sin dirección que compartir, no hay cuadro—. Antes
+                         * no se pasaba, así que Facebook nunca podía componer.
+                         */
+                        const accion = accionDePublicar(r, texto, cuenta, enlaceDeLaWeb)
                         const largo = sePasaDeLargo(r, texto)
                         return (
                           <div className="redes-publicar__fila" key={r}>
@@ -868,7 +896,7 @@ export default function Comunicados() {
                             </span>
                             <div className="redes-publicar__que">
                               <b>{r}</b>
-                              <span className="table-subtle">{COMO_PUBLICAR[r].comoVa}</span>
+                              <span className="table-subtle">{accion.explica}</span>
                               {/* X corta a los 280 y no avisa: corta y ya. */}
                               {largo && (
                                 <span className="form-hint form-hint--error">
@@ -876,34 +904,62 @@ export default function Comunicados() {
                                 </span>
                               )}
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => {
-                                void copiarAlPortapapeles(texto).then((ok) =>
-                                  setCopiado(ok ? r : null))
-                              }}
-                            >
-                              {copiado === r ? '✓ Copiado' : 'Copiar texto'}
-                            </button>
+                            {/*
+                              EL COMPARTIR DEL TELÉFONO, cuando lo hay.
+                              Es lo único que mete el texto DENTRO de Instagram
+                              o TikTok sin pegar nada: se pulsa, se elige la
+                              aplicación y ya está. Solo sale donde existe, que
+                              es el móvil — en el ordenador no aparece y no
+                              estorba.
+                            */}
+                            {compartirMovil && accion.modo !== 'componer' && (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => {
+                                  void navigator.share({ text: texto, ...(enlaceDeLaWeb ? { url: enlaceDeLaWeb } : {}) })
+                                    // Cancelar el menú de compartir NO es un
+                                    // error: es alguien que se ha arrepentido.
+                                    .catch(() => {})
+                                }}
+                              >
+                                Compartir
+                              </button>
+                            )}
+                            {/*
+                              Y el botón que dice lo que va a pasar. Antes eran
+                              dos —«Copiar texto» y «Abrir X»— y desde fuera no
+                              se sabía cuál publicaba.
+                            */}
+                            {accion.url ? (
                             <a
-                              className="btn btn-primary btn-sm"
-                              href={componer ?? suyo ?? '#'}
+                              className={`btn btn-sm ${compartirMovil && accion.modo !== 'componer' ? 'btn-ghost' : 'btn-primary'}`}
+                              href={accion.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              onClick={(e) => {
-                                if (!componer && !suyo) {
-                                  e.preventDefault()
-                                  setErrorRed(`Conecta ${r} arriba para saber a qué cuenta abrir.`)
-                                  return
-                                }
-                                // Se copia al abrir: es lo primero que hace
-                                // falta al llegar allí.
-                                void copiarAlPortapapeles(texto)
+                              onClick={() => {
+                                // En las que no se puede componer, el texto va
+                                // copiado: es lo primero que hace falta al
+                                // llegar allí.
+                                if (accion.modo === 'copiarYAbrir') void copiarAlPortapapeles(texto)
                               }}
                             >
-                              Abrir {r}
+                              {accion.boton}
                             </a>
+                            ) : (
+                              /* Sin cuenta conectada no hay a dónde abrir, así
+                                 que el botón hace lo único que puede hacer y lo
+                                 dice. */
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => {
+                                  void copiarAlPortapapeles(texto).then((ok) => setCopiado(ok ? r : null))
+                                }}
+                              >
+                                {copiado === r ? '✓ Copiado' : accion.boton}
+                              </button>
+                            )}
                           </div>
                         )
                       })}

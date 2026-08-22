@@ -73,7 +73,7 @@ export default async function ({ cargar, caso }) {
 
   // --- 5. Abrir la red con el texto puesto ---
   const conTexto = m.enlaceParaPublicar('X', 'Hola hermandad')
-  caso('X abre con el mensaje escrito', true, /twitter\.com\/intent\/tweet\?text=Hola%20hermandad/.test(conTexto))
+  caso('X abre con el mensaje escrito', true, /x\.com\/intent\/post\?text=Hola%20hermandad/.test(conTexto))
   caso('y con la dirección de la web si la hay', true,
     /url=https%3A%2F%2Fhdad\.es/.test(m.enlaceParaPublicar('X', 'Hola', 'https://hdad.es')))
   /*
@@ -102,6 +102,7 @@ export default async function ({ cargar, caso }) {
     m.REDES.filter((r) => m.COLOR_RED[r]).length + m.REDES.filter((r) => m.INICIAL_RED[r]).length)
 
   await laPantallaYLaBase({ caso })
+  await unBotonQueDiceLoQueHace({ cargar, caso })
 }
 
 /** Que la pantalla y el SQL hagan lo que se acaba de probar. */
@@ -133,7 +134,9 @@ async function laPantallaYLaBase({ caso }) {
   // Publicar: el texto y el botón de abrir.
   caso('la ficha deja el texto listo', true, /textoParaRedes\(selected\.titulo, selected\.cuerpo\)/.test(com))
   caso('con botón de copiar', true, /copiarAlPortapapeles\(texto\)/.test(com))
-  caso('y de abrir la red', true, /enlaceParaPublicar\(r, texto\)/.test(com))
+  // La pantalla ya no arma el enlace a mano: pide la acción, que además dice
+  // cómo llamar al botón. Se comprueba a fondo en `unBotonQueDiceLoQueHace`.
+  caso('y de abrir la red', true, /accionDePublicar\(r, texto, cuenta, enlaceDeLaWeb\)/.test(com))
   // Y se dice lo que NO hace, que es lo que evita la llamada de teléfono.
   caso('se dice que no publica solo', true, /no se publica solo/.test(com))
   caso('ya no dice «conexión simulada»', false, /Conexión simulada/.test(com))
@@ -154,3 +157,101 @@ async function laPantallaYLaBase({ caso }) {
   const todo = await readFile('supabase/TODO-EN-UNO.sql', 'utf8')
   caso('el SQL de redes va en el instalador', true, /cuentas_sociales_por_hermandad/.test(todo))
 }
+
+/**
+ * UN SOLO BOTÓN, Y QUE DIGA LO QUE VA A PASAR.
+ *
+ * Llegó dicho así: «hay que ponerlo fácil; si es copiar el texto, tenemos que
+ * hacerlo para que le salte ya en Twitter». Había dos botones por red
+ * —«Copiar texto» y «Abrir X»— y desde fuera no se sabía cuál era el que
+ * publicaba. Por dentro son dos cosas; por fuera es una: publicar esto aquí.
+ */
+async function unBotonQueDiceLoQueHace({ cargar, caso }) {
+  const m = await cargar('src/lib/redesSociales.ts')
+  const conectada = (red) => ({ red, conectada: true, usuario: '@hdad', enlace: null })
+  const WEB = 'https://hermandaddetriana.es'
+
+  // X: se abre con el mensaje escrito. Es la que sí se puede de verdad.
+  const x = m.accionDePublicar('X', 'Cabildo el viernes', conectada('X'), WEB)
+  caso('en X se publica de una vez', 'componer', x.modo)
+  caso('y el botón lo dice', 'Publicar en X', x.boton)
+  caso('el texto va dentro del enlace', true, x.url.includes(encodeURIComponent('Cabildo el viernes')))
+  /*
+   * Y el enlace de la web va en el tuit. No es un adorno: un aviso de cabildo
+   * sin enlace obliga a buscar la web a mano.
+   */
+  caso('y el enlace de la web también', true, x.url.includes(encodeURIComponent(WEB)))
+  // La dirección de ahora, no la vieja: una redirección menos en el móvil.
+  caso('usa x.com y no la dirección vieja', true, /^https:\/\/x\.com\/intent\/post/.test(x.url))
+
+  /*
+   * FACEBOOK solo puede abrir su cuadro de compartir si hay una dirección que
+   * compartir. Sin web publicada NO se puede, y entonces lo honrado es abrir
+   * la página de la hermandad con el texto copiado — no un botón que promete
+   * publicar y lleva a la portada de Facebook.
+   */
+  const fbConWeb = m.accionDePublicar('Facebook', 'Hola', conectada('Facebook'), WEB)
+  caso('Facebook con web publicada compone', 'componer', fbConWeb.modo)
+  const fbSinWeb = m.accionDePublicar('Facebook', 'Hola', conectada('Facebook'), null)
+  caso('y sin web, copia y abre', 'copiarYAbrir', fbSinWeb.modo)
+  caso('sin llevar a la portada de Facebook', false, fbSinWeb.url === 'https://www.facebook.com/')
+
+  /*
+   * INSTAGRAM y TIKTOK no dejan publicar desde un enlace, y eso es decisión
+   * suya. Lo máximo por ordenador es copiar y abrir; el botón lo dice.
+   */
+  for (const red of ['Instagram', 'TikTok', 'YouTube']) {
+    const a = m.accionDePublicar(red, 'Hola', conectada(red), WEB)
+    caso(`${red} copia y abre`, 'copiarYAbrir', a.modo)
+    caso(`y el botón de ${red} no promete publicar`, false, /^Publicar/.test(a.boton))
+  }
+
+  /*
+   * SIN CUENTA CONECTADA no hay a dónde ir. Antes el botón se pintaba igual y
+   * al pulsarlo salía «conecta la red primero»: enterarse al pulsar es tarde.
+   */
+  const sinCuenta = m.accionDePublicar('Instagram', 'Hola', undefined, WEB)
+  caso('sin cuenta conectada solo se copia', 'soloCopiar', sinCuenta.modo)
+  caso('y no hay a dónde abrir', null, sinCuenta.url)
+  caso('y el botón lo dice desde el principio', 'Copiar el texto', sinCuenta.boton)
+
+  /*
+   * EL COMPARTIR DEL MÓVIL. Es lo único que mete el texto DENTRO de Instagram
+   * sin pegar nada. Se mira en el momento porque el mismo usuario abre la
+   * aplicación en el ordenador y en el teléfono.
+   */
+  // En Node 22 `navigator` es de solo lectura: asignarlo revienta el proceso
+  // entero, así que se sustituye con `defineProperty` y se deja como estaba.
+  const antes = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  const fingir = (valor) =>
+    Object.defineProperty(globalThis, 'navigator', { value: valor, configurable: true, writable: true })
+  try {
+    fingir({})
+    caso('en el ordenador no hay compartir del sistema', false, m.sePuedeCompartirConElMovil())
+    fingir({ share: () => {} })
+    caso('en el móvil sí', true, m.sePuedeCompartirConElMovil())
+  } finally {
+    if (antes) Object.defineProperty(globalThis, 'navigator', antes)
+  }
+
+  await laPantallaLoUsa({ caso })
+}
+
+/** Y que la pantalla use esto, no su propia versión. */
+async function laPantallaLoUsa({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const c = (await readFile('src/pages/app/Comunicados.tsx', 'utf8'))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+
+  caso('la pantalla pide la acción al catálogo', true, /accionDePublicar\(r, texto, cuenta, enlaceDeLaWeb\)/.test(c))
+  caso('y el botón se llama como diga la acción', true, /\{accion\.boton\}/.test(c))
+  caso('ofrece el compartir del móvil', true, /navigator\.share\(/.test(c))
+
+  /*
+   * El enlace solo si la web está PUBLICADA. Mandar a la gente a una web sin
+   * publicar es mandarla a una página que no existe — y encima desde un aviso
+   * oficial de la hermandad.
+   */
+  caso('el enlace solo va si la web está publicada', true, /if \(!web\.publicada\) return null/.test(c))
+}
+
