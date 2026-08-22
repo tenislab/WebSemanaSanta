@@ -251,6 +251,15 @@ h1, h2, h3,
 }
 .logo-mark svg { width: 100%; height: 100%; }
 
+/* EL LOGOTIPO DE LA PORTADA.
+   En la maqueta el nombre va en VERSALES muy espaciadas al lado de la marca:
+   es lo que le da el aire de rótulo grabado en vez de nombre de aplicación. */
+.landing-glass .brand-name,
+.portal__head .brand-name {
+  text-transform: uppercase; letter-spacing: 0.2em; font-weight: 500;
+}
+.landing-glass .brand { gap: 0.85rem; }
+
 .brand-texto { display: inline-flex; flex-direction: column; gap: 0.12em; line-height: 1; }
 .brand-name { color: var(--text); font-weight: 600; letter-spacing: 0; line-height: 1; }
 .brand-lema {
@@ -308,6 +317,32 @@ h1, h2, h3,
     linear-gradient(170deg, #2b0e12 0%, #1f0a0d 55%, #100606 100%);
 }
 .landing-bg .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.36; will-change: transform; }
+
+/*
+ * LA CRUZ DEL FONDO.
+ *
+ * En la maqueta hay una cruz de guía detrás del panel de la derecha, muy
+ * tenue: es lo que hace que el granate deje de ser un color plano y parezca
+ * una fotografía. Sin ella el hero es un rectángulo oscuro.
+ *
+ * Va DIBUJADA con degradados y no como imagen: una foto de fondo son cientos
+ * de kilobytes que se descarga todo el que entra —y esta es la primera página
+ * que ve nadie, la que decide si sigue—, además de un archivo más que servir.
+ */
+.landing-bg::after {
+  content: ''; position: absolute; right: 6%; top: 4%; width: 46vw; height: 92%;
+  pointer-events: none; opacity: 0.85;
+  background:
+    /* El palo vertical y el travesaño. */
+    linear-gradient(to right, transparent calc(50% - 1.1vw), rgba(222,196,140,0.16) calc(50% - 1.1vw),
+      rgba(222,196,140,0.16) calc(50% + 1.1vw), transparent calc(50% + 1.1vw)),
+    linear-gradient(to bottom, transparent 25%, rgba(222,196,140,0.14) 25%,
+      rgba(222,196,140,0.14) 30%, transparent 30%);
+  -webkit-mask-image: radial-gradient(60% 55% at 50% 45%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(60% 55% at 50% 45%, #000 0%, transparent 78%);
+  filter: blur(1.5px);
+}
+@media (max-width: 900px) { .landing-bg::after { display: none; } }
 
 /* cabecera glass */
 .site-header {
@@ -407,8 +442,19 @@ h1, h2, h3,
 /* hero */
 .hero { padding: 4.5rem 0 4rem; }
 .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 3.5rem; align-items: center; }
-.hero-copy h1 { font-size: clamp(2.5rem, 4.8vw, 3.6rem); line-height: 1.08; margin-top: 1rem; color: #f3ede2; }
-.hero-copy h1 em { font-style: italic; color: #d6bc8a; }
+/* EL TITULAR, EN VERSALES.
+   Es la frase que tiene que sonar rotunda y la primera que se lee. En caja
+   baja con la segunda línea en cursiva bajaba el tono justo ahí. El
+   interletrado se abre un pelo porque las versales juntas se emplastan. */
+.hero-copy h1 {
+  /* El tamaño está atado a que «Gestiona tu hermandad» quepa EN UNA LÍNEA: el
+     salto de línea lo pone el texto a mano, y si el tipo es mayor el navegador
+     mete otro por su cuenta y el titular sale en tres renglones descuadrados. */
+  font-size: clamp(1.9rem, 3.45vw, 2.95rem); line-height: 1.16; margin-top: 1.1rem;
+  color: #f6efe4; text-transform: uppercase; letter-spacing: 0.01em; font-weight: 400;
+  text-wrap: nowrap;
+}
+.hero-copy h1 em { font-style: normal; color: #e7d3a6; }
 .lede { margin-top: 1.3rem; max-width: 48ch; color: rgba(245, 237, 230, 0.7); font-size: 1.08rem; }
 /* -------------------------------------------------------------------------
    Las tres claves del hero.
@@ -428,7 +474,10 @@ h1, h2, h3,
 }
 .hero-clave__ic { width: 20px; height: 20px; color: #d6bc8a; margin-bottom: 0.15rem; }
 .hero-clave__ic svg { width: 100%; height: 100%; }
-.hero-clave b { font-size: 0.86rem; color: #f3ede2; line-height: 1.25; }
+.hero-clave b {
+  font-size: 0.82rem; color: #f3ede2; line-height: 1.3;
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+}
 .hero-clave span:last-child { font-size: 0.79rem; color: rgba(245,237,230,0.62); line-height: 1.35; }
 @media (max-width: 720px) { .hero-claves { grid-template-columns: minmax(0, 1fr); } }
 
@@ -436,6 +485,24 @@ h1, h2, h3,
 .bullets li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; color: rgba(245, 237, 230, 0.9); }
 .bullets svg { width: 18px; height: 18px; color: #d6bc8a; flex: none; }
 .hero-actions { display: flex; gap: 0.9rem; margin-top: 2.1rem; flex-wrap: wrap; }
+.hero-actions .btn { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.82rem; padding: 0.95rem 1.6rem; }
+
+/* El botón que sigue ahí al bajar. La página es larga y quien se convence en
+   el tercer bloque tenía que subir hasta arriba para encontrar por dónde
+   empezar. */
+.flota-cta {
+  position: fixed; right: 1.6rem; bottom: 1.6rem; z-index: 60;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.85rem 1.5rem; border-radius: 999px; text-decoration: none;
+  background: linear-gradient(180deg, #f0e0bb 0%, #cfae68 100%);
+  color: #3a1a12; font-weight: 600; font-size: 0.92rem;
+  border: 1px solid rgba(255,255,255,0.5);
+  box-shadow: 0 14px 34px -10px rgba(0,0,0,0.7), 0 0 0 6px rgba(214,188,138,0.1);
+}
+.flota-cta svg { width: 17px; height: 17px; }
+.flota-cta:hover { filter: brightness(1.05); }
+.flota-cta:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+@media (max-width: 560px) { .flota-cta { right: 1rem; bottom: 1rem; padding: 0.75rem 1.2rem; } }
 
 /* tarjeta de cristal del hero (vista previa) */
 .hero-visual { display: flex; justify-content: center; }
@@ -459,10 +526,15 @@ h1, h2, h3,
 .panel-demo {
   width: 100%; max-width: 400px; padding: 1.5rem 1.5rem 1.3rem; border-radius: 20px;
   background: linear-gradient(158deg, rgba(255,255,255,0.13), rgba(255,255,255,0.035));
-  border: 1px solid rgba(214,188,138,0.3);
+  border: 1px solid rgba(222,196,140,0.42);
   backdrop-filter: blur(26px) saturate(1.6);
   -webkit-backdrop-filter: blur(26px) saturate(1.6);
-  box-shadow: 0 44px 90px -34px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.28);
+  /* El halo de oro alrededor. Es lo que separa el panel del fondo granate: sin
+     él se funde con la página y deja de leerse como una pantalla. */
+  box-shadow:
+    0 44px 90px -30px rgba(0,0,0,0.8),
+    0 0 60px -14px rgba(214,188,138,0.24),
+    inset 0 1px 0 rgba(255,255,255,0.3);
 }
 .panel-demo__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .panel-demo__puntos { display: flex; gap: 0.28rem; }
@@ -3341,7 +3413,99 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
     var(--bg-sunken);
   transition: background 0.4s ease;
   display: flex; flex-direction: column;
+  position: relative; isolation: isolate; overflow: hidden;
 }
+
+/* =========================================================================
+   EL FONDO DE LA ENTRADA DEL HERMANO
+
+   Cinco capas, y ninguna es una fotografía:
+
+     1. la portada de piedra de una iglesia, desenfocada, a la izquierda
+     2. la filigrana dorada que cruza por detrás de las tarjetas
+     3. las manchas de color —rosa polvo arriba, granate a la derecha, cera
+        abajo— que dan el ambiente
+     4. el damasco, tan tenue que no se ve el motivo pero se nota la tela
+     5. la luz, que entra por arriba a la izquierda y deja los rincones en
+        penumbra
+
+   Solo en la ENTRADA. Dentro del área, el hermano está trabajando y el fondo
+   es el de siempre —además de respetar el modo oscuro, que esta escena no—.
+
+   Todo dibujado con degradados y un SVG metido en el propio CSS. Una foto
+   serían cientos de kilobytes en la PRIMERA pantalla que ve un hermano —y
+   muchos entran desde el móvil con datos—, más un archivo que servir y que se
+   puede perder al desplegar. Esto pesa lo que ocupa este comentario.
+   ========================================================================= */
+
+/*
+ * 1. LA PORTADA DE PIEDRA.
+ *
+ * Dibujada, no fotografiada: arquivoltas, dovelas, clave, imposta, jambas y
+ * basas. Empezó como degradados radiales concéntricos y no valía: un radial
+ * hace una ELIPSE ENTERA, así que salía un óvalo borroso en vez de una puerta
+ * —el arco de arriba estaba bien y abajo se cerraba solo—. Con un dibujo se
+ * controla cada moldura, que es lo que hace que se lea como la portada de una
+ * iglesia y no como una mancha.
+ *
+ * `aspect-ratio` y no una altura en %: la proporción del dibujo es 240×360, y
+ * estirándolo a la altura de la pantalla el arco salía ovalado en los
+ * monitores anchos.
+ */
+.portal--entrada::before {
+  content: ''; position: absolute; left: -4%; top: 4.5rem; width: 30%; aspect-ratio: 2 / 3;
+  z-index: -2; pointer-events: none; opacity: 0.52;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 360' preserveAspectRatio='xMidYMin slice'%3E%3Cdefs%3E%3ClinearGradient id='pd' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23b28a5c'/%3E%3Cstop offset='.38' stop-color='%23e0c49c'/%3E%3Cstop offset='.62' stop-color='%23d8b98d'/%3E%3Cstop offset='1' stop-color='%23a97f52'/%3E%3C/linearGradient%3E%3ClinearGradient id='hueco' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%238a6440'/%3E%3Cstop offset='1' stop-color='%23a8825c'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg stroke='%23c2a077' stroke-width='1.1' opacity='.5'%3E%3Cpath d='M0 62h240M0 96h240M0 130h240M0 164h240M0 232h240M0 276h240M0 320h240'/%3E%3Cpath d='M18 62v34M60 96v34M18 130v34M200 62v34M180 96v34M200 130v34M14 232v44M226 232v44M40 276v44M200 276v44'/%3E%3C/g%3E%3Cg fill='url(%23pd)'%3E%3Crect x='0' y='34' width='240' height='9'/%3E%3Crect x='6' y='43' width='228' height='6' opacity='.75'/%3E%3C/g%3E%3Cpath d='M62 360V190a58 58 0 0 1 116 0v170Z' fill='url(%23hueco)'/%3E%3Cg fill='url(%23pd)'%3E%3Cpath d='M52 190a68 68 0 0 1 136 0h-10a58 58 0 0 0-116 0Z'/%3E%3Cpath d='M40 190a80 80 0 0 1 160 0h-12a68 68 0 0 0-136 0Z' opacity='.92'/%3E%3Cpath d='M26 190a94 94 0 0 1 188 0h-14a80 80 0 0 0-160 0Z' opacity='.84'/%3E%3C/g%3E%3Cg fill='none' stroke='%238f6a41' stroke-width='1.2' opacity='.55'%3E%3Cpath d='M52 190a68 68 0 0 1 136 0M40 190a80 80 0 0 1 160 0M26 190a94 94 0 0 1 188 0'/%3E%3C/g%3E%3Cg stroke='%239c7549' stroke-width='1' opacity='.4'%3E%3Cpath d='M41 176L27 174M51 150L39 143M69 129L60 118M93 115L88 102M120 110L120 96M147 115L152 102M171 129L180 118M189 150L201 143M199 176L213 174'/%3E%3C/g%3E%3Cpath d='M108 98h24l7 -22h-38Z' fill='url(%23pd)' stroke='%238f6a41' stroke-width='1.1'/%3E%3Cg fill='url(%23pd)'%3E%3Crect x='14' y='182' width='226' height='10'/%3E%3Crect x='20' y='192' width='214' height='5' opacity='.7'/%3E%3C/g%3E%3Cpath d='M14 182h226' stroke='%238f6a41' stroke-width='1.1' opacity='.5' fill='none'/%3E%3Cg fill='url(%23pd)'%3E%3Crect x='26' y='197' width='36' height='163'/%3E%3Crect x='178' y='197' width='36' height='163'/%3E%3C/g%3E%3Cg fill='none' stroke='%238f6a41' stroke-width='1' opacity='.4'%3E%3Cpath d='M34 197v163M54 197v163M186 197v163M206 197v163M26 197v163M62 197v163M178 197v163M214 197v163'/%3E%3C/g%3E%3Cg fill='url(%23pd)'%3E%3Crect x='20' y='330' width='48' height='12'/%3E%3Crect x='172' y='330' width='48' height='12'/%3E%3Crect x='16' y='342' width='56' height='18' opacity='.9'/%3E%3Crect x='168' y='342' width='56' height='18' opacity='.9'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-size: 100% 100%;
+  /* Poco desenfoque: con mucho vuelve a ser la mancha de antes. Lo que la
+     aleja es el desenfoque MÁS la opacidad, no el desenfoque solo. */
+  filter: blur(2.5px);
+  /* Se deshace por abajo y por la derecha, para que no quede recortada a media
+     pared ni haga un canto contra la tarjeta de al lado. */
+  -webkit-mask-image: linear-gradient(180deg, #000 58%, transparent 96%), linear-gradient(90deg, #000 86%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 58%, transparent 96%), linear-gradient(90deg, #000 86%, transparent 100%);
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+
+/* 2. La filigrana, cruzando por detrás de las tarjetas. */
+.portal--entrada::after {
+  content: ''; position: absolute; right: -6%; top: 6%; width: 68%; height: 88%;
+  z-index: -2; pointer-events: none; opacity: 0.22;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%23b08b45' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M110 12c0 26-20 38-20 56s20 22 20 42-20 22-20 42 20 30 20 56'/%3E%3Cpath d='M110 12c0 26 20 38 20 56s-20 22-20 42 20 22 20 42-20 30-20 56'/%3E%3Cpath d='M12 110c26 0 38-20 56-20s22 20 42 20 22-20 42-20 30 20 56 20'/%3E%3Cpath d='M34 40c16 4 24 16 24 32M186 40c-16 4-24 16-24 32M34 180c16-4 24-16 24-32M186 180c-16-4-24-16-24-32'/%3E%3Cpath d='M110 66c-12 8-18 18-18 30M110 66c12 8 18 18 18 30M110 154c-12-8-18-18-18-30M110 154c12-8 18-18 18-30'/%3E%3Ccircle cx='110' cy='110' r='7'/%3E%3Ccircle cx='34' cy='110' r='4'/%3E%3Ccircle cx='186' cy='110' r='4'/%3E%3Ccircle cx='110' cy='34' r='4'/%3E%3Ccircle cx='110' cy='186' r='4'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 300px 300px;
+  /* Se apaga hacia los lados: si llega al borde parece un papel pintado. */
+  -webkit-mask-image: radial-gradient(75% 70% at 40% 45%, #000 0%, transparent 82%);
+  mask-image: radial-gradient(75% 70% at 40% 45%, #000 0%, transparent 82%);
+}
+
+/* 3. El ambiente: rosa polvo arriba, granate a la derecha, cera abajo. */
+.portal__ambiente {
+  position: absolute; inset: 0; z-index: -3; pointer-events: none;
+  background:
+    radial-gradient(52% 44% at 96% 96%, rgba(74,17,25,0.5), transparent 62%),
+    radial-gradient(40% 70% at 103% 40%, rgba(106,26,35,0.34), transparent 60%),
+    radial-gradient(70% 46% at 46% -6%, rgba(176,132,146,0.42), transparent 68%),
+    linear-gradient(178deg, rgba(196,158,168,0.34) 0%, rgba(240,228,208,0.5) 46%, rgba(246,238,222,0.72) 100%);
+}
+
+/* 4. El damasco. Textura, no dibujo: al 6% no se ve el motivo, se nota que el
+   fondo no es un degradado liso. Es la diferencia entre una pared y un PDF. */
+.portal__ambiente::before {
+  content: ''; position: absolute; inset: 0; opacity: 0.042;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='120' viewBox='0 0 90 120'%3E%3Cg fill='none' stroke='%237a5626' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M45 0C45 20 0 26 0 60s45 40 45 60'/%3E%3Cpath d='M45 0c0 20 45 26 45 60s-45 40-45 60'/%3E%3Cpath d='M45 33c-7 6-11 15-11 24s4 18 11 24c7-6 11-15 11-24s-4-18-11-24z'/%3E%3Cpath d='M45 33v48M34 57h22M12 60c6-5 10-5 16 0M62 60c6-5 10-5 16 0'/%3E%3Ccircle cx='45' cy='57' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 124px 165px;
+}
+
+/* 5. La luz. Entra por arriba a la izquierda —de ahí viene también la sombra
+   de la portada— y los rincones quedan en penumbra. Sin esto las cuatro capas
+   de antes se leen planas, como un fondo de plantilla. */
+.portal__ambiente::after {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(58% 52% at 10% -10%, rgba(255,250,236,0.6), transparent 72%),
+    radial-gradient(125% 105% at 50% 46%, transparent 52%, rgba(74,17,25,0.16) 100%);
+}
+
 /* Quien lleva cargo tiene dos botones aquí: «Ir al panel» y «Salir». En el
    móvil caben en fila; si no cupieran, la cabecera ya envuelve. */
 .portal__head-acciones { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
@@ -3421,16 +3585,32 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
     linear-gradient(150deg, #d9b45e 0%, #c9a04a 28%, #e6cd8b 52%, #bf9440 78%, #d4ae59 100%);
   box-shadow: 0 18px 48px rgba(74,17,25,0.28), inset 0 1px 0 rgba(255,255,255,0.55);
 }
-/* El ornamento grabado del fondo. Va en un pseudoelemento y muy tenue: es
-   textura, no dibujo — si se lee, compite con el lacre. */
+/*
+ * EL ORNAMENTO GRABADO.
+ *
+ * Es lo que convierte el degradado dorado en una plancha de latón repujado. Va
+ * como dibujo dentro del propio CSS (no como archivo aparte) para que no haya
+ * una petición más ni un archivo que se pueda perder al desplegar.
+ *
+ * Tenue a propósito: es textura, no dibujo. Si se lee, compite con el lacre,
+ * que es lo que tiene que mirarse primero.
+ */
 .portal__aside::before {
-  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.16;
-  background-image:
-    radial-gradient(circle at 12% 18%, rgba(90,60,10,0.9) 0 2px, transparent 2.5px),
-    radial-gradient(circle at 88% 82%, rgba(90,60,10,0.9) 0 2px, transparent 2.5px),
-    repeating-conic-gradient(from 0deg at 50% 50%, rgba(120,80,20,0.5) 0deg 2deg, transparent 2deg 24deg);
-  -webkit-mask-image: radial-gradient(circle at 50% 45%, transparent 0 34%, #000 62%);
-  mask-image: radial-gradient(circle at 50% 45%, transparent 0 34%, #000 62%);
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.3;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%236b4a12' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M60 8c0 14-11 20-11 30s11 12 11 22-11 12-11 22 11 16 11 30'/%3E%3Cpath d='M60 8c0 14 11 20 11 30S60 50 60 60s11 12 11 22-11 16-11 30'/%3E%3Cpath d='M8 60c14 0 20-11 30-11s12 11 22 11 12-11 22-11 16 11 30 11'/%3E%3Cpath d='M18 22c8 2 12 8 12 16M102 22c-8 2-12 8-12 16M18 98c8-2 12-8 12-16M102 98c-8-2-12-8-12-16'/%3E%3Ccircle cx='60' cy='60' r='4'/%3E%3Ccircle cx='18' cy='60' r='2.4'/%3E%3Ccircle cx='102' cy='60' r='2.4'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 128px 128px;
+  /* Se abre un hueco redondo en el centro para que el lacre no caiga sobre el
+     dibujo, y se apaga en los bordes para que no choque con el marco. */
+  -webkit-mask-image: radial-gradient(circle at 50% 30%, transparent 0 22%, #000 42%), linear-gradient(#000, #000);
+  mask-image: radial-gradient(circle at 50% 30%, transparent 0 22%, #000 42%), linear-gradient(#000, #000);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+/* El filete grabado que enmarca la plancha. */
+.portal__aside::after {
+  content: ''; position: absolute; inset: 0.9rem; pointer-events: none; border-radius: 14px;
+  border: 1px solid rgba(107,74,18,0.28);
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,0.16), inset 0 0 0 4px rgba(107,74,18,0.14);
 }
 .portal__aside > * { position: relative; }
 @media (max-width: 860px) { .portal__aside { display: none; } }
@@ -3438,14 +3618,28 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
 /* El lacre: disco de cera granate con el escudo dentro y el borde irregular. */
 .portal__sello { display: flex; justify-content: center; margin-bottom: 0.6rem; }
 .portal__sello-disco {
-  width: 108px; height: 108px; flex: none; display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 34% 28%, #8d2733, #6a1a23 58%, #4a1119);
-  box-shadow: 0 8px 20px rgba(74,17,25,0.45), inset 0 2px 6px rgba(255,255,255,0.22), inset 0 -4px 10px rgba(0,0,0,0.4);
+  position: relative;
+  width: 132px; height: 132px; flex: none; display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 36% 26%, rgba(255,255,255,0.3), transparent 42%),
+    radial-gradient(circle at 50% 55%, #8d2733 0%, #6a1a23 55%, #48101a 100%);
+  box-shadow:
+    0 12px 26px rgba(74,17,25,0.5),
+    inset 0 3px 8px rgba(255,255,255,0.26),
+    inset 0 -6px 14px rgba(0,0,0,0.45);
   /* El borde de un lacre no es un círculo: es la cera que se ha ido por donde
-     ha querido. Un círculo perfecto se lee como una pegatina. */
-  border-radius: 46% 54% 52% 48% / 50% 46% 54% 50%;
+     ha querido. Un círculo perfecto se lee como una pegatina. Las ocho
+     esquinas desiguales son lo que le da el aire de sello estampado. */
+  border-radius: 47% 53% 44% 56% / 52% 45% 55% 48%;
 }
-.portal__sello-disco img { width: 62%; height: 62%; object-fit: contain; }
+/* El anillo de oro grabado dentro de la cera. */
+.portal__sello-disco::before {
+  content: ''; position: absolute; inset: 11px; border-radius: inherit;
+  border: 1.5px solid rgba(226,196,132,0.55);
+  box-shadow: inset 0 0 12px rgba(0,0,0,0.35);
+}
+.portal__sello-disco img { width: 58%; height: 58%; object-fit: contain; position: relative; }
+.portal__sello-disco .logo-mark { position: relative; }
 .portal__aside-title {
   font-size: 1.8rem; line-height: 1.15; margin: 0; color: #3d240d; text-align: center;
   font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-weight: 600;
@@ -3541,6 +3735,97 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
 .portal__picker-item small { display: block; font-size: 0.78rem; color: var(--text-muted); margin-top: 0.1rem; }
 .portal__picker-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .portal__picker-empty { font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem 0.1rem; }
+
+/* -------------------------------------------------------------------------
+   LA ENTRADA ES UNA ESCENA FIJA, y por eso se sale del tema.
+
+   Papel color hueso, oro y granate: es la portada de la casa, y una portada no
+   cambia de color según cómo tenga cada uno puesto el ordenador. Se hace
+   redefiniendo AQUÍ las variables del tema en vez de rule por rule, que es lo
+   que evita que mañana alguien añada un botón y le salga gris sobre crema.
+
+   El área del hermano de dentro sí respeta el modo oscuro: allí se trabaja.
+   ------------------------------------------------------------------------- */
+.portal--entrada {
+  --text: #33241a;
+  --text-muted: #7c6450;
+  --bg-raised: #fffdf8;
+  --bg-sunken: #f4ebda;
+  --line: rgba(122,86,38,0.20);
+  --line-strong: rgba(122,86,38,0.34);
+  /* Y el cristal de la cabecera. Se quedó fuera en la primera pasada y en modo
+     oscuro salía la cabecera negra con «Gobergo» escrito en marrón encima:
+     ilegible. Si se fija la letra, hay que fijar también lo que hay detrás. */
+  --glass-surface: rgba(255,252,246,0.78);
+  --glass-surface-strong: rgba(255,252,246,0.86);
+  --glass-border: rgba(122,86,38,0.18);
+  --ring: rgba(122,86,38,0.28);
+  color: var(--text);
+}
+
+/* La tarjeta de la derecha: papel, no pantalla. El blanco puro al lado del
+   latón de la izquierda se veía como un recorte pegado encima de la escena. */
+.portal--entrada .portal__card {
+  position: relative; overflow: hidden;
+  background: linear-gradient(178deg, #fbf6ea 0%, #f6ecd9 100%);
+  border-color: rgba(122,86,38,0.22);
+  box-shadow: 0 18px 48px rgba(74,17,25,0.18), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+/* La cruz y el laurel grabados detrás del contenido. Al 5%: es la marca de
+   agua del papel, no un dibujo — si se lee, compite con lo que hay que leer. */
+.portal--entrada .portal__card::before {
+  content: ''; position: absolute; right: 4%; top: 26%; width: 62%; aspect-ratio: 5 / 6;
+  opacity: 0.06; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 240'%3E%3Cg fill='none' stroke='%236a1a23' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M100 16v186M56 70h88' stroke-width='7'/%3E%3Cpath d='M58 216Q16 176 40 100' stroke-width='2.6'/%3E%3Cpath d='M142 216Q184 176 160 100' stroke-width='2.6'/%3E%3Cpath d='M51.7 209.4Q41.0 213.9 31.9 206.5Q42.7 202.0 51.7 209.4M51.7 209.4Q45.8 201.3 50.2 192.2Q56.1 200.3 51.7 209.4M44.8 200.1Q34.1 202.9 26.6 194.8Q37.3 192.0 44.8 200.1M44.8 200.1Q40.3 191.7 45.6 183.8Q50.1 192.2 44.8 200.1M39.3 190.0Q29.0 191.2 23.0 182.7Q33.4 181.5 39.3 190.0M39.3 190.0Q36.2 181.6 42.2 174.9Q45.3 183.3 39.3 190.0M35.2 179.1Q25.5 178.9 21.1 170.2Q30.8 170.4 35.2 179.1M35.2 179.1Q33.4 170.9 39.9 165.5Q41.7 173.7 35.2 179.1M32.6 167.5Q23.6 166.1 20.6 157.5Q29.6 158.9 32.6 167.5M32.6 167.5Q31.9 159.7 38.5 155.4Q39.2 163.3 32.6 167.5M31.4 155.0Q23.2 152.8 21.4 144.5Q29.5 146.8 31.4 155.0M31.4 155.0Q31.6 147.8 38.2 144.6Q37.9 151.9 31.4 155.0M31.6 141.8Q24.3 138.9 23.4 131.2Q30.7 134.1 31.6 141.8M31.6 141.8Q32.5 135.2 38.9 132.9Q37.9 139.6 31.6 141.8M33.2 127.9Q26.8 124.6 26.7 117.4Q33.1 120.7 33.2 127.9M33.2 127.9Q34.7 121.9 40.7 120.4Q39.2 126.4 33.2 127.9M36.3 113.1Q30.7 109.7 31.2 103.1Q36.7 106.6 36.3 113.1M36.3 113.1Q38.1 107.8 43.6 106.8Q41.8 112.2 36.3 113.1' stroke-width='1.6'/%3E%3Cpath d='M148.3 209.4Q157.3 202.0 168.1 206.5Q159.0 213.9 148.3 209.4M148.3 209.4Q143.9 200.3 149.8 192.2Q154.2 201.3 148.3 209.4M155.2 200.1Q162.7 192.0 173.4 194.8Q165.9 202.9 155.2 200.1M155.2 200.1Q149.9 192.2 154.4 183.8Q159.7 191.7 155.2 200.1M160.7 190.0Q166.6 181.5 177.0 182.7Q171.0 191.2 160.7 190.0M160.7 190.0Q154.7 183.3 157.8 174.9Q163.8 181.6 160.7 190.0M164.8 179.1Q169.2 170.4 178.9 170.2Q174.5 178.9 164.8 179.1M164.8 179.1Q158.3 173.7 160.1 165.5Q166.6 170.9 164.8 179.1M167.4 167.5Q170.4 158.9 179.4 157.5Q176.4 166.1 167.4 167.5M167.4 167.5Q160.8 163.3 161.5 155.4Q168.1 159.7 167.4 167.5M168.6 155.0Q170.5 146.8 178.6 144.5Q176.8 152.8 168.6 155.0M168.6 155.0Q162.1 151.9 161.8 144.6Q168.4 147.8 168.6 155.0M168.4 141.8Q169.3 134.1 176.6 131.2Q175.7 138.9 168.4 141.8M168.4 141.8Q162.1 139.6 161.1 132.9Q167.5 135.2 168.4 141.8M166.8 127.9Q166.9 120.7 173.3 117.4Q173.2 124.6 166.8 127.9M166.8 127.9Q160.8 126.4 159.3 120.4Q165.3 121.9 166.8 127.9M163.7 113.1Q163.3 106.6 168.8 103.1Q169.3 109.7 163.7 113.1M163.7 113.1Q158.2 112.2 156.4 106.8Q161.9 107.8 163.7 113.1' stroke-width='1.6'/%3E%3C/g%3E%3C/svg%3E") no-repeat center / contain;
+}
+/* Y el contenido por encima: un pseudoelemento posicionado se pinta ENCIMA del
+   texto normal, y la marca de agua tapaba media lista. */
+.portal--entrada .portal__card > * { position: relative; z-index: 1; }
+
+/* La lista de hermandades, en filas peladas.
+
+   Cada hermandad venía en su propia cajita con borde y fondo. Cuatro cajitas
+   dentro de otra caja, dentro de la escena: tres marcos anidados para enseñar
+   dos líneas de texto. Una raya y un espacio hacen el mismo trabajo. */
+.portal--entrada .portal__picker { gap: 0; margin-top: 0.4rem; }
+.portal--entrada .portal__picker-item {
+  background: none; border: 0; border-bottom: 1px solid var(--line);
+  border-radius: 0; padding: 0.78rem 0.4rem;
+}
+.portal--entrada .portal__picker li:last-child .portal__picker-item { border-bottom: 0; }
+.portal--entrada .portal__picker-item:hover,
+.portal--entrada .portal__picker-item:focus-visible {
+  background: rgba(122,86,38,0.08); border-bottom-color: var(--line);
+}
+
+/* -------------------------------------------------------------------------
+   LO QUE ESTABA PINTADO PARA EL CRISTAL OSCURO.
+
+   El aviso de demostración y los botones de cuenta de prueba nacieron sobre el
+   panel de acceso, que es cristal oscuro: letra color crema (#eedfc0) y bordes
+   blancos translúcidos. Puestos sobre el papel hueso de esta tarjeta,
+   desaparecen — crema sobre crema.
+
+   Ya había un caso igual resuelto así para el panel (`.dash .banner--info`):
+   volver a los tokens del tema en vez de al color fijo.
+   ------------------------------------------------------------------------- */
+.portal--entrada .banner--info {
+  background: rgba(122,86,38,0.09); color: var(--text); border-color: var(--line-strong);
+}
+.portal--entrada .banner--info strong { color: #6a1a23; }
+.portal--entrada .demo-accounts__label { color: var(--text-muted); }
+.portal--entrada .demo-account {
+  border-color: var(--line-strong); background: rgba(255,255,255,0.5); color: var(--text);
+}
+.portal--entrada .demo-account:hover:not(:disabled) {
+  border-color: rgba(122,86,38,0.5); background: #fff;
+}
+/* El nombre del hermano de prueba iba en #f3ede2 —blanco roto— y sobre el papel
+   desaparecía entero: se veía el DNI debajo y encima nada, como si la fila
+   estuviera a medio cargar. */
+.portal--entrada .demo-account b { color: var(--text); }
+.portal--entrada .demo-account small { color: var(--text-muted); }
+.portal--entrada .demo-account__cred { color: #8a6a3f !important; }
 
 .portal__back {
   background: none; border: none; color: var(--text-muted); font: inherit; font-size: 0.85rem;

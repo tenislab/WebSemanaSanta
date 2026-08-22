@@ -1154,7 +1154,14 @@ export default function HermanoPortal() {
   // ===================== Pantalla de identificación =====================
   if (!hermanoActivo) {
     return (
-      <div className="portal" style={estiloTema(hermandadElegida?.color ?? '#6A1A23')}>
+      <div className="portal portal--entrada" style={estiloTema(hermandadElegida?.color ?? '#6A1A23')}>
+        {/* Las manchas de color, el damasco y la luz del fondo. Van en su
+            propia capa para poder quedarse DEBAJO del arco de piedra y de la
+            filigrana, que se pintan con los pseudoelementos de `.portal`.
+
+            Y `portal--entrada` porque toda esa escena es SOLO la entrada: una
+            vez dentro, el hermano está trabajando y el fondo es el normal. */}
+        <div className="portal__ambiente" aria-hidden="true" />
         <PortalHead
           hermandad={hermandadElegida?.nombre ?? 'Gobergo'}
           logo={hermandadElegida?.logoDataUrl ?? null}

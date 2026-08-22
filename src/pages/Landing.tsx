@@ -144,8 +144,12 @@ export default function Landing() {
         <div className="wrap hero-grid">
           <div className="hero-copy">
             <p className="eyebrow">El software para hermandades y cofradías</p>
+            {/* En VERSALES y en dos líneas partidas a mano. La cursiva de antes
+                bajaba el tono justo en la frase que tiene que sonar rotunda, y
+                dejar que el navegador parta por donde quiera deja «desde un»
+                colgando al final de la primera línea. */}
             <h1>
-              Gestiona tu hermandad <em>desde un solo lugar</em>
+              Gestiona tu hermandad<br />desde un solo lugar
             </h1>
             <p className="lede">
               Hermanos, cuotas, papeletas de sitio, cortejo, tesorería y comunicaciones. Todo lo
@@ -162,6 +166,7 @@ export default function Landing() {
                   <span className="hero-clave__ic">{c.icon}</span>
                   <b>{c.titulo}</b>
                   <span>{c.sub}</span>
+
                 </li>
               ))}
             </ul>
@@ -234,6 +239,19 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/*
+        EL BOTÓN QUE SIGUE AHÍ AL BAJAR.
+        La página es larga —funciones, para quién es, precios— y quien se
+        convence en el tercer bloque tenía que subir hasta arriba del todo para
+        encontrar por dónde empezar.
+      */}
+      <a className="flota-cta" href="/registro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Empezar ahora
+      </a>
 
       <div className="trust">
         <div className="wrap">
