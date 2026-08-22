@@ -3827,6 +3827,31 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
 .portal--entrada .demo-account small { color: var(--text-muted); }
 .portal--entrada .demo-account__cred { color: #8a6a3f !important; }
 
+/* =========================================================================
+   Notificaciones: lo que espera a que la junta haga algo
+   ========================================================================= */
+/* El historial de asistencia en la cabecera de la ficha: dato de apoyo, no
+   titular. Va del color apagado para que no compita con la antigüedad. */
+.ficha-hero__asistencia { color: var(--text-muted); font-style: italic; }
+
+.avisos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.aviso {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.85rem 0.2rem; border-bottom: 1px solid var(--line);
+}
+.aviso:last-child { border-bottom: 0; }
+/* Sin caja por aviso: son filas de una lista, y meterlas en tarjetas dentro de
+   otra tarjeta añade dos marcos para enseñar dos líneas de texto. */
+.aviso__que { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.aviso__que b { font-size: 0.95rem; }
+.aviso__acciones { display: flex; gap: 0.4rem; flex-shrink: 0; }
+/* En el móvil, los botones debajo y a lo ancho: en una fila de 390 px, el
+   nombre del hermano se partía en cuatro líneas para dejarles sitio. */
+@media (max-width: 640px) {
+  .aviso { flex-direction: column; align-items: stretch; }
+  .aviso__acciones { justify-content: flex-end; }
+}
+
 .portal__back {
   background: none; border: none; color: var(--text-muted); font: inherit; font-size: 0.85rem;
   cursor: pointer; padding: 0; margin-bottom: 0.9rem; text-decoration: underline;

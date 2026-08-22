@@ -1,3 +1,4 @@
+import type { ErrorTraducido } from '../lib/errorDeBaseDeDatos'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { NavLink, Outlet, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import BarraDeshacer from './BarraDeshacer'
@@ -101,6 +102,7 @@ const NAV: NavGroup[] = [
   {
     items: [
       { to: '/app', label: 'Inicio', icon: ic.inicio },
+      { to: '/app/notificaciones', label: 'Notificaciones', icon: ic.comunicados },
       { to: '/app/hermanos', label: 'Hermanos', icon: ic.hermanos, modulo: 'hermanos' },
       { to: '/app/cortejo', label: 'Cortejo', icon: ic.cortejo, modulo: 'cortejo' },
       { to: '/app/cuotas', label: 'Cuotas', icon: ic.cuotas, modulo: 'cuotas' },
@@ -153,6 +155,9 @@ export default function AppShell() {
   const { user, signOut } = useAuth()
   // Aviso cuando un guardado no llega a la base de datos (ver supabaseSync).
   const [errorSync, setErrorSync] = useState<string | null>(null)
+  /* El mismo fallo, dicho en cristiano y con el siguiente paso. Ver
+     `src/lib/errorDeBaseDeDatos.ts`: el texto de Postgres es exacto e inútil. */
+  const [explicacion, setExplicacion] = useState<ErrorTraducido | null>(null)
   /*
    * EL MOTIVO, no solo la tabla.
    *
@@ -176,8 +181,11 @@ export default function AppShell() {
   }, [])
   useEffect(() => {
     function alFallar(e: Event) {
-      const detalle = (e as CustomEvent<{ tabla: string; fallos?: string[] }>).detail
+      const detalle = (e as CustomEvent<{ tabla: string; fallos?: string[]; traducidos?: ErrorTraducido[] }>).detail
       setErrorSync(detalle?.tabla ?? '')
+      // El primero traducido: si hay varios fallos suelen ser el mismo motivo
+      // repetido por fila, y tres párrafos iguales no informan más que uno.
+      setExplicacion(detalle?.traducidos?.[0] ?? null)
       const texto = (detalle?.fallos ?? []).join('\n')
       setDetalleSync(texto)
       // Se guarda aparte y NO se borra al dar a «Entendido»: cuando alguien se
@@ -408,8 +416,10 @@ export default function AppShell() {
           <div className="banner-inline banner-inline--warn app-sync-error" role="alert">
             <span>
               <b>No se ha podido guardar en la base de datos</b>
-              {errorSync ? ` (${errorSync})` : ''}. Lo que ves en pantalla puede no estar guardado:
-              revisa tu conexión y vuelve a intentarlo.
+              {errorSync ? ` (${errorSync})` : ''}.{' '}
+              {explicacion
+                ? <>{explicacion.mensaje}<br />{explicacion.queHacer}</>
+                : 'Lo que ves en pantalla puede no estar guardado: revisa tu conexión y vuelve a intentarlo.'}
             </span>
             <button className="btn btn-ghost btn-sm" onClick={() => setErrorSync(null)}>
               Entendido

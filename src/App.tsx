@@ -57,6 +57,7 @@ const VerificarPapeleta = lazy(() => import('./pages/VerificarPapeleta'))
 const cargarAppShell = () => import('./components/AppShell')
 const cargarDashboard = () => import('./pages/app/DashboardHome')
 const cargarHermanos = () => import('./pages/app/Hermanos')
+const cargarNotificaciones = () => import('./pages/app/Notificaciones')
 const cargarCuotas = () => import('./pages/app/Cuotas')
 const cargarPapeletas = () => import('./pages/app/Papeletas')
 const cargarCortejo = () => import('./pages/app/Cortejo')
@@ -74,6 +75,7 @@ const cargarSeguridad = () => import('./pages/app/Seguridad')
 const AppShell = lazy(cargarAppShell)
 const DashboardHome = lazy(cargarDashboard)
 const Hermanos = lazy(cargarHermanos)
+const Notificaciones = lazy(cargarNotificaciones)
 const Cuotas = lazy(cargarCuotas)
 const Papeletas = lazy(cargarPapeletas)
 const Cortejo = lazy(cargarCortejo)
@@ -241,6 +243,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardHome />} />
+        <Route path="notificaciones" element={<Notificaciones />} />
         <Route path="hermanos" element={<Hermanos />} />
         <Route path="cortejo" element={<Cortejo />} />
         <Route path="cuotas" element={<Cuotas />} />

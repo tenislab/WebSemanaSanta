@@ -12,6 +12,7 @@ import { useTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { esMiembro, aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
+import { getAsistencias, historialDeAsistencia, asistenciaEnUnaFrase } from '../../lib/asistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { crearAccesoHermano } from '../../lib/accesos'
@@ -139,6 +140,13 @@ export default function Hermanos() {
    */
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = useMemo(() => hermanos.find((h) => h.id === selectedId) ?? null, [hermanos, selectedId])
+  /* Su historial de asistencia, dicho en una frase. Se lee del mapa completo
+     —va por `año:hermano`, así que lo de cada edición sigue ahí— y se recalcula
+     solo al cambiar de ficha. */
+  const fraseAsistencia = useMemo(
+    () => (selected ? asistenciaEnUnaFrase(historialDeAsistencia(getAsistencias(), selected.id)) : ''),
+    [selected],
+  )
   const [etiquetas, setEtiquetas] = useEtiquetas()
   const [camposPropios] = useCamposPropios()
   // Con el nombre de la cuenta de reserva, igual que Cuotas, Tesorería,
@@ -1325,6 +1333,21 @@ export default function Hermanos() {
                     ? `En el cortejo: ${tramoPorHermano.get(selected.id)}`
                     : 'Sin papeleta este año'}
                 </small>
+                {/*
+                  EL HISTORIAL DE ASISTENCIA, en una línea.
+
+                  Se marca la madrugada del Viernes Santo, tramo por tramo, y
+                  ahí moría: al año siguiente, repartiendo el cortejo, nadie
+                  sabía quién faltó ni por qué. Y ese es justo el dato que hace
+                  falta en ese momento — quien lleva dos años sin salir no
+                  debería llevarse un sitio por delante de quien no ha faltado
+                  nunca, y eso hoy se decide de memoria.
+
+                  Si no consta nada NO se pinta: poner «0 salidas» junto a
+                  quien lleva veinte años saliendo —y entró antes de que esto
+                  existiera— parece un dato y es una laguna.
+                */}
+                {fraseAsistencia && <small className="ficha-hero__asistencia">{fraseAsistencia}</small>}
                 <div className="ficha-hero__pills">
                   <span className={`pill ${estadoClass(selected.estado)}`}>{selected.estado}</span>
                   <span className={`pill ${cuotaClass(selected)}`}>

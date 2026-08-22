@@ -249,6 +249,36 @@ export function explicarFalloDeEnvio(error: unknown): string {
       'en los ajustes de la función.'
     )
   }
+  /*
+   * «EDGE FUNCTION RETURNED A NON-2XX STATUS CODE».
+   *
+   * Este caía al final y se enseñaba tal cual, que es la peor de las tres:
+   * suena a avería del servidor y no lo es. Significa justo lo contrario de lo
+   * de arriba — la función SÍ está desplegada y SÍ se la ha alcanzado—, pero
+   * ha respondido con error. Y casi siempre es lo mismo, por este orden:
+   *
+   *   1. Falta el secreto RESEND_API_KEY, o está mal copiado.
+   *   2. El dominio del remitente no está verificado en Resend, que es el
+   *      motivo número uno: Resend NO deja enviar desde un dominio que no le
+   *      hayas demostrado que es tuyo.
+   *   3. Falta CORREO_REMITENTE.
+   *
+   * Y el motivo exacto lo dice la propia función en el cuerpo de su respuesta,
+   * que es lo que lee `leerDetalle()`. Si eso llega, manda eso y no esto.
+   */
+  /* Solo la frase literal, NO cualquier estado >= 400: si Supabase da un
+     mensaje concreto, ese vale más que esta explicación general, y taparlo
+     sería justo lo que se quiere evitar. */
+  if (/non-2xx status code/i.test(crudo)) {
+    return (
+      'La función de envío ha respondido con un error, así que está desplegada y se llega a ' +
+      'ella: lo que falla es lo de dentro. Casi siempre es una de tres, por este orden: falta ' +
+      'el secreto RESEND_API_KEY o está mal copiado; el dominio del remitente no está ' +
+      'verificado en Resend (Resend no deja enviar desde un dominio sin verificar); o falta ' +
+      'CORREO_REMITENTE. El motivo exacto sale en Supabase → Edge Functions → enviar-correo → ' +
+      'Invocations, en la última llamada.'
+    )
+  }
   return crudo || 'No se pudo contactar con el servidor de correo.'
 }
 

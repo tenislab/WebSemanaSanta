@@ -23,6 +23,7 @@
  * Un canal de fallos que falla no sirve de nada.
  */
 import { isSupabaseConfigured, supabase } from './supabase'
+import { explicarFalloDeEnvio } from './correo'
 
 /** A dónde van los fallos de Gobergo. */
 export const CORREO_SOPORTE = 'jaimerivasgranada@gmail.com'
@@ -135,7 +136,15 @@ export async function mandarASoporte(
         responderA: r.correoDeQuienLoManda?.trim() || undefined,
       },
     })
-    if (error) return { ok: false, reserva, error: error.message }
+    /*
+     * Traducido, no en crudo. Aquí salía «Edge Function returned a non-2xx
+     * status code», que suena a avería del servidor y significa lo contrario:
+     * la función está y responde, pero le falta un secreto o el dominio del
+     * remitente sin verificar. Y esto lo lee alguien que ya está intentando
+     * contar un fallo — darle otro mensaje indescifrable es cerrarle la
+     * última puerta.
+     */
+    if (error) return { ok: false, reserva, error: explicarFalloDeEnvio(error) }
     if (data?.error) return { ok: false, reserva, error: String(data.error) }
     return { ok: true }
   } catch (e) {

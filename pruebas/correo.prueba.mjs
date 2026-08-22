@@ -184,6 +184,35 @@ async function correoAuditoria({ cargar, caso }) {
   // Y lo que no se reconoce se dice tal cual, sin inventar.
   caso('lo desconocido se cuenta tal cual', 'Algo raro de Resend', fallo('Algo raro de Resend', 500))
 
+  /*
+   * «EDGE FUNCTION RETURNED A NON-2XX STATUS CODE».
+   *
+   * Este se enseñaba en crudo y es la peor de las tres, porque suena a avería
+   * del servidor y significa lo CONTRARIO que las de arriba: la función está
+   * desplegada y se llega a ella, pero ha respondido con error. Mandar a
+   * desplegarla o a tocar el «Verify JWT» con este mensaje es media hora
+   * perdida en lo que ya funciona.
+   */
+  const dentro = fallo('Edge Function returned a non-2xx status code')
+  caso('el non-2xx no manda a desplegar nada', false, /no está desplegada/.test(dentro))
+  caso('ni a tocar el interruptor', false, /Verify JWT/.test(dentro))
+  caso('dice que el problema está dentro', true, /lo de dentro|ha respondido con un error/.test(dentro))
+  // Las tres causas, por orden de frecuencia.
+  caso('apunta a la clave de Resend', true, /RESEND_API_KEY/.test(dentro))
+  caso('y al dominio sin verificar, que es la número uno', true, /sin verificar/.test(dentro))
+  caso('y al remitente', true, /CORREO_REMITENTE/.test(dentro))
+  caso('y dice dónde ver el motivo exacto', true, /Invocations/.test(dentro))
+
+  /*
+   * Y el reporte de fallos usa el mismo traductor. Salía en crudo, y eso lo
+   * lee alguien que YA está intentando contar un problema: darle otro mensaje
+   * indescifrable es cerrarle la última puerta que le quedaba.
+   */
+  const { readFile: leer } = await import('node:fs/promises')
+  const rep = await leer('src/lib/reporteFallo.ts', 'utf8')
+  caso('contar un fallo traduce el error igual', true, /explicarFalloDeEnvio\(error\)/.test(rep))
+  caso('y ya no lo suelta en crudo', false, /error: error\.message \}/.test(rep))
+
   // ---------------------------------------------------------------------
   // Las cabeceras CORS de la función de envío
   // ---------------------------------------------------------------------

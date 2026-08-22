@@ -1,3 +1,4 @@
+import { traducirErrorDeEscritura, type ErrorTraducido } from './errorDeBaseDeDatos'
 import { useEffect, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
@@ -219,18 +220,31 @@ async function sincronizar<T extends { id: string }>(
   // Sin mirarlo, un guardado fallido pasaba totalmente inadvertido: la pantalla
   // decía que se había guardado y al recargar el cambio no estaba.
   const fallos: string[] = []
+  /*
+   * Y traducidos. `crear: new row violates row-level security policy for table
+   * "hermanos"` es exacto y no sirve de nada: dice que la base ha dicho que no,
+   * no qué le falta a la cuenta ni a dónde ir. Detrás de ese mensaje había tres
+   * cosas que parecían tres fallos —el censo importado que «desaparecía», las
+   * altas que no se podían aceptar y el hermano que no se dejaba crear— y era
+   * el mismo rechazo las tres veces.
+   */
+  const traducidos: ErrorTraducido[] = []
+  function anotar(operacion: string, prefijo: string, error: { message: string; code?: string }) {
+    fallos.push(`${prefijo}: ${error.message}`)
+    traducidos.push(traducirErrorDeEscritura(tabla, operacion, error.message, error.code))
+  }
   try {
     if (eliminados.length > 0) {
       const { error } = await supabase.from(tabla).delete().in('id', eliminados.map((e) => e.id))
-      if (error) fallos.push(`borrar: ${error.message}`)
+      if (error) anotar('borrar', 'borrar', error)
     }
     if (nuevos.length > 0) {
       const { error } = await supabase.from(tabla).insert(nuevos.map(toRow))
-      if (error) fallos.push(`crear: ${error.message}`)
+      if (error) anotar('crear', 'crear', error)
     }
     for (const item of posiblesCambios) {
       const { error } = await supabase.from(tabla).update(toRow(item)).eq('id', item.id)
-      if (error) fallos.push(`guardar ${item.id}: ${error.message}`)
+      if (error) anotar('guardar', `guardar ${item.id}`, error)
     }
   } catch (err) {
     fallos.push(String(err))
@@ -239,6 +253,6 @@ async function sincronizar<T extends { id: string }>(
     console.error(`No se pudo sincronizar "${tabla}" con Supabase:`, fallos.join(' · '))
     // Aviso visible: quien está usando la app debe enterarse de que lo que ve
     // en pantalla no ha llegado a la base de datos.
-    window.dispatchEvent(new CustomEvent('cabildo-sync-error', { detail: { tabla, fallos } }))
+    window.dispatchEvent(new CustomEvent('cabildo-sync-error', { detail: { tabla, fallos, traducidos } }))
   }
 }

@@ -44,6 +44,13 @@ export default async function ({ caso }) {
     // Este solo MIRA: dice qué le falta a una base de datos de verdad y no
     // cambia nada. Meterlo en el de instalar no tendría sentido.
     'DIAGNOSTICO.sql',
+    /*
+     * Y este tampoco: responde «por qué MI cuenta no puede hacer esto» para un
+     * correo concreto. Es una consulta con un parámetro que hay que rellenar a
+     * mano, así que en el instalador no pintaría nada — y además no cambia
+     * nada, solo mira.
+     */
+    'POR-QUE-NO-PUEDO.sql',
     // Un trozo de `seguridad-claves-y-registro.sql`, suelto, para quien
     // necesita salir del paso sin ejecutar el fichero entero. Meterlo en el de
     // instalar definiría la misma función dos veces.
