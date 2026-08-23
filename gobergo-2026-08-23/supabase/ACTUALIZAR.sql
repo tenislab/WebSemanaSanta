@@ -1,0 +1,1631 @@
+-- =============================================================================
+--
+--   GOBERGO — ACTUALIZAR UNA BASE QUE YA FUNCIONA
+--
+-- =============================================================================
+--
+--   GENERADO. No lo edites a mano: se sobrescribe.
+--   Se toca el fichero suelto y se vuelve a generar con
+--       node scripts/generar-actualizar.mjs
+--
+-- -----------------------------------------------------------------------------
+-- PARA QUIÉN ES ESTE ARCHIVO
+-- -----------------------------------------------------------------------------
+--
+-- Para una base que YA está montada y a la que le faltan las últimas piezas.
+--
+-- Si estás empezando de cero, este no: usa `TODO-EN-UNO.sql`, que lo crea
+-- todo. Ejecutar los dos tampoco rompe nada, solo sobra.
+--
+-- -----------------------------------------------------------------------------
+-- CÓMO SE USA
+-- -----------------------------------------------------------------------------
+--
+--   1. Abre tu proyecto en supabase.com
+--   2. Menú izquierdo → SQL Editor → New query
+--   3. Copia ESTE ARCHIVO ENTERO, pégalo y dale a RUN
+--
+-- Al terminar sale una tabla diciendo qué hay puesto y qué no. Es lo único que
+-- devuelve: si sale todo en «puesto», ya está.
+--
+-- Es seguro volver a ejecutarlo. Todo está escrito para no romperse si ya
+-- existía, y nada de lo que hay aquí borra ni sobrescribe datos.
+--
+-- -----------------------------------------------------------------------------
+-- QUÉ AÑADE
+-- -----------------------------------------------------------------------------
+--
+--   1. ajustes-de-la-hermandad.sql    Los ajustes de cuotas y las etiquetas, guardados en la hermandad
+--   2. clave-de-catalogos.sql         Que cada hermandad tenga sus propios catálogos (la clave era global)
+--   3. imagenes.sql                   El almacén de fotos: que la web no lleve las imágenes dentro
+--   4. visitas-web.sql                El contador de visitas de la web, sin cookies ni Google Analytics
+--   5. suscriptores-web.sql           Avisos por correo para quien sigue a la hermandad sin ser hermano
+--   6. copias.sql                     Las copias de seguridad, guardadas solas cada semana
+--   7. permisos-eventos-y-web.sql     Los dos módulos que nunca se sembraron: «eventos» y «web»
+--   8. lo-que-toca-el-hermano.sql     Que el hermano no se ponga la cuota como pagada desde la consola
+--   9. sin-contrasenas-en-las-solicitudes.sql Fuera la contraseña en claro que guardaba cada solicitud de alta
+--   10. freno-de-los-formularios.sql   Un tope a lo que cualquiera puede meter desde la web pública
+--   11. cuenta-por-hermandad.sql       Ser hermano de dos hermandades: una cuenta por hermandad + DNI
+--
+-- -----------------------------------------------------------------------------
+-- LO QUE ESTE ARCHIVO NO LLEVA, Y POR QUÉ
+-- -----------------------------------------------------------------------------
+--
+-- 1. `permisos-por-hermandad.sql` NO ESTÁ, y no se debe ejecutar suelto sobre
+--    una base al día. Redefine `modulo_permitido()`, que `hermano-con-cargo.sql`
+--    vuelve a definir después con una vía más: el hermano que lleva un cargo en
+--    su ficha. Manda la última definición que se ejecuta, así que el fichero
+--    viejo por su cuenta deja fuera al tesorero que además es hermano. De ahí
+--    solo hacía falta el relleno de «eventos» y «web», y ese va arriba, en su
+--    propio fichero, sin tocar ninguna función.
+--
+-- 2. `tareas-programadas.sql` NO ESTÁ porque necesita la extensión `pg_cron`
+--    activada antes, y eso se hace a mano: Database → Extensions → pg_cron.
+--    Puesta la extensión, ese fichero se ejecuta aparte. Sin él todo funciona;
+--    lo único que no pasa solo es la limpieza de visitas viejas y de
+--    suscriptores sin confirmar.
+--
+-- =============================================================================
+
+
+-- =============================================================================
+--   AJUSTES-DE-LA-HERMANDAD.SQL — Los ajustes de cuotas y las etiquetas, guardados en la hermandad
+-- =============================================================================
+
+-- ============================================================================
+--   DOS AJUSTES QUE VIVÍAN EN UN SOLO NAVEGADOR
+-- ============================================================================
+--
+-- Mismo problema que tenían el modelo de papeleta y la hoja de asistencia
+-- —arreglado en `plantillas-hermandad.sql`— en otros dos sitios que se
+-- quedaron atrás. Los dos son decisiones DE LA HERMANDAD, no preferencias de
+-- quien está delante del ordenador, y los dos vivían en `localStorage`.
+--
+-- 1. LOS AJUSTES DE CUOTAS, y este es de dinero.
+--
+--    `bloquearPapeletaConDeuda` — «a quien deba cuotas no se le saca papeleta».
+--    La hermandad lo decide en cabildo, la secretaria lo activa en SU
+--    ordenador, y quien atiende el sábado por la mañana desde el otro no tiene
+--    el bloqueo: le saca la papeleta a un moroso y nadie se entera hasta que
+--    se cuadran las cuentas.
+--
+--    `moraRequiereDosCargos` — poner a alguien en mora exige que lo proponga
+--    un cargo y lo confirme otro distinto. Es un control de cuatro ojos, y un
+--    control de cuatro ojos que se salta abriendo otro navegador no es un
+--    control.
+--
+-- 2. EL CATÁLOGO DE ETIQUETAS (costalero, acólito, banda, diputado de tramo…).
+--
+--    Con él se segmentan los comunicados y se filtra el censo. Cada ordenador
+--    tenía el suyo: el mayordomo creaba «Costalero de repuesto» en el suyo y
+--    desde el de secretaría esa etiqueta no existía, así que el comunicado a
+--    los costaleros de repuesto no se podía mandar. Y al cerrar sesión se
+--    borra todo lo que empieza por `cabildo-`, así que el catálogo entero
+--    desaparecía.
+--
+-- Las dos van como `jsonb` en `hermandad_settings`, igual que las plantillas.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+alter table hermandad_settings add column if not exists ajustes_cuotas jsonb;
+alter table hermandad_settings add column if not exists etiquetas jsonb;
+
+comment on column hermandad_settings.ajustes_cuotas is
+  'Decisiones de la hermandad sobre cuotas: si bloquear la papeleta a quien debe, '
+  'y si la mora exige la confirmación de dos cargos. Vivían en localStorage, así que '
+  'no valían desde otro ordenador — incluido el control de cuatro ojos de la mora.';
+
+comment on column hermandad_settings.etiquetas is
+  'Catálogo de etiquetas de la hermandad (costalero, acólito, banda…). Con ellas se '
+  'segmentan los comunicados. Vivían en localStorage: cada ordenador tenía el suyo y '
+  'se borraban al cerrar sesión.';
+
+-- =============================================================================
+--   CLAVE-DE-CATALOGOS.SQL — Que cada hermandad tenga sus propios catálogos (la clave era global)
+-- =============================================================================
+
+-- =============================================================================
+--   CLAVE-DE-CATALOGOS.SQL — Que cada hermandad tenga sus propios catálogos
+-- =============================================================================
+--
+-- EL MISMO FALLO QUE `redes-sociales.sql`, en la otra tabla que se quedó
+-- fuera. Y aquí es peor, porque `catalogos` se toca mucho más.
+--
+-- La tabla nació con `primary key (clave, valor)`. Esa clave es GLOBAL. Al
+-- pasar a varias hermandades se le añadió `hermandad_id` como a todas las
+-- demás, pero la clave se quedó igual — a diferencia del DNI del hermano, del
+-- número de hermano, de los ajustes, de la web y de las redes, que sí se
+-- arreglaron en su día.
+--
+-- LO QUE HAY EN ESA TABLA son las listas que configura cada hermandad en
+-- Configuración: las categorías de ingreso y de gasto, las cuentas de
+-- tesorería, los tipos de incidencia, las categorías del inventario, los
+-- canales y los segmentos de los comunicados.
+--
+-- Y son las MENOS DISTINTIVAS QUE HAY. «Cera», «Flores», «Limosnas»,
+-- «Caja», «Bueno», «Restaurado»: las escribe igual todo el mundo, porque son
+-- las palabras de siempre de una hermandad. O sea que la SEGUNDA hermandad que
+-- entrara no podía guardar prácticamente ninguna de las suyas: la fila ya
+-- existía, de otra gente, y el guardado se estrellaba contra una clave
+-- duplicada.
+--
+-- No es un caso raro que aparezca con el tiempo. Aparece con la hermandad
+-- número dos y con el primer valor obvio que escriba.
+--
+-- Y encima no se ve venir: por la frontera de seguridad
+-- (`hermandad_id = hermandad_actual()`), la fila que estorba es de otra
+-- hermandad y por tanto INVISIBLE. En pantalla no hay nada repetido, y aun así
+-- no se puede guardar.
+--
+-- Se puede ejecutar sobre una base ya en uso. No borra ningún catálogo de
+-- ninguna hermandad.
+
+-- 1. La columna y su valor por defecto (por si esta base es anterior).
+alter table catalogos add column if not exists hermandad_id uuid references hermandades(id) on delete cascade;
+alter table catalogos alter column hermandad_id set default hermandad_actual();
+
+-- 2. La clave, por hermandad y no global.
+--
+--    En dos pasos y con aviso en vez de romper: una clave primaria no admite
+--    nulos, así que primero se le busca dueño a lo que hubiera suelto de antes
+--    de multi-hermandad —se le da a la primera hermandad, que es de quien era—
+--    y solo si no queda nada huérfano se cambia la clave. Si quedara algo, se
+--    deja como estaba y se avisa: es preferible eso a que la instalación se
+--    pare a la mitad y todo lo que va detrás no llegue a crearse.
+do $$
+declare v_huerfanos int;
+begin
+  update catalogos set hermandad_id = (select id from hermandades order by creada_en limit 1)
+   where hermandad_id is null;
+
+  select count(*) into v_huerfanos from catalogos where hermandad_id is null;
+  if v_huerfanos > 0 then
+    -- Pasa si la base no tiene ninguna hermandad todavía. Entonces tampoco hay
+    -- catálogos de nadie que arreglar, y esto se vuelve a ejecutar solo con
+    -- correr el archivo otra vez después de crear la primera.
+    raise warning 'catalogos: quedan % filas sin hermandad; la clave primaria se deja como estaba', v_huerfanos;
+    return;
+  end if;
+
+  alter table catalogos alter column hermandad_id set not null;
+  alter table catalogos drop constraint if exists catalogos_pkey;
+  alter table catalogos add constraint catalogos_pkey primary key (hermandad_id, clave, valor);
+end $$;
+
+comment on table catalogos is
+  'Las listas que configura cada hermandad (categorías, cuentas, tipos…). La '
+  'clave es (hermandad_id, clave, valor): con la clave global de antes, la '
+  'segunda hermandad no podía guardar ni «Cera», porque la fila ya era de otra '
+  'y encima no la veía.';
+
+-- -----------------------------------------------------------------------------
+-- Comprobación
+-- -----------------------------------------------------------------------------
+-- Después de ejecutarlo, esto tiene que decir «hermandad_id, clave, valor»:
+--
+--   select pg_get_constraintdef(oid) from pg_constraint
+--    where conrelid = 'catalogos'::regclass and contype = 'p';
+--
+-- Si sigue diciendo solo «clave, valor», es que quedaban filas sin hermandad:
+-- míralas con
+--
+--   select * from catalogos where hermandad_id is null;
+--
+-- y vuelve a ejecutar este archivo cuando estén asignadas.
+
+-- =============================================================================
+--   IMAGENES.SQL — El almacén de fotos: que la web no lleve las imágenes dentro
+-- =============================================================================
+
+-- ============================================================================
+-- EL ALMACÉN DE IMÁGENES
+--
+-- Hasta ahora las fotos de la web viajaban DENTRO del contenido, escritas como
+-- texto (`data:image/webp;base64,...`). Funciona, pero tiene tres techos:
+--
+--   1. La web entera es una sola fila de la tabla `web_publica`. Veinte fotos
+--      de una salida y esa fila pesa quince megas: cada guardado los sube
+--      enteros otra vez, y cada visita los descarga enteros aunque no cambie
+--      ni una coma.
+--   2. El navegador no puede guardar en caché una foto que va dentro del HTML.
+--      La misma imagen se descarga en cada página.
+--   3. Y lo que bloqueaba de verdad: WhatsApp, Facebook y X NO leen una
+--      imagen en `data:`. Por eso al pegar el enlace de la hermandad salía la
+--      tarjeta sin foto. Para que salga tiene que haber una dirección de
+--      verdad, y para eso hace falta esto.
+--
+-- Ejecútalo UNA VEZ en el SQL Editor de tu proyecto, después de
+-- `multi-hermandad.sql` (de ahí sale `hermandad_actual()`).
+--
+-- CADA HERMANDAD, EN SU CARPETA. Todas comparten el mismo cubo, así que lo
+-- primero de la ruta es el id de la hermandad:
+--
+--     imagenes/6f3a…-e21b/web/9c1d…-4a7f.webp
+--
+-- No es orden: es la seguridad. Las políticas de abajo miran esa primera
+-- carpeta para decidir quién puede escribir. Una foto subida fuera de ella la
+-- rechaza el propio Storage.
+--
+-- POR QUÉ EL CUBO ES PÚBLICO. Lo que hay dentro son las fotos de la web de la
+-- hermandad: están puestas para que las vea todo el mundo, y la tarjeta de
+-- WhatsApp no funciona de otra manera. Las fotos del CENSO también viven aquí,
+-- bajo `hermanos/`, con un nombre aleatorio de 128 bits que no aparece en
+-- ninguna página pública. La alternativa —cubo privado y direcciones firmadas—
+-- obligaría a resolver cada foto con una llamada al servidor antes de
+-- pintarla, caduca a las horas y rompe el carné impreso. Si algún día una
+-- hermandad necesita lo otro, el sitio donde se cambia es este archivo y
+-- `src/lib/almacenImagenes.ts`, no las cincuenta pantallas que enseñan fotos.
+-- ============================================================================
+
+insert into storage.buckets (id, name, public)
+values ('imagenes', 'imagenes', true)
+on conflict (id) do update set public = true;
+
+-- LEER: cualquiera. Es una web pública; el cubo lo sirve sin pasar por aquí,
+-- pero la política se deja escrita para que no dependa de una casilla del
+-- panel de Supabase que alguien puede desmarcar sin querer.
+drop policy if exists "imagenes_leer" on storage.objects;
+create policy "imagenes_leer" on storage.objects
+  for select
+  to public
+  using (bucket_id = 'imagenes');
+
+-- ESCRIBIR: solo con sesión iniciada, y solo dentro de la carpeta de tu
+-- hermandad. Es lo que impide que una hermandad pise las fotos de otra.
+drop policy if exists "imagenes_subir" on storage.objects;
+create policy "imagenes_subir" on storage.objects
+  for insert
+  to authenticated
+  with check (
+    bucket_id = 'imagenes'
+    and (storage.foldername(name))[1] = hermandad_actual()::text
+  );
+
+drop policy if exists "imagenes_actualizar" on storage.objects;
+create policy "imagenes_actualizar" on storage.objects
+  for update
+  to authenticated
+  using (
+    bucket_id = 'imagenes'
+    and (storage.foldername(name))[1] = hermandad_actual()::text
+  )
+  with check (
+    bucket_id = 'imagenes'
+    and (storage.foldername(name))[1] = hermandad_actual()::text
+  );
+
+drop policy if exists "imagenes_borrar" on storage.objects;
+create policy "imagenes_borrar" on storage.objects
+  for delete
+  to authenticated
+  using (
+    bucket_id = 'imagenes'
+    and (storage.foldername(name))[1] = hermandad_actual()::text
+  );
+
+-- =============================================================================
+--   VISITAS-WEB.SQL — El contador de visitas de la web, sin cookies ni Google Analytics
+-- =============================================================================
+
+-- =============================================================================
+--   EL CONTADOR DE VISITAS DE LA WEB
+-- =============================================================================
+--
+-- «¿Entra alguien en la web?» es la primera pregunta que hace una hermandad
+-- después de publicarla, y hasta ahora no había forma de contestarla.
+--
+-- POR QUÉ NO GOOGLE ANALYTICS. Porque obliga a poner el cartel de las cookies.
+-- Una web de hermandad que recibe cien visitas al mes no necesita pagar ese
+-- precio: el cartel molesta a todo el que entra, hay que mantenerlo al día, y
+-- convierte una web sencilla en algo que pide permiso antes de enseñar nada.
+--
+-- Esto cuenta VISITAS A PÁGINAS y nada más:
+--
+--   · NO guarda la dirección IP.
+--   · NO pone cookies ni nada parecido.
+--   · NO sigue a nadie entre páginas ni entre días.
+--   · NO se puede saber quién ha entrado, ni volver atrás y averiguarlo.
+--
+-- Lo que se guarda es un número por día y por página: «el 14 de marzo, la
+-- portada tuvo 43 visitas». Eso no son datos personales, así que no hace falta
+-- ni cartel ni consentimiento. Y es lo que de verdad se quiere saber.
+--
+-- LO QUE NO PUEDE DECIR, y conviene tenerlo claro antes de mirar los números:
+-- no sabe cuántas PERSONAS distintas han entrado. Sin seguir a nadie no se
+-- puede, y prefiero un número honesto a uno inventado. Cuenta visitas a
+-- páginas: si la misma persona abre tres, son tres.
+--
+-- Ejecútalo una vez en el SQL Editor, después de `multi-hermandad.sql`.
+-- =============================================================================
+
+create table if not exists visitas_web (
+  hermandad_id uuid not null references hermandades(id) on delete cascade,
+  -- El día, en hora de España. Lo pone el servidor: fiarse de la fecha que
+  -- mande el navegador es dejar que cualquiera escriba en el día que quiera.
+  dia date not null,
+  /*
+   * Qué página. Se guarda la RUTA, nunca la dirección entera: la dirección
+   * puede traer pegado detrás lo que sea —el `?utm_...` de una campaña, el
+   * texto que alguien buscó— y eso ya no es «qué página se vio».
+   */
+  ruta text not null,
+  visitas integer not null default 0,
+  primary key (hermandad_id, dia, ruta)
+);
+
+create index if not exists visitas_web_dia_idx on visitas_web (hermandad_id, dia desc);
+
+alter table visitas_web enable row level security;
+
+/*
+ * NADIE ESCRIBE AQUÍ A MANO, ni siquiera para sumar uno.
+ *
+ * Con una política de INSERT abierta —como la del buzón de mensajes— cualquiera
+ * con la clave pública podría meter cien mil filas y reventar la tabla, o
+ * inflar el contador de una hermandad hasta que sus números no valgan nada.
+ *
+ * Se entra por la función de abajo, que solo sabe hacer una cosa: sumar uno.
+ */
+drop policy if exists "las visitas se leen desde el panel" on visitas_web;
+create policy "las visitas se leen desde el panel"
+  on visitas_web for select
+  to authenticated
+  using (hermandad_id = hermandad_actual() and not auth_es_hermano());
+
+/**
+ * Suma una visita. Es lo único que se puede hacer desde fuera.
+ *
+ * `security definer` para poder escribir en una tabla que no deja escribir a
+ * nadie, y `search_path` fijado para que nadie pueda colar otra tabla con el
+ * mismo nombre por delante.
+ */
+/*
+ * Y QUE NO CREZCA PARA SIEMPRE. Una hermandad con veinte páginas genera unas
+ * 7.000 filas al año; en diez años, setenta mil, para enseñar un gráfico de los
+ * últimos treinta días. Se guardan DOS AÑOS, que es lo que hace falta para
+ * comparar una Semana Santa con la anterior, y lo de antes se tira.
+ *
+ * La lanza `pg_cron` los domingos de madrugada — ver
+ * `supabase/tareas-programadas.sql`, que hay que ejecutar aparte porque
+ * primero hay que encender la extensión en el panel de Supabase.
+ */
+create or replace function limpiar_visitas_viejas() returns void
+language sql security definer set search_path = public as $$
+  delete from visitas_web where dia < current_date - interval '2 years'
+$$;
+revoke execute on function limpiar_visitas_viejas() from public, anon, authenticated;
+
+create or replace function contar_visita(p_hermandad_id uuid, p_ruta text)
+returns void
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_ruta text;
+  v_dia date;
+  v_distintas int;
+begin
+  if p_hermandad_id is null then return; end if;
+  if not exists (select 1 from hermandades where id = p_hermandad_id) then return; end if;
+
+  v_ruta := split_part(split_part(coalesce(p_ruta, '/'), '?', 1), '#', 1);
+  if v_ruta = '' or left(v_ruta, 1) <> '/' then v_ruta := '/'; end if;
+  v_ruta := left(v_ruta, 200);
+
+  -- La fecha, de este lado y en hora de España: con la del navegador, quien
+  -- tenga el reloj mal —o quien quiera— escribe en el día que le apetezca.
+  v_dia := (now() at time zone 'Europe/Madrid')::date;
+
+  -- Si esta ruta ya se contó hoy no hay nada que mirar: la fila existe y solo
+  -- se le suma uno. El tope solo importa cuando iría a crear una fila nueva.
+  if not exists (select 1 from visitas_web
+                  where hermandad_id = p_hermandad_id and dia = v_dia and ruta = v_ruta) then
+    select count(*) into v_distintas from visitas_web
+     where hermandad_id = p_hermandad_id and dia = v_dia;
+    if v_distintas >= 300 then v_ruta := '/otras'; end if;
+  end if;
+
+  insert into visitas_web (hermandad_id, dia, ruta, visitas)
+  values (p_hermandad_id, v_dia, v_ruta, 1)
+  on conflict (hermandad_id, dia, ruta)
+  do update set visitas = visitas_web.visitas + 1;
+end $$;
+grant execute on function contar_visita(uuid, text) to anon, authenticated;
+
+comment on function contar_visita(uuid, text) is
+  'Suma una visita a una página de la web pública. No guarda IP, ni cookies, ni '
+  'nada que identifique a nadie: solo un número por día y por ruta.';
+
+-- =============================================================================
+--   SUSCRIPTORES-WEB.SQL — Avisos por correo para quien sigue a la hermandad sin ser hermano
+-- =============================================================================
+
+-- =============================================================================
+--   AVISADME DE LOS CULTOS — quien sigue a la hermandad sin ser hermano
+-- =============================================================================
+--
+-- Alrededor de una hermandad hay mucha más gente que hermanos: vecinos del
+-- barrio, devotos, gente que se crió allí y vive fuera, quien va todos los años
+-- a ver la salida. Toda esa gente se entera de los cultos por casualidad —o no
+-- se entera— porque los avisos van al censo y ellos no están en el censo.
+--
+-- Y NO SE LES PUEDE METER EN EL CENSO. Un censo es la lista de hermanos y de
+-- ahí cuelgan las cuotas, las papeletas y la antigüedad. Meter a un vecino ahí
+-- para poder avisarle rompe el censo y le da una condición que no tiene.
+--
+-- Esto es una lista aparte: un correo y poco más.
+--
+-- LO QUE EXIGE EL RGPD, y por qué está cada cosa:
+--
+--   · CONSENTIMIENTO EXPRESO. Una casilla que hay que marcar a mano —nunca
+--     premarcada— y se guarda QUÉ texto aceptó y CUÁNDO. Sin eso, si algún día
+--     alguien reclama, la hermandad no puede demostrar nada.
+--   · CONFIRMAR EL CORREO. Sin confirmar, cualquiera apunta el correo de otro:
+--     se le manda un enlace y hasta que no lo abre no se le escribe. Además es
+--     lo que evita que los envíos de la hermandad acaben en spam.
+--   · DARSE DE BAJA DE UN CLIC. Cada suscriptor lleva su propia llave, y con
+--     ella se borra solo, sin escribir a nadie ni dar explicaciones.
+--
+-- Ejecútalo una vez en el SQL Editor, después de `multi-hermandad.sql`.
+-- =============================================================================
+
+/*
+ * LA LLAVE DE BAJA SALE DE `gen_random_bytes`, QUE NO ES DE POSTGRES A SECAS.
+ *
+ * Viene con la extensión `pgcrypto`. En Supabase está encendida de fábrica, así
+ * que aquí funcionaba y nadie lo miró; pero es una dependencia que este fichero
+ * no declaraba. En un Postgres sin ella, la instalación se para EN ESTA LÍNEA y
+ * todo lo que viene detrás —las políticas, las funciones de suscripción, las
+ * copias— no llega a crearse. Y como el error habla de una función y no de una
+ * extensión, no se entiende.
+ *
+ * Se declara. Si ya está, no hace nada.
+ */
+create extension if not exists pgcrypto;
+
+create table if not exists suscriptores_web (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid not null references hermandades(id) on delete cascade,
+  email text not null,
+  nombre text not null default '',
+
+  /*
+   * LA LLAVE. Sirve para dos cosas —confirmar y darse de baja— y es lo único
+   * que hace falta saber para las dos: por eso va en la dirección del correo
+   * que se le manda y por eso es larga y al azar.
+   *
+   * Con un id normal, cualquiera que probara identificadores podría dar de baja
+   * a otro. Con esto, no hay nada que probar.
+   */
+  llave text not null default encode(gen_random_bytes(24), 'hex'),
+
+  -- Hasta que no abre el enlace del correo, no se le escribe.
+  confirmado boolean not null default false,
+  confirmado_en timestamptz,
+
+  -- Qué aceptó exactamente y cuándo. Es la prueba del consentimiento.
+  texto_aceptado text not null default '',
+  alta_en timestamptz not null default now(),
+
+  -- De dónde salió: «web», «formulario de contacto»… Para saber qué funciona.
+  origen text not null default 'web'
+);
+
+-- Un correo, una vez por hermandad. Sin esto, quien pulsa dos veces el botón
+-- acaba recibiendo cada aviso por duplicado.
+/*
+ * CUÁNDO SE LE MANDÓ EL CORREO DE CONFIRMAR.
+ *
+ * No es informativo: es el freno. Sin él, pedir «mándame la confirmación» mil
+ * veces con el correo de otro le llena la bandeja a esa persona, firmado por la
+ * hermandad. Con él, del segundo intento en diez minutos no sale nada.
+ */
+alter table suscriptores_web
+  add column if not exists confirmacion_enviada_en timestamptz;
+
+create unique index if not exists suscriptores_web_email_uniq
+  on suscriptores_web (hermandad_id, lower(email));
+create index if not exists suscriptores_web_hermandad_idx on suscriptores_web (hermandad_id);
+
+alter table suscriptores_web enable row level security;
+
+/*
+ * NADIE ESCRIBE AQUÍ DIRECTAMENTE, ni siquiera para apuntarse.
+ *
+ * Con un INSERT abierto —como el del buzón de mensajes— la lista sería una
+ * puerta para meter mil correos de golpe, y sobre todo se podría LEER lo que
+ * otro acaba de escribir si alguien afina la consulta. Una lista de correos es
+ * exactamente lo que busca quien manda spam.
+ *
+ * Se entra por las tres funciones de abajo, que hacen una cosa cada una.
+ */
+drop policy if exists "la hermandad ve sus suscriptores" on suscriptores_web;
+create policy "la hermandad ve sus suscriptores"
+  on suscriptores_web for select
+  to authenticated
+  using (hermandad_id = hermandad_actual() and not auth_es_hermano());
+
+drop policy if exists "la hermandad borra sus suscriptores" on suscriptores_web;
+create policy "la hermandad borra sus suscriptores"
+  on suscriptores_web for delete
+  to authenticated
+  using (hermandad_id = hermandad_actual() and not auth_es_hermano());
+
+/**
+ * Apuntarse. DEVUELVE SÍ O NO, y nunca la llave.
+ *
+ * ANTES DEVOLVÍA LA LLAVE, y ese era el agujero. La llave es lo único que hace
+ * falta para confirmar un alta (`confirmar_suscripcion`) y para darla de baja
+ * (`baja_de_la_web`), y esta función la puede llamar cualquiera desde fuera sin
+ * identificarse. Pero es que además, por el `on conflict … returning`, cuando
+ * el correo YA ESTABA no devolvía una llave nueva: devolvía LA DE ESA PERSONA.
+ *
+ * O sea, que con la dirección de alguien de la lista —que no es ningún
+ * secreto— se podía:
+ *
+ *   · CONFIRMAR SU ALTA sin que llegara a ver el correo. Y entonces la
+ *     hermandad tiene apuntado «esta persona confirmó tal día», que es la
+ *     prueba del consentimiento, y es falsa. La hermandad se pone a escribirle
+ *     a alguien que nunca pidió nada, con un papel que dice que sí.
+ *   · O DARLE DE BAJA. Una dirección detrás de otra, y la lista se vacía sin
+ *     que nadie se entere: los suscriptores dejan de recibir los cultos y la
+ *     hermandad no ve más que una lista que mengua.
+ *
+ * La llave se queda dentro de la base. Sale por dos sitios y solo por dos: el
+ * correo que se le manda a esa persona, y el panel de la hermandad.
+ *
+ * SIGUE SIN DECIR SI EL CORREO YA ESTABA. Contestar «ese correo ya está
+ * apuntado» le diría a cualquiera quién está en la lista, y eso es filtrar los
+ * datos de otro. Devuelve `true` en los dos casos.
+ */
+drop function if exists suscribirse_a_la_web(uuid, text, text, text);
+create or replace function suscribirse_a_la_web(
+  p_hermandad_id uuid,
+  p_email text,
+  p_nombre text default '',
+  p_texto text default ''
+) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare
+  v_email text;
+  v_recientes int;
+begin
+  if p_hermandad_id is null then return false; end if;
+  if not exists (select 1 from hermandades where id = p_hermandad_id) then return false; end if;
+
+  v_email := lower(trim(coalesce(p_email, '')));
+  -- Una comprobación mínima, del lado de acá. La de verdad la hace el correo de
+  -- confirmación: si la dirección no existe, nunca se confirma.
+  if v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[a-z]{2,}$' then return false; end if;
+
+  /*
+   * EL FRENO. Esto lo llama cualquiera sin identificarse, así que sin un tope
+   * se le pueden meter cien mil correos a una hermandad en una tarde: la lista
+   * queda inservible y hay que borrarla entera a mano.
+   *
+   * Sesenta altas nuevas por hora es mucho más de lo que da de sí el
+   * formulario de una hermandad, incluso el día siguiente a la salida. Se
+   * cuentan solo las NUEVAS: quien vuelve a apuntarse con un correo que ya
+   * estaba no crea fila y no gasta cupo.
+   */
+  select count(*) into v_recientes from suscriptores_web
+   where hermandad_id = p_hermandad_id and alta_en > now() - interval '1 hour';
+  if v_recientes >= 60 then
+    raise exception 'Ahora mismo no se pueden recoger más altas. Inténtalo dentro de un rato.'
+      using errcode = 'P0001';
+  end if;
+
+  insert into suscriptores_web (hermandad_id, email, nombre, texto_aceptado)
+  values (p_hermandad_id, v_email, left(trim(coalesce(p_nombre, '')), 120), left(coalesce(p_texto, ''), 1000))
+  on conflict (hermandad_id, lower(email))
+  -- Sin cambiar nada de lo que ya había: ni el consentimiento, ni la fecha de
+  -- alta, ni si estaba confirmado. Volver a apuntarse no puede borrar la prueba
+  -- de cuándo aceptó.
+  do update set email = suscriptores_web.email;
+
+  return true;
+end $$;
+grant execute on function suscribirse_a_la_web(uuid, text, text, text) to anon, authenticated;
+
+/**
+ * LA LLAVE PARA EL CORREO DE CONFIRMAR — y solo para el servidor.
+ *
+ * Esta es la única puerta por la que la llave sale de la base hacia quien
+ * manda el correo, y NO SE LE DA A `anon` NI A `authenticated`: solo a
+ * `service_role`, que es la clave que vive dentro de la función `enviar-correo`
+ * y nunca pisa un navegador. Si algún día alguien le da el permiso a `anon`,
+ * vuelve el agujero entero.
+ *
+ * Devuelve null —y no manda nada— en tres casos:
+ *
+ *   · Ese correo no está apuntado en esa hermandad. Sin esto, sería una forma
+ *     de preguntar «¿está fulano en vuestra lista?».
+ *   · Ya está confirmado. No hay nada que confirmar y mandarlo otra vez es
+ *     spam.
+ *   · Se le mandó hace menos de diez minutos. Es el freno de verdad: sin él,
+ *     pedir la confirmación mil veces con el correo de otra persona le llena la
+ *     bandeja, y firmado por la hermandad.
+ *
+ * Deja apuntado el envío en la misma consulta, así que dos peticiones a la vez
+ * no consiguen dos correos.
+ */
+create or replace function llave_para_confirmar(p_hermandad_id uuid, p_email text)
+returns jsonb
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_llave text;
+  v_nombre text;
+begin
+  if p_hermandad_id is null then return null; end if;
+  update suscriptores_web
+     set confirmacion_enviada_en = now()
+   where hermandad_id = p_hermandad_id
+     and lower(email) = lower(trim(coalesce(p_email, '')))
+     and not confirmado
+     and (confirmacion_enviada_en is null or confirmacion_enviada_en < now() - interval '10 minutes')
+  returning llave into v_llave;
+  if v_llave is null then return null; end if;
+
+  -- El nombre va en el mismo viaje. Quien manda el correo lo necesita para
+  -- firmarlo, y una segunda consulta para leer un nombre es una pieza más que
+  -- se puede caer justo entre las dos.
+  select nombre into v_nombre from hermandades where id = p_hermandad_id;
+  return jsonb_build_object('llave', v_llave, 'hermandad', coalesce(v_nombre, ''));
+end $$;
+revoke all on function llave_para_confirmar(uuid, text) from public, anon, authenticated;
+grant execute on function llave_para_confirmar(uuid, text) to service_role;
+
+/** Confirmar, con la llave del enlace. Decir si ha valido o no. */
+create or replace function confirmar_suscripcion(p_llave text) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare v_hay boolean;
+begin
+  update suscriptores_web
+     set confirmado = true,
+         -- Solo la primera vez: si vuelve a abrir el enlace del correo dentro
+         -- de un año, la fecha buena sigue siendo la de entonces.
+         confirmado_en = coalesce(confirmado_en, now())
+   where llave = p_llave
+  returning true into v_hay;
+  return coalesce(v_hay, false);
+end $$;
+grant execute on function confirmar_suscripcion(text) to anon, authenticated;
+
+/**
+ * Darse de baja. Se BORRA la fila, no se marca.
+ *
+ * Guardar «este pidió la baja» obliga a seguir teniendo su correo para
+ * acordarse de no escribirle, que es justo lo contrario de lo que ha pedido. Si
+ * algún día vuelve, se apunta otra vez.
+ */
+create or replace function baja_de_la_web(p_llave text) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare v_hay boolean;
+begin
+  delete from suscriptores_web where llave = p_llave returning true into v_hay;
+  return coalesce(v_hay, false);
+end $$;
+grant execute on function baja_de_la_web(text) to anon, authenticated;
+
+-- =============================================================================
+--   COPIAS.SQL — Las copias de seguridad, guardadas solas cada semana
+-- =============================================================================
+
+-- =============================================================================
+--   LAS COPIAS DE SEGURIDAD, GUARDADAS SOLAS
+-- =============================================================================
+--
+-- Hasta ahora la copia había que descargarla a mano. Funciona el día que
+-- alguien se acuerda, y el problema es que nadie se acuerda: se pulsa el botón
+-- la semana que se monta todo y no se vuelve a pulsar en dos años.
+--
+-- Y el censo de una hermandad es EL dato que no se puede volver a escribir.
+-- Cuatrocientas fichas con su antigüedad, su cuota y su sitio en el cortejo no
+-- se reconstruyen: o están, o se han perdido.
+--
+-- Esto es un cubo donde la aplicación deja una copia cada semana, sola.
+--
+-- POR QUÉ UN CUBO PRIVADO Y NO EL DE LAS IMÁGENES. Porque una copia lleva el
+-- censo entero: nombres, DNI, teléfonos, direcciones, IBAN y datos de salud.
+-- Es lo más sensible que hay en toda la aplicación. El cubo de las imágenes es
+-- público —tiene que serlo, para que WhatsApp lea las fotos— y aquí eso sería
+-- publicar el censo de la hermandad en internet.
+--
+-- Ejecútalo una vez en el SQL Editor, después de `multi-hermandad.sql`.
+-- =============================================================================
+
+insert into storage.buckets (id, name, public)
+values ('copias', 'copias', false)
+on conflict (id) do update set public = false;
+
+/*
+ * CADA HERMANDAD, EN SU CARPETA, y solo la suya.
+ *
+ * Es la misma regla que el archivo documental, pero aquí importa más: quien
+ * pudiera leer la carpeta de otra hermandad se llevaría su censo completo de
+ * una sola descarga.
+ *
+ * Y NO LO VE UN HERMANO. `auth_es_hermano()` fuera: el hermano entra en su área
+ * a ver SU ficha, no el censo de los demás en un archivo.
+ */
+drop policy if exists "copias_leer" on storage.objects;
+create policy "copias_leer" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'copias'
+    and (storage.foldername(name))[1] = hermandad_actual()::text
+    and not auth_es_hermano()
+  );
+
+drop policy if exists "copias_guardar" on storage.objects;
+create policy "copias_guardar" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'copias'
+    and (storage.foldername(name))[1] = hermandad_actual()::text
+    and not auth_es_hermano()
+  );
+
+/*
+ * BORRAR SÍ, y hace falta: las copias viejas se van tirando para que el cubo no
+ * crezca sin fin. Lo que NO se puede es sobrescribir una copia existente — no
+ * hay política de update a propósito. Una copia que se puede pisar no es una
+ * copia de seguridad.
+ */
+drop policy if exists "copias_borrar" on storage.objects;
+create policy "copias_borrar" on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'copias'
+    and (storage.foldername(name))[1] = hermandad_actual()::text
+    and not auth_es_hermano()
+  );
+
+-- =============================================================================
+--   PERMISOS-EVENTOS-Y-WEB.SQL — Los dos módulos que nunca se sembraron: «eventos» y «web»
+-- =============================================================================
+
+-- ============================================================================
+--   LOS DOS MÓDULOS QUE NUNCA SE SEMBRARON: «eventos» y «web»
+-- ============================================================================
+--
+-- La lista de permisos de fábrica se quedó corta desde el principio. Faltaba
+-- «eventos» en cinco cargos y «web» en dos, así que en cualquier hermandad ya
+-- creada el Hermano Mayor —que lo puede todo por definición— no podía guardar
+-- un evento ni publicar la web: la pantalla se lo ofrecía, la política lo
+-- rechazaba.
+--
+-- POR QUÉ ESTÁ EN SU PROPIO FICHERO Y NO DENTRO DE
+-- `permisos-por-hermandad.sql`, QUE ES DONDE ESTABA.
+--
+-- Porque ese fichero no se puede ejecutar suelto sobre una base al día, y este
+-- sí. `permisos-por-hermandad.sql` redefine `modulo_permitido()`, y esa función
+-- la vuelve a redefinir después `hermano-con-cargo.sql` añadiéndole una tercera
+-- vía: el hermano que lleva un cargo en su ficha. De todas las definiciones
+-- manda la última que se ejecuta, así que ejecutar el fichero viejo por su
+-- cuenta DEJA SIN ACCESO a todo hermano con cargo en la ficha — que es como
+-- están hoy los tesoreros y secretarios que además son hermanos.
+--
+-- Este arreglo, en cambio, no toca ninguna función: solo añade filas que
+-- faltan. Por eso se puede ejecutar solo, y por eso vive aparte.
+--
+-- Y SE AÑADEN SOLO ESTOS DOS, no se resiembra la lista entera. Volver a
+-- sembrarla devolvería permisos que una hermandad haya quitado a propósito
+-- —«al Secretario no le dejo tocar el censo»— y eso es peor que el fallo que
+-- se viene a arreglar. Nadie ha podido quitar a mano algo que nunca estuvo.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Es seguro repetirlo.
+-- ============================================================================
+
+insert into permisos_cargo (hermandad_id, cargo, modulo_id)
+select h.id, f.cargo, f.modulo_id
+from hermandades h
+cross join (values
+  ('Hermano Mayor','eventos'),('Hermano Mayor','web'),
+  ('Secretario/a','eventos'),('Secretario/a','web'),
+  ('Mayordomo/Prioste','eventos'),
+  ('Diputado/a Mayor de Gobierno','eventos'),
+  ('Vocal','eventos')
+) as f(cargo, modulo_id)
+-- Solo a los cargos que esta hermandad ya reconoce: si nunca se le sembró
+-- «Vocal», no se le inventa uno ahora.
+where exists (
+  select 1 from permisos_cargo pc
+  where pc.hermandad_id = h.id and pc.cargo = f.cargo
+)
+on conflict do nothing;
+
+
+
+-- ============================================================================
+--   Y QUE EL MÓDULO «WEB» SIRVA PARA ALGO
+-- ============================================================================
+--
+-- El módulo existía y la pantalla lo respetaba —quien no lo tiene no ve la
+-- sección de la web—, pero LA BASE DE DATOS NO LO PEDÍA. La política decía
+-- solo «no es un hermano»:
+--
+--     using (not auth_es_hermano()) with check (not auth_es_hermano())
+--
+-- O sea que cualquiera del personal, con el cargo que fuera, podía reescribir
+-- la web pública de la hermandad desde la consola del navegador sin pasar por
+-- ninguna pantalla. El diputado de tramo, el fiscal, el mayordomo: todos.
+--
+-- Es el mismo error que en la ficha del hermano y en las cuotas: LO QUE ESCONDE
+-- LA PANTALLA NO PROTEGE NADA. Quien tiene sesión habla con la base
+-- directamente, y ahí solo manda lo que digan las políticas.
+--
+-- Y aquí duele más de lo que parece, porque la web pública es lo que ve el
+-- barrio entero: una portada cambiada la ve más gente en una tarde que
+-- cualquier otra cosa de la aplicación.
+--
+-- Va DETRÁS de la siembra de arriba a propósito: primero el módulo existe para
+-- los cargos que lo tienen que tener, y solo después se exige. Al revés, la
+-- hermandad se quedaría un rato sin poder editar su web. Y `es_titular()`
+-- entra siempre dentro de `modulo_permitido`, así que quien la lleva no se
+-- queda fuera pase lo que pase.
+drop policy if exists "el personal edita la web" on web_publica;
+create policy "el personal edita la web" on web_publica for all to authenticated
+  using (not auth_es_hermano() and modulo_permitido('web'))
+  with check (not auth_es_hermano() and modulo_permitido('web'));
+
+-- =============================================================================
+--   LO-QUE-TOCA-EL-HERMANO.SQL — Que el hermano no se ponga la cuota como pagada desde la consola
+-- =============================================================================
+
+-- =============================================================================
+--   LO-QUE-TOCA-EL-HERMANO.SQL — El hermano no se pone la cuota como pagada
+-- =============================================================================
+--
+-- EL AGUJERO, y es el mismo que ya se cerró en la ficha del hermano con
+-- `hermanos_solo_personal_toca_el_cargo`. Aquí quedó abierto.
+--
+-- El hermano necesita poder escribir en SU recibo: es como avisa de que ya ha
+-- pagado por Bizum o por transferencia. Para eso hay una política de UPDATE
+-- sobre `cuotas`. Y el razonamiento con el que se dejó sin acotar por columnas
+-- está escrito en `area-hermano.sql`:
+--
+--     «No hace falta acotar más por columnas: lo único que la aplicación le
+--      deja tocar ahí es el aviso de pago.»
+--
+-- Y AHÍ ESTÁ EL FALLO. Lo que le deje tocar la aplicación no protege nada: el
+-- hermano tiene una sesión de verdad, y desde la consola del navegador —la que
+-- se abre con F12— puede hablar con la base de datos directamente, sin pasar
+-- por ninguna pantalla:
+--
+--     supabase.from('cuotas').update({ estado: 'Pagada', importe: 0 })
+--             .eq('hermano_id', ...)
+--
+-- Comprobado contra un Postgres de verdad: la fila cambia. En ese momento su
+-- recibo queda pagado y a cero, él sale como al corriente, se lleva su papeleta
+-- de sitio, y las cuentas de la hermandad dicen que ese dinero entró. La
+-- tesorería no tiene forma de notarlo: en su pantalla el recibo está pagado.
+--
+-- Y NO ES UN CASO DE LABORATORIO. Es una línea, con la sesión que ya tiene
+-- abierta, sin herramientas y sin saber nada de bases de datos: se busca en
+-- cualquier sitio. En una hermandad de seiscientos hermanos basta con que a uno
+-- se le ocurra y se lo cuente al de al lado.
+--
+-- LO MISMO EN LAS PAPELETAS. Ahí el hermano sí hace cosas de verdad —renovar
+-- su sitio, renunciar, avisar de que ha pagado—, pero no puede ponerse la
+-- papeleta como «Pagada» ni como «Entregada», ni cambiarse el número, ni
+-- ponerse fecha de entrega.
+--
+-- Se arregla como se arregló en la ficha: LISTA BLANCA. Se dice qué puede
+-- cambiar y todo lo demás vuelve a como estaba. Lista blanca y no lista negra,
+-- porque una lista negra se queda corta el día que alguien añade una columna.
+--
+-- Se puede ejecutar sobre una base ya en uso: no toca ninguna fila.
+
+/**
+ * Lo único que un hermano puede cambiar de SU recibo: el aviso de pago.
+ *
+ * Ni el estado, ni el importe, ni la fecha de cobro, ni si está domiciliado, ni
+ * si ya viajó en una remesa. Todo eso lo decide la tesorería al confirmar.
+ */
+create or replace function cuotas_el_hermano_solo_avisa() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  -- Sin sesión no es el navegador: es el editor SQL o una función interna, que
+  -- ya han pasado por RLS. Ahí no hay nada que proteger y estorbaría para
+  -- arreglar datos a mano.
+  if auth.uid() is null then return new; end if;
+
+  -- Quien lleva las cuotas escribe la fila entera, que es su trabajo.
+  if modulo_permitido('cuotas') or modulo_permitido('tesoreria') then return new; end if;
+
+  -- Un hermano no se emite recibos a sí mismo.
+  if tg_op = 'INSERT' then
+    raise exception 'Un hermano no puede crearse recibos.' using errcode = 'P0001';
+  end if;
+
+  new.numero := old.numero;
+  new.hermano_id := old.hermano_id;
+  new.concepto := old.concepto;
+  new.importe := old.importe;
+  new.estado := old.estado;
+  new.fecha_emision := old.fecha_emision;
+  new.fecha_cobro := old.fecha_cobro;
+  new.domiciliada := old.domiciliada;
+  new.metodo_cobro := old.metodo_cobro;
+  new.fecha_pago := old.fecha_pago;
+  new.ejercicio := old.ejercicio;
+  new.hermandad_id := old.hermandad_id;
+  new.remesada_el := old.remesada_el;
+  -- La mora la propone quien lleva las cuotas, no el que la debe.
+  new.mora_propuesta_por := old.mora_propuesta_por;
+  new.mora_propuesta_nombre := old.mora_propuesta_nombre;
+  -- Y `pago_comunicado` es lo que sí se le deja: es el aviso.
+  return new;
+end $$;
+
+drop trigger if exists cuotas_el_hermano_solo_avisa on cuotas;
+create trigger cuotas_el_hermano_solo_avisa
+  before insert or update on cuotas
+  for each row execute function cuotas_el_hermano_solo_avisa();
+
+comment on function cuotas_el_hermano_solo_avisa() is
+  'Lista blanca de lo que un hermano puede cambiar de SU recibo: solo el aviso de pago. '
+  'Sin esto, con su propia sesión y una línea desde la consola del navegador se ponía el '
+  'recibo como pagado y a cero, salía al corriente y se llevaba su papeleta.';
+
+
+/**
+ * Y en su papeleta: puede renovar, renunciar y avisar de que ha pagado.
+ *
+ * No puede ponerse la papeleta como pagada ni como entregada —eso lo dice quien
+ * la cobra y quien la entrega—, ni cambiarse el número, que es el sitio en el
+ * cortejo y va por antigüedad.
+ */
+create or replace function papeletas_lo_que_toca_el_hermano() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return new; end if;
+  if modulo_permitido('papeletas') or modulo_permitido('cortejo') then return new; end if;
+
+  if tg_op = 'INSERT' then
+    -- Pedirla sí puede; nace sin cobrar y sin entregar.
+    new.estado := 'Asignada';
+    new.fecha_entrega := null;
+    new.pago_fecha := null;
+    new.fecha_pago := null;
+    new.motivo_anulacion := null;
+    return new;
+  end if;
+
+  new.numero := old.numero;
+  new.hermano_id := old.hermano_id;
+  new.anio := old.anio;
+  new.hermandad_id := old.hermandad_id;
+  new.fecha_solicitud := old.fecha_solicitud;
+  -- Lo que dice que está cobrada o entregada no lo pone él.
+  new.fecha_entrega := old.fecha_entrega;
+  new.pago_metodo := old.pago_metodo;
+  new.pago_fecha := old.pago_fecha;
+  new.metodo_pago := old.metodo_pago;
+  new.fecha_pago := old.fecha_pago;
+  new.motivo_anulacion := old.motivo_anulacion;
+
+  /*
+   * EL ESTADO, solo a los dos sitios a los que él puede llevarlo: pedir su
+   * sitio y renunciar. «Pagada» y «Entregada» las dice quien cobra y quien
+   * entrega; «Anulada» la dice la hermandad.
+   */
+  if new.estado is distinct from old.estado
+     and new.estado not in ('Asignada', 'Renuncia') then
+    new.estado := old.estado;
+  end if;
+
+  return new;
+end $$;
+
+drop trigger if exists papeletas_lo_que_toca_el_hermano on papeletas;
+create trigger papeletas_lo_que_toca_el_hermano
+  before insert or update on papeletas
+  for each row execute function papeletas_lo_que_toca_el_hermano();
+
+comment on function papeletas_lo_que_toca_el_hermano() is
+  'Lista blanca de lo que un hermano puede cambiar de SU papeleta: pedir sitio, renunciar '
+  'y avisar del pago. Ni cobrarla, ni entregarla, ni cambiarse el número.';
+
+-- -----------------------------------------------------------------------------
+-- Comprobación
+-- -----------------------------------------------------------------------------
+-- Los dos disparadores tienen que estar:
+--
+--   select tgname from pg_trigger
+--    where tgrelid in ('cuotas'::regclass, 'papeletas'::regclass) and not tgisinternal;
+--
+-- Tiene que salir `cuotas_el_hermano_solo_avisa` y `papeletas_lo_que_toca_el_hermano`,
+-- además de los `apuntar_*` del registro de actividad.
+
+-- =============================================================================
+--   SIN-CONTRASENAS-EN-LAS-SOLICITUDES.SQL — Fuera la contraseña en claro que guardaba cada solicitud de alta
+-- =============================================================================
+
+-- =============================================================================
+--   SIN-CONTRASEÑAS-EN-LAS-SOLICITUDES.SQL
+-- =============================================================================
+--
+-- EL FALLO: `solicitudes_alta.clave_propuesta` guardaba EN CLARO la contraseña
+-- que tecleaba quien pedía el alta desde la web pública.
+--
+-- Quién la ve: cualquiera del personal con el módulo «hermanos» —el Hermano
+-- Mayor, la Secretaría, el Diputado Mayor—, y no en una pantalla escondida sino
+-- en la propia fila de la solicitud. Y se queda ahí mientras la solicitud está
+-- pendiente, que en una hermandad pueden ser semanas.
+--
+-- POR QUÉ IMPORTA MÁS DE LO QUE PARECE: la gente repite contraseñas. La que
+-- veía la secretaria es, con mucha probabilidad, la del correo de esa persona.
+-- Quien pide el alta no está dándole una contraseña a una empresa con un equipo
+-- de seguridad: se la está dando a un vecino que lleva la secretaría los martes.
+--
+-- Y NO HACÍA FALTA NINGUNA. El camino de «se genera una clave de un solo uso al
+-- aprobar y se manda por correo» ya existía —se usaba en el alta de un menor,
+-- que llega sin contraseña—. Ahora se usa siempre, y el formulario pide un
+-- campo menos.
+--
+-- Esto hace dos cosas, y las dos hacen falta:
+--
+--   1. BORRA LAS QUE YA ESTUVIERAN GUARDADAS. Mientras existan, el problema
+--      sigue existiendo aunque el formulario ya no pida ninguna.
+--   2. IMPIDE QUE ENTREN MÁS, con un disparador. Y esto tampoco sobra: la
+--      hermandad puede tener el navegador con la versión anterior de la
+--      aplicación abierta desde ayer, y esa sí manda la contraseña.
+--
+-- No se borra la columna: quitarla rompería a esa versión anterior en cuanto
+-- alguien la use, y una solicitud perdida es peor que una columna vacía. Queda
+-- ahí, siempre en blanco.
+--
+-- Se puede ejecutar sobre una base ya en uso.
+
+-- 1. Fuera las que hay.
+update solicitudes_alta set clave_propuesta = '' where coalesce(clave_propuesta, '') <> '';
+
+-- 2. Y que no vuelvan a entrar.
+create or replace function solicitudes_sin_clave() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  -- En blanco siempre, venga de donde venga. No se rechaza la solicitud: lo
+  -- que importa es el alta, y quien la pide no tiene por qué quedarse fuera
+  -- porque su navegador tenga la versión de ayer.
+  new.clave_propuesta := '';
+  return new;
+end $$;
+
+drop trigger if exists solicitudes_sin_clave on solicitudes_alta;
+create trigger solicitudes_sin_clave
+  before insert or update on solicitudes_alta
+  for each row execute function solicitudes_sin_clave();
+
+comment on column solicitudes_alta.clave_propuesta is
+  'SIEMPRE VACÍA. Guardaba en claro la contraseña que proponía quien pedía el alta, '
+  'a la vista de la secretaría durante semanas. La clave se genera al aprobar y se '
+  'manda por correo. La columna se queda para no romper versiones anteriores de la '
+  'aplicación; un disparador la deja en blanco.';
+
+-- -----------------------------------------------------------------------------
+-- Comprobación
+-- -----------------------------------------------------------------------------
+-- Después de ejecutarlo, esto tiene que devolver 0:
+--
+--   select count(*) from solicitudes_alta where coalesce(clave_propuesta, '') <> '';
+
+-- =============================================================================
+--   FRENO-DE-LOS-FORMULARIOS.SQL — Un tope a lo que cualquiera puede meter desde la web pública
+-- =============================================================================
+
+-- =============================================================================
+--   FRENO-DE-LOS-FORMULARIOS.SQL — Que nadie llene la base desde fuera
+-- =============================================================================
+--
+-- HAY TRES PUERTAS QUE PUEDE EMPUJAR CUALQUIERA SIN IDENTIFICARSE, y ninguna
+-- tenía tope:
+--
+--   · el buzón de la web (`mensajes_web`): contacto, donativos, lotería;
+--   · las solicitudes de alta (`solicitudes_alta`);
+--   · el contador de visitas, que tiene su freno en `visitas-web.sql`, donde
+--     vive la función. Ponerlo aquí la redefiniría, y entonces ese fichero
+--     dejaría de poder ejecutarse suelto sin deshacer el freno.
+--
+-- Las tres se abren a `anon` a propósito y así tiene que seguir siendo: es la
+-- web pública y el visitante no tiene sesión ni la va a tener. Lo que faltaba
+-- era el freno.
+--
+-- LO QUE HAY EN EL NAVEGADOR NO CUENTA. Los formularios llevan un campo trampa
+-- para robots, y está bien, pero solo lo ve quien pasa por el formulario. Quien
+-- habla con la base directamente —que es de lo que va esto— no lo pisa.
+--
+-- QUÉ PASA SIN FRENO, y son dos cosas distintas:
+--
+--   1. SE AHOGA EL BUZÓN. Diez mil mensajes de relleno y los tres de verdad
+--      —un donativo, una consulta, alguien que quiere hacerse hermano— no hay
+--      quien los encuentre. No hace falta tirar nada abajo para hacer daño.
+--   2. SE LLENA LA BASE. Un proyecto de Supabase del plan gratuito tiene el
+--      espacio contado, y ahí no se cae solo el buzón: se cae la hermandad
+--      entera, con su censo y sus cuotas dentro.
+--
+-- Y AL TEXTO TAMPOCO SE LE PEDÍA MEDIDA: un solo mensaje podía traer megas.
+-- Se recorta aquí, del lado de la base, porque lo que recorta el navegador se
+-- quita quitando el navegador de en medio.
+--
+-- LOS TOPES SON HOLGADOS A PROPÓSITO. Sesenta mensajes por hora en una
+-- hermandad es muchísimo —el día siguiente a la salida no llegan ni diez—, y
+-- cuarenta altas por hora son casi mil al día. No se trata de acotar el uso de
+-- verdad, sino de que el abuso no salga gratis.
+--
+-- Se puede ejecutar sobre una base ya en uso: no toca ninguna fila.
+
+/**
+ * El buzón: se recorta el texto y se cuentan los de la última hora.
+ *
+ * El personal de la hermandad no pasa por aquí (`auth.uid()` con sesión y sin
+ * ser hermano): si algún día se importa un buzón entero, no se topa consigo
+ * mismo.
+ */
+create or replace function mensajes_web_con_freno() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_recientes int;
+begin
+  -- Medida a todo lo que llega. Va antes del tope: aunque la fila entre, no
+  -- puede entrar con megas dentro.
+  new.nombre   := left(coalesce(new.nombre, ''), 120);
+  new.email    := left(coalesce(new.email, ''), 160);
+  new.telefono := left(coalesce(new.telefono, ''), 40);
+  new.asunto   := left(coalesce(new.asunto, ''), 200);
+  new.mensaje  := left(coalesce(new.mensaje, ''), 4000);
+  new.causa    := left(coalesce(new.causa, ''), 200);
+  new.metodo   := left(coalesce(new.metodo, ''), 60);
+
+  if tg_op <> 'INSERT' then return new; end if;
+  -- Quien tiene sesión y no es hermano es la propia hermandad: no se le frena.
+  if auth.uid() is not null and not auth_es_hermano() then return new; end if;
+
+  /*
+   * LA HORA LA PONE LA BASE, Y ESTO NO ES UN DETALLE: ES EL FRENO.
+   *
+   * El tope de abajo cuenta los de la última hora por `creado_en`. Si esa
+   * columna llega de fuera, basta con ponerla tres días atrás para que el
+   * contador no vea ninguno y el freno no exista. Comprobado: entraban los
+   * doscientos.
+   *
+   * Y de paso, `leido` y `atendido` tampoco los pone quien escribe: si no, se
+   * puede dejar un mensaje ya marcado como leído y atendido, o sea, invisible
+   * en el buzón de la hermandad.
+   */
+  new.creado_en := now();
+  new.leido := false;
+  new.atendido := false;
+
+  select count(*) into v_recientes from mensajes_web
+   where hermandad_id = new.hermandad_id and creado_en > now() - interval '1 hour';
+  if v_recientes >= 60 then
+    -- Se avisa en cristiano: quien llega justo detrás de un barrido tiene
+    -- derecho a saber por qué no le funciona y a que le digan que vuelva.
+    raise exception 'Ahora mismo no se pueden recoger más mensajes. Inténtalo dentro de un rato.'
+      using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists mensajes_web_con_freno on mensajes_web;
+create trigger mensajes_web_con_freno
+  before insert or update on mensajes_web
+  for each row execute function mensajes_web_con_freno();
+
+
+/**
+ * Las solicitudes de alta, igual.
+ *
+ * `fecha` es texto («23 ago 2026») y no sirve para contar por hora, así que se
+ * cuentan las que no están resueltas: una avalancha las deja todas pendientes,
+ * que es exactamente la señal.
+ */
+create or replace function solicitudes_con_freno() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_pendientes int;
+begin
+  new.nombre   := left(coalesce(new.nombre, ''), 120);
+  new.dni      := left(coalesce(new.dni, ''), 40);
+  new.email    := left(coalesce(new.email, ''), 160);
+  new.telefono := left(coalesce(new.telefono, ''), 40);
+
+  if tg_op <> 'INSERT' then return new; end if;
+  if auth.uid() is not null and not auth_es_hermano() then return new; end if;
+
+  /*
+   * Y EL ESTADO LO PONE LA BASE, por lo mismo y por algo peor.
+   *
+   * El tope de abajo cuenta las PENDIENTES, así que mandándolas con
+   * `estado: 'Aprobada'` no cuentan y el freno no existe. Pero es que además,
+   * una solicitud que llega ya aprobada desde fuera aparece en el panel de la
+   * secretaría como si la hubiera aprobado alguien de la casa.
+   */
+  new.estado := 'Pendiente';
+  new.resuelta_el := null;
+  new.motivo_rechazo := null;
+
+  select count(*) into v_pendientes from solicitudes_alta
+   where hermandad_id = new.hermandad_id and estado = 'Pendiente';
+  /*
+   * Trescientas pendientes A LA VEZ no las tiene ninguna hermandad: son las que
+   * caben en el panel de la secretaría antes de que deje de poder mirarlas. Y
+   * el tope se suelta solo según las va resolviendo, que es lo que la hace
+   * distinta de un tope por hora — aquí no hay que esperar a nada.
+   */
+  if v_pendientes >= 300 then
+    raise exception 'Ahora mismo no se pueden recoger más solicitudes. Inténtalo dentro de unos días.'
+      using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists solicitudes_con_freno on solicitudes_alta;
+create trigger solicitudes_con_freno
+  before insert or update on solicitudes_alta
+  for each row execute function solicitudes_con_freno();
+
+
+
+-- -----------------------------------------------------------------------------
+-- Comprobación
+-- -----------------------------------------------------------------------------
+-- Los dos disparadores tienen que estar:
+--
+--   select tgname from pg_trigger
+--    where tgrelid in ('mensajes_web'::regclass, 'solicitudes_alta'::regclass)
+--      and not tgisinternal;
+
+-- =============================================================================
+--   CUENTA-POR-HERMANDAD.SQL — Ser hermano de dos hermandades: una cuenta por hermandad + DNI
+-- =============================================================================
+
+-- =============================================================================
+--   CUENTA-POR-HERMANDAD.SQL — Ser hermano de dos hermandades a la vez
+-- =============================================================================
+--
+-- EN ANDALUCÍA SER HERMANO DE DOS O TRES HERMANDADES ES LO NORMAL. Y hasta
+-- ahora, cuando las dos estaban en Gobergo, esa persona solo podía entrar en el
+-- área de UNA.
+--
+-- El censo ya lo contemplaba: el DNI se hizo único POR HERMANDAD en su día, con
+-- el comentario «la misma persona puede ser hermana de dos». Su ficha está dos
+-- veces, una en cada hermandad, y eso está bien. Lo que faltaba era la cuenta.
+--
+-- POR QUÉ FALLABA. Un hermano entra así:
+--
+--     elige hermandad → escribe su DNI → escribe su contraseña
+--
+-- El correo NO LO TECLEA NUNCA: la aplicación lo busca a partir del DNI y con
+-- él inicia la sesión. Pero las cuentas de Supabase se identifican POR CORREO, y
+-- el correo es único en todo el sistema. Así que al aprobar el alta en la
+-- segunda hermandad, la creación de la cuenta se estrellaba con «el correo ya lo
+-- usa otra cuenta»: esa persona quedaba en el censo de la segunda y sin poder
+-- entrar en su área.
+--
+-- LO QUE SE SEPARA AQUÍ son dos cosas que estaban pegadas sin necesidad:
+--
+--   · `email`         — el correo de la persona, donde recibe los avisos. Es el
+--                       MISMO en las dos hermandades, y no se toca.
+--   · `correo_acceso` — cómo se llama su cuenta por dentro. Uno por hermandad.
+--                       No lo ve ni lo teclea nadie.
+--
+-- Con eso, hermandad + DNI ES la cuenta, que es exactamente como se entra. Dos
+-- hermandades, dos cuentas, dos contraseñas —independientes, porque son dos
+-- accesos distintos— y un solo correo para los avisos.
+--
+-- NADIE QUE YA TENGA CUENTA SE ENTERA DE ESTO. Su `correo_acceso` está a null, y
+-- `resolver_email_hermano` devuelve entonces el correo de siempre: entran igual
+-- que ayer. El identificador derivado solo lo usan las cuentas que se crean a
+-- partir de ahora.
+--
+-- Se puede ejecutar sobre una base ya en uso: no toca ninguna fila.
+
+/*
+ * `gen_random_bytes` y `digest` vienen con `pgcrypto`, no con Postgres a secas.
+ * En Supabase está encendida de fábrica, pero se declara igualmente: este
+ * archivo se puede ejecutar solo, y sin ella se pararía a la mitad con un error
+ * que habla de una función y no de una extensión — que fue exactamente lo que
+ * pasó con `suscriptores-web.sql`.
+ */
+create extension if not exists pgcrypto;
+
+alter table hermanos add column if not exists correo_acceso text;
+
+/*
+ * Único, porque es el nombre de una cuenta. Parcial —solo donde no es nulo—
+ * para no chocar con todas las fichas viejas, que lo tienen vacío.
+ */
+create unique index if not exists hermanos_correo_acceso_uniq
+  on hermanos (lower(correo_acceso)) where correo_acceso is not null;
+
+comment on column hermanos.correo_acceso is
+  'Cómo se llama su cuenta POR DENTRO, una por hermandad. No es su correo: ese es '
+  '«email» y sirve para los avisos, es el mismo en todas sus hermandades y no se '
+  'toca. Nulo en las fichas anteriores a este cambio, que siguen entrando con su '
+  'correo de siempre.';
+
+/**
+ * El identificador interno de una cuenta: hermandad + DNI.
+ *
+ * NO ES UN CORREO DE VERDAD y no tiene por qué serlo: no recibe nada, y quien
+ * escribe a esa persona usa el `email` de su ficha. Tiene forma de correo porque
+ * es lo que Supabase pide para nombrar una cuenta.
+ *
+ * Lleva un trozo del id de la hermandad para que el mismo DNI dé dos cuentas
+ * distintas, que es de lo que va todo esto. Y el DNI va limpio —sin puntos ni
+ * guiones— porque en el censo importado está escrito de las dos maneras y son la
+ * misma persona.
+ *
+ * Se GUARDA en la ficha en cuanto se crea la cuenta, no se recalcula cada vez.
+ * Si mañana la secretaría corrige un DNI mal tecleado —que en un censo importado
+ * de un Excel pasa— la cuenta tiene que seguir siendo la suya; recalculándolo se
+ * quedaría sin poder entrar y sin que nadie entendiera por qué.
+ */
+create or replace function correo_de_acceso(p_hermandad_id uuid, p_dni text)
+returns text
+language sql immutable as $$
+  select upper(regexp_replace(coalesce(p_dni, ''), '[^A-Za-z0-9]', '', 'g'))
+      || '.' || left(replace(p_hermandad_id::text, '-', ''), 12)
+      || '@acceso.gobergo.com'
+$$;
+
+/**
+ * Y el que busca la aplicación para iniciar sesión: el interno si lo tiene, y
+ * si no el de siempre.
+ *
+ * Ese `coalesce` es lo que hace que este cambio no se note: las fichas de antes
+ * no tienen identificador interno y siguen entrando con su correo, exactamente
+ * igual que ayer.
+ *
+ * Y DE PASO SE CIERRA UNA FUGA. Esta función se la puede llamar cualquiera sin
+ * identificarse —es como entra un hermano— y devolvía EL CORREO REAL de esa
+ * persona. Un DNI no es ningún secreto: sabiendo el de alguien se obtenía su
+ * dirección. Hay freno (25 DNI distintos por media hora), pero contra una
+ * persona concreta funciona a la primera. Para las cuentas nuevas ya no
+ * devuelve nada que diga nada de nadie.
+ */
+create or replace function resolver_email_hermano(p_hermandad_id uuid, p_dni text)
+returns text
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_dni text;
+  v_huella text;
+  v_recientes int;
+  v_email text;
+begin
+  v_dni := upper(regexp_replace(coalesce(p_dni, ''), '[^A-Za-z0-9]', '', 'g'));
+  if v_dni = '' or p_hermandad_id is null then
+    return null;
+  end if;
+
+  v_huella := md5(v_dni || ':' || p_hermandad_id::text);
+
+  select count(distinct huella_dni) into v_recientes
+    from intentos_acceso
+   where hermandad_id = p_hermandad_id
+     and cuando > now() - interval '30 minutes';
+
+  if v_recientes >= 25 then
+    raise exception 'Demasiados intentos de acceso en esta hermandad. Espera unos minutos y vuelve a probar.'
+      using errcode = 'P0001';
+  end if;
+
+  insert into intentos_acceso (hermandad_id, huella_dni) values (p_hermandad_id, v_huella);
+  delete from intentos_acceso where cuando < now() - interval '1 day';
+
+  select coalesce(nullif(correo_acceso, ''), nullif(email, '')) into v_email
+    from hermanos
+   where hermandad_id = p_hermandad_id
+     and upper(regexp_replace(dni, '[^A-Za-z0-9]', '', 'g')) = v_dni
+     and estado <> 'Baja'
+   limit 1;
+
+  return v_email;
+end $$;
+
+grant execute on function resolver_email_hermano(uuid, text) to anon, authenticated;
+
+-- -----------------------------------------------------------------------------
+-- Comprobación
+-- -----------------------------------------------------------------------------
+-- La columna tiene que estar, y vacía en todas las fichas de hoy:
+--
+--   select count(*) as fichas, count(correo_acceso) as con_cuenta_propia from hermanos;
+--
+-- «con_cuenta_propia» en 0 al principio es lo correcto: se va llenando según se
+-- creen cuentas nuevas.
+
+
+-- =============================================================================
+--   Y LA RECUPERACIÓN DE CONTRASEÑA, NUESTRA
+-- =============================================================================
+--
+-- POR QUÉ HACE FALTA: «he olvidado mi contraseña» hacía que Supabase mandara un
+-- correo a la dirección de la cuenta. Con el identificador interno de arriba,
+-- esa dirección NO RECIBE NADA — así que el enlace no llegaría nunca y cada
+-- hermano nuevo se quedaría sin poder recuperar su acceso. Eso es meter un
+-- fallo, no quitarlo, y por eso esto entra en el mismo archivo.
+--
+-- CÓMO FUNCIONA, y es igual que el correo de confirmar una suscripción: el
+-- navegador solo dice «este DNI de esta hermandad quiere recuperar». Ni el
+-- token ni el correo de la persona pasan por él. La función `enviar-correo` los
+-- lee aquí con la clave de servicio y manda el enlace al correo DE VERDAD de su
+-- ficha.
+
+create table if not exists recuperaciones_hermano (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid not null references hermandades(id) on delete cascade,
+  hermano_id uuid not null references hermanos(id) on delete cascade,
+  /*
+   * LA HUELLA DEL TOKEN, NO EL TOKEN. Quien pudiera leer esta tabla tendría si
+   * no la llave para entrar en la cuenta de cualquiera que haya pedido
+   * recuperarla. Guardando el resumen, la tabla no sirve de nada por sí sola.
+   */
+  huella text not null unique,
+  caduca_en timestamptz not null,
+  usada_en timestamptz,
+  creada_en timestamptz not null default now()
+);
+create index if not exists recuperaciones_hermano_idx on recuperaciones_hermano (hermano_id, creada_en desc);
+
+alter table recuperaciones_hermano enable row level security;
+-- Nadie la toca desde fuera. Las dos funciones de abajo son SECURITY DEFINER y
+-- se saltan las políticas a propósito; sin ninguna política, una tabla con RLS
+-- encendido está cerrada del todo, que es lo que se quiere.
+revoke all on recuperaciones_hermano from anon, authenticated;
+
+/**
+ * Paso 1: se pide. Devuelve el token, el correo DE VERDAD y el nombre, para que
+ * quien manda el correo sepa a dónde y cómo escribir.
+ *
+ * SOLO PARA `service_role`. Si esto se le diera a `anon`, sería regalar la
+ * llave de la cuenta de cualquiera con solo saber su DNI, que es justo lo
+ * contrario de lo que viene a hacer.
+ *
+ * Devuelve null —y no se manda nada— si ese DNI no está en esa hermandad, si
+ * está de baja, si no tiene correo donde escribirle, o si ya pidió una hace
+ * menos de cinco minutos. Lo último es el freno: sin él, pedir la recuperación
+ * mil veces con el DNI de otro le llena la bandeja, firmado por la hermandad.
+ */
+create or replace function pedir_recuperacion_hermano(p_hermandad_id uuid, p_dni text)
+returns jsonb
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_dni text;
+  v_hermano record;
+  v_token text;
+begin
+  if p_hermandad_id is null then return null; end if;
+  v_dni := upper(regexp_replace(coalesce(p_dni, ''), '[^A-Za-z0-9]', '', 'g'));
+  if v_dni = '' then return null; end if;
+
+  select id, nombre, email into v_hermano from hermanos
+   where hermandad_id = p_hermandad_id
+     and upper(regexp_replace(dni, '[^A-Za-z0-9]', '', 'g')) = v_dni
+     and estado <> 'Baja'
+     and coalesce(email, '') <> ''
+     -- Sin cuenta no hay contraseña que recuperar.
+     and auth_user_id is not null
+   limit 1;
+  if v_hermano.id is null then return null; end if;
+
+  if exists (select 1 from recuperaciones_hermano
+              where hermano_id = v_hermano.id and creada_en > now() - interval '5 minutes') then
+    return null;
+  end if;
+
+  -- Largo y al azar: es lo único que hace falta saber para ponerle otra
+  -- contraseña a esa cuenta, así que no puede haber nada que adivinar.
+  v_token := encode(gen_random_bytes(32), 'hex');
+
+  -- Las anteriores de esta persona dejan de valer: pedir una nueva tiene que
+  -- invalidar la de antes, o un enlace viejo reenviado sigue abriendo.
+  update recuperaciones_hermano set usada_en = now()
+   where hermano_id = v_hermano.id and usada_en is null;
+
+  insert into recuperaciones_hermano (hermandad_id, hermano_id, huella, caduca_en)
+  values (p_hermandad_id, v_hermano.id, encode(digest(v_token, 'sha256'), 'hex'),
+          now() + interval '2 hours');
+
+  -- Y se limpia lo viejo aprovechando el viaje, para no tener que programar nada.
+  delete from recuperaciones_hermano where creada_en < now() - interval '7 days';
+
+  return jsonb_build_object('token', v_token, 'email', v_hermano.email, 'nombre', v_hermano.nombre);
+end $$;
+revoke all on function pedir_recuperacion_hermano(uuid, text) from public, anon, authenticated;
+grant execute on function pedir_recuperacion_hermano(uuid, text) to service_role;
+
+/**
+ * Paso 2: se canjea. Devuelve de qué cuenta es, para poder ponerle la
+ * contraseña nueva.
+ *
+ * También solo para `service_role`: la contraseña se cambia con la clave de
+ * servicio desde la función `enviar-correo`, porque eso no se puede hacer desde
+ * SQL ni desde el navegador.
+ *
+ * SE MARCA COMO USADA EN LA MISMA CONSULTA. Un token de un solo uso que se
+ * comprueba y se marca en dos pasos se puede canjear dos veces si llegan a la
+ * vez, y aquí eso es dos cambios de contraseña.
+ */
+create or replace function canjear_recuperacion_hermano(p_token text)
+returns uuid
+language plpgsql volatile security definer set search_path = public as $$
+declare v_auth uuid;
+begin
+  if coalesce(p_token, '') = '' then return null; end if;
+
+  update recuperaciones_hermano r
+     set usada_en = now()
+    from hermanos h
+   where h.id = r.hermano_id
+     and r.huella = encode(digest(p_token, 'sha256'), 'hex')
+     and r.usada_en is null
+     and r.caduca_en > now()
+     and h.estado <> 'Baja'
+  returning h.auth_user_id into v_auth;
+
+  return v_auth;
+end $$;
+revoke all on function canjear_recuperacion_hermano(text) from public, anon, authenticated;
+grant execute on function canjear_recuperacion_hermano(text) to service_role;
+
+
+-- =============================================================================
+--   QUÉ HA QUEDADO PUESTO
+-- =============================================================================
+
+select * from (values
+  ('Ajustes de cuotas de la hermandad',
+   (select count(*) > 0 from information_schema.columns
+     where table_name = 'hermandad_settings' and column_name = 'ajustes_cuotas')),
+  ('Catálogo de etiquetas',
+   (select count(*) > 0 from information_schema.columns
+     where table_name = 'hermandad_settings' and column_name = 'etiquetas')),
+  /*
+   * Los dos módulos que faltaban, mirando SOLO las hermandades que tienen
+   * permisos sembrados.
+   *
+   * Una hermandad sin NINGUNA fila en «permisos_cargo» es otra avería
+   * distinta —nadie con cargo puede hacer nada allí— y el relleno no la toca a
+   * propósito: no se le inventan cargos que nunca tuvo. Metiéndola en esta
+   * cuenta, el informe decía «no» después de haber hecho su trabajo bien, que
+   * es la peor manera de informar: parece que el fichero ha fallado. Va en su
+   * propia línea, abajo.
+   */
+  ('Permiso de «eventos» al Hermano Mayor',
+   (select count(*) = 0 from hermandades h
+     where exists (select 1 from permisos_cargo pc where pc.hermandad_id = h.id)
+       and not exists (
+      select 1 from permisos_cargo pc
+       where pc.hermandad_id = h.id and pc.cargo = 'Hermano Mayor' and pc.modulo_id = 'eventos'))),
+  ('Permiso de «web» al Hermano Mayor',
+   (select count(*) = 0 from hermandades h
+     where exists (select 1 from permisos_cargo pc where pc.hermandad_id = h.id)
+       and not exists (
+      select 1 from permisos_cargo pc
+       where pc.hermandad_id = h.id and pc.cargo = 'Hermano Mayor' and pc.modulo_id = 'web'))),
+  /*
+   * Y si alguna hermandad se quedó SIN PERMISOS DE NINGÚN TIPO, se dice. Pasa
+   * con las creadas antes de que existiera la siembra: la junta entra, no
+   * puede tocar nada y no hay forma de saber por qué. Se arregla ejecutando
+   * «permisos-por-hermandad.sql», que sí siembra desde cero.
+   */
+  ('Ninguna hermandad se ha quedado sin permisos',
+   (select count(*) = 0 from hermandades h
+     where not exists (select 1 from permisos_cargo pc where pc.hermandad_id = h.id))),
+  ('Almacén de imágenes de la web',
+   (select count(*) > 0 from storage.buckets where id = 'imagenes')),
+  ('Contador de visitas',
+   (select to_regclass('public.visitas_web') is not null)),
+  ('Suscriptores de la web',
+   (select to_regclass('public.suscriptores_web') is not null)),
+  ('Copias de seguridad',
+   (select count(*) > 0 from storage.buckets where id = 'copias')),
+  ('Limpieza automática (pg_cron, se activa a mano)',
+   (select count(*) > 0 from pg_extension where extname = 'pg_cron'))
+) as t(que, esta)
+order by esta, que;

@@ -1,0 +1,15 @@
+﻿D.N.I.;Apellidos y nombre;Ejercicio;Concepto;Importe;Estado;Fecha de pago;Forma de pago
+10111213H;Utrera Zamora, Pablo;2023;Cuota anual;60,00 €;Pagada;12/02/2023;Domiciliación
+10111213H;Utrera Zamora, Pablo;2024;Cuota anual;60,00 €;Pagada;10/02/2024;Domiciliación
+10111213H;Utrera Zamora, Pablo;2025;Cuota anual;65,00 €;Pagada;11/02/2025;Domiciliación
+23456789J;Bermúdez Cano, José Antonio;2024;Cuota anual;60,00 €;Pagada;10/02/2024;Transferencia
+23456789J;Bermúdez Cano, José Antonio;2025;Cuota anual;65,00 €;Pendiente;;Transferencia
+34567890W;Cordero Rueda, Ana Isabel;2025;Cuota anual;65,00 €;Devuelta;;Domiciliación
+45678901A;Delgado Nieto, Francisco Javier;2025;Cuota anual;65,00 €;Pagada;14/02/2025;Bizum
+45678901A;Delgado Nieto, Francisco Javier;2025;Cuota extraordinaria restauración;25,00 €;Pagada;20/03/2025;Efectivo
+56789012G;Espinosa Gil, Rocío;2025;Donativo extraordinario;1.234,56 €;Pagada;02/04/2025;Transferencia
+67890123M;Fernández Ojeda, Manuel;2024;Cuota anual;60;Pagada;10/02/2024;Domiciliación
+78901234Y;Gálvez Cruz, Inmaculada;2025;Cuota anual;65,00 €;En mora;;Domiciliación
+10111213H;Utrera Zamora, Pablo;2025;Cuota anual;65,00 €;Pagada;11/02/2025;Domiciliación
+99999999R;Persona Que No Está, Juan;2025;Cuota anual;65,00 €;Pendiente;;
+89012345F;Herrera Pavón, Álvaro;;Cuota anual;65,00 €;Pagada;;Efectivo

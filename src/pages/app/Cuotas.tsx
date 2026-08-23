@@ -52,6 +52,7 @@ import { useContextoDeImportacion } from '../../lib/contextoImportacion'
 import { TABLA_CUOTAS } from '../../lib/tablasImportables'
 import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
+import { getCampana } from '../../lib/campana'
 import {
   ejercicioDeCuotas,
   emitirCuotasAnuales,
@@ -60,9 +61,6 @@ import {
   simularCobroRemesa,
   parseFechaEs,
   ejercicioDe,
-  ejercicioVigente,
-  inicioDeEjercicio,
-  renovacionValida,
 } from '../../lib/cuotasEmision'
 import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
@@ -78,12 +76,6 @@ function hoy() {
 }
 
 /** Fecha por defecto del primer cobro: hoy + 15 días (margen de aviso típico de una domiciliación SEPA). */
-/** Meses en castellano para el ajuste de renovación (enero = índice 0). */
-const MESES_LARGOS = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-]
-
 function fechaCobroPorDefecto() {
   const d = new Date()
   d.setDate(d.getDate() + 15)
@@ -221,24 +213,7 @@ export default function Cuotas() {
    * honesto es no ofrecer la emisión y decir por qué.
    */
   const catalogoListo = conceptosCuota.length > 0
-  /**
-   * EL EJERCICIO QUE TOCA COBRAR, según el día en que la hermandad renueva.
-   *
-   * Salía de `getCampana().anio`, que es la Semana Santa que viene y NO el
-   * ejercicio contable. En agosto de 2026 eso proponía emitir el **2027**: es
-   * la captura que llegó, «se emitirá … a 32 hermanos del ejercicio 2027». Un
-   * año entero cobrado por adelantado, y a los domiciliados no se les deshace
-   * borrando el recibo, porque el cargo ya ha salido en la remesa.
-   *
-   * Ahora es el de la última renovación cumplida: con renovación el 1 de enero
-   * es el año natural, y con renovación en septiembre, en agosto todavía se
-   * está en el ejercicio del año anterior. Así el ciclo se repite solo cada
-   * año, el día que diga la hermandad.
-   */
-  const ejercicioEnCurso = useMemo(
-    () => ejercicioVigente(ajustes.renovacion),
-    [ajustes.renovacion],
-  )
+  const ejercicioEnCurso = useMemo(() => getCampana().anio, [])
   const ultimoEmitido = useMemo(() => ultimoEjercicio(cuotas), [cuotas])
   /**
    * EL EJERCICIO QUE SE ESTÁ MIRANDO, que NO es el de la campaña.
@@ -258,65 +233,29 @@ export default function Cuotas() {
   const [emisionOpen, setEmisionOpen] = useState(false)
   const [ejercicioEmision, setEjercicioEmision] = useState(ejercicioEnCurso)
   const [conceptoEmision, setConceptoEmision] = useState('')
-  /*
-   * EL CONCEPTO ELEGIDO SIEMPRE HA DE ESTAR EN EL CATÁLOGO.
-   *
-   * El catálogo llega de la base después del primer pintado, y la hermandad
-   * puede renombrar su cuota desde Configuración. Antes esto solo se rellenaba
-   * «si está vacío», así que un nombre que dejaba de existir se quedaba puesto:
-   * el `<select>` no encontraba ninguna opción con ese valor y se pintaba EN
-   * BLANCO, que es la captura que llegó, mientras el aviso de debajo seguía
-   * nombrando el concepto viejo.
-   */
+  // El catálogo llega después del primer pintado. Si el concepto se fijara solo
+  // al montar, se quedaría con el valor de entonces —vacío, o el de ejemplo— y
+  // la emisión se haría con un nombre que no es de la hermandad.
   useEffect(() => {
-    if (conceptosCuota.length === 0) return
-    if (conceptosCuota.some((c) => c.nombre === conceptoEmision)) return
-    setConceptoEmision(conceptosCuota[0].nombre)
-  }, [conceptosCuota, conceptoEmision])
+    if (!conceptoEmision && conceptoAnual) setConceptoEmision(conceptoAnual.nombre)
+  }, [conceptoAnual, conceptoEmision])
   const [metodoEmision, setMetodoEmision] = useState<MetodoCobro>('Domiciliación')
   // Un año a medio teclear («2», «202») emitiría cuotas de un ejercicio absurdo.
   const ejercicioValido = ejercicioEmision >= 2000 && ejercicioEmision <= 2100
 
-  /**
-   * EL CONCEPTO QUE SE VA A EMITIR, como objeto del catálogo y no como texto.
-   *
-   * Con el nombre suelto había tres respuestas distintas a la vez en el mismo
-   * cajón: el desplegable en blanco (ninguna opción con ese valor), el aviso
-   * nombrando el concepto viejo, y el importe cogido del PRIMER concepto del
-   * catálogo —`?? conceptoAnual?.importe`—, que no tiene por qué ser el
-   * elegido. Con el objeto entero solo caben dos: o es uno del catálogo, o no
-   * hay concepto y no se emite nada.
-   */
-  const conceptoElegido = useMemo(
-    () => conceptosCuota.find((c) => c.nombre === conceptoEmision) ?? null,
-    [conceptosCuota, conceptoEmision],
-  )
   const pendientesDeEmitir = useMemo(
-    () =>
-      conceptoElegido
-        ? hermanosSinCuota(cuotas, hermanos, ejercicioEmision, conceptoElegido.nombre)
-        : [],
-    [cuotas, hermanos, ejercicioEmision, conceptoElegido],
+    () => hermanosSinCuota(cuotas, hermanos, ejercicioEmision, conceptoEmision),
+    [cuotas, hermanos, ejercicioEmision, conceptoEmision],
   )
-  const importeConceptoEmision = conceptoElegido?.importe ?? 0
-  /** El día en que arranca el ejercicio que se está emitiendo: la fecha de cobro. */
-  const fechaCobroDelEjercicio = useMemo(
-    () => inicioDeEjercicio(ejercicioEmision, ajustes.renovacion),
-    [ejercicioEmision, ajustes.renovacion],
+  const importeConceptoEmision = useMemo(
+    () => conceptosCuota.find((c) => c.nombre === conceptoEmision)?.importe ?? conceptoAnual?.importe ?? 0,
+    [conceptosCuota, conceptoEmision, conceptoAnual],
   )
-  /** Cuántos hermanos no tienen todavía la cuota del ejercicio en curso. */
-  const sinCuotaDelEjercicio = useMemo(
-    () =>
-      conceptoAnual
-        ? hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual.nombre).length
-        : 0,
-    [cuotas, hermanos, ejercicioEnCurso, conceptoAnual],
-  )
-  // ¿Toca un ejercicio nuevo? Hay hermanos activos sin la cuota del ejercicio
-  // en curso, que avanza solo el día de la renovación: así el aviso vuelve
-  // cada año sin que nadie tenga que acordarse.
+  // ¿Toca un ejercicio nuevo? Hay hermanos activos sin la cuota anual del año en curso.
   const hayNuevoEjercicio =
-    catalogoListo && (ultimoEmitido == null || ultimoEmitido < ejercicioEnCurso) && sinCuotaDelEjercicio > 0
+    catalogoListo &&
+    (ultimoEmitido == null || ultimoEmitido < ejercicioEnCurso) &&
+    hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual!.nombre).length > 0
   const hermanoDe = useMemo(() => {
     const map = new Map(hermanos.map((h) => [h.id, h]))
     return (id: string) => map.get(id)
@@ -479,22 +418,14 @@ export default function Cuotas() {
 
   function abrirEmision() {
     setEjercicioEmision(ejercicioEnCurso)
-    /*
-     * NO se inventa un concepto. Aquí ponía `?? 'Cuota anual'`, que es
-     * exactamente contra lo que avisa `conceptosCuota.ts`: sin catálogo de la
-     * hermandad, el cajón se abría con un nombre que no es suyo y con importe
-     * 0 €, porque ese nombre no está en ningún sitio. Es la captura que llegó:
-     * «se emitirá 0,00 € de "Cuota anual" a 32 hermanos». Sin catálogo no hay
-     * nada que proponer, y lo que se enseña es por qué.
-     */
-    if (conceptoAnual) setConceptoEmision(conceptoAnual.nombre)
+    setConceptoEmision(conceptoAnual?.nombre ?? 'Cuota anual')
     setMetodoEmision('Domiciliación')
     setEmisionOpen(true)
   }
 
   /** Emite la cuota anual del ejercicio a todos los hermanos que aún no la tienen. */
   function confirmarEmision() {
-    if (!ejercicioValido || !conceptoElegido) return
+    if (!ejercicioValido) return
     // Se calcula DENTRO del updater, sobre la lista más reciente: si se emitiera
     // sobre la copia del render (p. ej. antes de que termine de cargar la tabla)
     // se numeraría desde 1 y se duplicarían recibos ya existentes.
@@ -503,21 +434,9 @@ export default function Cuotas() {
         cuotas: prev,
         hermanos,
         ejercicio: ejercicioEmision,
-        concepto: conceptoElegido.nombre,
-        importe: conceptoElegido.importe,
-        /*
-         * SE COBRA EL DÍA DE LA RENOVACIÓN, no dentro de quince días.
-         *
-         * Era `hoy + 15`, así que la fecha de cobro dependía del día que el
-         * tesorero se acordara de pulsar el botón: emitir el 3 de enero o el
-         * 3 de marzo daba dos ejercicios con vencimientos distintos, y la
-         * remesa —que solo incluye recibos cuya fecha de cobro ha llegado— se
-         * quedaba esperando dos semanas sin motivo. El ejercicio arranca el
-         * día que dice la hermandad y ese es el día del cargo; si se emite
-         * tarde, la fecha queda atrás y los domiciliados entran ya en la
-         * primera remesa, que es lo que toca cuando se va con retraso.
-         */
-        fechaCobro: formatearFechaInput(isoLocal(fechaCobroDelEjercicio)),
+        concepto: conceptoEmision,
+        importe: importeConceptoEmision,
+        fechaCobro: formatearFechaInput(fechaCobroPorDefecto()),
         fechaEmision: hoy(),
         metodoPorDefecto: metodoEmision,
         nuevoId,
@@ -813,13 +732,9 @@ export default function Cuotas() {
       {hayNuevoEjercicio && (
         <div className="banner-inline banner-inline--accent cuotas-nuevo-ejercicio">
           <span>
-            <b>
-              Nuevo ejercicio {ejercicioEnCurso}, desde el {ajustes.renovacion.dia} de{' '}
-              {MESES_LARGOS[ajustes.renovacion.mes - 1]}.
-            </b>{' '}
-            Hay {sinCuotaDelEjercicio} hermanos sin la {conceptoAnual!.nombre} de este ejercicio.
-            Emítela a todo el censo de una vez: a quien tenga IBAN se le domicilia y entra en la
-            remesa; al resto le queda el recibo sin cobrar.
+            <b>Nuevo ejercicio {ejercicioEnCurso}.</b> Hay{' '}
+            {hermanosSinCuota(cuotas, hermanos, ejercicioEnCurso, conceptoAnual!.nombre).length} hermanos
+            sin la {conceptoAnual!.nombre} de este año. Emítela a todo el censo de una vez.
           </span>
           <button className="btn btn-primary btn-sm" onClick={abrirEmision}>
             Emitir cuotas de {ejercicioEnCurso}
@@ -1530,16 +1445,9 @@ export default function Cuotas() {
               <label htmlFor="conceptoEmision">Concepto</label>
               <select
                 id="conceptoEmision"
-                value={conceptoElegido?.nombre ?? ''}
+                value={conceptoEmision}
                 onChange={(e) => setConceptoEmision(e.target.value)}
-                disabled={!catalogoListo}
               >
-                {/*
-                  Sin catálogo el desplegable se quedaba vacío del todo, sin
-                  explicación: un recuadro en blanco que parece que no ha
-                  cargado. Una opción que dice lo que pasa se lee.
-                */}
-                {!catalogoListo && <option value="">Sin conceptos configurados</option>}
                 {conceptosCuota.map((c) => (
                   <option key={c.id} value={c.nombre}>
                     {c.nombre} · {formatCurrency(c.importe)}
@@ -1563,43 +1471,17 @@ export default function Cuotas() {
               Se domicilia solo a quien tenga IBAN; al resto se le emite por transferencia.
             </p>
           </div>
-          {/*
-            SIN CATÁLOGO NO SE DICEN CIFRAS. Antes este mismo recuadro decía
-            «se emitirá 0,00 € de "Cuota anual" a 32 hermanos» con el
-            desplegable en blanco: tres datos y los tres inventados. Cuando no
-            se sabe, se dice qué falta y dónde se arregla.
-          */}
-          {!catalogoListo ? (
-            <div className="banner-inline banner-inline--accent">
-              Todavía no hay conceptos de cuota. Los define tu hermandad —el nombre y el importe de
-              cada cuota— en{' '}
-              <Link to="/app/configuracion" className="dash-head__link">
-                Configuración
-              </Link>
-              . Hasta entonces no se puede emitir nada, porque no hay ni importe ni concepto que
-              poner en el recibo.
-            </div>
-          ) : (
-            <>
-              <div className="banner-inline banner-inline--accent">
-                Se emitirá <b>{formatCurrency(importeConceptoEmision)}</b> de «
-                {conceptoElegido?.nombre}» a <b>{pendientesDeEmitir.length}</b> hermano
-                {pendientesDeEmitir.length === 1 ? '' : 's'} del ejercicio {ejercicioEmision} que aún
-                no la tienen, con fecha de cobro el{' '}
-                <b>{formatearFechaInput(isoLocal(fechaCobroDelEjercicio))}</b>. Los de baja y los
-                hermanos civiles quedan fuera, y a quien ya la tenga no se le duplica.
-              </div>
-              <p className="form-hint">
-                A quien tenga IBAN se le domicilia y entra en la remesa; al resto le queda el recibo
-                sin cobrar hasta que pague.
-              </p>
-              {pendientesDeEmitir.length === 0 && (
-                <p className="form-hint">
-                  Todos los hermanos activos ya tienen «{conceptoElegido?.nombre}» del ejercicio{' '}
-                  {ejercicioEmision}.
-                </p>
-              )}
-            </>
+          <div className="banner-inline banner-inline--accent">
+            Se emitirá <b>{formatCurrency(importeConceptoEmision)}</b> de «{conceptoEmision}» a{' '}
+            <b>{pendientesDeEmitir.length}</b> hermano{pendientesDeEmitir.length === 1 ? '' : 's'} del
+            ejercicio {ejercicioEmision} que aún no la tienen. Los de baja y los hermanos civiles
+            quedan fuera, y a quien ya
+            la tenga no se le duplica.
+          </div>
+          {pendientesDeEmitir.length === 0 && (
+            <p className="form-hint">
+              Todos los hermanos activos ya tienen «{conceptoEmision}» del ejercicio {ejercicioEmision}.
+            </p>
           )}
         </div>
       </Drawer>
@@ -1625,64 +1507,9 @@ export default function Cuotas() {
         />
       </Drawer>
 
-      {/* Ajustes de cuotas: renovación del ejercicio y mora */}
-      <Drawer
-        open={ajustesOpen}
-        onClose={() => setAjustesOpen(false)}
-        title="Ajustes de cuotas"
-        subtitle="Renovación y mora"
-      >
+      {/* Ajustes de cuotas (mora) */}
+      <Drawer open={ajustesOpen} onClose={() => setAjustesOpen(false)} title="Ajustes de cuotas" subtitle="Mora">
         <div className="app-form">
-          <div className="assign-box">
-            <h4 className="assign-box__title">Cuándo se renuevan las cuotas</h4>
-            <div className="form-grid-2">
-              <div className="form-row">
-                <label htmlFor="renovacionDia">Día</label>
-                <input
-                  id="renovacionDia"
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={ajustes.renovacion.dia}
-                  onChange={(e) =>
-                    setAjustes({
-                      ...ajustes,
-                      renovacion: renovacionValida({ ...ajustes.renovacion, dia: Number(e.target.value) }),
-                    })
-                  }
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="renovacionMes">Mes</label>
-                <select
-                  id="renovacionMes"
-                  value={ajustes.renovacion.mes}
-                  onChange={(e) =>
-                    setAjustes({
-                      ...ajustes,
-                      renovacion: renovacionValida({ ...ajustes.renovacion, mes: Number(e.target.value) }),
-                    })
-                  }
-                >
-                  {MESES_LARGOS.map((nombre, i) => (
-                    <option key={nombre} value={i + 1}>
-                      {nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <p className="form-hint">
-              Cada {ajustes.renovacion.dia} de {MESES_LARGOS[ajustes.renovacion.mes - 1]} empieza un
-              ejercicio nuevo. Ahora mismo es el <b>{ejercicioEnCurso}</b>: es el que Cuotas propone
-              emitir y con esa fecha de cobro. La emisión no es automática —la lanza la tesorería
-              desde «Emitir el ejercicio entero»— pero el aviso vuelve solo cada año ese día.
-            </p>
-            <p className="form-hint">
-              Al emitir, a quien tenga IBAN se le domicilia y entra en la remesa que se manda al
-              banco; a quien no, el recibo le queda sin cobrar hasta que pague.
-            </p>
-          </div>
           <div className="assign-box">
             <label className="checkbox-row">
               <input

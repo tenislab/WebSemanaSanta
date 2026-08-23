@@ -1,0 +1,60 @@
+{
+  "rewrites": [
+    {
+      "source": "/w/:path*",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/seo"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/seo"
+    },
+    {
+      "source": "/",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/noticias",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/n/:slug",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/t/:slug",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/c/:slug",
+      "destination": "/api/w"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/((?!assets/).*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
+  ]
+}

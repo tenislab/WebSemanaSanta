@@ -1,0 +1,421 @@
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
+import { useAuth, DEMO_EMAIL, DEMO_PASSWORD } from '../context/AuthContext'
+import { getPersonal } from '../lib/personal'
+import { sembrarDemoLlena, sembrarDemoVacia } from '../lib/demo'
+
+type Mode = 'login' | 'signup' | 'reset'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function inicialesDe(nombre: string) {
+  const partes = nombre.trim().split(/\s+/)
+  return partes.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?'
+}
+
+export default function AuthForm({ mode }: { mode: Mode }) {
+  const { signIn, signUp, resetPassword, signOut, configured, mfaPendiente, verificarCodigoMfa } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/app'
+  const [searchParams] = useSearchParams()
+
+  const [hermandad, setHermandad] = useState('')
+  const [nombre, setNombre] = useState('')
+  // En modo local (demostración) el formulario viene relleno con el usuario
+  // titular para poder entrar de un clic sin teclear nada.
+  const [email, setEmail] = useState(
+    () => searchParams.get('correo') ?? (!configured && mode === 'login' ? DEMO_EMAIL : ''),
+  )
+  const [password, setPassword] = useState(
+    () => (!configured && mode === 'login' ? DEMO_PASSWORD : ''),
+  )
+  const [confirm, setConfirm] = useState('')
+  const [showPass, setShowPass] = useState(false)
+  const [accept, setAccept] = useState(false)
+
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const [mfaStep, setMfaStep] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
+
+  const isSignup = mode === 'signup'
+  const isReset = mode === 'reset'
+
+  // Si ya hay una sesión con contraseña correcta pero pendiente del segundo
+  // paso (por ejemplo, se recargó la página a mitad del proceso), retoma
+  // directamente en el paso del código.
+  useEffect(() => {
+    if (mode === 'login' && mfaPendiente) setMfaStep(true)
+  }, [mode, mfaPendiente])
+
+  async function handleVerifyMfa(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      const { error } = await verificarCodigoMfa(mfaCode.trim())
+      if (error) {
+        setError(error)
+        return
+      }
+      navigate(redirectTo, { replace: true })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function validate(): string | null {
+    if (!EMAIL_RE.test(email)) return 'Introduce un correo electrónico válido.'
+    if (isReset) return null
+    if (isSignup) {
+      if (hermandad.trim().length < 3) return 'Escribe el nombre de tu hermandad.'
+      if (nombre.trim().length < 3) return 'Escribe tu nombre y apellidos.'
+    }
+    if (password.length < 6) return 'La contraseña debe tener al menos 6 caracteres.'
+    if (isSignup) {
+      if (confirm !== password) return 'Las contraseñas no coinciden.'
+      if (!accept) return 'Debes aceptar las condiciones y la política de privacidad.'
+    }
+    return null
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setNotice(null)
+
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      if (isReset) {
+        const { error } = await resetPassword(email)
+        if (error) {
+          setError(error)
+          return
+        }
+        setNotice('Si ese correo tiene cuenta, te hemos enviado un enlace para restablecer la contraseña.')
+        return
+      }
+
+      if (isSignup) {
+        const { error, needsConfirmation } = await signUp(email, password, {
+          hermandad: hermandad.trim(),
+          nombre: nombre.trim(),
+        })
+        if (error) {
+          setError(error)
+          return
+        }
+        if (needsConfirmation) {
+          setNotice('Te hemos enviado un correo para confirmar tu cuenta. Ábrelo para activar el acceso.')
+          return
+        }
+        navigate('/app', { replace: true })
+        return
+      }
+
+      const { error, mfaRequerido } = await signIn(email, password)
+      if (error) {
+        setError(error)
+        return
+      }
+      if (mfaRequerido) {
+        setMfaStep(true)
+        return
+      }
+      navigate(redirectTo, { replace: true })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function entrarComoDemo(correoDemo: string, claveDemo: string) {
+    setError(null)
+    setNotice(null)
+    // Reflejar en el formulario qué usuario está entrando (queda relleno).
+    setEmail(correoDemo)
+    setPassword(claveDemo)
+    setSubmitting(true)
+    try {
+      const { error, mfaRequerido } = await signIn(correoDemo, claveDemo)
+      if (error) {
+        setError(error)
+        return
+      }
+      if (mfaRequerido) {
+        setMfaStep(true)
+        return
+      }
+      navigate(redirectTo, { replace: true })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  /**
+   * Entra en la demo eligiendo el punto de partida: LLENA (datos de ejemplo) o
+   * VACÍA (hermandad sin datos, para crearlo todo). Sembramos localStorage y
+   * entramos como titular; el panel se monta leyendo ya esos datos.
+   */
+  async function elegirDemo(modo: 'llena' | 'vacia') {
+    if (modo === 'llena') sembrarDemoLlena()
+    else sembrarDemoVacia()
+    await entrarComoDemo(DEMO_EMAIL, DEMO_PASSWORD)
+  }
+
+  const cuentasDemo = useMemo(
+    () => [
+      { id: 'titular', nombre: 'Usuario Demo', cargo: 'Titular · acceso completo', email: DEMO_EMAIL, clave: DEMO_PASSWORD },
+      ...getPersonal()
+        .filter((p) => p.activo)
+        .map((p) => ({ id: p.id, nombre: p.nombre, cargo: p.cargo, email: p.email, clave: p.clave })),
+    ],
+    [],
+  )
+
+  const submitLabel = isReset
+    ? 'Enviar enlace'
+    : isSignup
+      ? 'Crear hermandad'
+      : 'Iniciar sesión'
+
+  if (mode === 'login' && mfaStep) {
+    return (
+      <form className="auth-form" onSubmit={handleVerifyMfa} noValidate>
+        <div className="banner banner--info" role="status">
+          <strong>Verificación en dos pasos.</strong> Abre tu app de autenticación (Google
+          Authenticator, Authy…) e introduce el código de 6 dígitos.
+        </div>
+        {error && (
+          <div className="banner banner--error" role="alert">
+            {error}
+          </div>
+        )}
+        <div className="field">
+          <label htmlFor="mfaCode">Código de verificación</label>
+          <input
+            id="mfaCode"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            maxLength={6}
+            value={mfaCode}
+            onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+            autoFocus
+          />
+        </div>
+        <button type="submit" className="btn btn-primary btn-block" disabled={submitting || mfaCode.length < 6}>
+          {submitting ? <span className="spinner" aria-hidden="true" /> : 'Verificar'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-block"
+          onClick={async () => {
+            await signOut()
+            setMfaStep(false)
+            setMfaCode('')
+            setError(null)
+          }}
+        >
+          Volver
+        </button>
+      </form>
+    )
+  }
+
+  return (
+    <form className="auth-form" onSubmit={handleSubmit} noValidate>
+      {!configured && mode === 'login' && (
+        <div className="banner banner--info banner--demo" role="status">
+          <div>
+            <strong>Modo demostración.</strong> Elige cómo empezar: con datos de ejemplo para
+            ver las funciones ya en marcha, o con una hermandad vacía para crearlo todo desde cero.
+          </div>
+          <div className="demo-modos">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => elegirDemo('llena')}
+              disabled={submitting}
+            >
+              Datos de ejemplo (llena)
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => elegirDemo('vacia')}
+              disabled={submitting}
+            >
+              Empezar de cero (vacía)
+            </button>
+          </div>
+          <div className="demo-accounts__label">
+            O entra como un cargo concreto (con los datos actuales) y comprueba qué ve cada uno:
+          </div>
+          <div className="demo-accounts">
+            {cuentasDemo.map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                className="demo-account"
+                onClick={() => entrarComoDemo(c.email, c.clave)}
+                disabled={submitting}
+              >
+                <span className="demo-account__avatar">{inicialesDe(c.nombre)}</span>
+                <span>
+                  <b>{c.nombre}</b>
+                  <small>{c.cargo}</small>
+                  <small className="demo-account__cred">{c.email} · {c.clave}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {!configured && isSignup && (
+        <div className="banner banner--info" role="status">
+          <strong>Modo demostración.</strong> Puedes rellenar cualquier dato: se creará una
+          hermandad de prueba local (no se guarda) y entrarás directamente.
+        </div>
+      )}
+      {!configured && isReset && (
+        <div className="banner banner--info" role="status">
+          <strong>Modo demostración.</strong> No se envían correos; usa el usuario de prueba en{' '}
+          <Link to="/login">iniciar sesión</Link>.
+        </div>
+      )}
+
+      {error && (
+        <div className="banner banner--error" role="alert">
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div className="banner banner--success" role="status">
+          {notice}
+        </div>
+      )}
+
+      {isSignup && (
+        <>
+          <div className="field">
+            <label htmlFor="hermandad">Nombre de la hermandad</label>
+            <input
+              id="hermandad"
+              type="text"
+              autoComplete="organization"
+              placeholder="Hermandad de la Vera-Cruz"
+              value={hermandad}
+              onChange={(e) => setHermandad(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="nombre">Tu nombre y apellidos</label>
+            <input
+              id="nombre"
+              type="text"
+              autoComplete="name"
+              placeholder="Nombre del responsable"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+
+      <div className="field">
+        <label htmlFor="email">Correo electrónico</label>
+        <input
+          id="email"
+          type="email"
+          autoComplete="email"
+          placeholder="secretaria@tuhermandad.org"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+
+      {!isReset && (
+        <div className="field">
+          <div className="field-row">
+            <label htmlFor="password">Contraseña</label>
+            {mode === 'login' && (
+              <Link to="/recuperar" className="field-link">
+                ¿La olvidaste?
+              </Link>
+            )}
+          </div>
+          <div className="input-wrap">
+            <input
+              id="password"
+              type={showPass ? 'text' : 'password'}
+              autoComplete={isSignup ? 'new-password' : 'current-password'}
+              placeholder={isSignup ? 'Crea una contraseña (mín. 6)' : configured ? '••••••••••' : 'demo1234 · tesoro123'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              className="input-affix"
+              onClick={() => setShowPass((v) => !v)}
+              aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              {showPass ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isSignup && (
+        <div className="field">
+          <label htmlFor="confirm">Repite la contraseña</label>
+          <input
+            id="confirm"
+            type={showPass ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder="Vuelve a escribirla"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </div>
+      )}
+
+      {isSignup && (
+        <label className="checkbox">
+          <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} />
+          <span>
+            Acepto las{' '}
+            <a href="/legal/condiciones" target="_blank" rel="noopener noreferrer">condiciones del servicio</a> y la{' '}
+            <a href="/legal/privacidad" target="_blank" rel="noopener noreferrer">política de privacidad</a>.
+          </span>
+        </label>
+      )}
+
+      <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+        {submitting ? <span className="spinner" aria-hidden="true" /> : submitLabel}
+      </button>
+
+      {isReset && (
+        <p className="fineprint">Recibirás un correo con un enlace para crear una contraseña nueva.</p>
+      )}
+
+      {mode === 'login' && (
+        <>
+          <div className="auth-sep"><span>¿eres hermano/a?</span></div>
+          <Link to="/hermano" className="btn btn-outline btn-block">
+            Entrar en el área del hermano
+          </Link>
+        </>
+      )}
+    </form>
+  )
+}

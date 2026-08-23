@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Gobergo — el software para gestionar tu hermandad o cofradía: hermanos, cuotas, papeletas de sitio, cortejo, tesorería y comunicaciones." />
+    <meta name="theme-color" content="#7B1520" />
+    <title>Gobergo — Software para gestionar tu hermandad</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png?v=3" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
+    <!-- Fuentes para la web pública de cada hermandad (selector de tipografía) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Solo la letra DEL PANEL. Las doce familias del catálogo del constructor
+      de webs se cargan al entrar en la web pública o en su editor
+      (src/lib/fuentesDeLaWeb.ts): una hoja de estilos externa bloquea el
+      primer pintado, y no se le hace pagar ese bloqueo por trece familias a
+      quien abre el censo desde el móvil.
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&display=swap" rel="stylesheet" />
+    <script>
+      // Aplica el tema guardado antes de pintar para evitar parpadeo
+      (function () {
+        try {
+          var t = localStorage.getItem('cabildo-theme');
+          if (t) document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

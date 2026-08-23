@@ -1,0 +1,1430 @@
+/**
+ * EL SQL, EJECUTADO DE VERDAD CONTRA UN POSTGRES.
+ *
+ * Por qué existe. Todas las demás pruebas leen el SQL como texto: comprueban
+ * que la columna aparece escrita en algún sitio. Eso deja pasar una familia
+ * entera de fallos, y dos de ellos han costado caro:
+ *
+ *   · `hora_citacion` no existía en ninguna tabla. Ningún tramo se guardaba,
+ *     con el visto bueno verde en pantalla.
+ *   · El disparador del registro de actividad usaba `new.nombre`, y ni las
+ *     papeletas ni las cuotas ni los movimientos tienen esa columna. El SQL se
+ *     instalaba sin una queja —crear el disparador no comprueba nada— y lo que
+ *     dejaba de funcionar era emitir papeletas y cobrar cuotas.
+ *
+ * El segundo NO lo caza mirar el texto. Solo se ve escribiendo una fila.
+ *
+ * Si no hay un Postgres a mano, esto se salta y lo dice. No se calla: una
+ * prueba que se salta en silencio es peor que no tenerla.
+ */
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { readFile, writeFile, mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const correr = promisify(execFile)
+
+/** El puerto donde esta prueba busca su Postgres. Se puede cambiar por entorno. */
+const PUERTO = process.env.GOBERGO_PG_PUERTO ?? '5433'
+const USUARIO = process.env.GOBERGO_PG_USUARIO ?? 'postgres'
+
+async function hayPostgres() {
+  try {
+    await correr('psql', ['-p', PUERTO, '-U', USUARIO, '-tAc', 'select 1'], {
+      env: { ...process.env, PGCONNECT_TIMEOUT: '3' },
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function sql(texto) {
+  const dir = await mkdtemp(join(tmpdir(), 'gobergo-sql-'))
+  const f = join(dir, 'consulta.sql')
+  await writeFile(f, texto)
+  const { stdout } = await correr(
+    'psql',
+    ['-p', PUERTO, '-U', USUARIO, '-v', 'ON_ERROR_STOP=1', '-tA', '-f', f],
+    { maxBuffer: 32 * 1024 * 1024 },
+  )
+  return stdout.trim()
+}
+
+export default async function ({ caso }) {
+  if (!(await hayPostgres())) {
+    /*
+     * EN LA MÁQUINA DE CADA UNO se dice en voz alta y se sigue: no todo el
+     * mundo tiene un Postgres levantado, y no poder ejecutar las pruebas por
+     * eso sería peor.
+     *
+     * EN CI, NO. Ahí hay un Postgres al lado a propósito, y si no se
+     * encuentra es que algo está mal configurado — un puerto, una variable—.
+     * Saltarse en verde casi treinta comprobaciones del SQL por un fallo de
+     * configuración es exactamente cómo se pierde una red de seguridad: sin
+     * que nadie se entere. Por eso allí se pone `GOBERGO_PG_OBLIGATORIO`.
+     */
+    const obligatorio = process.env.GOBERGO_PG_OBLIGATORIO === '1'
+    caso(
+      obligatorio
+        ? `NO HAY POSTGRES en el puerto ${PUERTO} y aquí es obligatorio: el SQL se ha quedado sin comprobar`
+        : 'SIN POSTGRES: esta prueba NO se ha ejecutado (arranca uno en el '
+          + `puerto ${PUERTO} para comprobar el SQL de verdad)`,
+      true,
+      !obligatorio,
+    )
+    return
+  }
+
+  // Base limpia en cada pasada: si se arrastrara lo de antes, un fallo nuevo
+  // podría quedar tapado por una tabla que ya estaba bien.
+  await sql('drop schema if exists public cascade; create schema public;')
+  await montarLoQuePoneSupabase({ sql })
+
+  const todo = await readFile('supabase/TODO-EN-UNO.sql', 'utf8')
+  let instalado = ''
+  try {
+    await sql(todo)
+    instalado = 'ok'
+  } catch (e) {
+    instalado = String(e.stderr ?? e.message).split('\n').filter((l) => /ERROR/.test(l)).join(' · ')
+  }
+  caso('TODO-EN-UNO se ejecuta sin un solo error', 'ok', instalado)
+
+  // Y DOS VECES: la hermandad que ya lo ejecutó vuelve a ejecutarlo al
+  // actualizar, y no puede romperse por eso.
+  let otraVez = ''
+  try {
+    await sql(todo)
+    otraVez = 'ok'
+  } catch (e) {
+    otraVez = String(e.stderr ?? e.message).split('\n').filter((l) => /ERROR/.test(l)).join(' · ')
+  }
+  caso('y se puede volver a ejecutar encima', 'ok', otraVez)
+
+  /*
+   * ESCRIBIR DE VERDAD EN CADA TABLA.
+   *
+   * Con las columnas EXACTAS que escribe cada `toRow`. Es lo único que
+   * comprueba a la vez que la columna existe, que el tipo cuadra, que las
+   * restricciones dejan pasar lo que la aplicación manda y que los
+   * disparadores no revientan.
+   */
+  const H = "'11111111-1111-1111-1111-111111111111'"
+  const HNO = "'22222222-2222-2222-2222-222222222222'"
+  const T = "'33333333-3333-3333-3333-333333333333'"
+
+  const escrituras = [
+    ['la hermandad', `insert into hermandades (id, nombre) values (${H}, 'Hermandad de prueba')`],
+    ['un hermano', `insert into hermanos (id, hermandad_id, nombre, dni, numero)
+       values (${HNO}, ${H}, 'Jaime Rivas', '00000000T', 1)`],
+    // El que tumbó el cortejo entero: `hora_citacion`.
+    ['un tramo con su hora de citación', `insert into tramos
+       (id, nombre, cuerpo, capacidad, tipo, reparto, precio, hora_citacion, etiqueta, orden, hermandad_id)
+       values (${T}, 'Tramo 1', 'Cruz de Guía', 40, 'Cirio', 'numero', 10, '19:30', null, 1, ${H})`],
+    // El que dejó sin funcionar TODAS las solicitudes: `tutor_id`.
+    ['la solicitud de alta de un hijo', `insert into solicitudes_alta
+       (id, nombre, dni, email, telefono, clave_propuesta, fecha, estado, tutor_id, fecha_nacimiento, hermandad_id)
+       values (gen_random_uuid(), 'Hijo de prueba', '56728372H', 'padre@ejemplo.com',
+               '600000000', '', '2026-08-22', 'Pendiente', ${HNO}, '2023-03-23', ${H})`],
+    // Las tres que el disparador roto habría dejado inservibles.
+    ['una papeleta', `insert into papeletas
+       (id, numero, hermano_id, anio, tramo_id, opcion, importe, estado, fecha_solicitud,
+        fecha_entrega, metodo_pago, fecha_pago, motivo_anulacion, pago_metodo, pago_fecha, hermandad_id)
+       values (gen_random_uuid(), 1, ${HNO}, 2027, ${T}, null, 10, 'Solicitada',
+               '2026-08-22', null, null, null, null, null, null, ${H})`],
+    ['una cuota', `insert into cuotas
+       (id, numero, hermano_id, concepto, importe, estado, ejercicio, fecha_emision,
+        fecha_cobro, domiciliada, hermandad_id)
+       values (gen_random_uuid(), 1, ${HNO}, 'Cuota anual', 30, 'Pendiente', 2027,
+               '2026-08-22', '', false, ${H})`],
+    ['un apunte de tesorería', `insert into movimientos
+       (id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, hermandad_id)
+       values (gen_random_uuid(), 1, '2026-08-22', 'Donativo', 'Donativos', 'Ingreso',
+               50, 'Caja', 'Conciliado', ${H})`],
+    // Los dos precios de la hermandad. Vivían en el localStorage de quien los
+    // escribía, así que cada persona emitía las papeletas a un precio distinto.
+    ['los precios de la papeleta', `update hermandad_settings
+       set precio_papeleta = 18, precio_simbolica = 5 where hermandad_id = ${H}`],
+  ]
+
+  for (const [que, consulta] of escrituras) {
+    let r = 'ok'
+    try {
+      await sql(consulta)
+    } catch (e) {
+      r = String(e.stderr ?? e.message).split('\n').find((l) => /ERROR/.test(l)) ?? 'falló'
+    }
+    caso(`se puede guardar ${que}`, 'ok', r)
+  }
+
+  // Modificar y borrar son las otras dos ramas del disparador, y ninguna se
+  // recorre insertando.
+  for (const [que, consulta] of [
+    ['modificar una papeleta', "update papeletas set estado = 'Pagada'"],
+    ['modificar una cuota', "update cuotas set estado = 'Pagada'"],
+    ['borrar un apunte', 'delete from movimientos'],
+  ]) {
+    let r = 'ok'
+    try {
+      await sql(consulta)
+    } catch (e) {
+      r = String(e.stderr ?? e.message).split('\n').find((l) => /ERROR/.test(l)) ?? 'falló'
+    }
+    caso(`se puede ${que}`, 'ok', r)
+  }
+
+  // El registro tiene que haberse escrito SOLO, sin que nadie lo llame.
+  const apuntes = await sql('select count(*) from registro_actividad')
+  caso('la base ha apuntado los cambios ella sola', true, Number(apuntes) >= 7)
+  const origen = await sql("select count(*) from registro_actividad where origen <> 'base'")
+  caso('y todos vienen de la base, no del navegador', '0', origen)
+  // Y con el nombre de cada fila, que es lo que hace el registro legible.
+  const sinNombre = await sql("select count(*) from registro_actividad where coalesce(sobre_nombre,'') = ''")
+  caso('cada apunte dice sobre qué fila es', '0', sinNombre)
+
+  /*
+   * LOS ESTADOS QUE VALEN, EN LOS DOS SITIOS.
+   *
+   * La aplicación tiene una lista («Pagada | Pendiente | Devuelta | En mora»)
+   * y la base tiene otra, en un CHECK. Si alguien añade un estado nuevo en el
+   * código y no en la base, no falla al compilar ni al instalar: falla el día
+   * que alguien pone una cuota en ese estado, y falla la fila entera.
+   */
+  const UNIONES = [
+    ['cuotas_estado_check', 'src/data/cuotas.ts', /export type EstadoCuota = ([^\n]+)/],
+    ['papeletas_estado_check', 'src/data/papeletas.ts', /export type EstadoPapeleta = ([^\n]+)/],
+  ]
+  for (const [restriccion, fichero, patron] of UNIONES) {
+    const def = await sql(
+      `select coalesce(max(pg_get_constraintdef(oid)), '') from pg_constraint where conname = '${restriccion}'`,
+    )
+    const enLaBase = [...def.matchAll(/'([^']+)'::text/g)].map((m) => m[1]).sort()
+    let enElCodigo = []
+    try {
+      const src = await readFile(fichero, 'utf8')
+      const m = src.match(patron)
+      if (m) enElCodigo = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort()
+    } catch {
+      // El fichero puede haberse movido; se ve en el resultado de abajo.
+    }
+    caso(`${restriccion}: la base y el código dicen lo mismo`,
+      enElCodigo.join(', '), enLaBase.join(', '))
+  }
+
+  /*
+   * EL ARREGLO RÁPIDO tiene que dejar la misma función que el fichero grande.
+   * Si se quedaran distintos, quien use el atajo se llevaría una versión vieja
+   * sin saberlo — y este atajo existe justo para quien tiene prisa.
+   */
+  const rapido = await readFile('supabase/ARREGLO-RAPIDO-DISPARADOR.sql', 'utf8')
+  const grande = await readFile('supabase/seguridad-claves-y-registro.sql', 'utf8')
+  const cuerpoDe = (t) => {
+    const i = t.indexOf('create or replace function apuntar_cambio()')
+    return i < 0 ? '' : t.slice(i, t.indexOf('$$;', i) + 3)
+  }
+  caso('el arreglo rápido lleva la misma función que el fichero grande',
+    cuerpoDe(grande), cuerpoDe(rapido))
+  caso('y no está vacío', true, cuerpoDe(rapido).includes('to_jsonb'))
+
+  // Y el diagnóstico, sobre una base recién instalada, no puede encontrar nada.
+  const diag = await readFile('supabase/DIAGNOSTICO.sql', 'utf8')
+  const faltan = await sql(diag)
+  caso('el diagnóstico no ve nada que falte en una base al día', '', faltan)
+
+  /*
+   * Y VA EN UNA SOLA CONSULTA.
+   *
+   * No es manía: el editor de Supabase enseña solo el resultado de la ÚLTIMA
+   * consulta que le mandas. Con el diagnóstico partido en dos, la primera —la
+   * de las columnas que faltan, que es la que importa— no se veía, y un «No
+   * rows returned» podía estar tapando justo lo que se buscaba.
+   */
+  const puntoYComa = (diag.match(/;/g) ?? []).length
+  caso('el diagnóstico es UNA consulta, no dos', 1, puntoYComa)
+
+  // Y encuentra lo que tiene que encontrar. Una prueba que solo comprueba que
+  // no da falsos positivos no comprueba nada: un fichero vacío la pasaría.
+  await sql('alter table tramos drop column hora_citacion')
+  const conFallo = await sql(diag)
+  caso('y ve la columna que falta', true, /tramos\|hora_citacion/.test(conFallo))
+  await sql("alter table tramos add column hora_citacion text")
+
+  // Los permisos de tabla, que Supabase da de fábrica: van después de crear
+  // las tablas, y sin ellos todo falla con «permission denied» antes de que
+  // ninguna política llegue a decidir nada.
+  await darLosPermisosDeSupabase({ sql })
+  await elHermanoCambiaSuFicha({ sql, caso })
+  await elCargoMalEscrito({ sql, caso })
+  await actualizarUnaBaseQueYaFunciona({ sql, caso })
+  await elRegistroNoCrecePorSiempre({ sql, caso })
+  await elBarridoDeDniSeCorta({ sql, caso })
+  await laSegundaHermandadGuardaSusCatalogos({ sql, caso })
+  await elHermanoNoSePagaLaCuota({ sql, caso })
+  await laWebLaEditaQuienTieneWeb({ sql, caso })
+  await nadieGuardaContrasenasEnClaro({ sql, caso })
+  await losFormulariosPublicosTienenFreno({ sql, caso })
+  await hermanoDeDosHermandades({ sql, caso })
+}
+
+/**
+ * EL BARRIDO DE DNI, CORTADO DE VERDAD.
+ *
+ * `resolver_email_hermano` la puede llamar CUALQUIERA sin sesión: es lo que
+ * hace que un hermano entre en su área con su DNI. Y por eso mismo es una
+ * puerta para barrer: probando DNI uno detrás de otro se puede averiguar
+ * quién es hermano de qué hermandad, y de rebote su correo.
+ *
+ * Los DNI españoles no son un secreto —van en cualquier formulario— y
+ * generarlos válidos es una división entre 23. Sin freno, sacar el censo de
+ * una hermandad es cuestión de un rato.
+ *
+ * El freno está escrito: 25 DNI DISTINTOS por hermandad cada media hora. Pero
+ * hasta ahora eso solo se comprobaba leyendo el texto del SQL, y un contador
+ * que se lee bien puede contar mal. Aquí se ejecuta: treinta intentos seguidos
+ * desde una sesión anónima, como los haría quien lo intentara.
+ */
+async function elBarridoDeDniSeCorta({ sql, caso }) {
+  const hdad = (await sql('select id from hermandades limit 1')).trim()
+  if (!hdad) { caso('hay una hermandad contra la que probar', true, false); return }
+  await sql('delete from intentos_acceso')
+
+  /*
+   * Un envoltorio que se traga el rechazo y devuelve si pasó o no. Hace falta
+   * porque la excepción del freno aborta la sentencia entera: sin esto, el
+   * intento 26 se lleva por delante la cuenta de los 25 anteriores.
+   *
+   * NO va como `security definer`: tiene que ejecutarse con los permisos de
+   * quien llama, que es justo lo que se está probando.
+   */
+  await sql(`
+    create or replace function _prueba_intento_dni(h uuid, dni text) returns boolean
+    language plpgsql as $$
+    begin
+      perform resolver_email_hermano(h, dni);
+      return true;
+    exception when others then return false;
+    end $$;
+  `)
+
+  /** Prueba `cuantos` DNI DISTINTOS seguidos, desde una sesión anónima. */
+  const barrer = async (cuantos) => {
+    const salida = await sql(`
+      begin;
+        set local role anon;
+        select count(*) filter (where paso) || '/' || count(*) filter (where not paso)
+          from (
+            select _prueba_intento_dni('${hdad}', lpad(g::text, 8, '0') || 'Z') as paso
+              from generate_series(1, ${cuantos}) g
+          ) t;
+      rollback;
+    `)
+    /*
+     * De toda la salida se busca LA LÍNEA que tiene la forma «25/5». `psql`
+     * imprime también los BEGIN, SET y ROLLBACK, y partir la salida entera por
+     * la barra daba números que no eran números.
+     */
+    const linea = salida.split('\n').map((l) => l.trim()).find((l) => /^\d+\/\d+$/.test(l)) ?? ''
+    const [admitidos, cortados] = linea.split('/').map(Number)
+    return { admitidos, cortados }
+  }
+
+  const r = await barrer(30)
+  caso('deja pasar los 25 primeros', 25, r.admitidos)
+  caso('y corta a partir del 26', 5, r.cortados)
+
+  /*
+   * Y CUENTA DNI DISTINTOS, no intentos. Quien se equivoca al teclear el suyo
+   * y lo repite veinte veces no es el que preocupa: cerrarle la puerta por eso
+   * sería castigar al hermano y no al que barre.
+   */
+  await sql('delete from intentos_acceso')
+  const mismo = await sql(`
+    begin;
+      set local role anon;
+      select count(*) filter (where paso) from (
+        select _prueba_intento_dni('${hdad}', '12345678Z') as paso from generate_series(1, 40)
+      ) t;
+    rollback;
+  `)
+  const veces = mismo.split('\n').map((l) => l.trim()).find((l) => /^\d+$/.test(l)) ?? ''
+  caso('el mismo DNI cuarenta veces no cierra la puerta', 40, Number(veces))
+
+  // Y no se guarda el DNI: solo una huella, y con la hermandad dentro para que
+  // la misma no valga en dos sitios.
+  const fichero = await readFile('supabase/acceso-hermano.sql', 'utf8').catch(() => '')
+  const enUso = fichero || (await readFile('supabase/TODO-EN-UNO.sql', 'utf8'))
+  caso('no se guarda el DNI en claro', true, /huella_dni/.test(enUso))
+  caso('y la huella lleva dentro la hermandad', true, /md5\(v_dni \|\| ':' \|\| p_hermandad_id/.test(enUso))
+}
+
+/**
+ * EL REGISTRO DE ACTIVIDAD NO PUEDE CRECER PARA SIEMPRE.
+ *
+ * `registro_actividad` apunta UNA FILA POR CAMBIO, y lo escribe la propia base
+ * con un disparador. Está bien —lo exige el artículo 32 del RGPD y es la razón
+ * de que exista— pero nadie lo borraba nunca.
+ *
+ * No es un detalle: importar un censo de mil doscientos escribe mil doscientas
+ * filas; volver a importarlo, otras mil doscientas; emitir la cuota del
+ * ejercicio, otras tantas. En un año son decenas de miles en un plan de 500 MB.
+ *
+ * Y lo que de verdad obliga es el otro artículo, el 5.1.e: los datos
+ * personales no se guardan más de lo necesario. Aquí hay nombres y quién tocó
+ * la ficha de quién. Un registro de auditoría eterno no es prudencia.
+ *
+ * La función se saca del FICHERO, no se copia aquí: si allí se cambia el plazo
+ * o la columna, esta prueba lo ejecuta tal cual y se entera.
+ */
+async function elRegistroNoCrecePorSiempre({ sql, caso }) {
+  const fichero = await readFile('supabase/tareas-programadas.sql', 'utf8')
+
+  // La tarea programada tiene que estar declarada, aunque aquí no haya pg_cron
+  // para ejecutarla.
+  caso('hay una tarea que limpia el registro', true, /cron\.schedule\(\s*'gobergo-limpiar-registro'/.test(fichero))
+  caso('y no la puede ejecutar cualquiera', true,
+    /revoke execute on function limpiar_registro_viejo\(\) from public, anon, authenticated/.test(fichero))
+
+  // La función, tal cual está escrita en el fichero.
+  const trozo = fichero.match(/create or replace function limpiar_registro_viejo[\s\S]*?\$\$;/)
+  caso('la función está en el fichero', true, Boolean(trozo))
+  if (!trozo) return
+  await sql(trozo[0])
+
+  /*
+   * Y que borre lo viejo Y SOLO LO VIEJO. Una limpieza que se lleva de más es
+   * peor que no limpiar: el registro es lo único que dice quién tocó qué.
+   */
+  const HDAD = 'dddddddd-0000-0000-0000-000000000001'
+  await sql(`
+    insert into hermandades (id, nombre) values ('${HDAD}', 'Para el registro') on conflict do nothing;
+    delete from registro_actividad where hermandad_id = '${HDAD}';
+    insert into registro_actividad (hermandad_id, autor_nombre, accion, sobre_tipo, cuando)
+    values
+      ('${HDAD}', 'Antigua',  'crear', 'hermano', now() - interval '3 years'),
+      ('${HDAD}', 'Justo',    'crear', 'hermano', now() - interval '2 years 1 day'),
+      ('${HDAD}', 'Reciente', 'crear', 'hermano', now() - interval '1 year'),
+      ('${HDAD}', 'De hoy',   'crear', 'hermano', now());
+  `)
+  caso('se han apuntado los cuatro', 4,
+    Number(await sql(`select count(*) from registro_actividad where hermandad_id = '${HDAD}'`)))
+
+  await sql('select limpiar_registro_viejo()')
+  const quedan = (await sql(
+    `select string_agg(autor_nombre, ', ' order by cuando) from registro_actividad where hermandad_id = '${HDAD}'`,
+  )).trim()
+  caso('se van los de más de dos años y se quedan los demás', 'Reciente, De hoy', quedan)
+}
+
+/**
+ * «ACTUALIZAR.SQL» SOBRE UNA BASE QUE YA TIENE DATOS.
+ *
+ * Es el fichero que se le manda a una hermandad que ya está funcionando, y el
+ * que más miedo da: se pega en el editor de Supabase, encima de su censo, sus
+ * cuotas y su tesorería. Comprobarlo leyéndolo no vale de nada — un fichero de
+ * setecientas líneas se lee bien y falla en la cuatrocientas.
+ *
+ * Aquí se deja la base COMO LA DE ESA HERMANDAD —sin las piezas nuevas, con
+ * hermandades y permisos ya sembrados— y se ejecuta de verdad.
+ */
+async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
+  const HDAD = 'aaaaaaaa-0000-0000-0000-000000000001'
+
+  // Se le quita lo que trae el fichero, para que tenga algo que hacer.
+  await sql(`
+    drop table if exists visitas_web cascade;
+    drop table if exists suscriptores_web cascade;
+    alter table hermandad_settings drop column if exists ajustes_cuotas;
+    alter table hermandad_settings drop column if exists etiquetas;
+    delete from storage.buckets where id in ('imagenes', 'copias');
+    insert into hermandades (id, nombre) values ('${HDAD}', 'Hermandad de antes') on conflict do nothing;
+    select sembrar_permisos_de_fabrica('${HDAD}');
+    -- Y los dos módulos que nunca se sembraron, que es lo que viene a rellenar.
+    delete from permisos_cargo where modulo_id in ('eventos', 'web');
+  `)
+  const antes = Number(await sql(`select count(*) from permisos_cargo where modulo_id in ('eventos','web')`))
+  caso('la base de partida no tiene los dos módulos', 0, antes)
+
+  const actualizar = await readFile('supabase/ACTUALIZAR.sql', 'utf8')
+  let informe = ''
+  try {
+    informe = await sql(actualizar)
+  } catch (e) {
+    caso('ACTUALIZAR.sql se ejecuta sin un solo error', 'ok', String(e?.stderr ?? e).split('\n')[0])
+    return
+  }
+  caso('ACTUALIZAR.sql se ejecuta sin un solo error', 'ok', 'ok')
+
+  /*
+   * EL INFORME DEL FINAL tiene que decir que sí a todo, menos a `pg_cron` —que
+   * se enciende a mano desde el panel de Supabase y por eso no va dentro—.
+   * Es lo único que ve quien lo ejecuta: si mintiera, se daría por instalado
+   * lo que no está.
+   */
+  const filas = informe.split('\n').filter((l) => l.includes('|'))
+  const enFalso = filas.filter((l) => l.endsWith('|f')).map((l) => l.split('|')[0])
+  /*
+   * Lo único que queda en «no» es `pg_cron`, que se enciende a mano.
+   *
+   * Y «ninguna hermandad se ha quedado sin permisos» también sale en «no»
+   * aquí, y está bien que salga: los bloques anteriores de esta misma prueba
+   * insertan hermandades a mano, sin sembrarles nada. Es justo el caso que esa
+   * línea existe para delatar.
+   */
+  const esperadosEnFalso = [
+    'Limpieza automática (pg_cron, se activa a mano)',
+    'Ninguna hermandad se ha quedado sin permisos',
+  ]
+  caso('el informe solo deja pendiente lo que toca', '',
+    enFalso.filter((x) => !esperadosEnFalso.includes(x)).join(', '))
+  // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
+  caso('los dos módulos ya no salen pendientes', false,
+    enFalso.some((x) => /eventos|«web»/.test(x)))
+  caso('y comprueba diez cosas', 10, filas.length)
+
+  // Y que haya hecho lo suyo de verdad, no solo decirlo.
+  caso('ha rellenado los dos módulos que faltaban', true,
+    Number(await sql(`select count(*) from permisos_cargo where modulo_id in ('eventos','web')`)) > 0)
+  caso('ha creado el contador de visitas', true,
+    /^(t|true)$/.test((await sql(`select (to_regclass('public.visitas_web') is not null)::text`)).trim()))
+  caso('y los suscriptores', true,
+    /^(t|true)$/.test((await sql(`select (to_regclass('public.suscriptores_web') is not null)::text`)).trim()))
+  caso('y los dos cubos de ficheros', 2,
+    Number(await sql(`select count(*) from storage.buckets where id in ('imagenes','copias')`)))
+
+  // Volver a ejecutarlo encima no puede romper nada: la cabecera lo promete.
+  await sql(actualizar)
+  caso('se puede ejecutar dos veces', 2,
+    Number(await sql(`select count(*) from storage.buckets where id in ('imagenes','copias')`)))
+  // Y sin duplicar permisos, que es lo que pasaría con un insert sin guardia.
+  const repetidos = await sql(`
+    select coalesce(string_agg(cargo || '/' || modulo_id, ', '), '') from (
+      select cargo, modulo_id from permisos_cargo where hermandad_id = '${HDAD}'
+      group by cargo, modulo_id having count(*) > 1
+    ) x`)
+  caso('y sin duplicar ningún permiso', '', repetidos.trim())
+}
+
+/**
+ * UN CARGO MAL ESCRITO DEJA LA CUENTA SIN NADA, Y HAY QUE DECIRLO.
+ *
+ * `permisos_cargo` empareja por el TEXTO del cargo, letra por letra. La
+ * aplicación escribe «Tesorero/a», con la barra; si en la ficha pone
+ * «Tesorero» a secas —o en minúsculas, o con un espacio de más— no casa con
+ * ninguna fila y esa cuenta se queda SIN UN SOLO PERMISO.
+ *
+ * Por fuera se ve igual que un permiso que falta: la persona entra, el panel
+ * está vacío y no puede hacer nada, sin ningún mensaje. Es de las averías que
+ * más tiempo se llevan, porque la ficha «está bien puesta».
+ *
+ * Y el diagnóstico, que es lo que se ejecuta cuando eso pasa, mandaba a «dale
+ * a «Tesorero» el módulo hermanos»: un consejo imposible, porque ese cargo no
+ * existe. Ahora lo dice y enseña los que sí hay.
+ */
+async function elCargoMalEscrito({ sql, caso }) {
+  const UID = '77777777-7777-7777-7777-777777777777'
+  const hdad = (await sql(`select id from hermandades limit 1`)).trim()
+  if (!hdad) { caso('hay una hermandad para probar el cargo', true, false); return }
+
+  await sql(`
+    insert into auth.users (id, email) values ('${UID}', 'malcargo@ejemplo.es') on conflict do nothing;
+    -- Los permisos de fábrica de esa hermandad. Hacen falta: la hermandad de
+    -- esta prueba se inserta a mano, y en la vida real los siembra
+    -- «crear_hermandad» al crearla. Sin ellos no habría NINGÚN cargo con el
+    -- que comparar y el diagnóstico diría «no existe» hasta del bien escrito.
+    select sembrar_permisos_de_fabrica('${hdad}');
+    insert into personal (nombre, email, cargo, clave, activo, auth_user_id, hermandad_id)
+      values ('Con Cargo Raro', 'malcargo@ejemplo.es', 'Tesorero', 'x', true, '${UID}', '${hdad}')
+      on conflict do nothing;
+  `)
+
+  const diagnostico = await readFile('supabase/POR-QUE-NO-PUEDO.sql', 'utf8')
+  const salida = await sql(diagnostico)
+  const suFila = salida.split('\n').find((l) => l.includes('malcargo@ejemplo.es')) ?? ''
+
+  caso('el diagnóstico encuentra la cuenta', true, suFila.length > 0)
+  // Y no dice «su cargo no incluye ese módulo», que manda a arreglar lo que no
+  // se puede arreglar: dice que el cargo no existe.
+  caso('dice que el cargo no existe', true, /no existe en esta hermandad/.test(suFila))
+  caso('y no manda a darle un módulo a un cargo que no hay', false,
+    /su cargo no incluye el módulo/.test(suFila))
+  // Enseña los que SÍ hay, que es lo único que permite corregirlo.
+  caso('enseña los cargos que sí existen', true, /Tesorero\/a/.test(suFila))
+  caso('y avisa de que se escriben tal cual', true, /EXACTAMENTE/.test(suFila))
+
+  /*
+   * Y que el cargo BIEN escrito siga saliendo bien: una prueba que solo mira
+   * el caso malo pasaría igual si el diagnóstico dijera «no existe» siempre.
+   */
+  await sql(`update personal set cargo = 'Tesorero/a' where email = 'malcargo@ejemplo.es';`)
+  const bien = (await sql(diagnostico)).split('\n').find((l) => l.includes('malcargo@ejemplo.es')) ?? ''
+  caso('con el cargo bien escrito ya no lo dice', false, /no existe en esta hermandad/.test(bien))
+  caso('y le salen los módulos de su cargo', true, /cuotas/.test(bien) && /tesoreria/.test(bien))
+}
+
+/**
+ * LO QUE PONE SUPABASE Y UN POSTGRES A SECAS NO TIENE.
+ *
+ * Esta prueba existe para ejecutar el SQL de verdad, y el SQL de verdad está
+ * escrito contra Supabase: usa `auth.uid()` en cuarenta y nueve políticas,
+ * `auth.users` en cinco claves ajenas, y `storage.objects` para los adjuntos.
+ * Nada de eso viene con Postgres.
+ *
+ * Sin este andamiaje la prueba se saltaba SIEMPRE —«sin Postgres», decía— o
+ * fallaba en la línea 158 con «schema auth does not exist», que es lo mismo
+ * que no tenerla. Y es la única prueba del proyecto que comprueba que el SQL
+ * se instala: las demás lo leen como texto.
+ *
+ * Se monta lo MÍNIMO y con la misma forma que Supabase, ni más ni menos:
+ *
+ *   · `auth.uid()` devuelve lo que haya en `request.jwt.claim.sub`, que es de
+ *     donde lo saca Supabase. Así una prueba puede hacerse pasar por una
+ *     cuenta con `set local`.
+ *   · `auth.users` con las dos columnas que usa el SQL: `id` y `email`.
+ *   · `storage.foldername(name)` parte la ruta por barras, igual que allí: de
+ *     ahí sale la carpeta con la que las políticas separan una hermandad de
+ *     otra.
+ *
+ * NO se copia el resto de Supabase. Esto no comprueba que Supabase funcione;
+ * comprueba que NUESTRO SQL se instale y aguante, que es lo que se rompe.
+ */
+async function montarLoQuePoneSupabase({ sql }) {
+  await sql(`
+    create schema if not exists auth;
+    create schema if not exists storage;
+
+    -- Las columnas que usa NUESTRO SQL, con el mismo nombre que allí.
+    -- «last_sign_in_at» la lee el diagnóstico para ordenar las cuentas por la
+    -- última que entró, que casi siempre es la que dio el error.
+    create table if not exists auth.users (
+      id uuid primary key default gen_random_uuid(),
+      email text,
+      raw_user_meta_data jsonb default '{}'::jsonb,
+      last_sign_in_at timestamptz
+    );
+    alter table auth.users add column if not exists last_sign_in_at timestamptz;
+
+    -- La cuenta que está haciendo la consulta. En Supabase sale del token; aquí,
+    -- de un ajuste de sesión, para que una prueba pueda hacerse pasar por alguien.
+    -- Mira los dos sitios: «request.jwt.claim.sub» es de donde lo saca
+    -- Supabase, y «test.uid» es el que usa «supabase/PRUEBA-AISLAMIENTO.sql»,
+    -- que se escribió antes y se ejecuta a mano contra esta misma base.
+    create or replace function auth.uid() returns uuid
+      language sql stable as $$
+        select coalesce(
+          nullif(current_setting('request.jwt.claim.sub', true), ''),
+          nullif(current_setting('test.uid', true), '')
+        )::uuid
+      $$;
+
+    create or replace function auth.jwt() returns jsonb
+      language sql stable as $$
+        select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
+      $$;
+
+    create table if not exists storage.buckets (
+      id text primary key,
+      name text,
+      public boolean default false
+    );
+    create table if not exists storage.objects (
+      id uuid primary key default gen_random_uuid(),
+      bucket_id text references storage.buckets(id),
+      name text,
+      owner uuid
+    );
+    alter table storage.objects enable row level security;
+
+    -- «hermandad/2026/escaneo.pdf» → {hermandad, 2026}. La última parte es el
+    -- fichero y no cuenta: las políticas miran la PRIMERA, que es la carpeta
+    -- de la hermandad.
+    create or replace function storage.foldername(name text) returns text[]
+      language sql immutable as $$
+        select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 0)]
+      $$;
+
+    -- Roles de Supabase: las concesiones del SQL los nombran.
+    do $$ begin
+      if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+      if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+      if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if;
+    end $$;
+    grant usage on schema public to anon, authenticated, service_role;
+    grant usage on schema storage to anon, authenticated, service_role;
+    -- Y sobre «auth», que Supabase también lo concede: sin esto, cualquier
+    -- función que llame a auth.uid() sin ser SECURITY DEFINER falla aquí y no
+    -- allí, que es la peor manera de que se rompa una prueba.
+    grant usage on schema auth to anon, authenticated, service_role;
+  `)
+}
+
+/**
+ * Y los PERMISOS DE TABLA, que van después de crearlas.
+ *
+ * Supabase se los da de fábrica a `anon` y `authenticated` sobre todo lo que
+ * hay en `public`; las políticas de seguridad son lo que acota después QUÉ
+ * filas ve cada uno. Sin este paso, todo falla con «permission denied», que no
+ * es lo que se quiere comprobar: se quiere comprobar qué dicen las políticas,
+ * no si hay permiso de tabla.
+ */
+async function darLosPermisosDeSupabase({ sql }) {
+  await sql(`
+    grant all on all tables in schema public to anon, authenticated, service_role;
+    grant all on all sequences in schema public to anon, authenticated, service_role;
+    grant all on all tables in schema storage to anon, authenticated, service_role;
+  `)
+}
+
+/**
+ * QUE EL HERMANO PUEDA CAMBIAR SU FICHA, Y SOLO DE UNA MANERA.
+ *
+ * Esta prueba nace de un arreglo mío que estaba mal. Para no hacer una
+ * petición por fila al reimportar un censo, cambié las modificaciones a
+ * `upsert`, que hace lo mismo que `update` cuando la fila ya existe.
+ *
+ * Y no lo hace. PostgREST manda `upsert` como `insert … on conflict do
+ * update`, y Postgres comprueba la política de INSERCIÓN aunque acabe
+ * actualizando. El hermano tiene `hermanos_propio_update` y no tiene ninguna
+ * política de inserción —ni debe tenerla, un hermano no crea hermanos—, así
+ * que habría dejado de poder cambiar su correo o su contraseña desde su área.
+ *
+ * Eso se razona, pero razonarlo no basta: es justo el tipo de cosa que se cree
+ * al revés con toda la confianza del mundo. Aquí se ejecuta contra un Postgres
+ * de verdad, con la política puesta y la sesión haciéndose pasar por la
+ * hermana.
+ */
+async function elHermanoCambiaSuFicha({ sql, caso }) {
+  const UID = '11111111-1111-1111-1111-111111111111'
+  const HDAD = '22222222-2222-2222-2222-222222222222'
+  const FICHA = '33333333-3333-3333-3333-333333333333'
+  await sql(`
+    insert into auth.users (id, email) values ('${UID}', 'hermana@ejemplo.es') on conflict do nothing;
+    insert into hermandades (id, nombre) values ('${HDAD}', 'Hermandad de prueba') on conflict do nothing;
+    insert into hermanos (id, numero, nombre, dni, estado, hermandad_id, auth_user_id)
+      values ('${FICHA}', 901, 'Hermana de Prueba', '12345678Z', 'Activo', '${HDAD}', '${UID}')
+      on conflict (id) do nothing;
+  `)
+
+  /**
+   * Ejecuta algo HACIÉNDOSE PASAR por la hermana, y dice si la base lo dejó.
+   *
+   * Se deja fallar a propósito, sin `exception when others`: dentro de un
+   * bloque `do` el error se captura y `raise notice` sale por la salida de
+   * ERRORES, que `sql()` no lee. O sea que el rechazo no llegaba y la prueba
+   * daba por bueno justo lo que venía a cazar — pasaba en verde.
+   *
+   * Fallando de verdad, `psql` termina con error y la promesa se rompe: eso sí
+   * se ve. Y se devuelve el motivo, para poder comprobar que es el que se
+   * espera y no un fallo de sintaxis disfrazado de permiso denegado.
+   */
+  const comoLaHermana = async (sentencia) => {
+    try {
+      await sql(`
+        begin;
+          set local role authenticated;
+          set local "request.jwt.claim.sub" = '${UID}';
+          ${sentencia}
+        rollback;
+      `)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) {
+      return { deja: 'no', motivo: String(e?.stderr ?? e) }
+    }
+  }
+
+  // Primero, que la base la reconozca como hermana: si no, estaría probando
+  // las políticas del personal y saldría todo que sí.
+  const esHermana = await sql(`
+    begin;
+      set local role authenticated;
+      set local "request.jwt.claim.sub" = '${UID}';
+      select auth_es_hermano()::text;
+    rollback;
+  `)
+  caso('la base la ve como hermana', true, /true/.test(esHermana))
+
+  // 1. Cambiar SU ficha: es lo que hace su área. Tiene que poder.
+  caso('la hermana puede cambiar su propia ficha', 'sí', (await comoLaHermana(
+    `update hermanos set email = 'nuevo@ejemplo.es' where id = '${FICHA}';`)).deja)
+
+  /*
+   * 2. Y por `upsert`, NO. Es la comprobación que existe esta prueba: si algún
+   * día vuelve a parecer buena idea cambiar las modificaciones a `upsert`, esto
+   * lo para antes de que llegue al área del hermano.
+   */
+  const porUpsert = await comoLaHermana(
+    `insert into hermanos (id, numero, nombre, dni, estado, hermandad_id, auth_user_id, email)
+       values ('${FICHA}', 901, 'Hermana de Prueba', '12345678Z', 'Activo', '${HDAD}', '${UID}', 'x@ejemplo.es')
+       on conflict (id) do update set email = excluded.email;`)
+  caso('pero NO por upsert, que exige permiso de inserción', 'no', porUpsert.deja)
+  // Y que lo rechace POR ESO, no por otra cosa: si un día falla por sintaxis,
+  // la prueba seguiría en verde sin comprobar nada.
+  caso('y lo rechaza la política de seguridad', true, /row-level security policy for table "hermanos"/.test(porUpsert.motivo))
+
+  // 3. Y desde luego no puede crear un hermano nuevo, que es de lo que protege
+  //    esa política ausente.
+  caso('ni puede dar de alta a nadie', 'no', (await comoLaHermana(
+    `insert into hermanos (numero, nombre, dni, estado, hermandad_id)
+       values (902, 'Colado', '87654321X', 'Activo', '${HDAD}');`)).deja)
+
+  // Y que la aplicación NO use upsert donde escribe el hermano.
+  const sync = await readFile('src/lib/supabaseSync.ts', 'utf8')
+  caso('y el código no manda ningún upsert', false, /\.upsert\(/.test(sync))
+}
+
+/**
+ * QUE LA SEGUNDA HERMANDAD PUEDA GUARDAR SUS CATÁLOGOS.
+ *
+ * `catalogos` se quedó con la clave primaria en (clave, valor), SIN la
+ * hermandad. Se convirtieron el DNI del hermano, el número de hermano, los
+ * ajustes, la web y las redes sociales; esta se pasó por alto.
+ *
+ * Y es la peor en la que pasarla por alto, porque ahí viven las listas MENOS
+ * distintivas que hay: las categorías de ingreso y de gasto, las cuentas de
+ * tesorería, los tipos de incidencia, las categorías del inventario. «Cera»,
+ * «Flores», «Limosnas», «Caja», «Bueno». Las escribe igual todo el mundo.
+ *
+ * Así que la segunda hermandad que entrara no podía guardar prácticamente
+ * ninguna de las suyas: la fila ya existía, de otra gente, y el guardado se
+ * estrellaba contra una clave duplicada. No es un caso raro que salga con el
+ * tiempo — sale con la hermandad número dos y con el primer valor obvio.
+ *
+ * Y ENCIMA NO SE VE VENIR: por la frontera de seguridad, la fila que estorba
+ * es de otra hermandad y por tanto invisible. En pantalla no hay nada
+ * repetido, y aun así no se puede guardar.
+ *
+ * Esto se ejecuta de verdad porque es lo único que lo demuestra: la clave es
+ * cosa de la base de datos, y leer el SQL como texto no dice si la migración
+ * llegó a aplicarse sobre una base que ya existía.
+ */
+async function laSegundaHermandadGuardaSusCatalogos({ sql, caso }) {
+  const clave = (await sql(
+    "select pg_get_constraintdef(oid) from pg_constraint "
+    + "where conrelid = 'catalogos'::regclass and contype = 'p'",
+  )).trim()
+  caso('la clave de los catálogos lleva la hermandad delante',
+    'PRIMARY KEY (hermandad_id, clave, valor)', clave)
+
+  const A = "'a0000000-0000-0000-0000-00000000000a'"
+  const B = "'b0000000-0000-0000-0000-00000000000b'"
+  await sql(`insert into hermandades (id, nombre) values (${A}, 'Hdad. A'), (${B}, 'Hdad. B')
+             on conflict (id) do nothing`)
+  await sql("delete from catalogos where valor = 'Cera'")
+
+  // Las dos escriben «Cera», que es lo que escribe cualquiera.
+  let dosVeces = ''
+  try {
+    await sql(`insert into catalogos (hermandad_id, clave, valor, orden)
+               values (${A}, 'cabildo-catalogo-gastos', 'Cera', 1)`)
+    await sql(`insert into catalogos (hermandad_id, clave, valor, orden)
+               values (${B}, 'cabildo-catalogo-gastos', 'Cera', 1)`)
+    dosVeces = 'ok'
+  } catch (e) {
+    dosVeces = String(e.stderr ?? e.message).split('\n').filter((l) => /ERROR/.test(l)).join(' · ')
+  }
+  caso('las dos hermandades guardan su «Cera»', 'ok', dosVeces)
+  caso('y quedan las dos filas', '2',
+    (await sql("select count(*) from catalogos where valor = 'Cera'")).trim())
+
+  /*
+   * Y DENTRO DE UNA MISMA HERMANDAD SIGUE SIN PODER REPETIRSE. Es la mitad que
+   * no se puede perder al arreglar la otra: una categoría repetida sale dos
+   * veces en cada desplegable de tesorería y no hay forma de quitarla.
+   */
+  let repetida = ''
+  try {
+    await sql(`insert into catalogos (hermandad_id, clave, valor, orden)
+               values (${A}, 'cabildo-catalogo-gastos', 'Cera', 2)`)
+    repetida = 'la ha dejado repetir (mal)'
+  } catch {
+    repetida = 'no deja'
+  }
+  caso('la misma hermandad no puede repetir un valor', 'no deja', repetida)
+
+  // Y una fila sin hermandad ya no entra: antes se creaba y no la veía nadie,
+  // que es como se llenó la tabla de filas huérfanas que bloqueaban la clave.
+  let huerfana = ''
+  try {
+    await sql("insert into catalogos (clave, valor) values ('cabildo-catalogo-gastos', 'Sin dueño')")
+    huerfana = 'la ha dejado entrar (mal)'
+  } catch {
+    huerfana = 'no deja'
+  }
+  caso('una fila sin hermandad no entra', 'no deja', huerfana)
+}
+
+/**
+ * EL HERMANO NO SE PONE LA CUOTA COMO PAGADA.
+ *
+ * El hermano necesita poder escribir en SU recibo: es como avisa de que ha
+ * pagado por Bizum. Para eso hay una política de UPDATE sobre `cuotas`, y se
+ * dejó SIN ACOTAR POR COLUMNAS con este razonamiento, escrito en el SQL:
+ *
+ *     «No hace falta acotar más por columnas: lo único que la aplicación le
+ *      deja tocar ahí es el aviso de pago.»
+ *
+ * Y ahí está el fallo. Lo que le deje tocar la aplicación no protege nada: él
+ * tiene una sesión de verdad y desde la consola del navegador habla con la base
+ * directamente, sin pasar por ninguna pantalla:
+ *
+ *     supabase.from('cuotas').update({ estado: 'Pagada', importe: 0 })...
+ *
+ * En ese momento su recibo queda pagado y a cero, sale al corriente, se lleva
+ * su papeleta de sitio, y las cuentas de la hermandad dicen que ese dinero
+ * entró. La tesorería no tiene forma de notarlo.
+ *
+ * Es el mismo agujero que ya se cerró en la ficha del hermano —donde bastaba
+ * con ponerse `estado: 'Activo'` para recuperar un cargo destituido— y se
+ * cierra igual: lista blanca.
+ *
+ * ESTO SE EJECUTA DE VERDAD, con la sesión del hermano puesta, porque es lo
+ * único que lo demuestra: leer la política como texto no dice qué columnas deja
+ * pasar, precisamente porque RLS no sabe de columnas.
+ */
+async function elHermanoNoSePagaLaCuota({ sql, caso }) {
+  const HD = "'d0000000-0000-0000-0000-00000000000d'"
+  const CUENTA = "'e0000000-0000-0000-0000-00000000000e'"
+  const HNO = "'f0000000-0000-0000-0000-00000000000f'"
+
+  await sql(`
+    insert into hermandades (id, nombre) values (${HD}, 'Hdad. del hermano listo')
+      on conflict (id) do nothing;
+    insert into auth.users (id, email, raw_user_meta_data)
+      values (${CUENTA}, 'manuel@ejemplo.com', '{"tipo":"hermano"}') on conflict (id) do nothing;
+    delete from cuotas where hermano_id = ${HNO};
+    delete from hermanos where id = ${HNO};
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id)
+      values (${HNO}, ${HD}, 'Manuel', '99999999Z', 1, 'Activo', ${CUENTA});
+    insert into cuotas (id, hermandad_id, hermano_id, numero, concepto, importe, estado, ejercicio)
+      values (gen_random_uuid(), ${HD}, ${HNO}, 9001, 'Cuota anual', 60, 'Pendiente', 2026);
+  `)
+
+  /** Una consulta con la sesión de ese hermano puesta, como la haría su navegador. */
+  const comoElHermano = (consulta) => sql(`
+    begin;
+    set local role authenticated;
+    set local request.jwt.claim.sub = ${CUENTA};
+    set local request.jwt.claims = '{"user_metadata":{"tipo":"hermano"}}';
+    ${consulta}
+    rollback;
+  `)
+
+  const intento = await comoElHermano(`
+    update cuotas set estado = 'Pagada', importe = 0 where numero = 9001;
+    select estado || ' · ' || importe::text from cuotas where numero = 9001;
+  `)
+  const comoQueda = intento.split('\n').map((l) => l.trim()).find((l) => /·/.test(l))
+  caso('el hermano no puede ponerse el recibo como pagado', 'Pendiente · 60.00', comoQueda)
+
+  // Y lo que SÍ tiene que poder: avisar de que ha pagado. Sin esto el arreglo
+  // rompería lo que venía a proteger — su recibo se quedaría sin poder avisar.
+  const aviso = await comoElHermano(`
+    update cuotas set pago_comunicado = '{"metodo":"Bizum","fecha":"2026-08-23"}'::jsonb
+      where numero = 9001;
+    select coalesce(pago_comunicado ->> 'metodo', '(nada)') from cuotas where numero = 9001;
+  `)
+  caso('pero sí puede avisar de que ha pagado', true, /Bizum/.test(aviso))
+
+  // Ni crearse recibos de la nada.
+  let creando = ''
+  try {
+    await comoElHermano(`
+      insert into cuotas (id, hermandad_id, hermano_id, numero, concepto, importe, estado, ejercicio)
+        values (gen_random_uuid(), ${HD}, ${HNO}, 9002, 'Regalo', 0, 'Pagada', 2026);
+    `)
+    creando = 'lo ha dejado (mal)'
+  } catch {
+    creando = 'no le deja'
+  }
+  caso('ni crearse un recibo pagado', 'no le deja', creando)
+
+  /*
+   * Y EN LA PAPELETA: renovar y renunciar sí; ponerse «Pagada» o «Entregada»,
+   * no. Es lo mismo por otro camino — con la papeleta entregada sale en el
+   * cortejo sin haberla pagado.
+   */
+  await sql(`
+    delete from papeletas where numero = 9001;
+    insert into papeletas (id, hermandad_id, hermano_id, numero, anio, importe, estado)
+      values (gen_random_uuid(), ${HD}, ${HNO}, 9001, 2026, 30, 'Asignada');
+  `)
+  const papeleta = await comoElHermano(`
+    update papeletas set estado = 'Pagada', fecha_entrega = '2026-03-01' where numero = 9001;
+    select estado || ' · ' || coalesce(fecha_entrega::text, 'sin entregar') from papeletas where numero = 9001;
+  `)
+  const quedaLaPapeleta = papeleta.split('\n').map((l) => l.trim()).find((l) => /·/.test(l))
+  caso('no puede darse la papeleta por pagada ni entregada',
+    'Asignada · sin entregar', quedaLaPapeleta)
+
+  const renuncia = await comoElHermano(`
+    update papeletas set estado = 'Renuncia' where numero = 9001;
+    select estado from papeletas where numero = 9001;
+  `)
+  caso('pero sí puede renunciar a su sitio', true, /Renuncia/.test(renuncia))
+}
+
+/**
+ * LA WEB PÚBLICA LA EDITA QUIEN TIENE EL MÓDULO «WEB», Y NO CUALQUIERA.
+ *
+ * El módulo existía y la pantalla lo respetaba —quien no lo tiene no ve la
+ * sección de la web—, pero la base de datos no lo pedía. Su política decía solo
+ * «no es un hermano»:
+ *
+ *     using (not auth_es_hermano()) with check (not auth_es_hermano())
+ *
+ * Así que cualquiera del personal, con el cargo que fuera, podía reescribir la
+ * web pública desde la consola del navegador sin pasar por ninguna pantalla: el
+ * diputado de tramo, el fiscal, el mayordomo. Es el mismo error de siempre —lo
+ * que esconde la pantalla no protege nada— y aquí duele más, porque la web
+ * pública la ve el barrio entero.
+ */
+async function laWebLaEditaQuienTieneWeb({ sql, caso }) {
+  const HD = "'d0000000-0000-0000-0000-00000000000d'"
+  const DIPU = "'b0000000-1111-0000-0000-00000000000b'"
+  const SECRE = "'a0000000-1111-0000-0000-00000000000a'"
+
+  await sql(`
+    select sembrar_permisos_de_fabrica(${HD});
+    insert into auth.users (id, email) values
+      (${DIPU}, 'diputada@ejemplo.com'), (${SECRE}, 'secre@ejemplo.com')
+      on conflict (id) do nothing;
+    delete from personal where email in ('diputada@ejemplo.com', 'secre@ejemplo.com');
+    insert into personal (id, hermandad_id, nombre, email, cargo, activo, auth_user_id) values
+      (gen_random_uuid(), ${HD}, 'Marta', 'diputada@ejemplo.com', 'Diputado/a Mayor de Gobierno', true, ${DIPU}),
+      (gen_random_uuid(), ${HD}, 'Pilar', 'secre@ejemplo.com', 'Secretario/a', true, ${SECRE});
+    delete from web_publica where hermandad_id = ${HD};
+    insert into web_publica (hermandad_id, slug, publicada, datos)
+      values (${HD}, 'hdad-de-prueba', true, '{"titulo":"La de siempre"}');
+  `)
+
+  const como = (quien, consulta) => sql(`
+    begin;
+    set local role authenticated;
+    set local request.jwt.claim.sub = ${quien};
+    ${consulta}
+    rollback;
+  `)
+
+  // Primero: que el módulo esté sembrado donde toca. Si no, lo de abajo pasaría
+  // por el motivo equivocado —nadie podría editar la web— y saldría en verde.
+  const conWeb = await sql(`
+    select string_agg(cargo, ', ' order by cargo) from permisos_cargo
+     where hermandad_id = ${HD} and modulo_id = 'web'
+  `)
+  caso('el módulo «web» está sembrado en los cargos que lo llevan',
+    'Hermano Mayor, Secretario/a', conWeb.trim())
+
+  const dipu = await como(DIPU, `
+    update web_publica set datos = '{"titulo":"Reescrita"}' where slug = 'hdad-de-prueba';
+    select datos ->> 'titulo' from web_publica where slug = 'hdad-de-prueba';
+  `)
+  caso('quien no tiene «web» no puede tocarla', true, /La de siempre/.test(dipu))
+
+  const secre = await como(SECRE, `
+    update web_publica set datos = '{"titulo":"Cultos de septiembre"}' where slug = 'hdad-de-prueba';
+    select datos ->> 'titulo' from web_publica where slug = 'hdad-de-prueba';
+  `)
+  caso('y quien sí lo tiene, sigue pudiendo', true, /Cultos de septiembre/.test(secre))
+}
+
+/**
+ * LA CONTRASEÑA DE QUIEN PIDE EL ALTA NO SE GUARDA EN NINGUNA PARTE.
+ *
+ * `solicitudes_alta.clave_propuesta` guardaba EN CLARO la contraseña que
+ * tecleaba quien pedía el alta desde la web pública. La ve cualquiera del
+ * personal con el módulo «hermanos» —Hermano Mayor, Secretaría, Diputado
+ * Mayor—, en la propia fila de la solicitud, y se quedaba ahí mientras la
+ * solicitud estuviera pendiente: en una hermandad, semanas.
+ *
+ * La gente repite contraseñas. La que veía la secretaria es, con mucha
+ * probabilidad, la del correo de esa persona. Y quien pide el alta no se la
+ * está dando a una empresa con un equipo de seguridad: se la está dando a un
+ * vecino que lleva la secretaría los martes.
+ *
+ * Y NO HACÍA FALTA NINGUNA: el camino de «se genera una clave de un solo uso al
+ * aprobar y se manda por correo» ya existía —se usaba en el alta de un menor—
+ * y ahora se usa siempre.
+ */
+async function nadieGuardaContrasenasEnClaro({ sql, caso }) {
+  const HD = "'90000000-0000-0000-0000-000000000009'"
+  await sql(`
+    insert into hermandades (id, nombre) values (${HD}, 'Hdad. de las solicitudes')
+      on conflict (id) do nothing;
+    delete from solicitudes_alta where dni in ('11111111H', '22222222J');
+  `)
+
+  /*
+   * UNA COMO LAS QUE MANDA UNA VERSIÓN ANTERIOR DE LA APLICACIÓN. Esto no es
+   * rebuscado: la hermandad puede tener el navegador abierto desde ayer con el
+   * formulario viejo, y ese sí manda la contraseña. Por eso el arreglo no es
+   * solo quitar el campo del formulario.
+   */
+  await sql(`
+    insert into solicitudes_alta (id, hermandad_id, nombre, dni, email, clave_propuesta, fecha, estado)
+      values (gen_random_uuid(), ${HD}, 'Ana', '11111111H', 'ana@ejemplo.com',
+              'miclavedelcorreo', '23 ago 2026', 'Pendiente');
+  `)
+  const guardada = (await sql("select coalesce(clave_propuesta, '(nulo)') from solicitudes_alta where dni = '11111111H'")).trim()
+  caso('la contraseña no llega a guardarse', '', guardada)
+
+  // Y la solicitud SÍ se guarda: quien la pide no puede quedarse fuera porque
+  // su navegador tenga la versión de ayer.
+  caso('pero la solicitud entra igual', '1',
+    (await sql("select count(*) from solicitudes_alta where dni = '11111111H'")).trim())
+
+  // Ni al modificarla después.
+  await sql("update solicitudes_alta set clave_propuesta = 'otra' where dni = '11111111H'")
+  caso('ni se cuela al modificarla', '', (await sql(
+    "select coalesce(clave_propuesta, '') from solicitudes_alta where dni = '11111111H'")).trim())
+
+  caso('no queda ninguna contraseña guardada', '0',
+    (await sql("select count(*) from solicitudes_alta where coalesce(clave_propuesta, '') <> ''")).trim())
+
+  await elFormularioYaNoLaPide({ caso })
+}
+
+/** Y los dos formularios que la pedían dejan de pedirla. */
+async function elFormularioYaNoLaPide({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const web = await readFile('src/components/FormulariosWeb.tsx', 'utf8')
+  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+
+  caso('el formulario de la web no pide contraseña', false, /autoComplete="new-password"/.test(web))
+  caso('y manda la solicitud sin ninguna', true, /clavePropuesta: '',/.test(web))
+  caso('el del área del hermano tampoco', false, /name="clavePropuesta"/.test(portal))
+
+  /*
+   * Y LO QUE HABRÍA ROTO EL ARREGLO SI SE HUBIERA HECHO A MEDIAS:
+   *
+   * `esMenorACargo` se decidía con «tiene tutor O no trae contraseña». En
+   * cuanto ninguna solicitud trae contraseña, esa condición hace que TODO EL
+   * MUNDO pase por menor: se aprueba el alta y no se le crea cuenta a nadie,
+   * sin un solo aviso. Menor es quien tiene tutor, y solo eso.
+   */
+  caso('menor es quien tiene tutor, y solo eso', true,
+    /const esMenorACargo = Boolean\(sol\.tutorId\)\n/.test(hermanos))
+  caso('la clave se genera siempre', true, /const claveProvisional = claveDeUnSoloUso\(\)/.test(hermanos))
+  caso('y se le manda por correo', true, /claveProvisional: acceso\.id \? claveProvisional : null/.test(hermanos))
+}
+
+/**
+ * LAS TRES PUERTAS QUE EMPUJA CUALQUIERA DESDE FUERA, CON FRENO.
+ *
+ * El buzón de la web, las solicitudes de alta y el contador de visitas se abren
+ * a quien no ha iniciado sesión, a propósito: es la web pública y el visitante
+ * no tiene cuenta ni la va a tener. Lo que faltaba era el tope.
+ *
+ * Lo que hay en el navegador no cuenta. Los formularios llevan un campo trampa
+ * para robots y está bien, pero solo lo pisa quien pasa por el formulario;
+ * quien habla con la base directamente, no.
+ *
+ * Y sin tope pasan dos cosas distintas:
+ *
+ *   · SE AHOGA EL BUZÓN. Diez mil mensajes de relleno y los tres de verdad —un
+ *     donativo, alguien que quiere hacerse hermano— no hay quien los encuentre.
+ *     No hace falta tirar nada abajo para hacer daño.
+ *   · SE LLENA LA BASE. En el plan gratuito de Supabase el espacio está
+ *     contado, y ahí no se cae solo el buzón: se cae la hermandad entera, con
+ *     su censo y sus cuotas dentro.
+ *
+ * Se ejecuta de verdad, empujando las tres, porque un contador que se lee bien
+ * puede contar mal.
+ */
+async function losFormulariosPublicosTienenFreno({ sql, caso }) {
+  const HD = "'70000000-0000-0000-0000-000000000007'"
+  await sql(`
+    insert into hermandades (id, nombre) values (${HD}, 'Hdad. del formulario')
+      on conflict (id) do nothing;
+    delete from mensajes_web where hermandad_id = ${HD};
+    delete from solicitudes_alta where hermandad_id = ${HD};
+    delete from visitas_web where hermandad_id = ${HD};
+  `)
+
+  // --- El buzón: sesenta por hora, y el texto con medida.
+  await sql(`
+    do $$ begin
+      for i in 1..80 loop
+        begin
+          insert into mensajes_web (hermandad_id, tipo, nombre, email, mensaje, fecha)
+            values (${HD}, 'contacto', 'Robot ' || i, 'r@x.es', repeat('x', 50000), '23 ago 2026');
+        exception when sqlstate 'P0001' then exit;
+        end;
+      end loop;
+    end $$;
+  `)
+  caso('el buzón se para en sesenta por hora', '60',
+    (await sql(`select count(*) from mensajes_web where hermandad_id = ${HD}`)).trim())
+  /*
+   * Y EL TEXTO SE RECORTA. Sin esto, un solo mensaje puede traer megas: sesenta
+   * mensajes de cincuenta mil caracteres son tres megas de una tacada, y el
+   * tope por hora no lo impide.
+   */
+  caso('y un mensaje no puede traer megas', '4000',
+    (await sql(`select length(mensaje) from mensajes_web where hermandad_id = ${HD} limit 1`)).trim())
+
+  // --- Las solicitudes: trescientas pendientes a la vez.
+  await sql(`
+    do $$ begin
+      for i in 1..320 loop
+        begin
+          insert into solicitudes_alta (hermandad_id, nombre, dni, email, fecha, estado)
+            values (${HD}, 'Robot ' || i, lpad(i::text, 8, '0') || 'A', 'r' || i || '@x.es',
+                    '23 ago 2026', 'Pendiente');
+        exception when sqlstate 'P0001' then exit;
+        end;
+      end loop;
+    end $$;
+  `)
+  caso('las solicitudes se paran en trescientas pendientes', '300',
+    (await sql(`select count(*) from solicitudes_alta where hermandad_id = ${HD}`)).trim())
+
+  /*
+   * Y LA HERMANDAD NO SE FRENA A SÍ MISMA. Es la mitad que no se puede perder:
+   * la secretaría tiene que poder meter un alta a mano justo el día que alguien
+   * les ha llenado el panel, que es cuando más falta hace.
+   */
+  const aMano = await sql(`
+    begin;
+    set local role authenticated;
+    set local request.jwt.claim.sub = '${'a0000000-1111-0000-0000-00000000000a'}';
+    insert into solicitudes_alta (hermandad_id, nombre, dni, email, fecha, estado)
+      values (${HD}, 'Alta a mano', '99887766B', 'x@x.es', '23 ago 2026', 'Pendiente');
+    select count(*) from solicitudes_alta where dni = '99887766B';
+    rollback;
+  `)
+  caso('pero la secretaría sí puede meter una a mano', true, /(^|\s)1(\s|$)/m.test(aMano))
+
+  /*
+   * --- EL CONTADOR DE VISITAS ---
+   *
+   * Es la más fácil de empujar de las tres, porque ni siquiera hay que rellenar
+   * nada: basta con pedir direcciones. Cada ruta distinta creaba una fila, sin
+   * ningún límite. Pasadas trescientas en un día se cuentan juntas en «/otras»:
+   * la visita se sigue contando y lo que no crece es la tabla.
+   */
+  await sql(`
+    do $$ begin
+      for i in 1..500 loop perform contar_visita(${HD}, '/a' || i); end loop;
+    end $$;
+  `)
+  caso('quinientas rutas distintas no crean quinientas filas', '301',
+    (await sql(`select count(*) from visitas_web where hermandad_id = ${HD}`)).trim())
+  caso('las de más se cuentan juntas', '200',
+    (await sql(`select visitas from visitas_web where hermandad_id = ${HD} and ruta = '/otras'`)).trim())
+
+  // Y una ruta que ya existía sigue contando aparte: el tope no puede hacer que
+  // la hermandad deje de ver las visitas de sus propias páginas.
+  await sql(`select contar_visita(${HD}, '/a1')`)
+  caso('y una ruta de verdad sigue contando sola', '2',
+    (await sql(`select visitas from visitas_web where hermandad_id = ${HD} and ruta = '/a1'`)).trim())
+
+  await yElFrenoNoSePuedeEsquivar({ sql, caso, HD })
+}
+
+/**
+ * Y EL FRENO NO SE PUEDE ESQUIVAR DESDE FUERA.
+ *
+ * Un tope que se salta con un campo más no es un tope. Los dos se saltaban:
+ *
+ *   · EL DEL BUZÓN cuenta los de la última hora por `creado_en`. Esa columna
+ *     tiene `default now()`, pero un valor por defecto solo se usa cuando no
+ *     mandas nada: poniéndola tres días atrás, el contador no veía ninguno.
+ *     Comprobado antes del arreglo: entraban los doscientos.
+ *   · EL DE LAS SOLICITUDES cuenta las PENDIENTES, así que mandándolas con
+ *     `estado: 'Aprobada'` tampoco contaban. Y eso es peor que saltarse el
+ *     tope: una solicitud que llega ya aprobada desde fuera aparece en el panel
+ *     de la secretaría como si la hubiera aprobado alguien de la casa.
+ *
+ * Ahora la hora y el estado los pone la base, y de paso `leido` y `atendido`
+ * también: si no, se puede dejar un mensaje ya marcado como leído y atendido —o
+ * sea, invisible en el buzón—.
+ */
+async function yElFrenoNoSePuedeEsquivar({ sql, caso, HD }) {
+  await sql(`delete from mensajes_web where hermandad_id = ${HD}`)
+  await sql(`
+    do $$ begin
+      for i in 1..200 loop
+        begin
+          insert into mensajes_web (hermandad_id, tipo, nombre, mensaje, fecha, creado_en, leido, atendido)
+            values (${HD}, 'contacto', 'R' || i, 'x', '23 ago 2026',
+                    now() - interval '3 days', true, true);
+        exception when sqlstate 'P0001' then exit;
+        end;
+      end loop;
+    end $$;
+  `)
+  caso('con la fecha falseada, el freno sigue parando en sesenta', '60',
+    (await sql(`select count(*) from mensajes_web where hermandad_id = ${HD}`)).trim())
+  caso('y ninguno entra ya marcado como leído', '0',
+    (await sql(`select count(*) from mensajes_web where hermandad_id = ${HD} and leido`)).trim())
+
+  await sql(`delete from solicitudes_alta where hermandad_id = ${HD}`)
+  await sql(`
+    do $$ begin
+      for i in 1..400 loop
+        begin
+          insert into solicitudes_alta (hermandad_id, nombre, dni, email, fecha, estado)
+            values (${HD}, 'R' || i, lpad(i::text, 8, '0') || 'A', 'r' || i || '@x.es',
+                    '23 ago 2026', 'Aprobada');
+        exception when sqlstate 'P0001' then exit;
+        end;
+      end loop;
+    end $$;
+  `)
+  caso('mandarlas «ya aprobadas» tampoco se salta el tope', '300',
+    (await sql(`select count(*) from solicitudes_alta where hermandad_id = ${HD}`)).trim())
+  caso('y ninguna entra aprobada', '0',
+    (await sql(`select count(*) from solicitudes_alta where hermandad_id = ${HD} and estado = 'Aprobada'`)).trim())
+}
+
+/**
+ * SER HERMANO DE DOS HERMANDADES A LA VEZ.
+ *
+ * En Andalucía es lo normal, y hasta ahora esa persona solo podía entrar en el
+ * área de UNA. El censo ya lo contemplaba —el DNI se hizo único POR hermandad
+ * en su día, con el comentario «la misma persona puede ser hermana de dos»—;
+ * lo que faltaba era la cuenta.
+ *
+ * Un hermano entra eligiendo hermandad, con su DNI y su contraseña: el correo
+ * NO LO TECLEA NUNCA, la aplicación lo busca a partir del DNI. Pero las cuentas
+ * de Supabase se identifican por correo, y el correo es único en todo el
+ * sistema — así que la segunda hermandad se estrellaba con «ese correo ya lo
+ * usa otra cuenta» y esa persona quedaba en el censo sin poder entrar.
+ *
+ * Se separan dos cosas que estaban pegadas sin necesidad: `email`, que es su
+ * correo y sirve para los avisos —el MISMO en las dos hermandades—, y
+ * `correo_acceso`, que es cómo se llama su cuenta por dentro, una por
+ * hermandad, y que no ve ni teclea nadie.
+ */
+async function hermanoDeDosHermandades({ sql, caso }) {
+  const A = "'a1a1a1a1-0000-0000-0000-0000000000a1'"
+  const B = "'b2b2b2b2-0000-0000-0000-0000000000b2'"
+
+  await sql(`
+    insert into hermandades (id, nombre) values
+      (${A}, 'Hdad. de la Vera-Cruz'), (${B}, 'Hdad. de la Amargura')
+      on conflict (id) do nothing;
+    delete from hermanos where dni in ('11223344C', '55667788D');
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, email, correo_acceso) values
+      (gen_random_uuid(), ${A}, 'Manuel Ruiz', '11223344C', 45, 'Activo', 'manuel@gmail.com',
+       correo_de_acceso(${A}, '11223344C')),
+      (gen_random_uuid(), ${B}, 'Manuel Ruiz', '11223344C', 312, 'Activo', 'manuel@gmail.com',
+       correo_de_acceso(${B}, '11223344C'));
+  `)
+
+  caso('la misma persona está en las dos, con el mismo correo de avisos', '2',
+    (await sql("select count(*) from hermanos where dni = '11223344C' and email = 'manuel@gmail.com'")).trim())
+  caso('y cada hermandad le da una cuenta distinta', '2',
+    (await sql("select count(distinct correo_acceso) from hermanos where dni = '11223344C'")).trim())
+
+  /*
+   * Y AL ENTRAR, CADA HERMANDAD LE DEVUELVE LA SUYA. Con el DNI escrito como le
+   * salga —con puntos, con guion, en minúscula—, que es como lo escribe medio
+   * mundo y como está en la mitad de los censos importados.
+   */
+  const enA = (await sql(`select resolver_email_hermano(${A}, '11.223.344-C')`)).trim()
+  const enB = (await sql(`select resolver_email_hermano(${B}, '11223344c')`)).trim()
+  caso('entrando por la Vera-Cruz le toca una cuenta', true, /^11223344C\./.test(enA))
+  caso('y por la Amargura, otra', true, enB !== '' && enB !== enA)
+
+  /*
+   * --- LO QUE NO SE PUEDE ROMPER ARREGLANDO ESTO ---
+   *
+   * Quien YA tiene cuenta no se entera de nada. Su `correo_acceso` está a null
+   * y entonces se devuelve el correo de siempre: entra igual que ayer. Si esto
+   * fallara, el día de la actualización se quedarían fuera TODOS los hermanos
+   * que ya estaban dentro, que es lo peor que podría pasar aquí.
+   */
+  await sql(`
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, email)
+      values (gen_random_uuid(), ${A}, 'Ana de Siempre', '55667788D', 12, 'Activo', 'ana@gmail.com');
+  `)
+  caso('quien ya tenía cuenta entra con su correo de siempre', 'ana@gmail.com',
+    (await sql(`select resolver_email_hermano(${A}, '55667788D')`)).trim())
+
+  // Y un hermano de baja sigue sin poder entrar por ninguna de las dos vías.
+  await sql("update hermanos set estado = 'Baja' where dni = '55667788D'")
+  caso('y un hermano de baja no entra', '',
+    (await sql(`select coalesce(resolver_email_hermano(${A}, '55667788D'), '')`)).trim())
+
+  await laRecuperacionDeContrasena({ sql, caso, A })
+}
+
+/**
+ * Y LA RECUPERACIÓN DE CONTRASEÑA, QUE ES LO QUE OBLIGABA A HACERLO ENTERO.
+ *
+ * «He olvidado mi contraseña» lo hacía Supabase, mandando el correo a la
+ * dirección de la cuenta. Con la cuenta llamándose por hermandad + DNI, esa
+ * dirección NO RECIBE NADA: si se hubiera hecho el cambio sin esto, cada
+ * hermano nuevo se habría quedado sin poder recuperar su acceso. Eso es meter
+ * un fallo, no quitarlo.
+ *
+ * Ahora el enlace lo manda la función `enviar-correo` al correo DE VERDAD de su
+ * ficha. Ni el token ni la dirección pasan por el navegador de nadie.
+ */
+async function laRecuperacionDeContrasena({ sql, caso, A }) {
+  const CUENTA = "'c1c1c1c1-0000-0000-0000-0000000000c1'"
+  await sql(`
+    insert into auth.users (id, email) values (${CUENTA}, 'da igual') on conflict (id) do nothing;
+    update hermanos set auth_user_id = ${CUENTA} where dni = '11223344C' and hermandad_id = ${A};
+    delete from recuperaciones_hermano;
+  `)
+
+  // Se pide, y sale el correo DE SU FICHA, no el nombre interno de la cuenta.
+  caso('la recuperación va al correo de su ficha', 'manuel@gmail.com',
+    (await sql(`select pedir_recuperacion_hermano(${A}, '11.223.344-C') ->> 'email'`)).trim())
+
+  // Y el token vale, una vez.
+  await sql('delete from recuperaciones_hermano')
+  const canje = await sql(`
+    with p as (select pedir_recuperacion_hermano(${A}, '11223344C') as j)
+    select coalesce(canjear_recuperacion_hermano(j ->> 'token')::text, 'NADA') from p
+  `)
+  caso('el token abre la cuenta que toca', true, /c1c1c1c1/.test(canje))
+
+  /*
+   * --- Y LO QUE NO PUEDE PASAR ---
+   *
+   * El token es lo único que hace falta para ponerle otra contraseña a esa
+   * cuenta. Así que tiene que valer UNA VEZ, caducar, y no poder pedirlo nadie
+   * desde fuera.
+   */
+  await sql('delete from recuperaciones_hermano')
+  const dosVeces = await sql(`
+    with p as (select pedir_recuperacion_hermano(${A}, '11223344C') as j)
+    select coalesce(canjear_recuperacion_hermano(j ->> 'token')::text, 'nada')
+        || ' | ' || coalesce(canjear_recuperacion_hermano(j ->> 'token')::text, 'NADA') from p
+  `)
+  caso('y solo una vez', true, /\| NADA/.test(dosVeces))
+
+  /*
+   * CADUCADO. Se guarda el token, se envejece la fila y se intenta canjear: es
+   * la única forma de comprobarlo, porque la tabla guarda la HUELLA del token y
+   * no el token — a propósito, para que quien pudiera leerla no tuviera con eso
+   * la llave de la cuenta de nadie.
+   */
+  await sql('delete from recuperaciones_hermano')
+  const viejo = (await sql(
+    `select pedir_recuperacion_hermano(${A}, '11223344C') ->> 'token'`)).trim()
+  await sql("update recuperaciones_hermano set caduca_en = now() - interval '1 minute'")
+  caso('uno caducado no abre nada', '',
+    (await sql(`select coalesce(canjear_recuperacion_hermano('${viejo}')::text, '')`)).trim())
+  caso('y uno inventado tampoco', '',
+    (await sql("select coalesce(canjear_recuperacion_hermano('deadbeef')::text, '')")).trim())
+
+  // Un freno, para que pedirla mil veces con el DNI de otro no le llene la
+  // bandeja a esa persona, y encima firmado por la hermandad.
+  await sql('delete from recuperaciones_hermano')
+  await sql(`select pedir_recuperacion_hermano(${A}, '11223344C')`)
+  caso('no se puede pedir dos veces seguidas', '',
+    (await sql(`select coalesce(pedir_recuperacion_hermano(${A}, '11223344C')::text, '')`)).trim())
+
+  // Y ni pedirla ni canjearla se le dan a quien entra sin identificarse: sería
+  // regalar la llave de la cuenta de cualquiera con solo saber su DNI.
+  caso('anon no puede pedir una recuperación', 'f',
+    (await sql("select has_function_privilege('anon', 'pedir_recuperacion_hermano(uuid,text)', 'execute')")).trim())
+  caso('ni canjearla', 'f',
+    (await sql("select has_function_privilege('anon', 'canjear_recuperacion_hermano(text)', 'execute')")).trim())
+}

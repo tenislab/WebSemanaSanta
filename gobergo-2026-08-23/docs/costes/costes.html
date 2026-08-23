@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Gobergo · Qué cuesta tener esto en pie</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  :root {
+    --tinta: #241a15; --suave: #6b5d55; --linea: #e0d7cf; --crema: #faf7f3;
+    --vino: #6A1A23; --oro: #9c7c3f; --verde: #2f6b4f; --alerta: #a3421f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--tinta);
+    font: 10.5pt/1.55 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1, h2, h3, .etiqueta, table, .caja__titulo, .destacado { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .portada { border-bottom: 2.5pt solid var(--vino); padding-bottom: 8mm; margin-bottom: 7mm; }
+  .etiqueta { font-size: 7.5pt; letter-spacing: .18em; text-transform: uppercase; color: var(--oro); font-weight: 700; margin: 0 0 3mm; }
+  h1 { font-size: 24pt; margin: 0 0 3mm; line-height: 1.12; font-weight: 700; letter-spacing: -.01em; }
+  .bajada { font-size: 11pt; color: var(--suave); margin: 0; max-width: 134mm; }
+
+  h2 { font-size: 13pt; margin: 8mm 0 3mm; padding-bottom: 1.8mm; border-bottom: 1pt solid var(--linea); font-weight: 700; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 5mm 0 1.5mm; font-weight: 700; break-after: avoid; }
+  p { margin: 0 0 2.6mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 4.5mm; }
+  li { margin-bottom: 1.2mm; }
+
+  /* Se deja partir: forzarlas enteras dejaba media página en blanco, y partida
+     no se pierde nada porque la cabecera se repite arriba sola. */
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 3mm 0 4mm; }
+  /* Lo que sí no puede partirse es el total: solo, en la página siguiente, es
+     la fila que se busca y la que se queda sin contexto. */
+  tr { break-inside: avoid; }
+  th { text-align: left; font-size: 7.5pt; letter-spacing: .07em; text-transform: uppercase; color: var(--suave); border-bottom: 1pt solid var(--tinta); padding: 0 2.5mm 1.5mm 0; font-weight: 700; }
+  td { padding: 2mm 2.5mm 2mm 0; border-bottom: .5pt solid var(--linea); vertical-align: top; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 0; }
+  th:last-child, td:last-child { padding-right: 0; }
+  .gratis { color: var(--verde); font-weight: 700; }
+  tr.total td { border-bottom: none; border-top: 1.5pt solid var(--tinta); font-weight: 700; padding-top: 2.5mm; }
+  tr.hito td { background: #f2f7f3; }
+  .men { color: var(--suave); font-size: 8pt; }
+
+  .caja { background: var(--crema); border-left: 2.5pt solid var(--oro); padding: 4mm 5mm; margin: 4mm 0; break-inside: avoid; }
+  .caja--ojo { border-left-color: var(--alerta); }
+  .caja__titulo { font-size: 8.5pt; letter-spacing: .1em; text-transform: uppercase; color: var(--oro); font-weight: 700; margin: 0 0 2mm; }
+  .caja--ojo .caja__titulo { color: var(--alerta); }
+  .caja p:last-child { margin-bottom: 0; }
+
+  /* Rejilla y no flex: con `flex:1` y cuatro cajas, la última se salía del
+     margen derecho porque el contenido no dejaba encoger. Con `1fr` las cuatro
+     miden lo mismo pase lo que pase dentro. */
+  .destacado {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 3.5mm;
+    margin: 4mm 0 5mm; break-inside: avoid;
+  }
+  .cifra {
+    border: 1pt solid var(--linea); border-top: 2.5pt solid var(--vino);
+    padding: 3mm 3.2mm; min-width: 0;
+  }
+  .cifra__valor { font-size: 15.5pt; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .cifra__que { font-size: 8pt; color: var(--suave); margin-top: 1mm; line-height: 1.35; }
+
+  .cuando { font-size: 8.5pt; color: var(--suave); font-style: italic; font-family: inherit; }
+  .fuente { font-size: 8pt; color: var(--suave); }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 8.5pt; }
+  .fuente code { color: var(--tinta); }
+  .casilla { display: inline-block; width: 3.2mm; height: 3.2mm; border: .8pt solid var(--suave); margin-right: 1.5mm; vertical-align: -0.3mm; }
+  .pie { margin-top: 8mm; padding-top: 3mm; border-top: .5pt solid var(--linea); font-size: 8pt; color: var(--suave); }
+</style>
+</head>
+<body>
+
+<div class="portada">
+  <p class="etiqueta">Gobergo · Cuentas de la casa</p>
+  <h1>Qué cuesta tener esto en pie</h1>
+  <p class="bajada">
+    Todo en euros y con el IVA puesto, que es como se paga de verdad. Lo que cuesta hoy, lo que
+    costará cuando llegue cada cosa, y <strong>qué es exactamente lo que dispara cada gasto</strong>.
+  </p>
+</div>
+
+<div class="destacado">
+  <div class="cifra">
+    <div class="cifra__valor">1,20 €</div>
+    <div class="cifra__que">al mes mientras pruebas<br>solo el dominio</div>
+  </div>
+  <div class="cifra">
+    <div class="cifra__valor">73,56 €</div>
+    <div class="cifra__que">al mes en marcha<br>IVA incluido</div>
+  </div>
+  <div class="cifra">
+    <div class="cifra__valor">883 €</div>
+    <div class="cifra__que">al año en marcha<br>y no sube con las hermandades</div>
+  </div>
+  <div class="cifra">
+    <div class="cifra__valor">5</div>
+    <div class="cifra__que">hermandades a 15 €<br>para cubrir el gasto</div>
+  </div>
+</div>
+
+<h2>Hoy, mientras pruebas</h2>
+
+<table>
+  <thead><tr><th>Servicio</th><th>Para qué</th><th class="n">Al mes</th></tr></thead>
+  <tbody>
+    <tr><td>GitHub</td><td>Guardar el código, en privado</td><td class="n gratis">0 €</td></tr>
+    <tr><td>Vercel</td><td>Servir la web</td><td class="n gratis">0 €</td></tr>
+    <tr><td>Supabase</td><td>Base de datos y cuentas</td><td class="n gratis">0 €</td></tr>
+    <tr><td>Resend</td><td>Mandar los correos</td><td class="n gratis">0 €</td></tr>
+    <tr><td>Dominio <code>gobergo.com</code></td><td>La dirección</td><td class="n">1,20 €</td></tr>
+    <tr class="total"><td colspan="2">Total</td><td class="n">1,20 € al mes</td></tr>
+  </tbody>
+</table>
+
+<div class="caja">
+  <p class="caja__titulo">El repositorio privado no cuesta 4 €</p>
+  <p>
+    GitHub da <strong>repositorios privados ilimitados en el plan gratuito</strong>. Los 4 $/usuario
+    que has visto son del plan <em>Team</em>: permisos por equipo, revisores obligatorios, más
+    minutos de automatización. Estando tú solo, no aportan nada.
+  </p>
+</div>
+
+<h2>En marcha, con hermandades de verdad</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Servicio</th>
+      <th class="n">Tarifa</th>
+      <th class="n">€/mes</th>
+      <th class="n">Con IVA</th>
+      <th class="n">Al año</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Vercel Pro</td><td class="n">20 $</td><td class="n">18,40</td><td class="n">22,26</td><td class="n">267,17</td></tr>
+    <tr><td>Supabase Pro</td><td class="n">25 $</td><td class="n">23,00</td><td class="n">27,83</td><td class="n">333,96</td></tr>
+    <tr><td>Resend Pro</td><td class="n">20 $</td><td class="n">18,40</td><td class="n">22,26</td><td class="n">267,17</td></tr>
+    <tr><td>Dominio</td><td class="n">—</td><td class="n">1,20</td><td class="n">1,20</td><td class="n">14,40</td></tr>
+    <tr class="total"><td colspan="2">Total</td><td class="n">61,00</td><td class="n">73,56</td><td class="n">882,70</td></tr>
+  </tbody>
+</table>
+<p class="fuente">
+  Cambio aplicado: 1 $ = 0,92 €. IVA del 21 %: en España, al facturar estos servicios a un
+  autónomo dado de alta, se declara por inversión del sujeto pasivo — se paga y se deduce, así que
+  el coste real es el de la columna «€/mes». La columna con IVA es la de quien todavía no está dado
+  de alta.
+</p>
+
+<h2>Qué dispara cada gasto</h2>
+
+<h3>Vercel · <span class="cuando">en cuanto cobres a una hermandad</span></h3>
+<p>
+  Su plan gratuito es <strong>para uso no comercial</strong>. El día que una hermandad te pague una
+  cuota, esto es un negocio y toca el Pro. No es una recomendación técnica: son sus condiciones de
+  uso, y por eso este es el primero que conviene tener claro.
+</p>
+<p class="fuente">Confirmar en <code>vercel.com/pricing</code>.</p>
+
+<h3>Supabase · <span class="cuando">con la primera hermandad de verdad</span></h3>
+<p>
+  De capacidad, el gratuito sobra: 500 MB de base y 1 GB de archivos dan para muchas hermandades.
+  El problema son dos cosas que no se ven hasta que duelen:
+</p>
+<ul>
+  <li><strong>El proyecto se duerme</strong> tras una semana sin actividad. Una hermandad que vuelve en octubre, después de un verano parado, se encuentra la aplicación caída.</li>
+  <li><strong>No hay copias de seguridad automáticas.</strong> Con datos de prueba da igual. Con 800 fichas con DNI, direcciones y recibos, no.</li>
+</ul>
+<p>
+  Por eso no es un gasto de crecimiento: es el precio de poder decirle a una hermandad que sus datos
+  están seguros. <strong>Se paga el día que entre la primera</strong>, aunque quepa de sobra en el
+  gratuito.
+</p>
+<p class="fuente">Confirmar en <code>supabase.com/pricing</code>.</p>
+
+<h3>Resend · <span class="cuando">antes de lo que parece</span></h3>
+<p>
+  El gratuito da 3.000 correos al mes, que suena a mucho. Pero tiene otro límite, y es el que manda:
+  <strong>100 correos al día</strong>.
+</p>
+<div class="caja caja--ojo">
+  <p class="caja__titulo">Aquí es donde se rompe primero</p>
+  <p>
+    Una convocatoria a 800 hermanos son 800 correos <em>de golpe</em>. Salen 100 y los otros 700 se
+    rechazan. Y lo peor no es que fallen: es que <strong>fallan solo unos cuantos</strong>, así que
+    nadie se entera hasta que 700 personas no aparecen el día del reparto.
+  </p>
+  <p>Lo mismo al mandar los accesos después de importar un censo.</p>
+</div>
+<p class="fuente">Confirmar en <code>resend.com/pricing</code>.</p>
+
+<h3>Stripe · <span class="cuando">solo si cobras</span></h3>
+<p>
+  Sin cuota mensual: una comisión por operación, del orden del <strong>1,5 % + 0,25 €</strong> con
+  tarjeta europea. Sobre una suscripción de 15 €, unos 0,48 € por cobro — un 3,2 %. Tenerlo puesto
+  no cuesta nada.
+</p>
+<p class="fuente">Confirmar en <code>stripe.com/es/pricing</code>.</p>
+
+<h2>Cuándo deja de costarte dinero</h2>
+
+<p>
+  El gasto <strong>casi no sube con el número de hermandades</strong>: todas comparten la misma base
+  y el mismo servidor. Los 73,56 € son el suelo, no el precio por cliente. Con la suscripción de
+  15 €/mes:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Hermandades</th><th class="n">Ingresas</th><th class="n">Gasto</th><th class="n">Margen</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td class="n">15 €</td><td class="n">73,56 €</td><td class="n">−58,56 €</td></tr>
+    <tr><td>3</td><td class="n">45 €</td><td class="n">73,56 €</td><td class="n">−28,56 €</td></tr>
+    <tr class="hito"><td><strong>5</strong></td><td class="n">75 €</td><td class="n">73,56 €</td><td class="n"><strong>+1,44 €</strong></td></tr>
+    <tr><td>10</td><td class="n">150 €</td><td class="n">73,56 €</td><td class="n">+76,44 €</td></tr>
+    <tr><td>20</td><td class="n">300 €</td><td class="n">73,56 €</td><td class="n">+226,44 €</td></tr>
+  </tbody>
+</table>
+
+<div class="caja">
+  <p class="caja__titulo">Lo que esta tabla dice</p>
+  <p>
+    <strong>Cinco hermandades cubren el gasto entero.</strong> A partir de ahí, cada una que entra
+    es casi todo margen, porque el gasto se queda donde está. Y las cuatro primeras cuestan dinero:
+    unos 60 € al mes que hay que estar dispuesto a poner mientras llegan.
+  </p>
+  <p>
+    Esa es la cifra que importa de todo este documento. No los 883 € del año: <strong>los cinco
+    clientes</strong>.
+  </p>
+</div>
+
+<h2>Lo que no es software y pesa más</h2>
+
+<table>
+  <thead><tr><th>Concepto</th><th>Por qué</th><th class="n">Orden</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Asesoría de protección de datos</td>
+      <td>Manejas DNI, direcciones y datos de salud de gente que no es tuya. Hace falta un contrato de encargo del tratamiento con cada hermandad.</td>
+      <td class="n">300–800 €<br><span class="men">una vez</span></td>
+    </tr>
+    <tr>
+      <td>Seguro de responsabilidad civil</td>
+      <td>Si se pierden los datos de una hermandad, responde alguien.</td>
+      <td class="n">200–400 €<br><span class="men">al año</span></td>
+    </tr>
+    <tr>
+      <td>Cuota de autónomo</td>
+      <td>En cuanto factures de forma habitual. Hay tarifa reducida el primer año.</td>
+      <td class="n">~90 €<br><span class="men">al mes</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="caja caja--ojo">
+  <p class="caja__titulo">Esto cambia las cuentas de arriba</p>
+  <p>
+    Con la cuota de autónomo, el suelo pasa de 74 € a <strong>unos 164 € al mes</strong>. Y el punto
+    de equilibrio, de 5 hermandades a <strong>once</strong>. Los servidores son la parte barata: lo
+    caro es tener el negocio en regla, y conviene saberlo antes y no con la primera factura.
+  </p>
+</div>
+
+<h2>Por dónde empezar a pagar, en orden</h2>
+<ol>
+  <li><strong>Nada.</strong> Mientras pruebas, con el dominio te sobra.</li>
+  <li><strong>Lo legal</strong>, antes de tocar el censo real de nadie. Va primero, aunque no lo parezca.</li>
+  <li><strong>Supabase Pro</strong>, el día que entre la primera hermandad de verdad.</li>
+  <li><strong>Vercel Pro</strong>, el día que cobres la primera cuota.</li>
+  <li><strong>Resend Pro</strong>, cuando una hermandad pase de 100 hermanos.</li>
+</ol>
+
+<h2>Antes de decidir nada, confirma estas cuatro</h2>
+<p>
+  No he podido comprobarlas: el entorno donde trabajo no tiene salida a internet. Son las tarifas
+  que conozco, y cambian. Apunta al lado lo que veas de verdad:
+</p>
+<table>
+  <thead><tr><th>Servicio</th><th class="n">Aquí pone</th><th class="n">De verdad es</th></tr></thead>
+  <tbody>
+    <tr><td><span class="casilla"></span>Vercel Pro · <code>vercel.com/pricing</code></td><td class="n">20 $/mes</td><td class="n">—</td></tr>
+    <tr><td><span class="casilla"></span>Supabase Pro · <code>supabase.com/pricing</code></td><td class="n">25 $/mes</td><td class="n">—</td></tr>
+    <tr><td><span class="casilla"></span>Resend Pro · <code>resend.com/pricing</code></td><td class="n">20 $/mes</td><td class="n">—</td></tr>
+    <tr><td><span class="casilla"></span>Stripe · <code>stripe.com/es/pricing</code></td><td class="n">1,5 % + 0,25 €</td><td class="n">—</td></tr>
+  </tbody>
+</table>
+
+<div class="pie">
+  <p>
+    Documento generado desde <code>docs/costes/costes.html</code>. Para actualizarlo cuando cambie
+    una tarifa: se edita ese fichero y se lanza <code>node docs/costes/render.mjs</code>.
+  </p>
+</div>
+
+</body>
+</html>

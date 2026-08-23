@@ -1,0 +1,350 @@
+import { useEffect, useState } from 'react'
+import { supabase, isSupabaseConfigured } from './supabase'
+import { tramoToRow, rowToTramo } from './db/tramos'
+import { useEscuchaOtrasPestanas } from './persistencia'
+
+/**
+ * Un cuerpo es cada bloque del cortejo (un paso y su acompañamiento): Cristo,
+ * Virgen, Misterio, Palio, Cautivo… Lo define cada hermandad con el nombre
+ * que use — puede haber uno, dos, tres o los que hagan falta. El nombre
+ * «Único» tiene un trato especial al mostrar etiquetas (no se antepone).
+ */
+export type Cuerpo = string
+
+export type ModoReparto = 'numero' | 'solicitud'
+
+export interface Tramo {
+  id: string
+  nombre: string
+  /** Cuerpo del cortejo al que pertenece: agrupa y ordena el reparto por separado. */
+  cuerpo: Cuerpo
+  /** Cuántos hermanos caben en este tramo. */
+  capacidad: number
+  /** Qué se porta en este tramo (cirio, insignia, vara, presidencia…); lo define cada hermandad, texto libre. */
+  tipo?: string
+  /**
+   * Cómo se llena el tramo — lo elige la hermandad:
+   *  - 'numero': automático por número de hermano, con cascada entre los tramos
+   *    del mismo tipo del cuerpo (el comportamiento clásico de los cirios).
+   *  - 'solicitud': los hermanos lo piden y se lo queda el de menor número.
+   * Si falta (datos antiguos), se deduce del tipo: los «cirio» van por número.
+   */
+  reparto?: ModoReparto
+  /** Precio de la papeleta de este tramo; si falta, se usa el precio general de la hermandad. */
+  precio?: number | null
+  /**
+   * A qué hora se cita este tramo el día de la salida. Cada tramo entra a una
+   * hora distinta, y es LA pregunta del hermano la semana antes. Vacío = no se
+   * enseña y el hermano tiene que preguntar, que es lo que pasaba hasta ahora.
+   */
+  horaCitacion?: string
+  /**
+   * Qué rol da este tramo al que va en él: «Costalero», «Acólito», «Banda».
+   * La etiqueta se le pone SOLA al hermano mientras tenga aquí su papeleta de
+   * este año, y desaparece si la anula o renuncia. Vacío = este tramo no da
+   * ningún rol (los tramos de cirio normales, que son casi todos).
+   */
+  etiqueta?: string
+}
+
+const STORAGE_KEY = 'cabildo-tramos'
+const CUERPOS_KEY = 'cabildo-cuerpos'
+const PRECIO_BASE_KEY = 'cabildo-precio-papeleta'
+
+export const CUERPOS_POR_DEFECTO: Cuerpo[] = ['Cristo', 'Virgen', 'Único']
+
+/** Precio general de la papeleta cuando el tramo no fija el suyo (editable en Configuración). */
+export const PRECIO_BASE_POR_DEFECTO = 18
+
+/**
+ * Catálogo de tramos por defecto: un cortejo con dos pasos (Cristo y
+ * Virgen), cada uno con sus tramos, más la banda de música. El orden de la
+ * lista es el orden real de desfile dentro de cada cuerpo (el primero va
+ * justo detrás de la cruz de guía). No se fija un rango de números: el
+ * tramo de cada hermano se reparte solo según el aforo (capacidad) de cada
+ * uno, en ese orden — ver lib/cortejo.ts.
+ */
+const TRAMOS_POR_DEFECTO: Tramo[] = [
+  /*
+   * Con etiqueta, para que la demostración enseñe los roles automáticos.
+   *
+   * Sin ellas no se ve el mecanismo por ninguna parte: el desplegable de
+   * destinatarios de Comunicados ofrecía «Nazareno», «Acólito» y «Banda /
+   * Música» y las tres alcanzaban a cero personas, porque ningún tramo decía
+   * qué rol da. Se lee como que la segmentación por rol no funciona, y lo que
+   * pasaba es que en la demostración no había nada que etiquetar.
+   */
+  { id: 't1', nombre: 'Cruz de guía', cuerpo: 'Cristo', capacidad: 3, tipo: 'Insignia', reparto: 'solicitud', precio: 22, etiqueta: 'Nazareno' },
+  { id: 't2', nombre: 'Insignias', cuerpo: 'Cristo', capacidad: 8, tipo: 'Insignia', reparto: 'solicitud', etiqueta: 'Nazareno' },
+  { id: 't3', nombre: 'Cirio 1º tramo', cuerpo: 'Cristo', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't4', nombre: 'Cirio 2º tramo', cuerpo: 'Cristo', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't5', nombre: 'Música', cuerpo: 'Único', capacidad: 25, tipo: 'Música', reparto: 'solicitud', etiqueta: 'Banda / Música' },
+  { id: 't6', nombre: 'Cirio 1º tramo', cuerpo: 'Virgen', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't7', nombre: 'Cirio 2º tramo', cuerpo: 'Virgen', capacidad: 40, tipo: 'Cirio', reparto: 'numero', etiqueta: 'Nazareno' },
+  { id: 't8', nombre: 'Presidencia', cuerpo: 'Virgen', capacidad: 8, tipo: 'Presidencia', reparto: 'solicitud', etiqueta: 'Acólito' },
+]
+
+/**
+ * Los tramos que tenga guardados este navegador.
+ *
+ * OJO CON LO QUE DEVUELVE CUANDO NO HAY NADA. Antes caía siempre en
+ * `TRAMOS_POR_DEFECTO`, que son los tramos de la hermandad de MENTIRA (ids
+ * 't1'…'t8', «Cristo / Virgen / Único»). Eso es lo correcto sin base de datos,
+ * porque entonces la aplicación es una demostración; con base de datos
+ * conectada es un desastre silencioso:
+ *
+ *   - El área del hermano se quedaba EN BLANCO. Su papeleta apunta a un tramo
+ *     con identificador de verdad, que no está entre 't1'…'t8', así que el
+ *     `find` devolvía nada y la pantalla reventaba al pintar su sitio.
+ *   - Cortejo y Papeletas enseñaban a la secretaría los tramos de ejemplo como
+ *     si fueran los suyos, con sus capacidades y sus precios inventados.
+ *   - El hermano leía «Sin sitio» teniendo sitio, y su papeleta salía impresa
+ *     sin tramo ni puesto.
+ *
+ * Con Supabase conectado se devuelve la lista vacía, que es la verdad —«aún no
+ * han llegado»— y deja que `useTramos` los traiga. Una lista vacía se nota; la
+ * de otra hermandad, no.
+ */
+export function getTramos(): Tramo[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Tramo[]
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {
+    // localStorage no disponible o datos corruptos: seguimos abajo.
+  }
+  return isSupabaseConfigured ? [] : TRAMOS_POR_DEFECTO
+}
+
+/** Como `getTramos`, pero con Supabase conectado trae la lista real en cuanto llega. */
+export function useTramos(): Tramo[] {
+  const [tramos, setTramosState] = useState<Tramo[]>(() => getTramos())
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return
+    let cancelado = false
+    supabase
+      .from('tramos')
+      .select('*')
+      .order('orden')
+      .then(({ data, error }) => {
+        if (cancelado || error || !data || data.length === 0) return
+        const traidos = data.map(rowToTramo)
+        setTramosState(traidos)
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(traidos))
+        } catch {
+          // sin espacio o sin localStorage: no pasa nada, ya está en memoria
+        }
+      })
+    return () => {
+      cancelado = true
+    }
+  }, [])
+  // Lo que cambie en otra pestaña (el panel y el área del hermano abiertos a
+  // la vez) se refleja aquí sin recargar.
+  useEscuchaOtrasPestanas(STORAGE_KEY, () => setTramosState(getTramos()))
+
+  return tramos
+}
+
+/**
+ * Guarda los tramos. Con Supabase conectado, compara con lo que hay en la
+ * tabla y manda solo los inserts/updates/deletes que hacen falta (los
+ * tramos se editan como borrador y se guardan de una vez con el botón
+ * «Guardar tramos», no en cada tecleo).
+ */
+export async function saveTramos(tramos: Tramo[]): Promise<{ ok: boolean; error?: string }> {
+  const fallos: string[] = []
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error: leyendo } = await supabase.from('tramos').select('id')
+      if (leyendo) fallos.push(`leer: ${leyendo.message}`)
+      const idsActuales = new Set((data ?? []).map((r: { id: string }) => r.id))
+      const nextIds = new Set(tramos.map((t) => t.id))
+      const eliminados = [...idsActuales].filter((id) => !nextIds.has(id))
+      const nuevos = tramos.filter((t) => !idsActuales.has(t.id))
+      const posiblesCambios = tramos.filter((t) => idsActuales.has(t.id))
+
+      /*
+       * SE MIRA EL ERROR DE CADA UNA, y esto es lo que costó el cortejo entero.
+       *
+       * supabase-js no lanza excepción cuando la base rechaza la operación:
+       * devuelve `{ error }` en la respuesta. Como aquí no se miraba, el
+       * `try/catch` no se enteraba de nada y `saveTramos` devolvía como si
+       * todo hubiera ido bien.
+       *
+       * Con eso, el guardado de tramos llevaba fallando SIEMPRE —a la tabla le
+       * faltaba la columna `hora_citacion`, así que Postgres rechazaba cada
+       * insert y cada update— y en pantalla no había ni un aviso. Se creaban
+       * los tramos, se pintaban, se pulsaba «Guardar tramos», y al recargar
+       * Cortejo decía «0/0 puestos cubiertos · No hay tramos».
+       */
+      if (eliminados.length > 0) {
+        const { error } = await supabase.from('tramos').delete().in('id', eliminados)
+        if (error) fallos.push(`borrar: ${error.message}`)
+      }
+      if (nuevos.length > 0) {
+        const { error } = await supabase
+          .from('tramos').insert(nuevos.map((t, i) => tramoToRow(t, tramos.indexOf(t) ?? i)))
+        if (error) fallos.push(`crear: ${error.message}`)
+      }
+      for (const t of posiblesCambios) {
+        const { error } = await supabase.from('tramos').update(tramoToRow(t, tramos.indexOf(t))).eq('id', t.id)
+        if (error) fallos.push(`guardar «${t.nombre}»: ${error.message}`)
+      }
+    } catch (err) {
+      fallos.push(String(err))
+    }
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tramos))
+
+  if (fallos.length > 0) {
+    console.error('No se pudieron guardar los tramos en Supabase:', fallos.join(' · '))
+    // La misma banda de aviso que usa el resto de la aplicación: quien está
+    // delante tiene que enterarse de que lo que ve en pantalla no ha llegado
+    // a la base de datos.
+    window.dispatchEvent(new CustomEvent('cabildo-sync-error', { detail: { tabla: 'tramos', fallos } }))
+    return { ok: false, error: fallos.join(' · ') }
+  }
+  return { ok: true }
+}
+
+/**
+ * Cuerpos configurados por la hermandad, en su orden. Si aún no se han
+ * guardado (datos antiguos), se deducen de los tramos existentes para no
+ * perder nada, con los de siempre como último recurso.
+ */
+export function getCuerpos(): Cuerpo[] {
+  try {
+    const raw = localStorage.getItem(CUERPOS_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Cuerpo[]
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch {
+    // seguimos con la deducción
+  }
+  const delosTramos = cuerposPresentes(getTramos())
+  return delosTramos.length > 0 ? delosTramos : CUERPOS_POR_DEFECTO
+}
+
+export function saveCuerpos(cuerpos: Cuerpo[]) {
+  localStorage.setItem(CUERPOS_KEY, JSON.stringify(cuerpos))
+}
+
+/** Precio general de la papeleta de la hermandad (el tramo puede fijar el suyo). */
+export function getPrecioBase(): number {
+  try {
+    const raw = localStorage.getItem(PRECIO_BASE_KEY)
+    if (raw !== null) {
+      const n = Number(raw)
+      if (Number.isFinite(n) && n >= 0) return n
+    }
+  } catch {
+    // valores por defecto
+  }
+  return PRECIO_BASE_POR_DEFECTO
+}
+
+export function savePrecioBase(precio: number) {
+  localStorage.setItem(PRECIO_BASE_KEY, String(precio))
+}
+
+/** Precio de la papeleta de un tramo: el suyo propio o, si no lo fija, el general. */
+export function precioDeTramo(tramo: Tramo | null | undefined, precioBase: number): number {
+  if (tramo && tramo.precio != null && tramo.precio >= 0) return tramo.precio
+  return precioBase
+}
+
+/** Cuerpos que aparecen en los tramos, en su orden de desfile (primera aparición). */
+export function cuerposPresentes(tramos: Tramo[]): Cuerpo[] {
+  const out: Cuerpo[] = []
+  tramos.forEach((t) => {
+    if (!out.includes(t.cuerpo)) out.push(t.cuerpo)
+  })
+  return out
+}
+
+/** Tramos de un cuerpo, en su orden de desfile (el orden en que están guardados). */
+export function tramosDeCuerpo(cuerpo: Cuerpo, tramos: Tramo[]): Tramo[] {
+  return tramos.filter((t) => t.cuerpo === cuerpo)
+}
+
+/** Aforo total de un cuerpo: la suma de la capacidad de todos sus tramos. */
+export function aforoDeCuerpo(cuerpo: Cuerpo, tramos: Tramo[]): number {
+  return tramosDeCuerpo(cuerpo, tramos).reduce((sum, t) => sum + t.capacidad, 0)
+}
+
+/** Nombre completo para mostrar, con el cuerpo delante salvo que sea único. */
+/**
+ * Cómo se llama un tramo para una persona: «Virgen — Cirio 2º tramo».
+ *
+ * Acepta que no haya tramo y devuelve cadena vacía. Esto no es prudencia de
+ * más: `tramos.find(...)` puede no encontrarlo porque la lista aún no ha
+ * llegado de la base de datos, o porque han quitado ese tramo y quedan
+ * papeletas apuntando a él. Antes se llamaba con un `!` delante y reventaba
+ * con un TypeError que dejaba EN BLANCO el área del hermano.
+ */
+export function etiquetaTramo(tramo: Tramo | undefined | null): string {
+  if (!tramo) return ''
+  return tramo.cuerpo === 'Único' ? tramo.nombre : `${tramo.cuerpo} — ${tramo.nombre}`
+}
+
+function normalizaTipo(tipo: string | undefined): string {
+  return (tipo ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * Modo de reparto efectivo del tramo. Los datos guardados antes de que el
+ * reparto fuera configurable no lo traen: en ese caso se deduce del tipo
+ * (los «cirio» de toda la vida se llenan por número; el resto, por solicitud).
+ */
+export function repartoDe(tramo: Tramo): ModoReparto {
+  if (tramo.reparto === 'numero' || tramo.reparto === 'solicitud') return tramo.reparto
+  return normalizaTipo(tramo.tipo) === 'cirio' ? 'numero' : 'solicitud'
+}
+
+/** ¿Se llena automáticamente por número de hermano (comportamiento cirio)? */
+export function esAutomatico(tramo: Tramo): boolean {
+  return repartoDe(tramo) === 'numero'
+}
+
+export interface GrupoAutomatico {
+  /** Etiqueta del grupo para selectores («Cirio», «Penitente»…). */
+  etiqueta: string
+  /** Tramos del grupo, en orden de desfile; la cascada corre dentro del grupo. */
+  tramos: Tramo[]
+}
+
+/**
+ * Agrupa los tramos automáticos de una lista por su tipo (los «Cirio 1º/2º»
+ * cascadan entre sí; unos hipotéticos «Penitente 1º/2º» formarían su propio
+ * grupo aparte). Los tramos automáticos sin tipo comparten un mismo grupo.
+ */
+export function gruposAutomaticos(tramos: Tramo[]): GrupoAutomatico[] {
+  const grupos = new Map<string, GrupoAutomatico>()
+  tramos.filter(esAutomatico).forEach((t) => {
+    const clave = normalizaTipo(t.tipo) || '__auto'
+    const existente = grupos.get(clave)
+    if (existente) {
+      existente.tramos.push(t)
+    } else {
+      grupos.set(clave, { etiqueta: t.tipo?.trim() || 'Por número', tramos: [t] })
+    }
+  })
+  return [...grupos.values()]
+}
+
+/**
+ * @deprecated Usa esAutomatico(): el comportamiento «cirio» ya no depende del
+ * nombre del tipo, sino del modo de reparto que configure la hermandad.
+ */
+export function esCirio(tramo: Tramo): boolean {
+  return esAutomatico(tramo)
+}

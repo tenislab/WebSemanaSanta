@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
 import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
-import { RENOVACION_POR_DEFECTO, renovacionValida, type FechaRenovacion } from './cuotasEmision'
 
 /**
  * Ajustes de cuotas que decide cada hermandad. Por ahora: si poner en mora a un
@@ -13,35 +12,14 @@ export interface AjustesCuotas {
   moraRequiereDosCargos: boolean
   /** Si true, no se puede sacar papeleta a un hermano con cuotas pendientes. */
   bloquearPapeletaConDeuda: boolean
-  /**
-   * El día en que la hermandad renueva las cuotas: el 1 de enero en casi
-   * todas, en septiembre en algunas. De aquí sale el ejercicio que toca
-   * cobrar y la fecha de cobro de la emisión anual.
-   */
-  renovacion: FechaRenovacion
 }
 
 export const CLAVE_AJUSTES_CUOTAS = 'cabildo-ajustes-cuotas'
 
-export const AJUSTES_CUOTAS_INICIAL: AjustesCuotas = {
-  moraRequiereDosCargos: false,
-  bloquearPapeletaConDeuda: false,
-  renovacion: RENOVACION_POR_DEFECTO,
-}
+export const AJUSTES_CUOTAS_INICIAL: AjustesCuotas = { moraRequiereDosCargos: false, bloquearPapeletaConDeuda: false }
 
-/**
- * Los ajustes guardados, con la fecha de renovación siempre puesta.
- *
- * Lo que hay en el navegador (y en la plantilla de la hermandad) puede venir
- * de antes de que existiera este ajuste: entonces `renovacion` llega
- * `undefined` y `leerPersistido` lo devuelve tal cual, porque solo sustituye
- * el objeto entero, no los campos que falten. Sin esto, la primera hermandad
- * que abriera Cuotas tras actualizar calcularía el ejercicio sobre
- * `undefined`.
- */
 export function getAjustesCuotas(): AjustesCuotas {
-  const a = leerPersistido<AjustesCuotas>(CLAVE_AJUSTES_CUOTAS, AJUSTES_CUOTAS_INICIAL)
-  return { ...AJUSTES_CUOTAS_INICIAL, ...a, renovacion: renovacionValida(a?.renovacion) }
+  return leerPersistido<AjustesCuotas>(CLAVE_AJUSTES_CUOTAS, AJUSTES_CUOTAS_INICIAL)
 }
 
 export function saveAjustesCuotas(a: AjustesCuotas) {

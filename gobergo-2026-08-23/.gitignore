@@ -1,0 +1,50 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# build
+dist
+dist-*
+dist-ssr
+*.local
+
+# env — never commit real keys
+.env
+.env.local
+.env.*.local
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ficheros temporales que Vite deja en la raíz al recargar su configuración
+vite.config.ts.timestamp-*.mjs
+
+# entregas de Claude (parches y zips que se extraen sobre el repo)
+# Se ignoran a propósito: al aplicar una entrega, estos archivos caen en la raíz
+# y NO deben acabar en el repositorio. Ver docs/COMO-TRABAJAR.md.
+*.patch
+*.zip
+# El paquete con la historia de git que se entrega cuando el push da 403: es
+# una copia del propio repositorio, no puede vivir dentro de él.
+*.bundle
+LEEME.txt
+
+# copias temporales del .env (nunca al repositorio)
+.env.*
+!.env.example
+GOBERGO-costes.pdf
+dist-demo/
