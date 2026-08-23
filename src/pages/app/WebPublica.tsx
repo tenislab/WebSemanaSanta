@@ -1283,15 +1283,56 @@ function DisenoTab({
   }
 
   /** Título a medida de una sección; vacío = el nombre de fábrica. */
+  /*
+   * La última sección movida y hacia dónde. Sirve para dos cosas: devolverle el
+   * foco a su botón después de repintar, y marcarla un momento para que se vea
+   * cuál se ha movido — sin eso, en una lista de quince filas iguales, un
+   * intercambio no se distingue de que no haya pasado nada.
+   */
+  const [movida, setMovida] = useState<{ tipo: TipoSeccion; dir: -1 | 1 } | null>(null)
+  useEffect(() => {
+    if (!movida) return
+    const boton = document.querySelector<HTMLButtonElement>(
+      `[data-mover="${movida.tipo}:${movida.dir}"]`,
+    )
+    // Si ha llegado al extremo, su botón está desactivado y no puede recibir el
+    // foco: se le da al del sentido contrario, que sigue ahí.
+    const alterno = document.querySelector<HTMLButtonElement>(
+      `[data-mover="${movida.tipo}:${movida.dir === -1 ? 1 : -1}"]`,
+    )
+    if (boton && !boton.disabled) boton.focus()
+    else if (alterno && !alterno.disabled) alterno.focus()
+    const t = setTimeout(() => setMovida(null), 900)
+    return () => clearTimeout(t)
+  }, [movida])
+
   function renombrarSeccion(i: number, nombre: string) {
     editar('secciones', (xs) => xs.map((s, idx) => (idx === i ? { ...s, nombre } : s)))
   }
+  /*
+   * MOVER UNA SECCIÓN ARRIBA O ABAJO.
+   *
+   * Con quince secciones, subir una desde el final son catorce pulsaciones —y
+   * ahí estaba lo que se sentía «muy raro»: al intercambiar dos filas, el botón
+   * que acabas de pulsar SE VA con su fila a la posición nueva. El cursor se
+   * queda quieto, así que la segunda pulsación cae sobre el botón de OTRA
+   * sección y mueves la que no era.
+   *
+   * Peor a teclado: al llegar arriba del todo el botón ▲ se desactiva, y un
+   * botón desactivado pierde el foco — te devuelve al principio de la página.
+   *
+   * Se arregla recordando QUÉ sección se ha movido, no en qué posición estaba:
+   * la posición cambia, la sección no. Después de repintar se le devuelve el
+   * foco a su botón, así que pulsar cinco veces sube cinco puestos la misma
+   * sección, como espera cualquiera.
+   */
   function moverSeccion(i: number, dir: -1 | 1) {
     const j = i + dir
     if (j < 0 || j >= web.secciones.length) return
     const secciones = [...web.secciones]
     ;[secciones[i], secciones[j]] = [secciones[j], secciones[i]]
     editar('secciones', secciones)
+    setMovida({ tipo: web.secciones[i].tipo, dir })
   }
   return (
     <>
@@ -1655,7 +1696,10 @@ function DisenoTab({
         </div>
         <ul className="secciones-lista">
           {web.secciones.map((s, i) => (
-            <li key={s.tipo} className="seccion-item">
+            <li
+              key={s.tipo}
+              className={`seccion-item${movida?.tipo === s.tipo ? ' seccion-item--movida' : ''}`}
+            >
               <span className="seccion-item__nom">
                 {SECCIONES_INFO[s.tipo].nombre}
                 {s.visible && s.borrador && <span className="cms-borrador">Borrador</span>}
@@ -1686,8 +1730,18 @@ function DisenoTab({
                 aria-label={`Título a medida para ${SECCIONES_INFO[s.tipo].nombre}`}
               />
               <span className="seccion-item__orden">
-                <button type="button" className="icon-btn" onClick={() => moverSeccion(i, -1)} disabled={i === 0}>▲</button>
-                <button type="button" className="icon-btn" onClick={() => moverSeccion(i, 1)} disabled={i === web.secciones.length - 1}>▼</button>
+                {/* La marca lleva el TIPO, no la posición: la posición es justo
+                    lo que acaba de cambiar. */}
+                <button
+                  type="button" className="icon-btn" data-mover={`${s.tipo}:-1`}
+                  onClick={() => moverSeccion(i, -1)} disabled={i === 0}
+                  aria-label={`Subir ${SECCIONES_INFO[s.tipo].nombre}`}
+                >▲</button>
+                <button
+                  type="button" className="icon-btn" data-mover={`${s.tipo}:1`}
+                  onClick={() => moverSeccion(i, 1)} disabled={i === web.secciones.length - 1}
+                  aria-label={`Bajar ${SECCIONES_INFO[s.tipo].nombre}`}
+                >▼</button>
               </span>
             </li>
           ))}

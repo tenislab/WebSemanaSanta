@@ -41,17 +41,27 @@ export default async function ({ caso }) {
     // `lazy` la usa. Ese rodeo NO es un capricho de estilo: es lo que permite
     // que la precarga de abajo llame exactamente a la misma función, y por
     // tanto que React encuentre el trozo ya en memoria cuando se pulsa.
+    /*
+     * El `conReintento(...)` de en medio es la red que recarga la página cuando
+     * un trozo ya no existe —despliegue nuevo con la pestaña abierta—; ver
+     * `trozos.prueba.mjs`. No cambia nada de lo que se comprueba aquí: la
+     * función sigue teniendo nombre y sigue siendo la misma que usa la precarga.
+     */
     caso(`${pagina} se pide al pisarla`, true,
-      new RegExp(`const cargar\\w+ = \\(\\) => import\\('\\./pages/app/${pagina}'\\)`).test(app))
+      new RegExp(`const cargar\\w+ = conReintento\\(\\(\\) => import\\('\\./pages/app/${pagina}'\\)\\)`).test(app))
     caso(`${pagina} usa esa misma función`, true,
       new RegExp(`const ${pagina} = lazy\\(cargar\\w+\\)`).test(app))
     // Lo que de verdad se rompe: que vuelva a colarse un import de arriba.
     caso(`${pagina} no vuelve arriba`, false, new RegExp(`^import ${pagina} from`, 'm').test(app))
   }
   caso('el marco del panel también', true, app.includes("const AppShell = lazy(cargarAppShell)"))
-  // El área del hermano y la web pública son destinos, no sitios de paso.
-  caso('el área del hermano se pide aparte', true, app.includes("const HermanoPortal = lazy(() => import('./pages/HermanoPortal'))"))
-  caso('la web pública también', true, app.includes("const SitioPublico = lazy(() => import('./pages/SitioPublico'))"))
+  // El área del hermano y la web pública son destinos, no sitios de paso: van
+  // en su propio trozo y NO se precargan. (El `conReintento` es la red que
+  // recarga cuando el trozo ya no existe; ver `trozos.prueba.mjs`.)
+  caso('el área del hermano se pide aparte', true,
+    app.includes("const HermanoPortal = lazy(conReintento(() => import('./pages/HermanoPortal')))"))
+  caso('la web pública también', true,
+    app.includes("const SitioPublico = lazy(conReintento(() => import('./pages/SitioPublico')))"))
 
   // Sin Suspense, React revienta en cuanto una ruta perezosa se monta.
   caso('hay red debajo (Suspense)', true, /<Suspense fallback=\{<Cargando \/>\}>/.test(app))

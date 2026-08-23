@@ -30,15 +30,15 @@ import ProtectedRoute from './components/ProtectedRoute'
    a ellos a propósito, no de paso. Cada uno pesa lo suyo (el área del hermano
    son 2.200 líneas; la web, su motor entero) y ninguno de los dos le hace
    falta a quien va al otro. */
-const HermanoPortal = lazy(() => import('./pages/HermanoPortal'))
-const SitioPublico = lazy(() => import('./pages/SitioPublico'))
+const HermanoPortal = lazy(conReintento(() => import('./pages/HermanoPortal')))
+const SitioPublico = lazy(conReintento(() => import('./pages/SitioPublico')))
 
-const Login = lazy(() => import('./pages/Login'))
-const Signup = lazy(() => import('./pages/Signup'))
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
-const PaginaLegal = lazy(() => import('./pages/PaginaLegal'))
-const VerificarPapeleta = lazy(() => import('./pages/VerificarPapeleta'))
-const AvisosWeb = lazy(() => import('./pages/AvisosWeb'))
+const Login = lazy(conReintento(() => import('./pages/Login')))
+const Signup = lazy(conReintento(() => import('./pages/Signup')))
+const ForgotPassword = lazy(conReintento(() => import('./pages/ForgotPassword')))
+const PaginaLegal = lazy(conReintento(() => import('./pages/PaginaLegal')))
+const VerificarPapeleta = lazy(conReintento(() => import('./pages/VerificarPapeleta')))
+const AvisosWeb = lazy(conReintento(() => import('./pages/AvisosWeb')))
 
 /*
  * Las páginas del panel, con el «pídelo» separado del componente.
@@ -55,23 +55,75 @@ const AvisosWeb = lazy(() => import('./pages/AvisosWeb'))
  * traérsela en los ratos muertos. Y como `import()` guarda lo que ya trajo,
  * llamarla dos veces no descarga nada dos veces: la segunda es instantánea.
  */
-const cargarAppShell = () => import('./components/AppShell')
-const cargarDashboard = () => import('./pages/app/DashboardHome')
-const cargarHermanos = () => import('./pages/app/Hermanos')
-const cargarNotificaciones = () => import('./pages/app/Notificaciones')
-const cargarCuotas = () => import('./pages/app/Cuotas')
-const cargarPapeletas = () => import('./pages/app/Papeletas')
-const cargarCortejo = () => import('./pages/app/Cortejo')
-const cargarTesoreria = () => import('./pages/app/Tesoreria')
-const cargarInventario = () => import('./pages/app/Inventario')
-const cargarArchivo = () => import('./pages/app/Archivo')
-const cargarEventos = () => import('./pages/app/Eventos')
-const cargarComunicados = () => import('./pages/app/Comunicados')
-const cargarInformes = () => import('./pages/app/Informes')
-const cargarPersonal = () => import('./pages/app/Personal')
-const cargarWebPublica = () => import('./pages/app/WebPublica')
-const cargarConfiguracion = () => import('./pages/app/Configuracion')
-const cargarSeguridad = () => import('./pages/app/Seguridad')
+/**
+ * QUE UN TROZO QUE NO CARGA NO ROMPA LA PANTALLA.
+ *
+ * Cada página se descarga aparte, y su nombre de archivo lleva dentro un
+ * número que cambia en cada despliegue. Cuando se sube una versión nueva, el
+ * `index.html` que tiene el navegador en memoria sigue apuntando a los
+ * nombres VIEJOS — que en el servidor ya no existen.
+ *
+ * A partir de ahí, la primera pestaña que se abra intenta descargar un archivo
+ * que da 404, `lazy()` lanza el error y la pantalla se queda en blanco. Se
+ * arregla recargando, y por eso se lee como «va a rachas»: falla la primera
+ * vez, funciona a la segunda, y no hay forma de reproducirlo después.
+ *
+ * Le pasa a cualquiera que tuviera la aplicación abierta cuando se despliega,
+ * que en una hermandad es la secretaría entera un lunes por la mañana.
+ *
+ * Así que se recarga sola. UNA VEZ, y con la marca en `sessionStorage`: si el
+ * trozo tampoco carga después de recargar el problema es otro —sin conexión,
+ * un archivo que de verdad falta— y entonces hay que dejar que el error salga
+ * en vez de recargar en bucle, que es mucho peor que una pantalla en blanco.
+ */
+const MARCA_RECARGA = 'cabildo-recargado-por-trozo'
+
+function conReintento<T>(cargar: () => Promise<T>): () => Promise<T> {
+  return async () => {
+    try {
+      const modulo = await cargar()
+      /*
+       * Ha cargado: se borra la marca. Sin esto, la recarga solo se podría
+       * usar una vez por pestaña — y el siguiente despliegue del mismo día
+       * dejaría la pantalla en blanco otra vez.
+       */
+      try { sessionStorage.removeItem(MARCA_RECARGA) } catch { /* sin sessionStorage */ }
+      return modulo
+    } catch (e) {
+      let yaSeIntento = true
+      try {
+        yaSeIntento = sessionStorage.getItem(MARCA_RECARGA) === '1'
+        if (!yaSeIntento) sessionStorage.setItem(MARCA_RECARGA, '1')
+      } catch {
+        // Sin sessionStorage no se puede saber si ya se recargó, y recargar a
+        // ciegas puede entrar en bucle: mejor dejar el error.
+      }
+      if (yaSeIntento) throw e
+      window.location.reload()
+      // La página se está yendo: se devuelve una promesa que no resuelve nunca
+      // para que React no pinte nada mientras tanto.
+      return new Promise<T>(() => {})
+    }
+  }
+}
+
+const cargarAppShell = conReintento(() => import('./components/AppShell'))
+const cargarDashboard = conReintento(() => import('./pages/app/DashboardHome'))
+const cargarHermanos = conReintento(() => import('./pages/app/Hermanos'))
+const cargarNotificaciones = conReintento(() => import('./pages/app/Notificaciones'))
+const cargarCuotas = conReintento(() => import('./pages/app/Cuotas'))
+const cargarPapeletas = conReintento(() => import('./pages/app/Papeletas'))
+const cargarCortejo = conReintento(() => import('./pages/app/Cortejo'))
+const cargarTesoreria = conReintento(() => import('./pages/app/Tesoreria'))
+const cargarInventario = conReintento(() => import('./pages/app/Inventario'))
+const cargarArchivo = conReintento(() => import('./pages/app/Archivo'))
+const cargarEventos = conReintento(() => import('./pages/app/Eventos'))
+const cargarComunicados = conReintento(() => import('./pages/app/Comunicados'))
+const cargarInformes = conReintento(() => import('./pages/app/Informes'))
+const cargarPersonal = conReintento(() => import('./pages/app/Personal'))
+const cargarWebPublica = conReintento(() => import('./pages/app/WebPublica'))
+const cargarConfiguracion = conReintento(() => import('./pages/app/Configuracion'))
+const cargarSeguridad = conReintento(() => import('./pages/app/Seguridad'))
 
 const AppShell = lazy(cargarAppShell)
 const DashboardHome = lazy(cargarDashboard)

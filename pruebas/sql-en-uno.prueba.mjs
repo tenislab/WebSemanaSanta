@@ -38,6 +38,14 @@ export default async function ({ caso }) {
   const { readdir } = await import('node:fs/promises')
   const FUERA = new Set([
     'TODO-EN-UNO.sql',
+    /*
+     * `ACTUALIZAR.sql` tampoco: es un subconjunto generado de este mismo, con
+     * lo que le falta a una base que ya funciona. Lo comprueba
+     * `sql-actualizar.prueba.mjs`, que además exige que solo lleve piezas que
+     * nadie redefina después — ejecutar una pieza vieja suelta retira arreglos
+     * posteriores sin dar ningún error.
+     */
+    'ACTUALIZAR.sql',
     'PRUEBA-AISLAMIENTO.sql', 'PRUEBA-MUDANZA.sql', 'BORRAR-PRUEBAS.sql',
     'DATOS-DE-PRUEBA.sql', 'seed-hermanos-prueba.sql', 'seed-usuarios-ejemplo.sql',
     'reset-antes-de-actualizar.sql', 'migracion-2026-08.sql',

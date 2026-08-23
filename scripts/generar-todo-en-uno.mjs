@@ -61,6 +61,9 @@ export const PIEZAS = [
   ['visitas-web.sql', 'El contador de visitas de la web, sin cookies ni Google Analytics'],
   ['suscriptores-web.sql', 'Avisos por correo para quien sigue a la hermandad sin ser hermano'],
   ['copias.sql', 'Las copias de seguridad, guardadas solas cada semana'],
+  // Va detrás de `hermano-con-cargo.sql` a propósito: siembra filas sobre los
+  // cargos que esa siembra ya ha dejado puestos.
+  ['permisos-eventos-y-web.sql', 'Los dos módulos que nunca se sembraron: «eventos» y «web»'],
 ]
 
 const CABECERA = `-- =============================================================================

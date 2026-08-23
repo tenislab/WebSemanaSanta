@@ -371,11 +371,33 @@ export default function AppShell() {
           ))}
         </nav>
 
+        {/*
+          CON QUÉ CUENTA SE ESTÁ DENTRO, escrito y siempre.
+
+          Aquí ponía el nombre y el cargo, y con eso no se puede saber en qué
+          cuenta estás. El nombre sale de `user_metadata.nombre`, así que dos
+          cuentas distintas de la misma persona —la del titular y la del
+          tesorero, o la de pruebas y la de verdad— se ven EXACTAMENTE IGUAL:
+          «Jaime Rivas · Titular de la hermandad» las dos.
+
+          Y la sesión se queda guardada en el navegador, que es lo normal y lo
+          que todo el mundo espera. Así que al abrir la aplicación te devuelve a
+          la última cuenta con la que entraste, sea cual sea — y sin el correo
+          delante, eso se lee como que la aplicación ha hecho algo raro.
+
+          El correo es lo único que distingue una cuenta de otra, así que va
+          escrito. No es un dato de más: es la respuesta a «¿quién soy aquí?».
+        */}
         <div className="app-side__foot">
           <span className="app-avatar">{initialsOf(nombre)}</span>
           <span className="app-side__who">
             <b>{nombre}</b>
             <small>{cargoEnCristiano(cargo, user?.email)}</small>
+            {/* Solo si no lo está diciendo ya la línea de arriba: a quien no se
+                le reconoce el cargo, `cargoEnCristiano` ya devuelve el correo. */}
+            {user?.email && cargoEnCristiano(cargo, user.email) !== user.email && (
+              <small className="app-side__correo" title={user.email}>{user.email}</small>
+            )}
           </span>
         </div>
       </aside>
