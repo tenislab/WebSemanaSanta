@@ -626,6 +626,133 @@ h1, h2, h3,
 .trust p { margin: 0; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.09em; color: rgba(245, 237, 230, 0.5); }
 .trust-names { display: flex; gap: 2rem; flex-wrap: wrap; font-family: 'Iowan Old Style', Palatino, Georgia, serif; font-size: 1.05rem; color: rgba(245, 237, 230, 0.75); }
 
+/* =========================================================================
+   Portada — la Semana Santa que viene, y el año cofrade
+   =========================================================================
+   Las fechas NO están escritas a mano: se calculan (ver lib/semanaSanta.ts),
+   porque la Pascua se mueve más de un mes de un año a otro y una portada que
+   anuncia mal el Domingo de Ramos se descalifica sola delante de un cofrade.
+   ========================================================================= */
+.cofrade-banda {
+  padding: 2.6rem 0 2.4rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  /* Un tinte de oro muy bajo que separa la banda del héroe sin romper el
+     mundo oscuro de la página. */
+  background:
+    radial-gradient(120% 160% at 50% 0%, rgba(214, 188, 138, 0.09), transparent 62%);
+}
+.cofrade-banda__fila {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 2.5rem; flex-wrap: wrap;
+}
+.cofrade-banda__que { min-width: 0; flex: 1 1 26rem; }
+.cofrade-banda__que h2 {
+  font-size: 2rem; color: #f3ede2; margin: 0.7rem 0 0;
+  text-wrap: balance;
+}
+.cofrade-banda__lede {
+  color: rgba(245, 237, 230, 0.66); font-size: 0.95rem; margin: 0.8rem 0 0; max-width: 58ch;
+}
+
+/* La cuenta atrás: la cifra en el serif de la casa y grande, que es lo que se
+   mira. `tabular-nums` para que no baile al bajar de 100 a 99. */
+.cofrade-cuenta {
+  flex: none; margin: 0; text-align: center; line-height: 1;
+  padding: 1.15rem 1.9rem; border-radius: 20px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(214, 188, 138, 0.28);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.cofrade-cuenta b {
+  display: block; font-family: 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: 3rem; color: #d6bc8a; font-variant-numeric: tabular-nums; font-weight: 400;
+}
+.cofrade-cuenta span {
+  display: block; margin-top: 0.4rem; font-size: 0.72rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: rgba(245, 237, 230, 0.6);
+}
+
+/* Los jalones del tiempo: Ceniza, Ramos, Jueves, Viernes, Resurrección. */
+.cofrade-jalones {
+  list-style: none; margin: 2rem 0 0; padding: 1.1rem 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; flex-wrap: wrap; gap: 0.4rem 2.6rem;
+}
+.cofrade-jalones li { display: flex; flex-direction: column; gap: 0.15rem; }
+.cofrade-jalones b {
+  font-family: 'Iowan Old Style', Palatino, Georgia, serif;
+  font-size: 0.98rem; font-weight: 400; color: rgba(245, 237, 230, 0.9);
+}
+.cofrade-jalones span {
+  font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: #d6bc8a;
+}
+/* Los que ya pasaron se apagan: se lee por dónde va el año sin comparar
+   fechas con la de hoy. */
+.cofrade-jalones .es-pasado { opacity: 0.4; }
+.cofrade-jalones .es-pasado span { color: rgba(245, 237, 230, 0.5); }
+
+/* --- El año cofrade: cuatro tiempos --- */
+.anio-cofrade { padding-top: 0; }
+.anio-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.1rem; }
+.anio-card {
+  display: flex; flex-direction: column;
+  padding: 1.5rem 1.4rem 1.4rem; border-radius: 18px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.anio-card:hover { transform: translateY(-3px); border-color: rgba(214, 188, 138, 0.4); }
+.anio-card__cuando {
+  margin: 0; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(214, 188, 138, 0.85);
+}
+.anio-card h3 { font-size: 1.18rem; color: #f3ede2; margin: 0.5rem 0 0; text-wrap: balance; }
+.anio-card__que { color: rgba(245, 237, 230, 0.66); font-size: 0.88rem; margin: 0.7rem 0 0; }
+
+/* Las voces del oficio, en pastillas: papeletas, tramos, priostía… Son las
+   palabras por las que un hermano reconoce que esto va de lo suyo. */
+.anio-card__voces {
+  list-style: none; margin: 1rem 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+}
+.anio-card__voces li {
+  font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 999px;
+  color: rgba(245, 237, 230, 0.8);
+  background: rgba(214, 188, 138, 0.12); border: 1px solid rgba(214, 188, 138, 0.22);
+}
+.anio-card__gobergo {
+  margin: 1.1rem 0 0; padding-top: 0.9rem; margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.85rem; color: rgba(245, 237, 230, 0.72);
+}
+.anio-card__gobergo span {
+  display: block; font-size: 0.68rem; letter-spacing: 0.11em; text-transform: uppercase;
+  color: #d6bc8a; margin-bottom: 0.3rem;
+}
+
+@media (max-width: 1000px) {
+  .anio-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 700px) {
+  .cofrade-banda { padding: 2rem 0; }
+  .cofrade-banda__fila { gap: 1.4rem; }
+  .cofrade-banda__que h2 { font-size: 1.55rem; }
+  /* La cuenta atrás, a lo ancho y en fila: de pie ocupaba media pantalla. */
+  .cofrade-cuenta {
+    width: 100%; display: flex; align-items: baseline; justify-content: center; gap: 0.6rem;
+    padding: 0.9rem 1.2rem;
+  }
+  .cofrade-cuenta b { font-size: 2.1rem; }
+  .cofrade-cuenta span { margin-top: 0; }
+  .cofrade-jalones { gap: 0.6rem 1.4rem; }
+  .anio-grid { grid-template-columns: 1fr; }
+}
+
 /* secciones */
 .section { padding: 5rem 0; }
 .section-head { max-width: 62ch; margin-bottom: 3rem; }

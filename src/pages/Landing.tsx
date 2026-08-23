@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from '../components/Logo'
 import { PACKS, precioPack, etiquetaPeriodo, type Periodo } from '../lib/suscripcion'
+import { diasHasta, enCorto, enPalabras, proximaSemanaSanta } from '../lib/semanaSanta'
 
 function Check() {
   return (
@@ -28,14 +29,14 @@ const FEATURES = [
   },
   {
     title: 'Papeletas de sitio',
-    text: 'Solicitud, asignación, pago online, código QR e impresión. La campaña completa, sin colas en secretaría.',
+    text: 'Renovación por antigüedad, solicitud desde el móvil, pago online y papeleta con QR. La Cuaresma entera sin colas en secretaría.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8z" /><path d="M10 6v12" strokeDasharray="2 2" /></svg>
     ),
   },
   {
     title: 'Cortejo',
-    text: 'Tramos, puestos e insignias, reparto automático por número de hermano, túnicas y enseres. Organiza la cofradía y genera listados con QR.',
+    text: 'Tramos y puestos, cruz de guía, insignias y varales, diputados de tramo, acólitos y costaleros. Listados de salida por tramo y asistencia con QR en la puerta.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3v18M6 8v13M18 8v13M4 21h16" /><circle cx="12" cy="3" r="1.4" /></svg>
     ),
@@ -49,10 +50,82 @@ const FEATURES = [
   },
   {
     title: 'Comunicados',
-    text: 'Email, SMS, WhatsApp y push segmentados. Convocatorias de cabildo y avisos de cultos con confirmación de lectura.',
+    text: 'Email, SMS, WhatsApp y push segmentados. Convocatoria de cabildo, papeletas y avisos de culto, solo a quien toca.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5h16v11H8l-4 4z" /><path d="M8 9h8M8 12h5" /></svg>
     ),
+  },
+  {
+    title: 'Cultos y priostía',
+    text: 'Quinarios, triduos, besamanos, besapiés y vía crucis en un calendario que alimenta la web. Reparto de tareas de priostía y montaje del altar de cultos.',
+    icon: (
+      // Un cirio con su llama: es lo que hay encendido en un altar de cultos.
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+        <path d="M12 3c1.6 1.4 2.4 2.6 2.4 3.8A2.4 2.4 0 0 1 12 9.2a2.4 2.4 0 0 1-2.4-2.4C9.6 5.6 10.4 4.4 12 3Z" />
+        <rect x="8.6" y="11" width="6.8" height="10" rx="1.4" /><path d="M6 21h12" />
+      </svg>
+    ),
+  },
+  {
+    // La novena, y no por cuadrar la rejilla: es el módulo que sostiene todo lo
+    // demás —sin secretaría no hay censo que valga— y faltaba en la portada.
+    title: 'Secretaría y archivo',
+    text: 'Actas de cabildo, certificados de antigüedad, archivo documental y papelera con vuelta atrás. Con el registro de quién hizo cada cosa.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+        <path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /><path d="M9 12h6M9 16h4" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Patrimonio y enseres',
+    text: 'Orfebrería, textil, túnicas y enseres de culto con su ubicación, su estado de conservación y su valor asegurado. Préstamos y cesiones, controlados.',
+    icon: (
+      // La cruz de guía, que es la pieza que abre cualquier cortejo.
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+        <path d="M12 3v16M8 7.5h8" /><path d="M9 21h6" /><circle cx="12" cy="3" r="1.1" />
+      </svg>
+    ),
+  },
+]
+
+/**
+ * EL AÑO COFRADE, que no es el año natural.
+ *
+ * Una hermandad no trabaja de enero a diciembre: trabaja de Cuaresma a
+ * Cuaresma, y cada tiempo tiene lo suyo. Contarlo así en la portada hace dos
+ * cosas a la vez —enseña que Gobergo entiende el oficio, y explica cada módulo
+ * en el momento del año en que de verdad se usa— y le habla a quien decide con
+ * las palabras que usa esa persona, no con las de un catálogo de software.
+ */
+const ANIO_COFRADE = [
+  {
+    tiempo: 'Cuaresma',
+    cuando: 'del Miércoles de Ceniza al Domingo de Ramos',
+    que: 'Quinario o triduo al Titular, besamanos, besapiés y vía crucis. Y el reparto de papeletas de sitio, que es lo que llena la secretaría todas las tardes.',
+    voces: ['Papeletas de sitio', 'Quinario', 'Besamanos', 'Vía crucis'],
+    gobergo: 'La papeleta se pide y se renueva desde el móvil, se reparte por antigüedad y sale con su código QR.',
+  },
+  {
+    tiempo: 'La estación de penitencia',
+    cuando: 'de Ramos a Resurrección',
+    que: 'El cortejo, tramo a tramo: cruz de guía, insignias y varales, diputados de tramo, acólitos, y los costaleros debajo del paso.',
+    voces: ['Cortejo', 'Tramos', 'Insignias', 'Capataz y costaleros'],
+    gobergo: 'Los tramos montados con sus puestos, el listado de salida de cada diputado y el control de asistencia en la puerta.',
+  },
+  {
+    tiempo: 'Después de la salida',
+    cuando: 'primavera y verano',
+    que: 'Cabildo general de cuentas, memoria del ejercicio, altas y bajas del año, y la lista de lo que hay que restaurar antes de la siguiente.',
+    voces: ['Cabildo de cuentas', 'Memoria', 'Altas y bajas'],
+    gobergo: 'El estado de cuentas sale hecho, con las partidas que pide la diócesis. Las actas y los acuerdos, en el archivo.',
+  },
+  {
+    tiempo: 'El resto del año',
+    cuando: 'de otoño a Adviento',
+    que: 'Función principal de instituto, cultos de gloria y sacramentales, la bolsa de caridad, la priostía y el inventario, convivencias y formación.',
+    voces: ['Cultos de gloria', 'Caridad', 'Priostía', 'Patrimonio'],
+    gobergo: 'El calendario de cultos alimenta la web pública, y el inventario lleva el valor asegurado de cada enser.',
   },
 ]
 
@@ -115,6 +188,30 @@ const AUDIENCE = [
 
 export default function Landing() {
   const [periodo, setPeriodo] = useState<Periodo>('mensual')
+  /*
+   * LA SEMANA SANTA QUE VIENE, calculada. Ver `lib/semanaSanta.ts`: no se
+   * puede escribir a mano porque se mueve más de un mes de un año a otro, y
+   * una portada que anuncia el Domingo de Ramos en la fecha equivocada se
+   * descalifica sola delante de un cofrade.
+   */
+  const semana = proximaSemanaSanta()
+  const jalones = [
+    { que: 'Miércoles de Ceniza', iso: semana.ceniza },
+    { que: 'Domingo de Ramos', iso: semana.ramos },
+    { que: 'Jueves Santo', iso: semana.juevesSanto },
+    { que: 'Viernes Santo', iso: semana.viernesSanto },
+    { que: 'Resurrección', iso: semana.pascua },
+  ]
+  // Durante la propia Semana Santa la cuenta atrás ya no cuenta: dice lo que
+  // pasa. «Faltan −3 días» sería justo lo que no hay que enseñar el Jueves
+  // Santo, que es el día del año con más gente mirando.
+  const cuenta = semana.faltan > 1
+    ? { cifra: String(semana.faltan), pie: 'días' }
+    : semana.faltan === 1
+      ? { cifra: 'Mañana', pie: 'Domingo de Ramos' }
+      : semana.faltan === 0
+        ? { cifra: 'Hoy', pie: 'Domingo de Ramos' }
+        : { cifra: 'Ya', pie: 'está en la calle' }
   return (
     <div className="landing-glass">
       <div className="landing-bg" aria-hidden="true">
@@ -129,6 +226,7 @@ export default function Landing() {
           <Logo light size={34} />
           <nav className="nav-links">
             <a href="#funciones">Funciones</a>
+            <a href="#ano">El año cofrade</a>
             <a href="#audiencia">Para quién es</a>
             <a href="#precios">Precios</a>
           </nav>
@@ -253,6 +351,48 @@ export default function Landing() {
         Empezar ahora
       </a>
 
+      {/*
+        LA SEMANA SANTA QUE VIENE, con sus fechas de verdad.
+        Es el detalle que dice, sin decirlo, que esto lo ha hecho alguien que
+        conoce el oficio: cualquier hermano sabe que la fecha se mueve cada
+        año, y ver la suya bien puesta vale más que un párrafo de promesas.
+        Además coloca los módulos en el momento del año en que se usan.
+      */}
+      <section className="cofrade-banda" aria-labelledby="cofrade-banda-titulo">
+        <div className="wrap">
+          <div className="cofrade-banda__fila">
+            <div className="cofrade-banda__que">
+              <p className="eyebrow eyebrow--gold">Semana Santa de {semana.anio}</p>
+              <h2 id="cofrade-banda-titulo">
+                {semana.faltan >= 0
+                  ? <>Domingo de Ramos, {enPalabras(semana.ramos)}</>
+                  : <>Ya es Semana Santa</>}
+              </h2>
+              <p className="cofrade-banda__lede">
+                Gobergo cuenta los mismos días que tu hermandad: la campaña de papeletas se abre en
+                Cuaresma, el cortejo se cierra la semana antes y el cabildo de cuentas llega después.
+              </p>
+            </div>
+            <p className="cofrade-cuenta">
+              <b>{cuenta.cifra}</b>
+              <span>{cuenta.pie}</span>
+            </p>
+          </div>
+          <ol className="cofrade-jalones">
+            {jalones.map((j) => (
+              // Los que ya han pasado se apagan: así se lee de un vistazo por
+              // dónde va el año sin tener que comparar fechas con la de hoy.
+              // En febrero el Miércoles de Ceniza ya cuenta como pasado aunque
+              // la Semana Santa esté por venir: cada jalón mira SU fecha.
+              <li key={j.que} className={diasHasta(j.iso) < 0 ? 'es-pasado' : ''}>
+                <b>{j.que}</b>
+                <span>{enCorto(j.iso)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
       <div className="trust">
         <div className="wrap">
           <p>Hermandades y cofradías que ya lo usan</p>
@@ -282,6 +422,35 @@ export default function Landing() {
                 <span className="feature__ic">{f.icon}</span>
                 <h3>{f.title}</h3>
                 <p>{f.text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section anio-cofrade" id="ano">
+        <div className="wrap">
+          <div className="section-head">
+            <p className="eyebrow eyebrow--gold">El año cofrade</p>
+            <h2>Una hermandad no va de enero a diciembre</h2>
+            <p className="section-lead">
+              Va de Cuaresma a Cuaresma, y cada tiempo tiene lo suyo. Gobergo está montado igual:
+              cada módulo aparece cuando de verdad hace falta.
+            </p>
+          </div>
+          <div className="anio-grid">
+            {ANIO_COFRADE.map((t) => (
+              <article className="anio-card" key={t.tiempo}>
+                <p className="anio-card__cuando">{t.cuando}</p>
+                <h3>{t.tiempo}</h3>
+                <p className="anio-card__que">{t.que}</p>
+                <ul className="anio-card__voces">
+                  {t.voces.map((v) => <li key={v}>{v}</li>)}
+                </ul>
+                <p className="anio-card__gobergo">
+                  <span>En Gobergo</span>
+                  {t.gobergo}
+                </p>
               </article>
             ))}
           </div>
@@ -405,6 +574,7 @@ export default function Landing() {
             <h3>Producto</h3>
             <ul>
               <li><a href="#funciones">Funciones</a></li>
+              <li><a href="#ano">El año cofrade</a></li>
               <li><a href="#audiencia">Para quién es</a></li>
               <li><a href="#precios">Precios</a></li>
             </ul>
