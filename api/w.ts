@@ -18,8 +18,11 @@
  *
  * PARA ENCENDERLO:
  *   1. Ejecuta `supabase/web-publica.sql` en tu proyecto.
- *   2. Define SUPABASE_URL y SUPABASE_ANON_KEY en el despliegue.
- *   3. Deja los `rewrites` de `vercel.json` como están.
+ *   2. Ejecuta `supabase/imagenes.sql`. Sin esto la cabecera sale sin foto:
+ *      las imágenes se quedan escritas dentro del contenido y ni WhatsApp ni
+ *      Facebook leen una imagen en `data:` — ver `lib/almacenImagenes.ts`.
+ *   3. Define SUPABASE_URL y SUPABASE_ANON_KEY en el despliegue.
+ *   4. Deja los `rewrites` de `vercel.json` como están.
  */
 /*
  * NADA SE IMPORTA ARRIBA, y esto es a propósito.
@@ -162,8 +165,8 @@ async function servir(req: Peticion, res: Respuesta) {
 
   // Hay dos formas de pedir la misma página y las dos pasan por aquí:
   //
-  //   /w/<slug>[/n/<noticia>|/t/<titular>|/noticias]   ← sin dominio propio
-  //   /[n/<noticia>|t/<titular>|noticias]              ← con su dominio
+  //   /w/<slug>[/n/<noticia>|/t/<titular>|/c/<culto>|/noticias]  ← sin dominio propio
+  //   /[n/<noticia>|t/<titular>|c/<culto>|noticias]               ← con su dominio
   //
   // En la segunda no hay slug en la dirección: la hermandad se averigua por el
   // dominio por el que ha entrado. Sin esto, la hermandad que acaba de conectar
@@ -272,6 +275,28 @@ async function servir(req: Peticion, res: Respuesta) {
       pieza = {
         titulo: t.nombre, descripcion: t.descripcion || t.autoria, imagen: t.fotoDataUrl,
         ruta: `/t/${slugPieza}`, tipo: 'titular',
+      }
+    }
+  } else if (tipoPieza === 'c' && slugPieza) {
+    /*
+     * UN CULTO. Se busca por su enlace, que lleva el año pegado: los cultos de
+     * una hermandad se llaman todos igual año tras año, y sin el año dos
+     * quinarios de dos años distintos comparten dirección.
+     *
+     * Solo se miran los ESCRITOS en la web: los del calendario viven en el
+     * navegador de la hermandad y aquí no hay navegador.
+     */
+    const { slugCulto } = await import('../src/lib/webPublicaPuro')
+    const c = (web.cultos ?? []).find((x) => slugCulto(x) === slugPieza || x.id === slugPieza)
+    if (c) {
+      pieza = {
+        titulo: c.titulo,
+        descripcion: [c.fecha, c.lugar].filter((x) => x?.trim()).join(' · ') || c.detalle || '',
+        imagen: c.fotoDataUrl,
+        ruta: `/c/${slugPieza}`,
+        tipo: 'culto',
+        fecha: c.fechaIso || undefined,
+        lugar: c.lugar || undefined,
       }
     }
   } else if (tipoPieza === 'noticias') {

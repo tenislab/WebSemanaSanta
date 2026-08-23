@@ -93,19 +93,55 @@ async function avisoDeEjemplo({ cargar, caso }) {
   caso('en modo demostración, también', true, m.hayDatosDeEjemplo())
   localStorage.removeItem('cabildo-demo-modo')
 
-  // Que ninguna pantalla ni documento lo tenga escrito a fuego.
-  const { readFile } = await import('node:fs/promises')
-  for (const f of [
-    'src/pages/app/Hermanos.tsx', 'src/pages/app/Comunicados.tsx',
-    'src/pages/app/Inventario.tsx', 'src/pages/app/Archivo.tsx',
-    'src/pages/app/Tesoreria.tsx', 'src/components/Recibo.tsx',
-    'src/components/MovimientoJustificante.tsx', 'src/components/InformeImpreso.tsx',
-  ]) {
-    const src = await readFile(f, 'utf8')
-    const loDice = /datos de ejemplo/.test(src)
-    const loComprueba = /hayDatosDeEjemplo\(\)/.test(src)
-    caso(`${f.split('/').pop()} solo lo dice si lo comprueba`, true, !loDice || loComprueba)
+  /*
+   * Que ninguna pantalla ni documento lo tenga escrito a fuego.
+   *
+   * ESTO ERA UNA LISTA DE FICHEROS A MANO, y pasó lo que pasa con las listas a
+   * mano: se arreglaron las cinco pantallas que se conocían, se apuntaron esas
+   * cinco aquí, y las dos que faltaban —Cuotas y la hoja del cortejo— siguieron
+   * diciéndolo durante meses. La de Cuotas se la encontró una hermandad con 34
+   * hermanos de verdad encima de sus propios recibos; la del cortejo se
+   * IMPRIME y se le da al diputado de tramo el Viernes Santo.
+   *
+   * Ahora se barre `src` entero. Un fichero pasa si no lo dice, o si lo
+   * comprueba antes de decirlo.
+   */
+  const { readdir, readFile } = await import('node:fs/promises')
+  const { join } = await import('node:path')
+
+  /*
+   * Los que hablan DE la demostración, no los que etiquetan datos de verdad:
+   * el botón de entrar en modo demo, el de restablecer los datos de ejemplo y
+   * la vista previa del modelo de papeleta, que de verdad usa datos inventados.
+   * Cada uno está aquí por escrito y no por olvido.
+   */
+  const HABLAN_DE_LA_DEMO = new Set([
+    'src/pages/app/Configuracion.tsx',
+    'src/pages/HermanoPortal.tsx',
+    'src/components/AuthForm.tsx',
+    'src/components/ModeloPapeletaEditor.tsx',
+  ])
+
+  async function* pantallas(dir) {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const ruta = join(dir, e.name).split('\\').join('/')
+      if (e.isDirectory()) yield* pantallas(ruta)
+      else if (e.name.endsWith('.tsx')) yield ruta
+    }
   }
+
+  const culpables = []
+  for await (const f of pantallas('src')) {
+    if (HABLAN_DE_LA_DEMO.has(f)) continue
+    // Sin comentarios: este mismo fichero explica el fallo por escrito, y
+    // explicarlo no puede contar como cometerlo.
+    const src = (await readFile(f, 'utf8'))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/\/\/.*$/gm, '')
+    if (/datos de ejemplo/.test(src) && !/hayDatosDeEjemplo\(\)/.test(src)) culpables.push(f)
+  }
+  caso('ninguna pantalla lo dice sin comprobarlo', '', culpables.join(', '))
 }
 
 /**

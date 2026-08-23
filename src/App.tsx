@@ -215,13 +215,17 @@ export default function App() {
       <Route path="/w/:slug/noticias" element={<SitioPublico />} />
       {/* La ficha de un titular, con su enlace propio. */}
       <Route path="/w/:slug/t/:titular" element={<SitioPublico />} />
+      {/* Y cada culto. Es el enlace que se pega en el grupo cuando se
+          anuncia un quinario: lleva a la página del culto, con su hora, su
+          sitio y el botón de añadirlo al calendario. */}
+      <Route path="/w/:slug/c/:culto" element={<SitioPublico />} />
 
       {/*
         Las mismas páginas, colgando de la raíz, para la hermandad que ha
         conectado su dominio: ahí su web vive en `/` y una noticia es
         `hermandaddetriana.es/n/cartel-2027`, no `/w/hermandad-de-triana/n/…`.
 
-        Sin estas cuatro líneas caían en el `*` de abajo y volvían a la
+        Sin estas líneas caían en el `*` de abajo y volvían a la
         portada. Y no es un caso raro: son EXACTAMENTE las direcciones que la
         propia aplicación mete en el `sitemap.xml` y en el enlace que se pega
         en el grupo de WhatsApp en cuanto hay dominio propio. Todas ellas
@@ -230,6 +234,7 @@ export default function App() {
       <Route path="/noticias" element={<Raiz soloWeb />} />
       <Route path="/n/:noticia" element={<Raiz soloWeb />} />
       <Route path="/t/:titular" element={<Raiz soloWeb />} />
+      <Route path="/c/:culto" element={<Raiz soloWeb />} />
 
       <Route path="/legal/:slug" element={<PaginaLegal />} />
       <Route path="/verificar" element={<VerificarPapeleta />} />

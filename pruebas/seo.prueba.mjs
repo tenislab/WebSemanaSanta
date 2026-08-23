@@ -41,13 +41,42 @@ export default async function ({ cargar, caso }) {
   caso('el titular con ficha', true, rutas.includes('/t/ntro-padre-jesus'))
   caso('el titular sin ficha, no', false, rutas.includes('/t/sin-ficha'))
   caso('sin noticias no hay listado', false, m.rutasDeLaWeb({ ...base, noticias: [] }).map((r) => r.ruta).includes('/noticias'))
+  /*
+   * Y CADA CULTO, con su dirección. El enlace lleva el año pegado: los cultos
+   * se llaman todos igual año tras año y sin él dos quinarios comparten
+   * dirección.
+   *
+   * Solo los ESCRITOS en la web, no los del calendario: esto también lo llama
+   * el servidor para el sitemap, y allí no hay navegador de donde leer el
+   * módulo de Eventos. Prometerle a Google una dirección que no se puede
+   * servir es peor que no prometerla.
+   */
+  caso('cada culto tiene su dirección', true, rutas.some((r) => r.startsWith('/c/')))
+  caso('y un culto sin título no', false,
+    m.rutasDeLaWeb({ ...base, cultos: [{ id: 'c', titulo: '  ', detalle: '', fecha: '', lugar: '', fotoDataUrl: null }] })
+      .map((r) => r.ruta).some((r) => r.startsWith('/c/')))
 
   // --- Sitemap ---
   const sm = m.sitemapXml(base, 'https://veracruz.es')
   caso('el sitemap es XML', true, sm.startsWith('<?xml version="1.0" encoding="UTF-8"?>'))
   caso('lleva la portada', true, sm.includes('<loc>https://veracruz.es</loc>'))
   caso('y la noticia con su fecha', true, sm.includes('<lastmod>2026-02-02</lastmod>'))
-  caso('una sola entrada por página', 4, (sm.match(/<url>/g) || []).length)
+  // Portada, listado, la noticia publicada, el titular con ficha y los dos
+  // cultos del guion. Lo que importa es que no salga NINGUNA dos veces:
+  // Google penaliza el mismo contenido en dos direcciones.
+  caso('una sola entrada por página', 6, (sm.match(/<url>/g) || []).length)
+  caso('y ninguna repetida', true, new Set(m.rutasDeLaWeb(base).map((r) => r.ruta)).size === m.rutasDeLaWeb(base).length)
+  /*
+   * Ni siquiera con dos cultos que dan el mismo enlace: «Besapiés» dos veces
+   * en el mismo año pasa de verdad. Google cuenta la misma página prometida
+   * dos veces como contenido duplicado y la baja de posición.
+   */
+  const dosIguales = m.rutasDeLaWeb({ ...base, cultos: [
+    { id: 'c1', titulo: 'Besapiés', detalle: '', fecha: '', lugar: '', fotoDataUrl: null, fechaIso: '2027-03-01' },
+    { id: 'c2', titulo: 'Besapiés', detalle: '', fecha: '', lugar: '', fotoDataUrl: null, fechaIso: '2027-09-14' },
+  ] }).map((r) => r.ruta)
+  caso('dos cultos con el mismo enlace solo salen una vez', 1,
+    dosIguales.filter((r) => r === '/c/besapies-2027').length)
   caso('escapa los ampersands', true, m.sitemapXml({ ...base, slug: 'a&b' }, 'https://x.es/w/a&b').includes('a&amp;b'))
 
   // --- Robots ---
@@ -145,6 +174,37 @@ export default async function ({ cargar, caso }) {
   caso('sin imagen, tarjeta pequeña', true, html.includes('name="twitter:card" content="summary"'))
   caso('una imagen en data: no se manda', false, m.cabeceraHtml({ ...base, heroFotos: ['data:image/png;base64,xx'] }, hermandad, [], 'https://x.es').includes('og:image'))
   caso('una imagen con URL sí', true, m.cabeceraHtml({ ...base, heroFotos: ['https://x.es/foto.jpg'] }, hermandad, [], 'https://x.es').includes('og:image'))
+
+  /*
+   * LA FOTO QUE SE COGE ES LA PRIMERA QUE SIRVA, no la primera que haya.
+   *
+   * Una noticia escrita antes del almacén lleva su foto dentro del contenido
+   * (`data:`), y eso no lo lee ningún rastreador. Antes esa foto ganaba el
+   * turno y luego se descartaba, así que la noticia se compartía SIN imagen
+   * aunque la web tuviera una portada perfectamente válida.
+   */
+  const noticiaVieja = m.cabeceraHtml(
+    { ...base, heroFotos: ['https://x.es/portada.jpg'] }, hermandad, [], 'https://x.es',
+    { titulo: 'Cabildo', descripcion: '', imagen: 'data:image/png;base64,xx', ruta: '/n/cabildo' },
+  )
+  caso('con la foto de dentro, se cae a la portada', true, noticiaVieja.includes('content="https://x.es/portada.jpg"'))
+  caso('y la tarjeta vuelve a ser grande', true, noticiaVieja.includes('content="summary_large_image"'))
+
+  /*
+   * Y SIEMPRE ABSOLUTA. WhatsApp y Facebook piden la foto desde sus propios
+   * servidores: una dirección que empiece por «/» allí no lleva a ningún
+   * sitio, y la tarjeta sale sin imagen sin decir por qué.
+   */
+  const relativa = m.cabeceraHtml({ ...base, heroFotos: ['/fotos/portada.jpg'] }, hermandad, [], 'https://x.es')
+  caso('una ruta relativa se hace absoluta', true, relativa.includes('content="https://x.es/fotos/portada.jpg"'))
+  // Y la que ya es absoluta no se toca (si no, saldría https://x.es/https://…).
+  caso('y la absoluta se queda como está', false,
+    m.cabeceraHtml({ ...base, heroFotos: ['https://cdn.example/f.jpg'] }, hermandad, [], 'https://x.es')
+      .includes('https://x.es/https'))
+
+  // La tarjeta lleva texto alternativo: lo lee el lector de pantalla de quien
+  // recibe el enlace.
+  caso('la tarjeta lleva texto alternativo', true, relativa.includes('property="og:image:alt"'))
 
   // Una pieza suelta (una noticia) manda su título y su dirección.
   const conPieza = m.cabeceraHtml(base, hermandad, [], 'https://veracruz.es', {

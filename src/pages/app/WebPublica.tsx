@@ -30,10 +30,17 @@ import {
   urlMapaIncrustado,
   urlSegura,
   useWebPublica,
+  getWebPublica,
+  cartelesOrdenados,
+  GUION_CARTEL,
+  GUION_CARIDAD,
   MAX_PDF_SUBIDO,
+  MAX_PDF_CON_ALMACEN,
   type AlturaHero,
   type AlbumGaleria,
   type Boletin,
+  type CaridadWeb,
+  type Cartel,
   type ColumnaPie,
   type CultoWeb,
   type EnlacePie,
@@ -76,6 +83,7 @@ import { getCampana } from '../../lib/campana'
 import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml } from '../../lib/seoWeb'
 import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
 import { comprimirImagen, leerArchivo } from '../../lib/imagen'
+import { guardarImagen, hayAlmacen, mudarImagenes, sustituirImagenes } from '../../lib/almacenImagenes'
 import {
   TIPOS_MENSAJE, actualizarMensajeWeb, borrarMensajeWeb, devolverMensajeWeb, getMensajesWeb,
   resumenMensaje, sinLeer, useMensajesWeb,
@@ -91,7 +99,19 @@ import { pedirActivarDominio } from '../../lib/reporteFallo'
  * de una salida son nueve megas que dejan de viajar en cada visita.
  */
 function miniatura(dataUrl: string): Promise<string> {
-  return comprimirImagen(dataUrl, 520, 0.72)
+  return comprimirImagen(dataUrl, 520, 0.72).then((d) => guardarImagen(d))
+}
+
+/**
+ * Comprimir y GUARDAR. Todo lo que entra por el editor pasa por aquí.
+ *
+ * Antes la foto se quedaba escrita dentro del contenido y viajaba con él en
+ * cada guardado. Ahora se sube al almacén y lo que se guarda es su dirección
+ * — ver `lib/almacenImagenes.ts`. Sin Supabase detrás devuelve la imagen tal
+ * cual y todo sigue funcionando igual que antes.
+ */
+async function preparar(dataUrl: string, maxLado: number): Promise<string> {
+  return guardarImagen(await comprimirImagen(dataUrl, maxLado))
 }
 
 /**
@@ -103,7 +123,7 @@ async function leerImagenes(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: stri
   e.target.value = ''
   for (const file of files) {
     const dataUrl = await leerArchivo(file)
-    if (dataUrl) cb(await comprimirImagen(dataUrl, maxLado))
+    if (dataUrl) cb(await preparar(dataUrl, maxLado))
   }
 }
 
@@ -111,7 +131,7 @@ async function leerImagenes(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: stri
 async function leerArchivos(files: File[], cb: (dataUrl: string) => void) {
   for (const file of files.filter((f) => f.type.startsWith('image/'))) {
     const dataUrl = await leerArchivo(file)
-    if (dataUrl) cb(await comprimirImagen(dataUrl))
+    if (dataUrl) cb(await preparar(dataUrl, 1600))
   }
 }
 
@@ -119,7 +139,7 @@ function leerImagen(e: ChangeEvent<HTMLInputElement>, cb: (dataUrl: string) => v
   const file = e.target.files?.[0]
   if (!file || !file.type.startsWith('image/')) return
   const lector = new FileReader()
-  lector.onload = async () => cb(await comprimirImagen(String(lector.result), maxLado))
+  lector.onload = async () => cb(await preparar(String(lector.result), maxLado))
   lector.readAsDataURL(file)
   e.target.value = ''
 }
@@ -191,7 +211,7 @@ const ALTURAS: { id: AlturaHero; label: string }[] = [
   { id: 'completa', label: 'Pantalla completa' },
 ]
 
-type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta' | 'donativos' | 'loteria' | 'buzon'
+type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'cartel' | 'caridad' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta' | 'donativos' | 'loteria' | 'buzon'
 
 /**
  * A qué sección de la web corresponde cada pestaña del editor: la vista previa
@@ -201,6 +221,8 @@ const SECCION_DE_PESTANA: Partial<Record<Pestana, FocoPreview>> = {
   galeria: 'galeria',
   actualidad: 'actualidad',
   cultos: 'cultos',
+  cartel: 'cartel',
+  caridad: 'caridad',
   paginas: 'paginas',
   boletines: 'boletines',
   contacto: 'contacto',
@@ -282,6 +304,8 @@ const GRUPOS_PESTANAS: { titulo: string; items: { id: Pestana; label: string; ic
       { id: 'galeria', label: 'Galería', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M19 8v10a2 2 0 0 1-2 2H7" /></svg> },
       { id: 'actualidad', label: 'Actualidad', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5h12v14H5a1 1 0 0 1-1-1V5Z" /><path d="M16 9h3a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2" /><path d="M7 8h6M7 11.5h6M7 15h4" /></svg> },
       { id: 'cultos', label: 'Cultos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3v18M8 7h8" /></svg> },
+      { id: 'cartel', label: 'El cartel', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M8.5 7.5h7M8.5 11h7" /><circle cx="12" cy="16" r="2.2" /></svg> },
+      { id: 'caridad', label: 'Caridad', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M9 13.5 6.8 11.3a2.6 2.6 0 0 1 3.7-3.7l1.5 1.5 1.5-1.5a2.6 2.6 0 0 1 3.7 3.7L15 13.5" /><path d="M4 20c1.6-2.3 3.6-3.4 6-3.4h3.4c1 0 1.6.6 1.6 1.4s-.6 1.4-1.6 1.4h-2.6" /><path d="m13 18.6 5.4-2.4c.9-.4 1.8 0 2.1.8" /></svg> },
       { id: 'paginas', label: 'Páginas y textos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4M9 12h6M9 16h4" /></svg> },
       { id: 'boletines', label: 'Boletines', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> },
       { id: 'donativos', label: 'Donativos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20Z" /></svg> },
@@ -424,6 +448,42 @@ export default function WebPublica() {
   const [dispositivo, setDispositivo] = useState<Dispositivo>('movil')
   const [guardadoEn, setGuardadoEn] = useState<number | null>(null)
   const [mostrarGuardado, setMostrarGuardado] = useState(false)
+  const [mudadas, setMudadas] = useState(0)
+
+  /*
+   * LA MUDANZA DE LAS FOTOS, una vez y sin preguntar.
+   *
+   * Las webs escritas antes del almacén llevan las fotos dentro del propio
+   * contenido, y así no las lee WhatsApp ni las guarda el navegador en caché
+   * (ver `lib/almacenImagenes.ts`). Al abrir el editor se suben y se cambia
+   * cada foto por su dirección.
+   *
+   * Se hace SOLO al montar y no en cada guardado: guardar pasa en cada tecla
+   * que se escribe. Y no hace falta repetirlo, porque la segunda vez ya no
+   * queda ninguna dentro — el recorrido se da cuenta solo y no sube nada.
+   *
+   * Si falla, no se toca nada: la web se queda como estaba, con las fotos
+   * dentro, funcionando igual que ayer.
+   */
+  useEffect(() => {
+    if (!hayAlmacen()) return
+    let vivo = true
+    void (async () => {
+      const { subidas, mapa } = await mudarImagenes(getWebPublica())
+      if (!vivo || subidas === 0) return
+      /*
+       * SOBRE LO QUE HAY AHORA, no sobre la copia con la que empezó.
+       *
+       * Subir veinte fotos tarda segundos, y en esos segundos la hermandad
+       * está escribiendo. Guardando el resultado de la mudanza tal cual se
+       * guardaría una fotocopia de la web de hace cinco segundos: lo escrito
+       * mientras tanto desaparecía delante de sus ojos, sin aviso.
+       */
+      setWeb((actual) => sustituirImagenes(actual, mapa))
+      setMudadas(subidas)
+    })()
+    return () => { vivo = false }
+  }, [setWeb])
   useEffect(() => {
     if (guardadoEn === null) return
     setMostrarGuardado(true)
@@ -479,6 +539,9 @@ export default function WebPublica() {
     if (!web.albumes.some((a) => a.fotos.length > 0)) s.add('galeria')
     if (web.noticias.length === 0) s.add('actualidad')
     if (web.cultos.length === 0) s.add('cultos')
+    // Un cartel sin imagen no cuenta: la ficha sola no se publica.
+    if (!web.carteles.some((c) => c.imagenDataUrl)) s.add('cartel')
+    if (!web.caridad.entradilla.trim() && web.caridad.cifras.length === 0) s.add('caridad')
     if (web.paginas.length === 0) s.add('paginas')
     if (web.titulares.length === 0) s.add('titulares')
     if (!web.estacion.dia.trim() && web.estacion.itinerario.length === 0) s.add('estacion')
@@ -615,8 +678,10 @@ export default function WebPublica() {
           <p className="dash-head__lead">Elige un estilo, escribe el contenido y publica. A la derecha la ves cambiar en directo.</p>
         </div>
         <div className="dash-head__actions">
-          <span className={`cms-guardado${mostrarGuardado ? ' cms-guardado--visible' : ''}`} role="status">
-            ✓ Guardado
+          <span className={`cms-guardado${mostrarGuardado || mudadas > 0 ? ' cms-guardado--visible' : ''}`} role="status">
+            {mudadas > 0
+              ? `✓ ${mudadas} ${mudadas === 1 ? 'foto guardada' : 'fotos guardadas'} en el almacén`
+              : '✓ Guardado'}
           </span>
           {/* Los dos iguales: antes uno llevaba texto y el otro solo la flecha,
               y parecían dos controles distintos. */}
@@ -718,6 +783,8 @@ export default function WebPublica() {
           {pestana === 'galeria' && <GaleriaTab web={web} editar={editar} actualizar={actualizar} />}
           {pestana === 'actualidad' && <ActualidadTab web={web} editar={editar} />}
           {pestana === 'cultos' && <CultosTab web={web} editar={editar} delCalendario={cultosCalendario} />}
+          {pestana === 'cartel' && <CartelTab web={web} editar={editar} actualizar={actualizar} />}
+          {pestana === 'caridad' && <CaridadTab web={web} editar={editar} />}
           {pestana === 'paginas' && <PaginasTab web={web} editar={editar} paginaSel={paginaSel} setPaginaSel={setPaginaSel} />}
           {pestana === 'boletines' && <BoletinesTab web={web} editar={editar} actualizar={actualizar} />}
           {pestana === 'donativos' && <DonativosTab web={web} hermandad={hermandad} editar={editar} />}
@@ -3294,9 +3361,307 @@ function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebPublica;
   )
 }
 
+/* -------------------------------- Cartel -------------------------------- */
+/**
+ * EL CARTEL DEL AÑO.
+ *
+ * Es la pieza que más se comparte de una hermandad —se presenta en un acto, se
+ * cuelga en el barrio y circula por los grupos de WhatsApp durante semanas— y
+ * hasta ahora se subía como una foto más de la galería: perdida entre las
+ * treinta de la salida, sin decir de quién era ni de qué año.
+ *
+ * Aquí lleva su ficha, y los de años anteriores no se borran: la colección de
+ * carteles de una hermandad es media historia gráfica.
+ */
+function CartelTab({ web, editar, actualizar }: { web: WebPublica; editar: EditarFn; actualizar: ActualizarFn }) {
+  const carteles = cartelesOrdenados(web.carteles)
+
+  function editarUno(id: string, c: Partial<Cartel>) {
+    editar('carteles', (xs) => xs.map((x) => (x.id === id ? { ...x, ...c } : x)))
+  }
+  /** La imagen llega tarde (hay que leerla y subirla): sobre el estado más reciente. */
+  function guardarImagenDe(id: string, dataUrl: string) {
+    actualizar((actual) => ({
+      ...actual,
+      carteles: actual.carteles.map((x) => (x.id === id ? { ...x, imagenDataUrl: dataUrl } : x)),
+    }))
+  }
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head">
+        <h2 className="settings-card__title">El cartel</h2>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={() => editar('carteles', (xs) => [{ ...GUION_CARTEL, id: nuevoId() }, ...xs])}
+        >
+          + Nuevo cartel
+        </button>
+      </div>
+      <p className="form-hint">
+        El de este año se enseña grande, con su autor y su técnica. Los anteriores se quedan debajo
+        en una tira: no los borres, la colección de carteles es media historia de la hermandad.
+      </p>
+      {carteles.length === 0 && <p className="form-hint">Todavía no hay ningún cartel.</p>}
+      {carteles.map((c) => (
+        <div key={c.id} className="mini-card">
+          <div className="mini-card__head">
+            <strong>{c.titulo || `Cartel ${c.anio || 'sin año'}`}</strong>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm rgpd-borrar"
+              onClick={() => {
+                if (!window.confirm(`¿Quitar «${c.titulo || 'este cartel'}» de la web?`)) return
+                editar('carteles', (xs) => xs.filter((x) => x.id !== c.id))
+              }}
+            >
+              Quitar
+            </button>
+          </div>
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor={`cartelTitulo-${c.id}`}>Título</label>
+              <input
+                id={`cartelTitulo-${c.id}`} type="text" value={c.titulo}
+                onChange={(e) => editarUno(c.id, { titulo: e.target.value })}
+                placeholder="Cartel de la Semana Santa 2027"
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor={`cartelAnio-${c.id}`}>Año</label>
+              <input
+                id={`cartelAnio-${c.id}`} type="text" inputMode="numeric" value={c.anio}
+                onChange={(e) => editarUno(c.id, { anio: e.target.value })}
+                placeholder="2027"
+              />
+              {/* Sin año no se puede ordenar, y el de este año se queda detrás
+                  de uno de hace diez solo porque se subiera antes. */}
+              <p className="form-hint">Es lo que ordena los carteles. Sin él, este se va al final.</p>
+            </div>
+          </div>
+          <div className="form-row">
+            <label htmlFor={`cartelImg-${c.id}`}>La imagen</label>
+            {c.imagenDataUrl && (
+              <img
+                src={c.imagenDataUrl}
+                alt=""
+                style={{ maxWidth: 180, borderRadius: 8, display: 'block', marginBottom: '0.6rem' }}
+              />
+            )}
+            <input
+              id={`cartelImg-${c.id}`} type="file" accept="image/*"
+              onChange={(e) => leerImagenGrande(e, (d) => guardarImagenDe(c.id, d))}
+            />
+            {/* Un cartel se mira de cerca y se amplía: es de las pocas imágenes
+                de la web que merecen el tamaño grande. */}
+            <p className="form-hint">Se guarda a tamaño grande: un cartel se amplía para leer la letra pequeña.</p>
+          </div>
+          <div className="form-row">
+            <label htmlFor={`cartelAlt-${c.id}`}>Qué se ve en él</label>
+            <input
+              id={`cartelAlt-${c.id}`} type="text" value={c.alt}
+              onChange={(e) => editarUno(c.id, { alt: e.target.value })}
+              placeholder="El Señor con la cruz al hombro, de perfil, sobre fondo dorado"
+            />
+            <p className="form-hint">Para quien no puede ver la imagen. También lo lee Google.</p>
+          </div>
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor={`cartelAutor-${c.id}`}>Autor</label>
+              <input
+                id={`cartelAutor-${c.id}`} type="text" value={c.autor}
+                onChange={(e) => editarUno(c.id, { autor: e.target.value })}
+                placeholder="Nombre del pintor o del fotógrafo"
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor={`cartelTecnica-${c.id}`}>Técnica</label>
+              <input
+                id={`cartelTecnica-${c.id}`} type="text" value={c.tecnica}
+                onChange={(e) => editarUno(c.id, { tecnica: e.target.value })}
+                placeholder="Óleo sobre lienzo · Fotografía · Técnica mixta"
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <label htmlFor={`cartelPres-${c.id}`}>Presentación</label>
+            <input
+              id={`cartelPres-${c.id}`} type="text" value={c.presentacion}
+              onChange={(e) => editarUno(c.id, { presentacion: e.target.value })}
+              placeholder="Sábado 14 de febrero, 20:00, casa de hermandad"
+            />
+          </div>
+          <div className="form-row">
+            <label htmlFor={`cartelTexto-${c.id}`}>Lo que se quiera contar</label>
+            <textarea
+              id={`cartelTexto-${c.id}`} rows={3} value={c.texto}
+              onChange={(e) => editarUno(c.id, { texto: e.target.value })}
+              placeholder="La escena elegida, por qué se eligió, lo que se contó el día de la presentación."
+            />
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+/* ------------------------------- Caridad -------------------------------- */
+/**
+ * LA CARIDAD, con cifras.
+ *
+ * «¿Y esto en qué se gasta?» es la pregunta que llega de fuera, y la respuesta
+ * estaba en un párrafo dentro de Historia, que no lo lee nadie.
+ *
+ * Las cifras son tres y no un informe: es lo que cabe en un vistazo desde el
+ * móvil, que es desde donde se lee esto. Y van con ejemplo puesto, porque
+ * delante de tres cajas vacías no las rellena nadie.
+ */
+function CaridadTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+  const c = web.caridad
+  function set(cambios: Partial<CaridadWeb>) { editar('caridad', { ...c, ...cambios }) }
+  const vacia = !c.entradilla.trim() && c.cifras.length === 0
+    && !c.parrafos.some((p) => p.texto.trim()) && c.comoAyudar.length === 0
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head"><h2 className="settings-card__title">Caridad y obra social</h2></div>
+      <p className="form-hint">
+        Lo que la hermandad hace durante todo el año, no solo el día de la salida. Es lo que más se
+        pregunta desde fuera y lo que convence a quien duda si hacerse hermano.
+      </p>
+      {vacia && (
+        <div className="banner-inline banner-inline--accent">
+          <span>¿No sabes por dónde empezar? Te dejamos un guion con cifras de ejemplo para cambiar.</span>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => editar('caridad', {
+              ...GUION_CARIDAD,
+              cifras: GUION_CARIDAD.cifras.map((x) => ({ ...x, id: nuevoId() })),
+              parrafos: GUION_CARIDAD.parrafos.map((x) => ({ ...x, id: nuevoId() })),
+            })}
+          >
+            Rellenar con un guion
+          </button>
+        </div>
+      )}
+      <div className="form-row">
+        <label htmlFor="caridadEntradilla">Frase de entrada</label>
+        <input
+          id="caridadEntradilla" type="text" value={c.entradilla}
+          onChange={(e) => set({ entradilla: e.target.value })}
+          placeholder="Lo que la hermandad hace durante todo el año."
+        />
+      </div>
+
+      <div className="form-row">
+        <div className="settings-card__head" style={{ padding: 0, marginBottom: '0.5rem' }}>
+          <label>Las cifras</label>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={c.cifras.length >= 4}
+            onClick={() => set({ cifras: [...c.cifras, { id: nuevoId(), cifra: '', concepto: '' }] })}
+          >
+            + Añadir cifra
+          </button>
+        </div>
+        {/* Cuatro como mucho: con seis dejan de ser cifras y son una tabla, y
+            en el móvil se convierten en una columna interminable. */}
+        <p className="form-hint">
+          Tres o cuatro, no más. Una obra social contada solo con adjetivos no convence a nadie;
+          «142 familias, todas las semanas, desde 2011» sí.
+        </p>
+        {c.cifras.map((x) => (
+          <div key={x.id} className="form-grid-2" style={{ alignItems: 'end', marginBottom: '0.6rem' }}>
+            <div className="form-row">
+              <label htmlFor={`cifra-${x.id}`}>El número</label>
+              <input
+                id={`cifra-${x.id}`} type="text" value={x.cifra}
+                onChange={(e) => set({ cifras: c.cifras.map((y) => (y.id === x.id ? { ...y, cifra: e.target.value } : y)) })}
+                placeholder="142 · 3.400 kg · 12.000 €"
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor={`concepto-${x.id}`}>De qué</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  id={`concepto-${x.id}`} type="text" value={x.concepto}
+                  onChange={(e) => set({ cifras: c.cifras.map((y) => (y.id === x.id ? { ...y, concepto: e.target.value } : y)) })}
+                  placeholder="familias atendidas cada semana"
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm rgpd-borrar"
+                  onClick={() => set({ cifras: c.cifras.filter((y) => y.id !== x.id) })}
+                  aria-label={`Quitar la cifra ${x.cifra || 'sin número'}`}
+                >
+                  Quitar
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <EditorParrafos
+        parrafos={c.parrafos}
+        onChange={(parrafos) => set({ parrafos })}
+        titulo="El texto"
+        ayuda="A quién ayudáis, cómo se accede, de dónde sale el dinero."
+      />
+
+      <EditorFotos
+        fotos={c.fotos}
+        onChange={(fotos) => set({ fotos: typeof fotos === 'function' ? fotos(c.fotos) : fotos })}
+        onSubir={leerImagenMediana}
+        titulo="Fotos"
+      />
+
+      <div className="form-grid-2">
+        <div className="form-row">
+          <label htmlFor="caridadComo">Cómo ayudar</label>
+          <textarea
+            id="caridadComo" rows={4} value={c.comoAyudar.join('\n')}
+            onChange={(e) => set({ comoAyudar: lineas(e.target.value) })}
+            placeholder={'Aportación mensual a la bolsa de caridad\nEntrega de alimentos en la casa de hermandad\nVoluntariado en el reparto de los sábados'}
+          />
+          <p className="form-hint">Una por línea.</p>
+        </div>
+        <div className="form-row">
+          <label htmlFor="caridadCon">Con quién trabajáis</label>
+          <textarea
+            id="caridadCon" rows={4} value={c.conQuien.join('\n')}
+            onChange={(e) => set({ conQuien: lineas(e.target.value) })}
+            placeholder={'Cáritas parroquial\nBanco de alimentos'}
+          />
+          <p className="form-hint">Una por línea. Decir con quién colaboráis es lo que da confianza.</p>
+        </div>
+      </div>
+
+      <div className="form-row">
+        <label htmlFor="caridadCorreo">Correo de la diputación de caridad</label>
+        <input
+          id="caridadCorreo" type="email" value={c.correo}
+          onChange={(e) => set({ correo: e.target.value })}
+          placeholder="caridad@tuhermandad.es (vacío = el correo de contacto de la web)"
+        />
+        {/* El correo, en la propia sección: quien acaba de leer esto es justo
+            el que quiere escribir, y mandarlo al formulario del final es
+            perderlo por el camino. */}
+        <p className="form-hint">Sale al final de «Cómo ayudar», que es donde está quien quiere escribir.</p>
+      </div>
+    </section>
+  )
+}
+
 /* ------------------------------ Boletines ------------------------------ */
 function BoletinesTab({ web, editar, actualizar }: { web: WebPublica; editar: EditarFn; actualizar: ActualizarFn }) {
   const [errorPdf, setErrorPdf] = useState<string | null>(null)
+  // Con almacén el PDF es un archivo aparte y cabe un boletín en color; sin
+  // él se queda dentro de la web, en el navegador, y ahí 2 MB ya es mucho.
+  const tope = hayAlmacen() ? MAX_PDF_CON_ALMACEN : MAX_PDF_SUBIDO
 
   function editarBoletin(id: string, c: Partial<Boletin>) {
     editar('boletines', (xs) => xs.map((b) => (b.id === id ? { ...b, ...c } : b)))
@@ -3313,18 +3678,23 @@ function BoletinesTab({ web, editar, actualizar }: { web: WebPublica; editar: Ed
       setErrorPdf('Eso no es un PDF.')
       return
     }
-    if (file.size > MAX_PDF_SUBIDO) {
-      // Guardar aquí un boletín de 12 MB revienta el almacenamiento del
-      // navegador y se pierde TODA la web. Mejor decirlo antes.
+    if (file.size > tope) {
+      // Sin almacén, guardar aquí un boletín de 12 MB revienta el
+      // almacenamiento del navegador y se pierde TODA la web. Mejor decirlo
+      // antes.
       setErrorPdf(
         `«${file.name}» ocupa ${(file.size / 1024 / 1024).toFixed(1)} MB y el máximo para subir es ` +
-        `${(MAX_PDF_SUBIDO / 1024 / 1024).toFixed(0)} MB. Cuélgalo en la nube de la hermandad y pega aquí la dirección.`,
+        `${(tope / 1024 / 1024).toFixed(0)} MB. Cuélgalo en la nube de la hermandad y pega aquí la dirección.`,
       )
       return
     }
     setErrorPdf(null)
     const lector = new FileReader()
-    lector.onload = () => guardarPdf(id, { pdfDataUrl: String(lector.result), pdfNombre: file.name })
+    lector.onload = async () =>
+      guardarPdf(id, {
+        pdfDataUrl: await guardarImagen(String(lector.result), 'boletines'),
+        pdfNombre: file.name,
+      })
     lector.onerror = () => setErrorPdf('No se pudo leer el archivo.')
     lector.readAsDataURL(file)
   }
@@ -3343,7 +3713,7 @@ function BoletinesTab({ web, editar, actualizar }: { web: WebPublica; editar: Ed
       </div>
       <p className="form-hint">
         En la web salen como un expositor, con su portada y un botón de descarga. Puedes
-        <b> subir el PDF</b> (hasta {(MAX_PDF_SUBIDO / 1024 / 1024).toFixed(0)} MB) o
+        <b> subir el PDF</b> (hasta {(tope / 1024 / 1024).toFixed(0)} MB) o
         <b> pegar la dirección</b> donde ya esté colgado, que es lo que aguanta de verdad.
       </p>
       {errorPdf && <p className="form-hint form-hint--alerta">{errorPdf}</p>}

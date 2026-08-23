@@ -4375,6 +4375,188 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 /* El dorado del tema (oscuro en claro, claro en oscuro): el fijo #d6bc8a era invisible sobre crema. */
 .legal-page .eyebrow--gold,
 .verificar .eyebrow--gold { color: var(--gold); }
+
+/* ==========================================================================
+   LA TARJETA QUE SALE AL ESCANEAR UN QR
+   ==========================================================================
+   Quien la mira es un diputado de tramo, en la calle, de noche, con prisa y
+   con el móvil de otro. Tiene tres segundos. Por eso manda el nombre y la
+   distinción, no una lista de campos.
+
+   SEIS MODELOS, por los años que lleva en la casa. En una hermandad los años
+   son lo primero que se dice de alguien, y hasta ahora un hermano de cincuenta
+   y dos años tenía la misma tarjeta que uno que entró en marzo. Los cortes son
+   los de siempre: 25 plata, 50 oro, 75 diamante — ver `distincionHermano.ts`.
+
+   Cada modelo cambia DOS cosas: el metal de la cinta y el de la medalla. Ni
+   la tipografía ni la retícula: son la misma tarjeta, con distinta condecoración.
+   -------------------------------------------------------------------------- */
+.carne-qr {
+  --carne-tinta: #6A1A23;
+  --carne-metal: #C9A55C;
+  --carne-metal-claro: #E7D3A5;
+  --carne-fondo-medalla: linear-gradient(155deg, #F6EBD2, #D9BC7E);
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+  text-align: center;
+}
+
+/* La cinta: el galón de arriba. Es lo que separa un modelo de otro antes
+   incluso de leer nada. */
+.carne-qr__cinta {
+  margin: 0;
+  padding: 0.72rem 1rem;
+  background: var(--carne-tinta);
+  color: var(--carne-metal-claro);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  /* El filete de metal, que es lo que le da el aire de condecoración. */
+  box-shadow: inset 0 -2px 0 var(--carne-metal);
+}
+
+.carne-qr__cuerpo { padding: 1.6rem 1.5rem 1.3rem; }
+
+/* La medalla: los años, en grande y redondo. Es la pieza que se reconoce de
+   lejos, y la que hace que un carné de cincuenta años no se confunda. */
+.carne-qr__medalla {
+  width: 92px;
+  height: 92px;
+  margin: 0 auto 1.1rem;
+  border-radius: 50%;
+  background: var(--carne-fondo-medalla);
+  border: 2px solid var(--carne-metal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  color: var(--carne-tinta);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.carne-qr__medalla b {
+  font-size: 2rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
+}
+.carne-qr__medalla span {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  opacity: 0.75;
+}
+/* Cuatro cifras —el número de papeleta, o el año de alta de quien acaba de
+   entrar— no caben al tamaño de los años. */
+.carne-qr--papeleta .carne-qr__medalla b,
+.carne-qr--nuevo .carne-qr__medalla b { font-size: 1.3rem; letter-spacing: 0; }
+
+.carne-qr h1 {
+  font-size: 1.35rem;
+  line-height: 1.25;
+  margin: 0 0 0.3rem;
+  text-wrap: balance;
+}
+.carne-qr__sub { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 1rem; }
+
+.carne-qr__estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  background: #e6f4ea;
+  color: #1a7f37;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+.carne-qr__estado--off { background: var(--bg); color: var(--text-muted); }
+/* En oscuro el verde claro deslumbra: la misma señal, más apagada. */
+[data-theme='dark'] .carne-qr__estado { background: rgba(78, 168, 112, 0.18); color: #8ed3a8; }
+
+.carne-qr__detalle {
+  margin: 0.9rem 0 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+/* Lo que viene: «faltan tres años para las bodas de plata». Es lo que se
+   comenta en la casa de hermandad. */
+.carne-qr__proxima {
+  margin: 0.8rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--carne-tinta);
+  font-weight: 600;
+}
+/* En oscuro el granate del texto se apaga contra el fondo. */
+[data-theme='dark'] .carne-qr__proxima { color: var(--carne-metal); }
+
+/* El tramo de la papeleta: es LO que se comprueba en la calle. */
+.carne-qr__tramo {
+  margin: 0.9rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--carne-tinta);
+}
+[data-theme='dark'] .carne-qr__tramo { color: var(--carne-metal); }
+
+.carne-qr .verificar__nota {
+  margin: 0;
+  padding: 0.9rem 1.5rem 1.2rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ---- Los seis modelos ---- */
+
+/* De nuevo ingreso: verde, no metal. No es una condecoración — es una
+   bienvenida, y darle plata al que entró en marzo devalúa la de los otros. */
+.carne-qr--nuevo {
+  --carne-tinta: #1a5c34;
+  --carne-metal: #7fc79a;
+  --carne-metal-claro: #d9f0e2;
+  --carne-fondo-medalla: linear-gradient(155deg, #e8f6ee, #bfe3cd);
+}
+/* De la casa: el granate y el oro de siempre (los valores por defecto). */
+/* Veterano: el mismo granate, con el oro más subido. */
+.carne-qr--veterano {
+  --carne-metal: #B98F3E;
+  --carne-fondo-medalla: linear-gradient(155deg, #F2E2BE, #CFA95F);
+}
+/* Bodas de plata. */
+.carne-qr--plata {
+  --carne-tinta: #3C4650;
+  --carne-metal: #A9B4BF;
+  --carne-metal-claro: #E8EDF2;
+  --carne-fondo-medalla: linear-gradient(155deg, #FBFCFD, #C3CCD6 55%, #E9EEF3);
+}
+/* Bodas de oro. */
+.carne-qr--oro {
+  --carne-tinta: #5A3F12;
+  --carne-metal: #D4A93C;
+  --carne-metal-claro: #FBEFC9;
+  --carne-fondo-medalla: linear-gradient(155deg, #FCF1CE, #D8AC3E 55%, #F3DE9C);
+}
+/* Bodas de diamante: setenta y cinco años. Son los menos y se notan. */
+.carne-qr--diamante {
+  --carne-tinta: #26323F;
+  --carne-metal: #8FB6D6;
+  --carne-metal-claro: #E6F1FA;
+  --carne-fondo-medalla: linear-gradient(155deg, #FFFFFF, #C7DEEF 45%, #8FB6D6);
+}
+/* La papeleta no es una distinción: granate liso y sin metal subido. */
+.carne-qr--papeleta {
+  --carne-metal: #B98F3E;
+  --carne-fondo-medalla: linear-gradient(155deg, #F6EBD2, #E0C68F);
+}
+
 .legal-otros a { color: var(--gold); text-decoration: none; font-weight: 600; }
 .legal-otros a:hover { text-decoration: underline; }
 .legal-footer {
@@ -5199,6 +5381,208 @@ html:has(.sitio) { scroll-behavior: smooth; }
 .sitio__cta { margin-top: 1.6rem; }
 
 /* ---- Hazte hermano ---- */
+/* ---- La página de un culto --------------------------------------------
+   Tres datos y un botón: cuándo, dónde, qué es, y meterlo en el calendario.
+   Es lo que se mira desde el móvil, en la calle, de camino. */
+.sitio__culto-pagina { text-align: left; max-width: 720px; margin: 0 auto; }
+.sitio__culto-pagina h1 { margin: 0 0 0.5rem; }
+.sitio__culto-pagina-foto { margin: 0 0 1.6rem; }
+.sitio__culto-pagina-foto img {
+  width: 100%; height: auto; display: block;
+  border-radius: var(--sitio-radio);
+}
+.sitio__culto-faltan {
+  display: inline-block; margin: 0 0 1.2rem;
+  padding: 0.3rem 0.85rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--sitio-color) 12%, transparent);
+  color: var(--sitio-color-texto);
+  font-size: 0.85rem; font-weight: 600;
+}
+.sitio__culto-datos { margin: 0 0 1.4rem; display: flex; flex-direction: column; gap: 0.7rem; }
+.sitio__culto-datos > div { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 0.8rem; }
+.sitio__culto-datos dt {
+  font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--sitio-muted); padding-top: 0.2em;
+}
+.sitio__culto-datos dd { margin: 0; font-size: 1.05rem; }
+.sitio__culto-detalle { line-height: 1.75; margin: 0 0 1.6rem; }
+.sitio__culto-calendario { margin-bottom: 1.8rem; }
+.sitio__culto-mapa {
+  border-radius: var(--sitio-radio); overflow: hidden;
+  border: 1px solid var(--sitio-linea);
+}
+.sitio__culto-mapa iframe { width: 100%; height: 300px; border: 0; display: block; }
+
+/* ---- La hemeroteca ----------------------------------------------------
+   Con seis años de web, la actualidad es una lista infinita. La tira de años
+   deja saltar al que sea de un toque. */
+.sitio__hemeroteca {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin: 1.4rem 0 2rem;
+}
+.sitio__hemeroteca-anio {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--sitio-linea);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sitio-fg);
+  font: inherit; font-size: 0.9rem;
+  cursor: pointer;
+}
+.sitio__hemeroteca-anio span {
+  font-size: 0.75rem;
+  color: var(--sitio-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sitio__hemeroteca-anio:hover { border-color: var(--sitio-color); }
+.sitio__hemeroteca-anio--abierto {
+  background: var(--sitio-color);
+  border-color: var(--sitio-color);
+  color: #fff;
+}
+.sitio__hemeroteca-anio--abierto span { color: rgba(255, 255, 255, 0.75); }
+.sitio__hemeroteca-titulo {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 1.3rem;
+  color: var(--sitio-color-texto);
+  margin: 0 0 1.1rem;
+  text-align: left;
+}
+
+/* ---- El cartel ---------------------------------------------------------
+   Se enseña grande y con la ficha al lado: es la pieza que se comparte, y
+   metida en una rejilla con otras cosas deja de serlo. En el móvil la ficha
+   pasa debajo, que es donde cabe. */
+.sitio__cartel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+  text-align: left;
+}
+.sitio__cartel-obra { margin: 0; }
+.sitio__cartel-obra img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--sitio-radio);
+  /* La sombra alargada le da el aire de estar colgado, que es como se ve un
+     cartel de verdad. */
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+}
+.sitio__cartel-anio {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--sitio-color2-texto);
+  margin: 0 0 0.3rem;
+  letter-spacing: -1px;
+}
+.sitio__cartel-ficha h3 {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 1.5rem;
+  color: var(--sitio-color-texto);
+  margin: 0 0 1.1rem;
+}
+.sitio__cartel-datos { margin: 0 0 1.1rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.sitio__cartel-datos > div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 0.6rem; }
+.sitio__cartel-datos dt {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sitio-muted);
+  padding-top: 0.15em;
+}
+.sitio__cartel-datos dd { margin: 0; }
+.sitio__cartel-texto { line-height: 1.7; margin: 0; }
+.sitio__cartel-antes { margin-top: 2.4rem; text-align: left; }
+.sitio__cartel-antes h3 {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 1.05rem;
+  color: var(--sitio-color-texto);
+  margin: 0 0 0.9rem;
+}
+.sitio__cartel-tira {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; gap: 1rem; flex-wrap: wrap;
+}
+.sitio__cartel-tira li { width: 108px; }
+.sitio__cartel-tira img {
+  width: 100%; height: 150px; object-fit: cover; display: block;
+  border-radius: calc(var(--sitio-radio) * 0.6);
+  border: 1px solid var(--sitio-linea);
+}
+.sitio__cartel-tira span {
+  display: block; margin-top: 0.4rem;
+  font-size: 0.78rem; color: var(--sitio-muted);
+}
+@media (max-width: 700px) {
+  .sitio__cartel { grid-template-columns: 1fr; gap: 1.4rem; }
+  .sitio__cartel-anio { font-size: 2rem; }
+  .sitio__cartel-datos > div { grid-template-columns: 6rem minmax(0, 1fr); }
+}
+
+/* ---- Caridad -----------------------------------------------------------
+   Las cifras primero y en grande: es lo único de esta sección que se lee
+   entero desde un móvil, y lo que responde a «¿y esto en qué se gasta?». */
+.sitio__caridad-cifras {
+  margin: 1.6rem 0 2rem; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1.2rem;
+}
+.sitio__caridad-cifras li {
+  padding: 1.2rem 1rem;
+  border-radius: var(--sitio-radio);
+  background: var(--sitio-bg2);
+  border: 1px solid var(--sitio-linea);
+  text-align: center;
+}
+.sitio__caridad-cifras strong {
+  display: block;
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 2.1rem;
+  line-height: 1.05;
+  color: var(--sitio-color-texto);
+}
+.sitio__caridad-cifras span {
+  display: block; margin-top: 0.45rem;
+  font-size: 0.86rem; line-height: 1.45; color: var(--sitio-muted);
+}
+.sitio__caridad-texto { text-align: left; display: flex; flex-direction: column; gap: 1.3rem; }
+.sitio__caridad-texto h3 {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 1.1rem; color: var(--sitio-color-texto); margin: 0 0 0.45rem;
+}
+.sitio__caridad-texto p { margin: 0; line-height: 1.7; }
+.sitio__caridad-fotos {
+  margin: 1.8rem 0 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem;
+}
+.sitio__caridad-fotos img {
+  width: 100%; height: 190px; object-fit: cover; display: block;
+  border-radius: var(--sitio-radio);
+}
+.sitio__caridad-abajo {
+  margin-top: 2.2rem;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.6rem;
+}
+.sitio__caridad-bloque { text-align: left; }
+.sitio__caridad-bloque h3 {
+  font-family: var(--sitio-fuente-titulos);
+  font-size: 1.05rem; color: var(--sitio-color-texto); margin: 0 0 0.7rem;
+}
+.sitio__caridad-correo { margin: 0.9rem 0 0; font-size: 0.9rem; color: var(--sitio-muted); }
+.sitio__caridad-correo a { color: var(--sitio-color-texto); }
+.sitio__caridad-entidades { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sitio__caridad-entidades li {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--sitio-linea);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: var(--sitio-muted);
+}
+
 .sitio__hazte {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -6006,6 +6390,37 @@ html:has(.sitio) { scroll-behavior: smooth; }
   color: var(--gold, #c5a059); font-weight: 700; line-height: 1.2;
 }
 .carne__nombre { font-size: 1.3rem; line-height: 1.2; font-weight: 700; margin-bottom: 0.9rem; }
+/* EL GALÓN DE LA ANTIGÜEDAD.
+   El mismo escalón que sale al escanear el QR, con el mismo metal: bodas de
+   plata, de oro, de diamante. Es lo primero que se dice de un hermano en una
+   casa, y el carné no lo distinguía por ninguna parte. */
+.carne__distincion {
+  margin: -0.4rem 0 1rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--carne-galon, #c5a059);
+}
+.carne__distincion span {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--carne-galon, #c5a059);
+}
+.carne__distincion small {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: rgba(246, 239, 228, 0.66);
+}
+/* El metal de cada escalón. El «hermano» de la casa se queda con el oro de la
+   marca, que es el valor por defecto. */
+.carne--nuevo { --carne-galon: #8ed3a8; }
+.carne--veterano { --carne-galon: #d8b56a; }
+.carne--plata { --carne-galon: #cfd8e0; }
+.carne--oro { --carne-galon: #f0cf72; }
+.carne--diamante { --carne-galon: #b9d9f2; }
+
 .carne__datos { display: flex; gap: 1.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .carne__datos span {
   display: block; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.08em;
@@ -6052,6 +6467,11 @@ html:has(.sitio) { scroll-behavior: smooth; }
 /* En papel, tinta sobre blanco: el navegador no imprime fondos, y un carné
    con letra clara sobre un degradado que no sale es una hoja en blanco. */
 @media print {
+  /* El galón, en tinta: el navegador no imprime fondos y el metal claro sobre
+     blanco desaparece. */
+  .carne__distincion span { color: #1a1013 !important; }
+  .carne__distincion small { color: #5a5148 !important; }
+  .carne__distincion { border-left-color: #8a6f2e !important; }
   .carne {
     break-inside: avoid;
     background: #fff !important;

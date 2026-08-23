@@ -5,12 +5,12 @@ import { hermandadActualId } from './multiHermandad'
 import type { HermandadSettings } from './hermandadSettings'
 
 /*
- * Estas cuatro viven en `webPublicaPuro.ts` porque las necesita también la
+ * Estas viven en `webPublicaPuro.ts` porque las necesita también la
  * función de servidor, y desde el servidor no se puede importar este fichero
  * (arrastra React y el cliente de Supabase). Se reexportan para que el resto
  * de la aplicación las siga pidiendo aquí, como siempre.
  */
-export { aSlug, slugNoticia, slugTitular, noticiasPublicadas } from './webPublicaPuro'
+export { aSlug, slugNoticia, slugTitular, slugCulto, cartelesOrdenados, noticiasPorAnio, noticiasPublicadas } from './webPublicaPuro'
 
 /**
  * Web pública de la hermandad, creada y personalizada desde la propia app.
@@ -33,6 +33,8 @@ export type TipoSeccion =
   | 'estacion'
   | 'junta'
   | 'cultos'
+  | 'cartel'
+  | 'caridad'
   | 'galeria'
   | 'actualidad'
   | 'paginas'
@@ -259,6 +261,8 @@ export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string; publico: stri
   junta: { nombre: 'Junta de gobierno', publico: 'Junta de gobierno' },
   titulares: { nombre: 'Titulares', publico: 'Titulares' },
   cultos: { nombre: 'Cultos y actos', publico: 'Cultos' },
+  cartel: { nombre: 'El cartel', publico: 'El cartel' },
+  caridad: { nombre: 'Caridad y obra social', publico: 'Caridad' },
   galeria: { nombre: 'Galería de fotos', publico: 'Galería' },
   actualidad: { nombre: 'Actualidad (noticias)', publico: 'Actualidad' },
   paginas: { nombre: 'Páginas y textos', publico: 'La Hermandad' },
@@ -502,6 +506,77 @@ export interface ContenidoRico {
   fotos: FotoWeb[]
 }
 
+/**
+ * EL CARTEL DEL AÑO.
+ *
+ * Es la pieza que más se comparte de una hermandad: se presenta en un acto, se
+ * cuelga en el barrio y circula por los grupos de WhatsApp durante semanas.
+ * Hasta ahora se subía como una foto más de la galería, perdida entre las
+ * treinta de la salida del año pasado, sin decir de quién era ni de qué año.
+ *
+ * Con su ficha propia se comparte con su nombre y su autor, se puede descargar
+ * en grande para imprimirlo, y los de años anteriores se quedan guardados: la
+ * colección de carteles es media historia gráfica de una hermandad.
+ */
+export interface Cartel {
+  id: string
+  /** «Cartel de la Semana Santa 2027», «Cartel del LXXV aniversario». */
+  titulo: string
+  /** El año, suelto, para poder ordenar y para el rótulo. */
+  anio: string
+  imagenDataUrl: string | null
+  /** Qué se ve en el cartel, para quien no puede verlo. */
+  alt: string
+  /** Quién lo ha pintado o fotografiado. */
+  autor: string
+  /** «Óleo sobre lienzo», «Fotografía», «Técnica mixta». */
+  tecnica: string
+  /** Cuándo y dónde se presenta o se presentó. */
+  presentacion: string
+  /** Lo que se quiera contar: la escena elegida, el encargo, la anécdota. */
+  texto: string
+}
+
+export const CARTEL_VACIO: Omit<Cartel, 'id'> = {
+  titulo: '', anio: '', imagenDataUrl: null, alt: '', autor: '', tecnica: '', presentacion: '', texto: '',
+}
+
+/**
+ * LA CARIDAD, con cifras.
+ *
+ * Es lo que más se pregunta desde fuera —«¿y esto en qué se gasta?»— y hasta
+ * ahora quedaba en un párrafo dentro de Historia, que no lo lee nadie.
+ *
+ * Lleva cifras a propósito. Una obra social contada solo con adjetivos
+ * («intensa labor asistencial») no convence a nadie; «142 familias, todas las
+ * semanas, desde 2011» sí. Y son tres números, no un informe: lo que cabe en
+ * un vistazo desde el móvil.
+ */
+export interface CifraCaridad {
+  id: string
+  /** El número, tal cual se quiera escribir: «142», «3.400 kg», «12.000 €». */
+  cifra: string
+  /** Qué es ese número: «familias atendidas cada semana». */
+  concepto: string
+}
+
+export interface CaridadWeb {
+  entradilla: string
+  cifras: CifraCaridad[]
+  parrafos: ParrafoPagina[]
+  fotos: FotoWeb[]
+  /** Con qué entidades se colabora: Cáritas, el banco de alimentos, la parroquia… */
+  conQuien: string[]
+  /** Cómo puede ayudar quien lee: aportación, alimentos, voluntariado. */
+  comoAyudar: string[]
+  /** A quién escribir. Vacío = se usa el correo de contacto de la web. */
+  correo: string
+}
+
+export const CARIDAD_VACIA: CaridadWeb = {
+  entradilla: '', cifras: [], parrafos: [], fotos: [], conQuien: [], comoAyudar: [], correo: '',
+}
+
 export const CONTENIDO_RICO_VACIO: ContenidoRico = { entradilla: '', parrafos: [], fotos: [] }
 
 /** ¿Tiene algo que enseñar este bloque? */
@@ -563,8 +638,19 @@ export interface Boletin {
   fecha: string
 }
 
-/** Tope del PDF subido, en bytes. Por encima hay que dar la dirección. */
+/**
+ * Tope del PDF subido, en bytes. Son DOS topes porque son dos sitios
+ * distintos:
+ *
+ *  · Sin almacén (modo demostración, o Supabase sin `imagenes.sql`) el PDF se
+ *    queda escrito dentro de la web, en el navegador, que guarda unos 5 MB en
+ *    TOTAL. Un boletín de 4 MB no es que vaya justo: se lleva por delante la
+ *    web entera. De ahí los 2 MB.
+ *  · Con almacén el PDF es un archivo aparte y no compite con nada. Ahí el
+ *    tope es solo cortesía con quien lo descarga desde el móvil.
+ */
 export const MAX_PDF_SUBIDO = 2 * 1024 * 1024
+export const MAX_PDF_CON_ALMACEN = 25 * 1024 * 1024
 
 export interface RedWeb {
   id: string
@@ -776,6 +862,10 @@ export interface WebPublica {
   donativos: DonativosWeb
   /** La lotería del sorteo que toque. */
   loteria: LoteriaWeb
+  /** Los carteles, el de este año el primero. */
+  carteles: Cartel[]
+  /** La obra social, con sus cifras. */
+  caridad: CaridadWeb
 
   /** Formulario de contacto en la sección de Contacto. */
   formularioContacto: boolean
@@ -921,6 +1011,44 @@ export const GUION_PAGINA_CARIDAD = {
   fotos: [],
 }
 
+/**
+ * El guion de la caridad. Las cifras van CON EJEMPLO y no en blanco: puesto un
+ * «142 · familias atendidas cada semana» delante, la hermandad cambia el
+ * número; con tres cajas vacías, no rellena ninguna.
+ */
+export const GUION_CARIDAD: CaridadWeb = {
+  entradilla: 'Lo que la hermandad hace durante todo el año, no solo el día de la salida.',
+  cifras: [
+    { id: 'g-cf1', cifra: '142', concepto: 'familias atendidas cada semana' },
+    { id: 'g-cf2', cifra: '3.400 kg', concepto: 'de alimentos repartidos el año pasado' },
+    { id: 'g-cf3', cifra: 'desde 2011', concepto: 'sin faltar un solo reparto' },
+  ],
+  parrafos: [
+    { id: 'g-cr1', subtitulo: 'A quién ayudamos', texto: 'Explica a qué familias llegáis, cómo se accede a la ayuda y quién la lleva. Si trabajáis con los servicios sociales del barrio o con la parroquia, dilo: es lo que da confianza.' },
+    { id: 'g-cr2', subtitulo: 'De dónde sale', texto: 'De la cuota de los hermanos, de la bolsa de caridad, de lo que se recoge en los cultos… Contar de dónde sale el dinero es la mitad de la respuesta a «¿y esto en qué se gasta?».' },
+  ],
+  fotos: [],
+  conQuien: ['Cáritas parroquial', 'Banco de alimentos'],
+  comoAyudar: [
+    'Aportación mensual a la bolsa de caridad',
+    'Entrega de alimentos en la casa de hermandad',
+    'Voluntariado en el reparto de los sábados',
+  ],
+  correo: '',
+}
+
+/** El guion del cartel: lo que hay que rellenar, con el hueco a la vista. */
+export const GUION_CARTEL: Omit<Cartel, 'id'> = {
+  titulo: `Cartel de la Semana Santa ${new Date().getFullYear() + 1}`,
+  anio: String(new Date().getFullYear() + 1),
+  imagenDataUrl: null,
+  alt: '',
+  autor: '',
+  tecnica: '',
+  presentacion: '',
+  texto: 'La escena elegida, por qué se eligió, y lo que se contó el día de la presentación.',
+}
+
 export const CLAVE_WEB_PUBLICA = 'cabildo-web-publica'
 
 export const SECCIONES_POR_DEFECTO: SeccionConfig[] = [
@@ -930,6 +1058,11 @@ export const SECCIONES_POR_DEFECTO: SeccionConfig[] = [
   { tipo: 'estacion', visible: true },
   { tipo: 'junta', visible: true },
   { tipo: 'cultos', visible: true },
+  // El cartel y la caridad salen apagados: no todas las hermandades tienen
+  // cartel propio, y una sección de obra social vacía queda peor que no
+  // tenerla. Se encienden desde «Diseño» cuando hay algo que contar.
+  { tipo: 'cartel', visible: false },
+  { tipo: 'caridad', visible: false },
   { tipo: 'galeria', visible: true },
   { tipo: 'actualidad', visible: true },
   { tipo: 'paginas', visible: true },
@@ -1049,6 +1182,8 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
     reservaAbierta: true,
     maxPorPersona: 20,
   },
+  carteles: [],
+  caridad: CARIDAD_VACIA,
   formularioContacto: true,
   textoProteccionDatos:
     'Tus datos se usan solo para contestarte y no se ceden a nadie. Puedes pedir que los borremos escribiendo a la hermandad.',
@@ -1190,6 +1325,11 @@ function aContenidoRico(valor: unknown): ContenidoRico {
 }
 
 /** Mezcla lo guardado con los valores por defecto, para que los datos antiguos no pierdan campos nuevos. */
+/** Lo guardado, si de verdad es una lista. Si no, una vacía. */
+function lista<T>(x: T[] | undefined | null): T[] {
+  return Array.isArray(x) ? x : []
+}
+
 export function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
   if (!guardado) return WEB_PUBLICA_INICIAL
   // Compatibilidad: si venía con una sola foto de portada (modelo anterior),
@@ -1209,13 +1349,28 @@ export function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
       : sueltas && sueltas.length
         ? [{ id: 'album-1', titulo: 'Galería', descripcion: '', fecha: '', fotos: sueltas }]
         : []
-  // Si los datos son antiguos y no traían las secciones nuevas, se completan.
+  /*
+   * Si los datos son antiguos y no traían las secciones nuevas, se completan.
+   *
+   * Y se meten EN SU SITIO, no al final. Añadiéndolas al final, una hermandad
+   * que actualizaba se encontraba «El cartel» detrás de «Contacto», que es el
+   * cierre de la web: parecía un despiste, y había que arrastrarla a mano
+   * hasta arriba. Cada sección que falta entra detrás de la que la precede en
+   * el orden de fábrica.
+   */
   const secciones = guardado.secciones && guardado.secciones.length ? guardado.secciones : SECCIONES_POR_DEFECTO
-  const tiposPresentes = new Set(secciones.map((s) => s.tipo))
-  const seccionesCompletas = [
-    ...secciones,
-    ...SECCIONES_POR_DEFECTO.filter((s) => !tiposPresentes.has(s.tipo)),
-  ]
+  const seccionesCompletas = [...secciones]
+  const presente = (t: TipoSeccion) => seccionesCompletas.some((s) => s.tipo === t)
+  SECCIONES_POR_DEFECTO.forEach((nueva, i) => {
+    if (presente(nueva.tipo)) return
+    // La anterior de fábrica que esta web sí tenga: detrás de ella va.
+    let donde = 0
+    for (let j = i - 1; j >= 0; j -= 1) {
+      const anterior = seccionesCompletas.findIndex((s) => s.tipo === SECCIONES_POR_DEFECTO[j].tipo)
+      if (anterior !== -1) { donde = anterior + 1; break }
+    }
+    seccionesCompletas.splice(donde, 0, nueva)
+  })
   return {
     ...WEB_PUBLICA_INICIAL,
     ...guardado,
@@ -1234,6 +1389,26 @@ export function conDefectos(guardado: Partial<WebPublica> | null): WebPublica {
     sangre: { ...WEB_PUBLICA_INICIAL.sangre, ...(guardado.sangre ?? {}) },
     donativos: { ...WEB_PUBLICA_INICIAL.donativos, ...(guardado.donativos ?? {}) },
     loteria: { ...WEB_PUBLICA_INICIAL.loteria, ...(guardado.loteria ?? {}) },
+    /*
+     * Las dos secciones nuevas: una web guardada antes de que existieran no
+     * las tiene, y sin esto la página se cae al leer `web.caridad.cifras`.
+     *
+     * Se comprueba que sean LISTAS, no solo que no falten. Esto se lee de un
+     * JSON que lleva años guardándose y que puede venir de una copia de
+     * seguridad antigua o de una versión a medio migrar: un `carteles: null`
+     * —o un objeto donde debía haber una lista— revienta con «.map is not a
+     * function» y deja la web entera en blanco, sin decir por qué.
+     */
+    carteles: lista(guardado.carteles).map((c) => ({ ...CARTEL_VACIO, ...c })),
+    caridad: {
+      ...CARIDAD_VACIA,
+      ...(guardado.caridad ?? {}),
+      cifras: lista(guardado.caridad?.cifras),
+      parrafos: lista(guardado.caridad?.parrafos),
+      fotos: aFotosWeb(guardado.caridad?.fotos),
+      conQuien: lista(guardado.caridad?.conQuien),
+      comoAyudar: lista(guardado.caridad?.comoAyudar),
+    },
     resumenOtroIdioma: { ...WEB_PUBLICA_INICIAL.resumenOtroIdioma, ...(guardado.resumenOtroIdioma ?? {}) },
     cifras: guardado.cifras ?? [],
     // Se leen como parciales a propósito: lo guardado por una versión anterior

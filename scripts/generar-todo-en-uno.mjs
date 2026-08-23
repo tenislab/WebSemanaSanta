@@ -57,6 +57,7 @@ export const PIEZAS = [
   ['buscar-hermandad-con-su-escudo.sql', 'Que el hermano encuentre su hermandad por ciudad y la reconozca por su escudo'],
   ['redes-sociales.sql', 'Que cada hermandad tenga sus propias redes (la clave era global)'],
   ['motivo-del-rechazo.sql', 'Por qué se rechazó un alta, para poder decírselo a quien la pidió'],
+  ['imagenes.sql', 'El almacén de fotos: que la web no lleve las imágenes dentro'],
 ]
 
 const CABECERA = `-- =============================================================================

@@ -1,4 +1,4 @@
-import type { Noticia, Titular } from './webPublica'
+import type { Cartel, CultoWeb, Noticia, Titular } from './webPublica'
 
 /*
  * Las cuatro funciones de la web pública que TAMBIÉN corren en el servidor.
@@ -53,6 +53,61 @@ export function slugNoticia(n: Noticia): string {
 /** Igual, para un titular. */
 export function slugTitular(t: Titular): string {
   return t.slug?.trim() || aSlug(t.nombre) || t.id
+}
+
+/**
+ * Y para un culto.
+ *
+ * Lleva el AÑO pegado a propósito: los cultos de una hermandad se llaman todos
+ * igual año tras año —«Solemne Quinario», «Función Principal de Instituto»— y
+ * sin el año dos cultos de dos años distintos comparten dirección. El primero
+ * que se encuentra gana y el otro no se puede abrir.
+ *
+ * Cuando el culto viene del calendario hay fecha de verdad y de ahí sale el
+ * año; escrito a mano, se busca un año de cuatro cifras en el texto de la
+ * fecha, y si no lo hay se queda solo con el título — que es lo que había
+ * antes y sigue funcionando.
+ */
+export function slugCulto(c: CultoWeb): string {
+  const base = aSlug(c.titulo) || c.id
+  const anio = c.fechaIso?.slice(0, 4) || (c.fecha.match(/\b(19|20)\d{2}\b/) ?? [])[0] || ''
+  return anio ? `${base}-${anio}` : base
+}
+
+/**
+ * Los carteles, el más reciente primero. Se ordena por el año escrito, y los
+ * que no lo tengan van al final: un cartel sin año no puede colarse por
+ * delante del de este año solo porque se subiera después.
+ */
+export function cartelesOrdenados(carteles: Cartel[]): Cartel[] {
+  return [...carteles].sort((a, b) => (Number(b.anio) || 0) - (Number(a.anio) || 0))
+}
+
+/**
+ * Las noticias agrupadas por año, de lo más nuevo a lo más viejo: la
+ * hemeroteca.
+ *
+ * Sin esto, la actualidad de una hermandad con seis años de web es una lista
+ * infinita donde para llegar al Quinario de 2023 hay que bajar doscientas
+ * veces. Las que no tienen fecha se agrupan aparte, al final, en vez de
+ * colarse en el año en curso.
+ */
+export function noticiasPorAnio(noticias: Noticia[]): { anio: string; noticias: Noticia[] }[] {
+  const porAnio = new Map<string, Noticia[]>()
+  for (const n of noticiasPublicadas(noticias)) {
+    const anio = /^\d{4}/.test(n.fecha ?? '') ? n.fecha.slice(0, 4) : ''
+    const lista = porAnio.get(anio)
+    if (lista) lista.push(n)
+    else porAnio.set(anio, [n])
+  }
+  return [...porAnio.entries()]
+    .map(([anio, ns]) => ({ anio, noticias: ns }))
+    .sort((a, b) => {
+      // Las sin fecha, siempre las últimas: no son «del año 0».
+      if (!a.anio) return 1
+      if (!b.anio) return -1
+      return b.anio.localeCompare(a.anio)
+    })
 }
 
 /** Las noticias que se ven en la web, la destacada primero y por fecha. */

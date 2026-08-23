@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import { comprimirImagen, leerArchivo, pesoDeDataUrl, recortarCuadrado } from '../lib/imagen'
+import { guardarImagen } from '../lib/almacenImagenes'
 
 /**
  * La foto del hermano. Se recorta en cuadrado al subirla, así que se ve igual
@@ -56,8 +57,17 @@ export default function FotoHermano({
     // Primero se reduce y luego se recorta: recortar una foto de 12 megapíxeles
     // a pelo deja al navegador clavado unos segundos.
     const recortada = await recortarCuadrado(await comprimirImagen(crudo, 1000, 0.85), 400, 0.8)
+    /*
+     * Y al almacén. Guardada dentro de la ficha, la foto son ~40 kB de texto
+     * EN LA PROPIA FILA del hermano, y esa fila viaja entera cada vez que se
+     * carga el censo: con seiscientos hermanos con foto son veinticinco megas
+     * en cada listado. Aquí lo que se guarda es la dirección.
+     *
+     * Si no hay almacén devuelve la foto tal cual y todo sigue como antes.
+     */
+    const guardada = await guardarImagen(recortada, 'hermanos')
     setCargando(false)
-    onCambiar(recortada, true)
+    onCambiar(guardada, true)
   }
 
   return (

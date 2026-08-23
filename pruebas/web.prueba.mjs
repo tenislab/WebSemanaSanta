@@ -120,4 +120,123 @@ export default async function ({ cargar, caso }) {
 
   // --- Noticias (W3), que comparten mecánica ---
   caso('el enlace de una noticia sale del titular', 'cabildo-general', m.slugNoticia({ id: 'n', titulo: 'Cabildo General', fecha: '', resumen: '', fotoDataUrl: null, publicada: true }))
+
+  await elCartelYLaCaridad({ caso, m })
+  await elEnlaceDeUnCulto({ caso, m })
+  await laHemeroteca({ caso, m })
+}
+
+/**
+ * EL CARTEL Y LA CARIDAD, las dos secciones nuevas.
+ *
+ * Lo que se comprueba es lo que rompe una web ya escrita: que una guardada
+ * antes de que existieran no se caiga al leerlas, y que entren EN SU SITIO y
+ * no detrás de «Contacto», que es el cierre de la web.
+ */
+async function elCartelYLaCaridad({ caso, m }) {
+  // Una web guardada antes de que existieran las secciones nuevas.
+  const vieja = m.conDefectos({ titulo: 'Vera-Cruz', secciones: [
+    { tipo: 'historia', visible: true },
+    { tipo: 'cultos', visible: true },
+    { tipo: 'contacto', visible: true },
+  ] })
+  const tipos = vieja.secciones.map((s) => s.tipo)
+  caso('a una web vieja se le añaden las secciones nuevas', true,
+    tipos.includes('cartel') && tipos.includes('caridad'))
+  // EN SU SITIO. Añadidas al final quedaban detrás de Contacto, que es el
+  // cierre de la web: parecía un despiste y había que arrastrarlas a mano.
+  caso('y no detrás de Contacto', true, tipos.indexOf('cartel') < tipos.indexOf('contacto'))
+  caso('el cartel va después de los cultos', true, tipos.indexOf('cultos') < tipos.indexOf('cartel'))
+  // Y lo que ya tenía, intacto y en su orden.
+  caso('lo que ya tenía sigue', true, tipos.indexOf('historia') < tipos.indexOf('cultos'))
+
+  // Apagadas de fábrica: una sección de obra social vacía queda peor que no
+  // tenerla, y no todas las hermandades tienen cartel propio.
+  const nueva = m.conDefectos({})
+  caso('el cartel arranca apagado', false, nueva.secciones.find((s) => s.tipo === 'cartel').visible)
+  caso('la caridad también', false, nueva.secciones.find((s) => s.tipo === 'caridad').visible)
+
+  // Y los datos, con forma aunque no estuvieran guardados: sin esto la página
+  // se cae al leer `web.caridad.cifras`.
+  caso('la caridad arranca con sus listas', true,
+    Array.isArray(nueva.caridad.cifras) && Array.isArray(nueva.caridad.comoAyudar))
+  caso('y los carteles también', true, Array.isArray(nueva.carteles))
+  // Un cartel guardado a medias se completa con los huecos vacíos.
+  const aMedias = m.conDefectos({ carteles: [{ id: 'c1', titulo: 'Cartel 2027' }] })
+  caso('un cartel a medias se completa', '', aMedias.carteles[0].autor)
+  caso('sin perder lo que traía', 'Cartel 2027', aMedias.carteles[0].titulo)
+
+  // El orden de los carteles lo manda el AÑO, no cuándo se subieron.
+  const ordenados = m.cartelesOrdenados([
+    { id: 'a', anio: '2019' }, { id: 'b', anio: '' }, { id: 'c', anio: '2027' },
+  ])
+  caso('el cartel más reciente va primero', 'c', ordenados[0].id)
+  // Y uno sin año no se cuela por delante del de este año solo por subirse
+  // después.
+  caso('el que no tiene año va al final', 'b', ordenados[2].id)
+
+  /*
+   * Y NO SE CAE CON DATOS ROTOS. Esto se lee de un JSON que lleva años
+   * guardándose: puede venir de una copia antigua o de una versión a medio
+   * migrar. Un `carteles: null` reventaba con «.map is not a function» y
+   * dejaba la web ENTERA en blanco, sin decir por qué.
+   */
+  const rota = m.conDefectos({ carteles: null, caridad: { cifras: 'no soy una lista', conQuien: 42 } })
+  caso('con los carteles rotos, lista vacía', 0, rota.carteles.length)
+  caso('con las cifras rotas, lista vacía', 0, rota.caridad.cifras.length)
+  caso('y con lo demás roto, también', 0, rota.caridad.conQuien.length)
+  caso('la web sigue en pie', true, typeof rota.titulo === 'string')
+
+  caso('el guion de la caridad trae cifras', 3, m.GUION_CARIDAD.cifras.length)
+  caso('con número y concepto', true, m.GUION_CARIDAD.cifras.every((c) => c.cifra && c.concepto))
+}
+
+/**
+ * EL ENLACE DE UN CULTO.
+ *
+ * Lleva el año pegado, y no es un capricho: los cultos de una hermandad se
+ * llaman todos igual año tras año («Solemne Quinario»), y sin el año dos
+ * cultos de dos años distintos comparten dirección — el primero que se
+ * encuentra gana y el otro no se puede abrir.
+ */
+async function elEnlaceDeUnCulto({ caso, m }) {
+  const culto = (x) => ({ id: 'c1', titulo: '', detalle: '', fecha: '', lugar: '', fotoDataUrl: null, ...x })
+
+  caso('el enlace sale del título y el año', 'solemne-quinario-2027',
+    m.slugCulto(culto({ titulo: 'Solemne Quinario', fechaIso: '2027-03-02' })))
+  // Escrito a mano no hay fecha de verdad: se busca el año en el texto.
+  caso('escrito a mano, el año sale del texto', 'funcion-principal-2026',
+    m.slugCulto(culto({ titulo: 'Función Principal', fecha: 'Domingo 15 de marzo de 2026, 12:00' })))
+  // Y sin año en ninguna parte, el título solo: es lo que había antes.
+  caso('sin año, solo el título', 'besapies',
+    m.slugCulto(culto({ titulo: 'Besapiés' })))
+  // Lo que de verdad importa: dos años, dos direcciones.
+  caso('dos años dan dos enlaces distintos', false,
+    m.slugCulto(culto({ titulo: 'Quinario', fechaIso: '2026-03-02' }))
+    === m.slugCulto(culto({ titulo: 'Quinario', fechaIso: '2027-03-02' })))
+  caso('sin título se cae al id', 'c1', m.slugCulto(culto({ titulo: '' })))
+  // Un número que no es un año (una hora, un número de calle) no cuenta.
+  caso('un número que no es año no se coge', 'via-crucis',
+    m.slugCulto(culto({ titulo: 'Vía Crucis', fecha: 'a las 20:30, calle Mayor 118' })))
+}
+
+/**
+ * LA HEMEROTECA. Sin agrupar por año, la actualidad de una hermandad con seis
+ * años de web es una lista infinita donde para llegar al Quinario de 2023 hay
+ * que bajar doscientas veces.
+ */
+async function laHemeroteca({ caso, m }) {
+  const n = (id, fecha, extra) => ({ id, titulo: id, fecha, resumen: '', fotoDataUrl: null, publicada: true, ...extra })
+  const anios = m.noticiasPorAnio([
+    n('a', '2024-03-01'), n('b', '2026-01-15'), n('c', '2024-11-02'), n('d', '2026-05-05'), n('e', ''),
+  ])
+  caso('se agrupa por año', 3, anios.length)
+  caso('el año más nuevo primero', '2026', anios[0].anio)
+  caso('con sus dos noticias', 2, anios[0].noticias.length)
+  caso('y dentro, la más reciente antes', 'd', anios[0].noticias[0].id)
+  // Las sin fecha no son «del año 0»: van al final, aparte.
+  caso('las que no tienen fecha van al final', '', anios[2].anio)
+  // Y las ocultas no salen ni en la hemeroteca.
+  const conOculta = m.noticiasPorAnio([n('x', '2025-01-01'), n('y', '2025-02-01', { publicada: false })])
+  caso('una noticia oculta no entra', 1, conOculta[0].noticias.length)
 }

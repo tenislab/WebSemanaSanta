@@ -51,6 +51,7 @@ contenido**, pégalo en el editor y dale a **Run**. Uno por uno y en este orden:
 - [ ] `5  web-publica.sql`
 - [ ] `6  mensajes-web.sql`
 - [ ] `7  storage-archivo.sql`
+- [ ] `8  imagenes.sql`  ← el almacén de fotos
 
 > ⚠️ **El 3 es crítico y no se puede dejar para luego.** Sin él, cualquiera que
 > se registre en `/registro` obtiene permiso de escritura sobre TODA tu base de

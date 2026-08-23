@@ -459,4 +459,44 @@ export default async function ({ cargar, caso }) {
     const csv = motor.csvDeProblemas(ensayo, ['DNI', 'Importe', 'Año'])
     caso('el CSV de problemas lleva la fila y el motivo', true, csv.includes('99999999Z') && csv.includes('No hay ningún hermano'))
   }
+
+  await partidaDeOtros({ cargar, caso })
+}
+
+/**
+ * LA PARTIDA DE «OTROS», y por qué no vale con coger la última.
+ *
+ * Cuando una categoría del libro de caja no está en el catálogo de la
+ * hermandad, el apunte tiene que ir a algún sitio. Se cogía LA ÚLTIMA del
+ * catálogo, dando por hecho que la última es la de «otros»: lo es en el
+ * catálogo de fábrica, y deja de serlo en cuanto la hermandad añade una
+ * partida suya, que es lo primero que hace cualquiera.
+ *
+ * A partir de ahí, un ingreso desconocido se iba a esa partida nueva EN
+ * SILENCIO. No daba error: solo salía mal el Estado de Cuentas que se
+ * presenta en el cabildo, y eso se descubre en el cabildo.
+ */
+async function partidaDeOtros({ cargar, caso }) {
+  const m = await cargar('src/lib/tablasImportables.ts')
+
+  // El catálogo de fábrica: la de «otros» es la última, y se encuentra igual.
+  caso('en el catálogo de fábrica', 'Otros ingresos',
+    m.categoriaDeOtros(['Cuotas Hermanos/as', 'Donativos, Ofrendas y Cepillos', 'Subvenciones', 'Otros ingresos']))
+
+  // EL CASO QUE ROMPÍA: la hermandad añade una partida al final.
+  caso('con una partida añadida detrás, sigue siendo la de otros', 'Otros ingresos',
+    m.categoriaDeOtros(['Cuotas Hermanos/as', 'Otros ingresos', 'Alquiler de la casa de hermandad']))
+
+  // Se busca por el nombre, no por la posición, y aguanta las formas que usan
+  // las hermandades de verdad.
+  caso('«Varios» también vale', 'Varios', m.categoriaDeOtros(['Cultos', 'Varios', 'Cera']))
+  caso('«Gastos diversos» también', 'Gastos diversos', m.categoriaDeOtros(['Cultos', 'Gastos diversos']))
+  caso('«Sin clasificar» también', 'Sin clasificar', m.categoriaDeOtros(['Cultos', 'Sin clasificar']))
+  caso('y no se confunde con «Ofrendas»', 'Cera', m.categoriaDeOtros(['Ofrendas', 'Cera']))
+
+  // Sin ninguna que suene a «otros», la última: es lo que se hacía antes y
+  // sigue siendo mejor que no poner nada.
+  caso('sin ninguna de otros, la última', 'Cera', m.categoriaDeOtros(['Cultos', 'Cera']))
+  // Y con el catálogo vacío no se cae.
+  caso('con el catálogo vacío no revienta', 'Otros ingresos', m.categoriaDeOtros([]))
 }

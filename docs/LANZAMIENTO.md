@@ -33,6 +33,7 @@ arreglar con la hermandad delante. Si sale algo en rojo, se resuelve primero.
    | 5 | `supabase/web-publica.sql` | La web pública |
    | 6 | `supabase/mensajes-web.sql` | Buzón de los formularios |
    | 7 | `supabase/storage-archivo.sql` | Adjuntos del archivo documental |
+   | 8 | `supabase/imagenes.sql` | El almacén de fotos: sin él, la web lleva las imágenes dentro y no salen al compartir el enlace |
 
    El paso 3 **no es opcional y no se puede dejar para luego**. Léelo antes de
    ejecutarlo: al final explica cómo dar de alta al titular a mano.

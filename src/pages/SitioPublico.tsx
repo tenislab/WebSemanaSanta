@@ -5,11 +5,15 @@ import {
   PAREJAS_TIPOGRAFICAS,
   ajustesDeLaWeb,
   cargarWebPorSlug,
+  diasHasta,
   getWebPublica,
   marcaDeAgua,
   noticiasPublicadas,
+  noticiasPorAnio,
   slugNoticia,
   slugTitular,
+  slugCulto,
+  urlMapaIncrustado,
   type CultoWeb,
   type Noticia,
   type Titular,
@@ -19,6 +23,7 @@ import { AJUSTES_VACIOS, useHermandadSettings, type HermandadSettings } from '..
 import { constaLaSuscripcion, getSuscripcion, tieneCapacidad } from '../lib/suscripcion'
 import { haySesionAbierta } from '../lib/sesion'
 import { LogoMark } from '../components/Logo'
+import { icsDeUnActo, nombreDeArchivoIcs } from '../lib/ics'
 import SitioContenido, { AvisoFotos, FotoConMarca, Galeria, Parrafos, PieSitio, TarjetaNoticia } from '../components/SitioContenido'
 import { cultosDelCalendario } from '../lib/cultosDelCalendario'
 import { fijarHermandadDeLaPagina } from '../lib/multiHermandad'
@@ -26,6 +31,7 @@ import { isSupabaseConfigured } from '../lib/supabase'
 import {
   baseDeLaWeb,
   baseDeRutas,
+  type PiezaSeo,
   datosEstructurados,
   descripcionWeb,
   tituloWeb,
@@ -40,7 +46,7 @@ import {
 export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPublica } = {}) {
   // Las doce letras del catálogo, solo aquí: ver lib/fuentesDeLaWeb.ts.
   useEffect(() => { asegurarFuentesDeLaWeb() }, [])
-  const { slug: slugRuta, noticia: slugNot, titular: slugTit } = useParams()
+  const { slug: slugRuta, noticia: slugNot, titular: slugTit, culto: slugCul } = useParams()
   // Cuando se llega por el dominio propio de la hermandad no hay slug en la
   // dirección —se ha entrado por la raíz— así que se toma el de su web.
   const slug = slugRuta ?? webPorDominio?.slug
@@ -236,6 +242,47 @@ export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPub
     )
   }
 
+  /*
+   * UN CULTO SUELTO, con su enlace propio.
+   *
+   * Es el enlace que se pega en el grupo de la hermandad cuando se anuncia un
+   * quinario: hasta ahora había que mandar la portada entera y decir «baja
+   * hasta cultos». Se busca entre los escritos Y los del calendario, que es lo
+   * que se ve en la sección.
+   */
+  if (slugCul) {
+    const c = [...cultosCalendario, ...web.cultos].find((x) => slugCulto(x) === slugCul || x.id === slugCul)
+    if (!c) {
+      return (
+        <div className="sitio-noweb">
+          <LogoMark size={40} />
+          <h1>Ese culto ya no está</h1>
+          <p>Puede que haya pasado y se haya quitado de la web.</p>
+          <Link to={baseDeRutas(web) || '/'} className="sitio-btn">Ir a la web</Link>
+        </div>
+      )
+    }
+    return (
+      <>
+        <MetaWeb
+          web={web}
+          hermandad={hermandad}
+          cultos={cultosCalendario}
+          pieza={{
+            titulo: c.titulo,
+            descripcion: [c.fecha, c.lugar].filter((x) => x?.trim()).join(' · ') || c.detalle || '',
+            imagen: c.fotoDataUrl,
+            ruta: `/c/${slugCulto(c)}`,
+            tipo: 'culto',
+            fecha: c.fechaIso || undefined,
+            lugar: c.lugar || undefined,
+          }}
+        />
+        <PaginaCulto web={web} hermandad={hermandad} culto={c} otros={[...cultosCalendario, ...web.cultos]} />
+      </>
+    )
+  }
+
   // El listado completo de noticias.
   if (window.location.pathname.endsWith('/noticias')) {
     return (
@@ -408,17 +455,198 @@ function PaginaTitular({
   )
 }
 
+/**
+ * LA PÁGINA DE UN CULTO.
+ *
+ * Es el enlace que se pega en el grupo de la hermandad cuando se anuncia un
+ * quinario. Hasta ahora había que mandar la portada entera y decir «baja hasta
+ * cultos»; y el que lo abría desde el móvil, en la calle, tenía que leerse la
+ * web para encontrar la hora.
+ *
+ * Lo importante de esta página son tres datos —cuándo, dónde y qué es— y un
+ * botón: meterlo en el calendario. Un culto anunciado en enero se lee y se
+ * olvida; metido en el calendario, avisa él solo.
+ */
+function PaginaCulto({
+  web,
+  hermandad,
+  culto: c,
+  otros,
+}: {
+  web: WebPublica
+  hermandad: HermandadSettings
+  culto: CultoWeb
+  otros: CultoWeb[]
+}) {
+  const marca = marcaDeAgua(web, hermandad.nombreLegal ?? '')
+  const proximos = otros.filter((x) => x.id !== c.id).slice(0, 4)
+  const faltan = diasHasta(c.fechaIso)
+  const lugar = c.lugar?.trim() || web.direccion || hermandad.direccion || ''
+  return (
+    <MarcoSuelto web={web} hermandad={hermandad}>
+      <article className="sitio__culto-pagina">
+        {c.fotoDataUrl && (
+          <figure className="sitio__culto-pagina-foto">
+            <FotoConMarca src={c.fotoDataUrl} alt="" marca={marca} />
+          </figure>
+        )}
+        <h1>{c.titulo}</h1>
+        {/* «Faltan 12 días» solo cuando falta poco y hay fecha de verdad: a
+            cuatro meses vista no dice nada, y a dos días lo dice todo. */}
+        {faltan !== null && faltan >= 0 && faltan <= 60 && (
+          <p className="sitio__culto-faltan">
+            {faltan === 0 ? 'Es hoy' : faltan === 1 ? 'Es mañana' : `Faltan ${faltan} días`}
+          </p>
+        )}
+        <dl className="sitio__culto-datos">
+          {c.fecha?.trim() && <div><dt>Cuándo</dt><dd>{c.fecha}</dd></div>}
+          {lugar && <div><dt>Dónde</dt><dd>{lugar}</dd></div>}
+        </dl>
+        {c.detalle?.trim() && <p className="sitio__culto-detalle">{c.detalle}</p>}
+
+        <BotonCalendario culto={c} web={web} />
+
+        {web.mapaUrl && urlSeguraMapa(web.mapaUrl, lugar) && (
+          <div className="sitio__culto-mapa">
+            <iframe
+              src={urlSeguraMapa(web.mapaUrl, lugar) as string}
+              title={`Dónde es ${c.titulo}`}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+        )}
+      </article>
+
+      {proximos.length > 0 && (
+        <nav className="sitio__otros" aria-label="Los demás cultos">
+          <h2>Los demás cultos</h2>
+          <ul>
+            {proximos.map((o) => (
+              <li key={o.id}>
+                <Link to={`${baseDeRutas(web)}/c/${slugCulto(o)}`}>
+                  {o.fotoDataUrl && <img src={o.fotoDataUrl} alt="" loading="lazy" decoding="async" />}
+                  <span>{o.titulo}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+    </MarcoSuelto>
+  )
+}
+
+/** El mapa de la web, si es de Google y se puede incrustar sin abrir la puerta a nadie. */
+function urlSeguraMapa(mapaUrl: string, direccion: string): string | null {
+  return urlMapaIncrustado(mapaUrl, direccion)
+}
+
+/**
+ * «AÑADIR AL CALENDARIO».
+ *
+ * Solo sale cuando el culto tiene fecha de verdad (`fechaIso`), que es cuando
+ * viene del módulo de Eventos. Escrita a mano —«del 3 al 7 de marzo»— no hay
+ * forma honesta de sacar un día: mejor no ofrecer el botón que dar un archivo
+ * que el calendario coloca donde no es.
+ *
+ * La hora sí se busca en el texto: «Viernes 15, 20:30» tiene hora aunque la
+ * fecha venga por otro lado.
+ */
+function BotonCalendario({ culto, web }: { culto: CultoWeb; web: WebPublica }) {
+  const baseWeb = baseDeRutas(web)
+  /*
+   * `Blob` y no `data:`: Safari en iOS abre un `data:text/calendar` como texto
+   * plano en una pestaña nueva en vez de pasárselo al calendario.
+   *
+   * Y CON `useMemo` + LIMPIEZA, no suelto en el render. `createObjectURL`
+   * reserva memoria en el navegador hasta que se le dice que la suelte;
+   * llamándolo en cada render se dejaba una copia del archivo tirada cada vez
+   * que se repintaba la página, y no las recoge nadie hasta recargar.
+   */
+  const enlace = useMemo(() => {
+    if (!culto.fechaIso) return null
+    const hora = (culto.fecha ?? '').match(/\b(\d{1,2}):(\d{2})\b/)
+    const ics = icsDeUnActo({
+      id: culto.id,
+      titulo: culto.titulo,
+      fechaIso: culto.fechaIso,
+      hora: hora ? `${hora[1]}:${hora[2]}` : undefined,
+      lugar: culto.lugar || undefined,
+      descripcion: culto.detalle || undefined,
+      url: `${window.location.origin}${baseWeb}/c/${slugCulto(culto)}`,
+    })
+    if (!ics) return null
+    return URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }))
+  }, [culto, baseWeb])
+
+  useEffect(() => {
+    if (!enlace) return
+    return () => URL.revokeObjectURL(enlace)
+  }, [enlace])
+
+  if (!enlace) return null
+  return (
+    <a className="sitio-btn sitio__culto-calendario" href={enlace} download={nombreDeArchivoIcs(slugCulto(culto))}>
+      Añadir al calendario
+    </a>
+  )
+}
+
+/**
+ * LA HEMEROTECA.
+ *
+ * Sin agrupar por año, la actualidad de una hermandad con seis años de web es
+ * una lista infinita: para llegar a la presentación del cartel de 2023 hay que
+ * bajar doscientas veces. Y esas noticias viejas no son basura — son el
+ * archivo de la hermandad, lo que cuenta lo que se ha hecho.
+ *
+ * Con la tira de años arriba se salta al que sea de un toque. Se enseña el año
+ * más reciente y desde ahí se navega, en vez de cargar de golpe doscientas
+ * tarjetas con sus doscientas fotos.
+ */
 function ListadoNoticias({ web, hermandad }: { web: WebPublica; hermandad: HermandadSettings }) {
-  const noticias = noticiasPublicadas(web.noticias)
+  const porAnio = useMemo(() => noticiasPorAnio(web.noticias), [web.noticias])
+  const [anioAbierto, setAnioAbierto] = useState<string | null>(null)
+  // El más reciente por defecto. Se calcula aquí y no en el `useState` porque
+  // las noticias llegan de la base de datos DESPUÉS de montar: con el valor
+  // inicial se quedaba en null y no se veía nada.
+  const anio = anioAbierto ?? porAnio[0]?.anio ?? null
+  const grupo = porAnio.find((g) => g.anio === anio)
+  const rotulo = (a: string) => a || 'Sin fecha'
+
   return (
     <MarcoSuelto web={web} hermandad={hermandad}>
       <h1>Actualidad</h1>
-      {noticias.length === 0 && <p>Todavía no hay noticias publicadas.</p>}
-      <div className="sitio__noticias">
-        {noticias.map((n) => (
-          <TarjetaNoticia key={n.id} noticia={n} interactivo baseWeb={baseDeRutas(web)} />
-        ))}
-      </div>
+      {porAnio.length === 0 && <p>Todavía no hay noticias publicadas.</p>}
+      {/* Con un solo año la tira sobra: sería un botón suelto que no lleva a
+          ninguna parte distinta de donde ya estás. */}
+      {porAnio.length > 1 && (
+        <nav className="sitio__hemeroteca" aria-label="Noticias por año">
+          {porAnio.map((g) => (
+            <button
+              key={g.anio || 'sin-fecha'}
+              type="button"
+              className={`sitio__hemeroteca-anio${g.anio === anio ? ' sitio__hemeroteca-anio--abierto' : ''}`}
+              aria-current={g.anio === anio ? 'true' : undefined}
+              onClick={() => setAnioAbierto(g.anio)}
+            >
+              {rotulo(g.anio)}
+              <span>{g.noticias.length}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+      {grupo && (
+        <>
+          {porAnio.length > 1 && <h2 className="sitio__hemeroteca-titulo">{rotulo(grupo.anio)}</h2>}
+          <div className="sitio__noticias">
+            {grupo.noticias.map((n) => (
+              <TarjetaNoticia key={n.id} noticia={n} interactivo baseWeb={baseDeRutas(web)} />
+            ))}
+          </div>
+        </>
+      )}
     </MarcoSuelto>
   )
 }
@@ -447,10 +675,10 @@ function MetaWeb({
   /** Los próximos cultos, para los datos estructurados de Google. */
   cultos: CultoWeb[]
   /**
-   * En una página suelta (una noticia, la ficha de un titular) mandan SU
-   * título, SU descripción y SU foto: es lo que se pega en WhatsApp.
+   * En una página suelta (una noticia, la ficha de un titular, un culto)
+   * mandan SU título, SU descripción y SU foto: es lo que se pega en WhatsApp.
    */
-  pieza?: { titulo: string; descripcion: string; imagen: string | null; ruta: string }
+  pieza?: PiezaSeo
 }) {
   // Se sacan los campos sueltos a propósito: `pieza` es un objeto nuevo en cada
   // render, y como dependencia del efecto lo dispararía una y otra vez.
@@ -459,6 +687,9 @@ function MetaWeb({
   const piezaDescripcion = pieza?.descripcion ?? ''
   const piezaImagen = pieza?.imagen ?? null
   const piezaRuta = pieza?.ruta ?? '/'
+  const piezaTipo = pieza?.tipo
+  const piezaFecha = pieza?.fecha
+  const piezaLugar = pieza?.lugar
   useEffect(() => {
     const anterior = document.title
     const base = baseDeLaWeb(web, window.location.origin)
@@ -530,12 +761,26 @@ function MetaWeb({
     const escudo = web.logoDataUrl ?? hermandad.logoDataUrl
     if (escudo) enlace('icon', escudo)
 
-    // Datos estructurados: la hermandad, su sede y cada culto con su fecha.
-    // Google sí ejecuta JavaScript al indexar, así que esto le llega; WhatsApp
-    // no, y por eso hace falta además la función de servidor (ver docs/SEO.md).
+    /*
+     * Datos estructurados: la hermandad, su sede y cada culto con su fecha.
+     * Google sí ejecuta JavaScript al indexar, así que esto le llega; WhatsApp
+     * no, y por eso hace falta además la función de servidor (ver docs/SEO.md).
+     *
+     * Y CON LA PIEZA. Antes se mandaba siempre la ficha de la hermandad y solo
+     * eso: las cuarenta noticias eran para Google cuarenta copias de la misma
+     * ficha. La función de servidor sí mandaba la de cada una, así que la
+     * página servida y la página ya cargada decían cosas distintas — y la que
+     * gana es la segunda.
+     */
     const ld = document.createElement('script')
     ld.type = 'application/ld+json'
-    ld.textContent = JSON.stringify(datosEstructurados(web, hermandad, cultos, base))
+    const piezaLd: PiezaSeo | undefined = hayPieza
+      ? {
+        titulo: piezaTitulo, descripcion: piezaDescripcion, imagen: piezaImagen, ruta: piezaRuta,
+        tipo: piezaTipo, fecha: piezaFecha, lugar: piezaLugar,
+      }
+      : undefined
+    ld.textContent = JSON.stringify(datosEstructurados(web, hermandad, cultos, base, piezaLd))
     document.head.appendChild(ld)
     puestas.push(ld)
 
@@ -547,7 +792,7 @@ function MetaWeb({
         else el.setAttribute(attr, antes)
       })
     }
-  }, [web, hermandad, cultos, hayPieza, piezaTitulo, piezaDescripcion, piezaImagen, piezaRuta])
+  }, [web, hermandad, cultos, hayPieza, piezaTitulo, piezaDescripcion, piezaImagen, piezaRuta, piezaTipo, piezaFecha, piezaLugar])
 
   return null
 }

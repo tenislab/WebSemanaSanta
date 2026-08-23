@@ -640,10 +640,19 @@ export default function Cuotas() {
         <div>
           <p className="eyebrow">Cuotas</p>
           <h1>Cuotas y recibos</h1>
+          {/*
+            EL AVISO DE «DATOS DE EJEMPLO» IBA SIEMPRE, y aquí estaba el
+            despiste: cuando se arreglaron las cinco pantallas que lo decían
+            pasara lo que pasara, esta se quedó sin arreglar. Una hermandad con
+            34 hermanos de verdad en la base leía «datos de ejemplo mientras
+            conectamos la base de datos» encima de sus propios recibos, y a
+            partir de ahí ya no se fía de ninguna cifra de la pantalla.
+          */}
           <p className="dash-head__lead">
             {stats.total} recibo{stats.total === 1 ? '' : 's'} del ejercicio {ejercicioMirado} ·{' '}
-            {cuotas.length} en total ·
-            datos de ejemplo mientras conectamos la base de datos.{' '}
+            {cuotas.length} en total
+            {hayDatosDeEjemplo() && ' · datos de ejemplo mientras conectamos la base de datos'}
+            .{' '}
             <Link to="/app/configuracion" className="dash-head__link">
               Personalizar datos de la hermandad
             </Link>
@@ -773,7 +782,14 @@ export default function Cuotas() {
         <div className="stat-tile">
           <span className="stat-tile__label">Cobrado</span>
           <span className="stat-tile__value">{formatCurrency(stats.cobrado)}</span>
-          <span className="stat-tile__trend stat-tile__trend--ok">{stats.alDia}% al día · {ejercicioMirado}</span>
+          {/*
+            Sin un solo recibo emitido, «0% al día» no es una cifra mala: es
+            una cifra que no significa nada, y en verde encima. Se dice lo que
+            pasa de verdad.
+          */}
+          <span className={`stat-tile__trend stat-tile__trend--${stats.total ? 'ok' : 'neutral'}`}>
+            {stats.total ? `${stats.alDia}% al día · ${ejercicioMirado}` : `Sin emitir · ${ejercicioMirado}`}
+          </span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Pendiente de cobro</span>
@@ -788,13 +804,23 @@ export default function Cuotas() {
           entero sin cobrar. Ahora es lo que dice que es: cuántos hermanos de
           los que pagan cuota están al día.
         */}
+        {/*
+          Y CON CERO RECIBOS EMITIDOS NO SE ENSEÑA UN «0%».
+          Un 0% grande dice «vais fatal», y lo que pasa es lo contrario: no se
+          ha cobrado todavía, así que nadie debe nada. El aviso de arriba ya lo
+          explica; el indicador tenía que dejar de contradecirlo.
+        */}
         <div className="stat-tile">
           <span className="stat-tile__label">% al corriente</span>
           <span className="stat-tile__value">
-            {recuento.conCuota ? Math.round((recuento.alDia / recuento.conCuota) * 100) : 0}%
+            {stats.total === 0
+              ? '—'
+              : `${recuento.conCuota ? Math.round((recuento.alDia / recuento.conCuota) * 100) : 0}%`}
           </span>
           <span className="stat-tile__trend stat-tile__trend--neutral">
-            {recuento.alDia} de {recuento.conCuota} hermanos
+            {stats.total === 0
+              ? `Todavía no se ha emitido el ${ejercicioMirado}`
+              : `${recuento.alDia} de ${recuento.conCuota} hermanos`}
           </span>
         </div>
       </section>
@@ -973,7 +999,25 @@ export default function Cuotas() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="table-empty">
-                  No hay recibos que coincidan con la búsqueda.
+                  {/*
+                    TRES VACÍOS DISTINTOS, y antes los tres decían lo mismo.
+                    «No hay recibos que coincidan con la búsqueda» delante de
+                    una hermandad que todavía no ha emitido NINGUNO manda a
+                    revisar un buscador que está vacío, y deja la pantalla sin
+                    decir lo único que hay que hacer: emitir el ejercicio.
+                  */}
+                  {cuotas.length === 0 ? (
+                    <>
+                      Todavía no se ha emitido ningún recibo.{' '}
+                      <button type="button" className="btn btn-outline btn-sm" onClick={abrirEmision}>
+                        Emitir el ejercicio entero
+                      </button>
+                    </>
+                  ) : query.trim() ? (
+                    <>No hay recibos que coincidan con «{query.trim()}».</>
+                  ) : (
+                    <>Ningún recibo en «{filter}». Prueba con «Todas».</>
+                  )}
                 </td>
               </tr>
             )}

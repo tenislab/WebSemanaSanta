@@ -233,14 +233,39 @@ async function sincronizar<T extends { id: string }>(
     fallos.push(`${prefijo}: ${error.message}`)
     traducidos.push(traducirErrorDeEscritura(tabla, operacion, error.message, error.code))
   }
+  /*
+   * DE DOSCIENTOS EN DOSCIENTOS, y no todo de una vez.
+   *
+   * Esto es lo que hace falta el día que una hermandad importa su censo de
+   * verdad. Con doce hermanos de prueba da igual; con seiscientos, no:
+   *
+   *   · El BORRADO iba con `.in('id', [...])`, que PostgREST escribe en la
+   *     DIRECCIÓN. Seiscientos identificadores son unos veintidós mil
+   *     caracteres de URL, y el servidor la rechaza entera («414 Request-URI
+   *     Too Large»). O sea: vaciar el censo para volver a importarlo fallaba
+   *     justo en los censos grandes, que son los únicos que se vacían.
+   *   · El ALTA iba en una sola petición. Un cuerpo de varios megas —y con
+   *     fotos dentro, más— se queda en el camino; y si la base rechaza UNA
+   *     fila, se cae la petición entera y no entra ninguna de las seiscientas.
+   *
+   * Troceado, un tropiezo se lleva doscientas y no seiscientas, y lo que sí ha
+   * entrado se queda. El aviso dice cuántas han fallado, que es lo que
+   * necesita saber quien está mirando.
+   */
+  const DE_UNA_VEZ = 200
+  const trozos = <X,>(xs: X[]): X[][] => {
+    const partes: X[][] = []
+    for (let i = 0; i < xs.length; i += DE_UNA_VEZ) partes.push(xs.slice(i, i + DE_UNA_VEZ))
+    return partes
+  }
   try {
-    if (eliminados.length > 0) {
-      const { error } = await supabase.from(tabla).delete().in('id', eliminados.map((e) => e.id))
-      if (error) anotar('borrar', 'borrar', error)
+    for (const parte of trozos(eliminados)) {
+      const { error } = await supabase.from(tabla).delete().in('id', parte.map((e) => e.id))
+      if (error) anotar('borrar', `borrar ${parte.length}`, error)
     }
-    if (nuevos.length > 0) {
-      const { error } = await supabase.from(tabla).insert(nuevos.map(toRow))
-      if (error) anotar('crear', 'crear', error)
+    for (const parte of trozos(nuevos)) {
+      const { error } = await supabase.from(tabla).insert(parte.map(toRow))
+      if (error) anotar('crear', `crear ${parte.length}`, error)
     }
     for (const item of posiblesCambios) {
       const { error } = await supabase.from(tabla).update(toRow(item)).eq('id', item.id)

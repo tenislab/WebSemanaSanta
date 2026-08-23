@@ -1,3 +1,4 @@
+import { hayDatosDeEjemplo } from '../../lib/demo'
 import { llano } from '../../lib/buscar'
 import { useMemo, useState, type FormEvent, useRef } from 'react'
 import { Link } from 'react-router-dom'
@@ -808,7 +809,14 @@ export default function Cortejo() {
               </div>
             )
           })}
-          <p className="recibo-doc__note">Documento generado por Gobergo · datos de ejemplo</p>
+          {/*
+            La coletilla de «datos de ejemplo» iba SIEMPRE, y esto se imprime:
+            la hoja del cortejo que se le da al diputado de tramo el Viernes
+            Santo decía que los nombres eran de mentira.
+          */}
+          <p className="recibo-doc__note">
+            Documento generado por Gobergo{hayDatosDeEjemplo() ? ' · datos de ejemplo' : ''}
+          </p>
         </div>
       </Drawer>
 

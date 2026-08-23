@@ -362,6 +362,18 @@ export function tipoDeMovimiento(v: string): TipoMovimiento | null {
   return null
 }
 
+/**
+ * La partida de «otros» del catálogo que le pasen: la que recoge lo que no
+ * encaja en ninguna. Se busca por el nombre —«Otros ingresos», «Varios»,
+ * «Gastos diversos», «Sin clasificar»— y si no hay ninguna se usa la última,
+ * que es lo que se hacía antes.
+ */
+export function categoriaDeOtros(cuales: readonly string[]): string {
+  const suena = /^(otro|otros|varios|vario|diversos|diverso|sin clasificar|misc)/i
+  const encontrada = cuales.find((c) => suena.test(c.trim()))
+  return encontrada ?? cuales[cuales.length - 1] ?? 'Otros ingresos'
+}
+
 export const TABLA_MOVIMIENTOS: TablaImportable<Movimiento> = {
   id: 'movimientos',
   titulo: 'Traer el libro de caja',
@@ -511,10 +523,20 @@ export const TABLA_MOVIMIENTOS: TablaImportable<Movimiento> = {
       const encontrada = elegirDeLista(categoriaTexto, cuales)
       if (encontrada) datos.categoria = encontrada
       else {
-        // No se inventa una partida: se deja la última del catálogo (que es la
-        // de «otros») y se avisa, porque de las categorías cuelga el Estado de
-        // Cuentas que se presenta en el cabildo.
-        datos.categoria = cuales[cuales.length - 1] ?? 'Otros ingresos'
+        /*
+         * No se inventa una partida: se deja la de «otros» y se avisa, porque
+         * de las categorías cuelga el Estado de Cuentas que se presenta en el
+         * cabildo.
+         *
+         * ANTES SE COGÍA LA ÚLTIMA DEL CATÁLOGO, dando por hecho que la última
+         * es la de «otros». Lo es en el catálogo de fábrica, y deja de serlo
+         * en cuanto una hermandad añade una partida suya — que es lo primero
+         * que hace cualquiera. A partir de ahí, un ingreso desconocido se iba
+         * a esa partida nueva EN SILENCIO: no daba error, solo salía mal en el
+         * Estado de Cuentas. Ahora se busca la de «otros» por su nombre, y la
+         * última solo se usa si no hay ninguna.
+         */
+        datos.categoria = categoriaDeOtros(cuales)
         avisos.push(`la categoría «${categoriaTexto}» no está en vuestro catálogo, va a «${datos.categoria}»`)
       }
     } else if (datos.tipo) {

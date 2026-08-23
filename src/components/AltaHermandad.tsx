@@ -3,6 +3,7 @@ import { useFocoDeDialogo } from '../lib/foco'
 import { Link } from 'react-router-dom'
 import { saveHermandadSettings, type HermandadSettings } from '../lib/hermandadSettings'
 import { comprimirImagen, leerArchivo } from '../lib/imagen'
+import { guardarImagen } from '../lib/almacenImagenes'
 import { getCampana, saveCampana } from '../lib/campana'
 import { CLAVE_ALTA_HECHA } from '../lib/altaHermandad'
 
@@ -58,7 +59,14 @@ export default function AltaHermandad({
   async function subirEscudo(file: File | null) {
     if (!file || !file.type.startsWith('image/')) return
     const crudo = await leerArchivo(file)
-    if (crudo) set({ logoDataUrl: await comprimirImagen(crudo, 512, 0.9) })
+    if (!crudo) return
+    /*
+     * El escudo se intenta subir al almacén, pero aquí es normal que NO se
+     * pueda: estamos dando de alta la hermandad, así que puede que todavía no
+     * exista la carpeta donde iría. En ese caso se queda dentro de los ajustes
+     * —son 512 px, no pesa— y se muda solo al abrir el editor de la web.
+     */
+    set({ logoDataUrl: await guardarImagen(await comprimirImagen(crudo, 512, 0.9), 'web') })
   }
 
   return (

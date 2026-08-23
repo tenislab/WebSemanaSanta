@@ -3,6 +3,7 @@ import QrCode from './QrCode'
 import { datosCarneDe, urlCarne } from '../lib/verificacion'
 import { aniosDeHermandad } from '../lib/hermanoFicha'
 import { codigoDeHermano } from '../lib/codigoHermano'
+import { distincionDe, siguienteDistincion } from '../lib/distincionHermano'
 import type { Hermano } from '../data/hermanos'
 
 /**
@@ -27,6 +28,15 @@ export default function CarneHermano({
   const [imprimiendo, setImprimiendo] = useState(false)
   const enlace = urlCarne(datosCarneDe(hermano, hermandadNombre))
   const anios = aniosDeHermandad(hermano.antiguedad)
+  /*
+   * LA DISTINCIÓN. La misma que sale al escanear su QR, y sale de la misma
+   * función a propósito: si cada pantalla se la calculara por su cuenta, el
+   * día que una hermandad pida cambiar el corte de los veinticinco años el
+   * carné y el QR dirían cosas distintas del mismo hermano — que es lo peor
+   * que puede pasar en un documento que se enseña para acreditarse.
+   */
+  const distincion = distincionDe(anios)
+  const proxima = siguienteDistincion(anios)
 
   /**
    * Al imprimir, la hoja de estilo deja visible SOLO lo marcado como
@@ -57,7 +67,7 @@ export default function CarneHermano({
   }, [pantallaCompleta])
 
   const tarjeta = (grande: boolean) => (
-    <div className={`carne${grande ? ' carne--grande' : ''}${imprimiendo && !grande ? ' print-doc' : ''}`}>
+    <div className={`carne carne--${distincion.modelo}${grande ? ' carne--grande' : ''}${imprimiendo && !grande ? ' print-doc' : ''}`}>
       <div className="carne__cabeza">
         {logo ? <img src={logo} alt="" className="carne__escudo" /> : <span className="carne__escudo carne__escudo--sin" aria-hidden="true">✝</span>}
         <span className="carne__hermandad">{hermandadNombre}</span>
@@ -68,6 +78,22 @@ export default function CarneHermano({
         <img className="carne__foto" src={hermano.fotoDataUrl} alt={`Foto de ${hermano.nombre}`} />
       )}
       <p className="carne__nombre">{hermano.nombre}</p>
+      {/*
+        EL GALÓN DE LA ANTIGÜEDAD. En una hermandad los años son lo primero que
+        se dice de alguien —a los veinticinco bodas de plata, a los cincuenta
+        de oro— y el carné no los distinguía por ninguna parte: el de uno de
+        cincuenta y dos años era idéntico al de quien entró en marzo.
+      */}
+      <p className="carne__distincion">
+        <span>{distincion.titulo}</span>
+        {proxima && proxima.faltan <= 5 && (
+          <small>
+            {proxima.faltan === 1
+              ? `El año que viene, ${proxima.titulo.toLowerCase()}`
+              : `Faltan ${proxima.faltan} años para las ${proxima.titulo.toLowerCase()}`}
+          </small>
+        )}
+      </p>
       <div className="carne__datos">
         <div>
           <span>Nº de hermano/a</span>

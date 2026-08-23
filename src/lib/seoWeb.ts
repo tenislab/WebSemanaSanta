@@ -3,7 +3,7 @@ import type { CultoWeb, WebPublica } from './webPublica'
 // servidor de `api/`, y `webPublica` arrastra React y el cliente de Supabase
 // —que lee `import.meta.env`, inexistente en el servidor—. Por ahí se cayó la
 // portada de gobergo.com con un 500. Ver el comentario de webPublicaPuro.ts.
-import { noticiasPublicadas, slugNoticia, slugTitular } from './webPublicaPuro'
+import { noticiasPublicadas, slugCulto, slugNoticia, slugTitular } from './webPublicaPuro'
 import type { HermandadSettings } from './hermandadSettings'
 
 /**
@@ -89,9 +89,11 @@ export interface PiezaSeo {
   descripcion: string
   imagen: string | null
   ruta: string
-  tipo?: 'noticia' | 'titular' | 'listado'
-  /** Fecha de publicación, en `2027-03-15`. Solo la noticia la tiene. */
+  tipo?: 'noticia' | 'titular' | 'listado' | 'culto'
+  /** Fecha, en `2027-03-15`. La de publicación en una noticia; la del acto en un culto. */
   fecha?: string
+  /** Dónde es. Solo el culto la tiene, y es lo que Google enseña en la ficha del acto. */
+  lugar?: string
 }
 
 export function datosEstructurados(
@@ -202,6 +204,33 @@ export function datosEstructurados(
       })
     }
     /*
+     * UN CULTO ES UN ACTO, y Google tiene ficha para eso: sale con su fecha,
+     * su hora y su sitio, en un recuadro aparte, y se puede añadir al
+     * calendario desde el propio buscador.
+     *
+     * Es la diferencia entre que «Solemne Quinario» aparezca como una línea de
+     * texto más y que aparezca con el día y la parroquia. Para una hermandad
+     * que anuncia sus cultos, es lo que más se nota.
+     */
+    if (pieza.tipo === 'culto') {
+      grafo.push({
+        '@type': 'Event',
+        '@id': `${url}#acto`,
+        name: pieza.titulo,
+        url,
+        ...(pieza.fecha ? { startDate: pieza.fecha } : {}),
+        ...(pieza.descripcion.trim() ? { description: pieza.descripcion.trim() } : {}),
+        ...(pieza.imagen && !pieza.imagen.startsWith('data:') ? { image: pieza.imagen } : {}),
+        // Un culto es presencial y en un sitio. Sin esto, Google avisa de que
+        // la ficha del acto está incompleta y no la enseña.
+        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+        ...(pieza.lugar?.trim()
+          ? { location: { '@type': 'Place', name: pieza.lugar.trim() } }
+          : {}),
+        organizer: { '@id': `${base}#hermandad` },
+      })
+    }
+    /*
      * Las migas de pan. Es lo que hace que en el resultado de Google, debajo
      * del título, se lea «hermandaddetriana.es › Actualidad › El cartel de
      * 2027» en vez de la dirección cruda. Se lee mejor y se pulsa más.
@@ -213,9 +242,14 @@ export function datosEstructurados(
         ...(pieza.tipo === 'noticia'
           ? [{ '@type': 'ListItem', position: 2, name: 'Actualidad', item: urlAbsoluta(base, '/noticias') }]
           : []),
+        // El culto cuelga de la sección de Cultos de la portada, que es de
+        // donde se ha llegado a él.
+        ...(pieza.tipo === 'culto'
+          ? [{ '@type': 'ListItem', position: 2, name: 'Cultos', item: `${base}#cultos` }]
+          : []),
         {
           '@type': 'ListItem',
-          position: pieza.tipo === 'noticia' ? 3 : 2,
+          position: pieza.tipo === 'noticia' || pieza.tipo === 'culto' ? 3 : 2,
           name: pieza.titulo,
           item: url,
         },
@@ -236,7 +270,25 @@ export function rutasDeLaWeb(web: WebPublica): { ruta: string; fecha?: string }[
     const conFicha = (t.parrafos ?? []).some((p) => p.texto.trim() || p.subtitulo.trim()) || (t.fotos ?? []).length > 0
     if (conFicha) rutas.push({ ruta: `/t/${slugTitular(t)}` })
   })
-  return rutas
+  /*
+   * Y cada culto, con su dirección.
+   *
+   * Solo los ESCRITOS en la web, no los del calendario: esta función también
+   * la llama el servidor para el sitemap, y allí no hay navegador de donde
+   * leer el módulo de Eventos. Prometerle a Google una dirección que no se
+   * puede servir es peor que no prometerla.
+   */
+  ;(web.cultos ?? []).forEach((c) => {
+    if (c.titulo?.trim()) rutas.push({ ruta: `/c/${slugCulto(c)}` })
+  })
+  /*
+   * Y NINGUNA REPETIDA. Dos cultos con el mismo título y el mismo año dan el
+   * mismo enlace —«Besapiés» dos veces en marzo, por ejemplo—, y el sitemap
+   * los prometía dos veces. Google lo cuenta como contenido duplicado y la
+   * página baja de posición: es peor prometerla dos veces que una.
+   */
+  const vistas = new Set<string>()
+  return rutas.filter((r) => (vistas.has(r.ruta) ? false : (vistas.add(r.ruta), true)))
 }
 
 /** Escapa lo que va dentro de XML o de un atributo HTML. */
@@ -299,7 +351,15 @@ export function cabeceraHtml(
   const nombre = tituloWeb(web, hermandad)
   const titulo = pieza ? `${pieza.titulo} · ${nombre}` : nombre
   const descripcion = pieza ? pieza.descripcion.trim() || descripcionWeb(web) : descripcionWeb(web)
-  const imagen = pieza?.imagen ?? web.seo?.imagenDataUrl ?? web.heroFotos?.[0] ?? null
+  /*
+   * LA IMAGEN DE LA TARJETA. Se coge la primera que SIRVA, no la primera que
+   * haya: una foto escrita dentro del contenido (`data:`) no la lee ningún
+   * rastreador, y quedándose con ella se descartaba también la de portada, que
+   * a lo mejor sí valía. Resultado: una noticia con foto antigua se compartía
+   * sin ninguna imagen aunque la web tuviera portada.
+   */
+  const imagen = [pieza?.imagen, web.seo?.imagenDataUrl, web.heroFotos?.[0]]
+    .find((x): x is string => typeof x === 'string' && x.trim() !== '' && !x.startsWith('data:')) ?? null
   const url = urlAbsoluta(base, pieza?.ruta ?? '/')
   const et = (x: string) => escaparXml(x)
   const lineas = [
@@ -320,10 +380,17 @@ export function cabeceraHtml(
   if (pieza?.tipo === 'noticia' && pieza.fecha) {
     lineas.push(`<meta property="article:published_time" content="${et(pieza.fecha)}">`)
   }
-  // Una imagen en `data:` no la lee ningún rastreador: mejor no prometerla.
-  if (imagen && !imagen.startsWith('data:')) {
-    lineas.push(`<meta property="og:image" content="${et(imagen)}">`)
+  if (imagen) {
+    // ABSOLUTA siempre. WhatsApp y Facebook piden la imagen desde SUS
+    // servidores, no desde el navegador de nadie: una dirección que empiece
+    // por «/» allí no apunta a ningún sitio y la tarjeta sale sin foto.
+    const absoluta = /^https?:\/\//i.test(imagen) ? imagen : urlAbsoluta(base, imagen)
+    lineas.push(`<meta property="og:image" content="${et(absoluta)}">`)
+    // El texto alternativo de la tarjeta: lo lee el lector de pantalla de
+    // quien recibe el enlace por WhatsApp.
+    lineas.push(`<meta property="og:image:alt" content="${et(pieza?.titulo ?? nombre)}">`)
     lineas.push('<meta name="twitter:card" content="summary_large_image">')
+    lineas.push(`<meta name="twitter:image" content="${et(absoluta)}">`)
   } else {
     lineas.push('<meta name="twitter:card" content="summary">')
   }

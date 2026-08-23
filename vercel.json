@@ -29,6 +29,10 @@
       "destination": "/api/w"
     },
     {
+      "source": "/c/:slug",
+      "destination": "/api/w"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

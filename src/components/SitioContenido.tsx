@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, contenidoVacio, diasHasta, marcaDeAgua, nombreSeccion, noticiasPublicadas, slugNoticia, slugTitular, titularConFicha, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type FotoSangre, type Noticia, type ParrafoPagina, type TipoSeccion, type Titular, type WebPublica } from '../lib/webPublica'
+import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, cartelesOrdenados, contenidoVacio, diasHasta, slugCulto, marcaDeAgua, nombreSeccion, noticiasPublicadas, slugNoticia, slugTitular, titularConFicha, urlMapaIncrustado, urlSegura, type AlbumGaleria, type ContenidoRico, type CultoWeb, type FotoSangre, type Noticia, type ParrafoPagina, type TipoSeccion, type Titular, type WebPublica } from '../lib/webPublica'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
@@ -215,6 +215,13 @@ export default function SitioContenido({
     if (tipo === 'junta') return web.junta.some((m) => m.cargo.trim() || m.nombre.trim())
     if (tipo === 'titulares') return web.titulares.length > 0
     if (tipo === 'cultos') return cultosVisibles.length > 0
+    // Un cartel sin imagen no es un cartel: la ficha sola no se enseña.
+    if (tipo === 'cartel') return (web.carteles ?? []).some((c) => Boolean(c.imagenDataUrl))
+    if (tipo === 'caridad') {
+      const c = web.caridad
+      return Boolean(c.entradilla.trim() || c.cifras.length || c.parrafos.some((p) => p.texto.trim())
+        || c.comoAyudar.length || c.conQuien.length)
+    }
     if (tipo === 'galeria') return web.albumes.some((a) => a.fotos.length > 0)
     if (tipo === 'actualidad') return web.noticias.some((n) => n.publicada)
     if (tipo === 'paginas') return web.paginas.filter((p) => p.enMenu !== false).length > 0
@@ -1256,7 +1263,19 @@ function Seccion({
           {cultos.map((c) => (
             <article key={c.id} className="sitio__culto">
               {c.fotoDataUrl && <img className="sitio__culto-foto" src={c.fotoDataUrl} alt="" loading="lazy" decoding="async" />}
-              <h3>{c.titulo}</h3>
+              <h3>
+                {/*
+                  Cada culto lleva a SU página. Es el enlace que se pega en el
+                  grupo cuando se anuncia un quinario: antes había que mandar
+                  la portada entera y decir «baja hasta cultos».
+
+                  En la vista previa del panel no navega —`interactivo`—: ahí
+                  pulsarlo sacaría a la hermandad del editor.
+                */}
+                {interactivo
+                  ? <Link to={`${baseDeRutas(web)}/c/${slugCulto(c)}`}>{c.titulo}</Link>
+                  : c.titulo}
+              </h3>
               {(c.fecha?.trim() || c.lugar?.trim()) && (
                 <p className="sitio__culto-cuando">
                   {[c.fecha, c.lugar].filter((x) => x?.trim()).join(' · ')}
@@ -1269,6 +1288,146 @@ function Seccion({
       </section>
     )
   }
+  /*
+   * EL CARTEL. Se enseña grande y solo: es la pieza que se comparte, y
+   * metida en una rejilla con otras cosas deja de serlo. Debajo, la ficha
+   * —autor, técnica, presentación— que es lo que nadie encuentra cuando el
+   * cartel se sube como una foto más de la galería.
+   *
+   * Y los de años anteriores en una tira pequeña: la colección de carteles de
+   * una hermandad es media historia gráfica, y ocupa lo que ocupa una fila.
+   */
+  if (tipo === 'cartel') {
+    const conImagen = cartelesOrdenados(web.carteles ?? []).filter((c) => c.imagenDataUrl)
+    if (conImagen.length === 0) return null
+    const [actual, ...anteriores] = conImagen
+    return (
+      <section id="cartel" {...props}>
+        <h2>{titulo(SECCIONES_INFO.cartel.publico)}</h2>
+        <div className="sitio__cartel">
+          <figure className="sitio__cartel-obra">
+            <img
+              src={actual.imagenDataUrl as string}
+              alt={actual.alt.trim() || actual.titulo || 'Cartel'}
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <div className="sitio__cartel-ficha">
+            {actual.anio.trim() && <p className="sitio__cartel-anio">{actual.anio}</p>}
+            <h3>{actual.titulo || `Cartel ${actual.anio}`}</h3>
+            <dl className="sitio__cartel-datos">
+              {actual.autor.trim() && (
+                <div><dt>Autor</dt><dd>{actual.autor}</dd></div>
+              )}
+              {actual.tecnica.trim() && (
+                <div><dt>Técnica</dt><dd>{actual.tecnica}</dd></div>
+              )}
+              {actual.presentacion.trim() && (
+                <div><dt>Presentación</dt><dd>{actual.presentacion}</dd></div>
+              )}
+            </dl>
+            {actual.texto.trim() && <p className="sitio__cartel-texto">{actual.texto}</p>}
+          </div>
+        </div>
+        {anteriores.length > 0 && (
+          <div className="sitio__cartel-antes">
+            <h3>Carteles anteriores</h3>
+            <ul className="sitio__cartel-tira">
+              {anteriores.map((c) => (
+                <li key={c.id}>
+                  <img
+                    src={c.imagenDataUrl as string}
+                    alt={c.alt.trim() || c.titulo || `Cartel ${c.anio}`}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span>{c.anio || c.titulo}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  /*
+   * LA CARIDAD, con las cifras delante.
+   *
+   * Es la pregunta que llega de fuera —«¿y esto en qué se gasta?»— y hasta
+   * ahora la respuesta estaba en un párrafo dentro de Historia. Las cifras van
+   * primero y en grande porque una obra social contada solo con adjetivos no
+   * convence a nadie, y porque son lo único de esta sección que se lee entero
+   * desde un móvil.
+   */
+  if (tipo === 'caridad') {
+    const c = web.caridad
+    const conTexto = c.parrafos.filter((p) => p.texto.trim() || p.subtitulo.trim())
+    if (!c.entradilla.trim() && c.cifras.length === 0 && conTexto.length === 0
+      && c.comoAyudar.length === 0 && c.conQuien.length === 0) return null
+    const correo = c.correo.trim() || web.email || hermandad.email || ''
+    return (
+      <section id="caridad" {...props}>
+        <h2>{titulo(SECCIONES_INFO.caridad.publico)}</h2>
+        {c.entradilla.trim() && <p className="sitio__entradilla">{c.entradilla}</p>}
+        {c.cifras.length > 0 && (
+          <ul className="sitio__caridad-cifras">
+            {c.cifras.map((x) => (
+              <li key={x.id}>
+                <strong>{x.cifra}</strong>
+                <span>{x.concepto}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {conTexto.length > 0 && (
+          <div className="sitio__caridad-texto">
+            {conTexto.map((p) => (
+              <div key={p.id}>
+                {p.subtitulo.trim() && <h3>{p.subtitulo}</h3>}
+                {p.texto.trim() && <p>{p.texto}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+        {c.fotos.length > 0 && (
+          <div className="sitio__caridad-fotos">
+            {c.fotos.map((f, i) => (
+              <img key={i} src={f.url} alt={f.alt} loading="lazy" decoding="async" />
+            ))}
+          </div>
+        )}
+        <div className="sitio__caridad-abajo">
+          {c.comoAyudar.length > 0 && (
+            <div className="sitio__caridad-bloque">
+              <h3>Cómo ayudar</h3>
+              <ul className="sitio__lista-marcada">
+                {c.comoAyudar.map((x, i) => <li key={i}>{x}</li>)}
+              </ul>
+              {/* El correo, aquí y no en Contacto: quien acaba de leer esto es
+                  justo el que quiere escribir, y mandarlo a buscar el
+                  formulario al final de la web es perderlo. */}
+              {correo && (
+                <p className="sitio__caridad-correo">
+                  Escríbenos a <a href={`mailto:${correo}`}>{correo}</a>
+                </p>
+              )}
+            </div>
+          )}
+          {c.conQuien.length > 0 && (
+            <div className="sitio__caridad-bloque">
+              <h3>Con quién trabajamos</h3>
+              <ul className="sitio__caridad-entidades">
+                {c.conQuien.map((x, i) => <li key={i}>{x}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      </section>
+    )
+  }
+
   if (tipo === 'galeria') {
     const albumes = web.albumes.filter((a) => a.fotos.length > 0)
     if (albumes.length === 0) return null
