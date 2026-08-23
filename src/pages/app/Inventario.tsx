@@ -15,6 +15,9 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { enserToRow, rowToEnser } from '../../lib/db/enseres'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
+import ImportarTabla from '../../components/ImportarTabla'
+import { useContextoDeImportacion } from '../../lib/contextoImportacion'
+import { TABLA_ENSERES } from '../../lib/tablasImportables'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { year: 'numeric' })
@@ -42,6 +45,8 @@ export default function Inventario() {
   const [selected, setSelected] = useState<Enser | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
+  const [importarOpen, setImportarOpen] = useState(false)
+  const ctxImportacion = useContextoDeImportacion()
 
   const [prestadoDraft, setPrestadoDraft] = useState('')
 
@@ -135,9 +140,17 @@ export default function Inventario() {
             {stats.total} piezas registradas{hayDatosDeEjemplo() ? ' · datos de ejemplo mientras conectamos la base de datos' : ''}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setFormOpen(true)}>
-          + Nueva pieza
-        </button>
+        <div className="dash-head__actions">
+          {/* Traer el inventario vive junto a «nueva pieza»: es la misma idea
+              —meter piezas— pero de golpe, y es lo primero que hace una
+              hermandad que ya tenía el inventario en un Excel. */}
+          <button className="btn btn-outline" onClick={() => setImportarOpen(true)}>
+            Traer vuestro inventario
+          </button>
+          <button className="btn btn-primary" onClick={() => setFormOpen(true)}>
+            + Nueva pieza
+          </button>
+        </div>
       </div>
 
       <section className="stat-grid">
@@ -370,6 +383,15 @@ export default function Inventario() {
           </div>
         </form>
       </Drawer>
+
+      <ImportarTabla
+        abierto={importarOpen}
+        onCerrar={() => setImportarOpen(false)}
+        tabla={TABLA_ENSERES}
+        existentes={enseres}
+        ctx={ctxImportacion}
+        onImportar={(lista) => setEnseres(lista)}
+      />
     </div>
   )
 }

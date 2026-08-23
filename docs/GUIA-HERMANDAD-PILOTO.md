@@ -58,10 +58,10 @@ preferimos que se vea vacío a que se vea algo que no es vuestro.
 
 **Hermanos → Importar.**
 
-Sacad de donde lo tengáis una hoja de cálculo (Excel, LibreOffice, lo que sea)
-y guardadla como **CSV**. Da igual cómo se llamen las columnas: la aplicación
-os deja emparejarlas a mano y **os enseña una vista previa antes de tocar
-nada**.
+Sacad de donde lo tengáis una hoja de cálculo y **subidla tal cual**: el Excel
+(.xlsx) se lee directamente, no hay que convertirlo a nada. Da igual cómo se
+llamen las columnas: la aplicación os deja emparejarlas a mano y **os enseña
+una vista previa antes de tocar nada**.
 
 Lo que conviene saber:
 
@@ -79,7 +79,37 @@ Lo que conviene saber:
 Empezad importando **veinte fichas**, no las mil. Mirad que hayan quedado como
 esperabais y luego id a por el resto.
 
-### 5 · Y a partir de ahí
+En `docs/censo-de-prueba/` tenéis un censo de mentira con los líos de siempre
+(un DNI repetido, una fila sin nombre, acentos, un IBAN con espacios) para
+ensayar el traspaso antes de subir el vuestro.
+
+### 5 · Lo demás que ya tenéis: cuotas, caja e inventario
+
+El censo no es lo único que se puede traer. Las otras tres tablas van igual —el
+mismo asistente, la misma vista previa, el mismo botón de deshacer— y son las
+que se pierden si no se traen:
+
+| Qué | Dónde | Por qué merece la pena |
+|---|---|---|
+| **Historial de cuotas** | Cuotas → menú **Más** → *Traer el historial de cuotas* | Es la memoria de la tesorería. Sin él no se puede reclamar un impago de hace dos años ni decirle a un hermano desde cuándo está al corriente. |
+| **Libro de caja** | Tesorería → *Traer vuestro libro de caja* | Ingresos y gastos del ejercicio, que es lo que se presenta en el cabildo de cuentas. |
+| **Inventario** | Inventario → *Traer vuestro inventario* | Enseres y textil con su valor de seguro. |
+
+Tres cosas que conviene saber:
+
+- **El censo va primero.** Los recibos se enganchan a cada hermano por su DNI
+  (o su número, o su nombre), así que sin el censo importado no enganchan.
+- **Volver a subir el mismo archivo no duplica nada.** Un apunte de caja se
+  reconoce por fecha, concepto e importe; un recibo, por hermano, ejercicio y
+  concepto. Podéis subir un extracto que se solape con otro anterior.
+- **Antes de importar cuotas, mirad el aviso amarillo.** Si algún recibo entra
+  «pendiente y domiciliado», saldrá en la próxima remesa al banco: si vuestro
+  histórico ya está cobrado, marcadlo como pagado en la hoja.
+
+En `docs/tablas-de-prueba/` hay una hoja de ensayo de cada una, con su LÉEME y
+lo que tiene que salir exactamente.
+
+### 6 · Y a partir de ahí
 
 Ya podéis trabajar normal. Lo que se guarda, se guarda al momento y se ve desde
 cualquier ordenador.

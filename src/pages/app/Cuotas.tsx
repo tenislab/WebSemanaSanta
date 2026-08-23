@@ -47,6 +47,9 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { descargarArchivo, toCsv } from '../../lib/csv'
+import ImportarTabla from '../../components/ImportarTabla'
+import { useContextoDeImportacion } from '../../lib/contextoImportacion'
+import { TABLA_CUOTAS } from '../../lib/tablasImportables'
 import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
 import { getCampana } from '../../lib/campana'
@@ -181,6 +184,8 @@ export default function Cuotas() {
   const [ajustes, setAjustes] = useAjustesCuotas()
 
   const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
+  const [importarOpen, setImportarOpen] = useState(false)
+  const ctxImportacion = useContextoDeImportacion(hermanos)
   // El libro de cuentas. Cobrar un recibo tiene que dejar su apunte aquí: sin
   // esto, el dinero entraba en la hermandad y Tesorería no se enteraba.
   const [, setMovimientos] = useSupabaseTable<Movimiento>(
@@ -666,6 +671,14 @@ export default function Cuotas() {
             </button>
             <button type="button" onClick={() => setAjustesOpen(true)}>
               Ajustes de cuotas
+            </button>
+            {/* El histórico va aquí, con lo demás de cuotas: es lo primero que
+                necesita una hermandad que llega de otro programa, porque sin él
+                Gobergo empieza sin memoria de tesorería —no se puede reclamar un
+                impago de hace dos años ni decir desde cuándo alguien está al
+                corriente. */}
+            <button type="button" onClick={() => setImportarOpen(true)}>
+              Traer el historial de cuotas
             </button>
           </MenuAcciones>
           <button className="btn btn-primary" onClick={abrirNuevaCuota}>
@@ -1470,6 +1483,15 @@ export default function Cuotas() {
           </div>
         </div>
       </Drawer>
+
+      <ImportarTabla
+        abierto={importarOpen}
+        onCerrar={() => setImportarOpen(false)}
+        tabla={TABLA_CUOTAS}
+        existentes={cuotas}
+        ctx={ctxImportacion}
+        onImportar={(lista) => setCuotas(lista)}
+      />
     </div>
   )
 }

@@ -39,3 +39,11 @@ Y además, para comprobar que se leen bien:
 
 Si sale otra cosa, es un fallo: cuéntalo con el botón «Contar un fallo» del
 panel.
+
+## Y después del censo
+
+El censo no es lo único que se puede traer. En
+[`../tablas-de-prueba/LEEME.md`](../tablas-de-prueba/LEEME.md) están las hojas
+de ensayo del **historial de cuotas**, el **libro de caja** y el
+**inventario**. Los DNI son los mismos que los de aquí, así que el recorrido
+completo funciona: primero el censo, después las cuotas.

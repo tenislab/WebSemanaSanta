@@ -1,4 +1,8 @@
 import { limpiarDni } from './dni'
+import {
+  anioDe, detectarSeparador, fechaIso, leerCsv, normalizarCabecera, pareceBinario,
+} from './leerTabla'
+import { proponerColumnas } from './importarTabla'
 import type { EstadoHermano, Hermano } from '../data/hermanos'
 
 /**
@@ -17,79 +21,19 @@ import type { EstadoHermano, Hermano } from '../data/hermanos'
  */
 
 /* ---------------------------------------------------------------------------
-   1. Leer el archivo
+   1. Leer el archivo — que ya no se hace aquí
    --------------------------------------------------------------------------- */
 
-/**
- * Con qué se separan las columnas. En España Excel suele soltar **punto y
- * coma**, porque la coma es el separador decimal; pero medio mundo exporta con
- * coma, y algunos programas antiguos con tabulador. Se detecta en vez de
- * obligar a la hermandad a saberlo.
- */
-export function detectarSeparador(texto: string): ';' | ',' | '\t' {
-  const primera = texto.split(/\r?\n/).find((l) => l.trim() !== '') ?? ''
-  // Se cuenta FUERA de las comillas: un nombre como «Pérez, Ana» tiene comas
-  // que no separan nada, y contándolas a pelo ganaba siempre la coma.
-  let dentro = false
-  const cuenta = { ';': 0, ',': 0, '\t': 0 }
-  for (const c of primera) {
-    if (c === '"') dentro = !dentro
-    else if (!dentro && (c === ';' || c === ',' || c === '\t')) cuenta[c] += 1
-  }
-  if (cuenta['\t'] > cuenta[';'] && cuenta['\t'] > cuenta[',']) return '\t'
-  return cuenta[','] > cuenta[';'] ? ',' : ';'
-}
-
-/**
- * Parte un CSV en filas y celdas, respetando las comillas y los saltos de línea
- * que van dentro de una celda entrecomillada (una dirección de dos líneas, por
- * ejemplo). Partir por `\n` a secas rompe justo esos casos.
- */
-export function leerCsv(texto: string, separador?: string): string[][] {
-  // El BOM que mete Excel se cuela en el nombre de la primera columna y luego
-  // no empareja con nada.
-  const limpio = texto.replace(/^\uFEFF/, '')
-  const sep = separador ?? detectarSeparador(limpio)
-  const filas: string[][] = []
-  let fila: string[] = []
-  let celda = ''
-  let dentro = false
-  for (let i = 0; i < limpio.length; i += 1) {
-    const c = limpio[i]
-    if (dentro) {
-      if (c === '"') {
-        if (limpio[i + 1] === '"') { celda += '"'; i += 1 } // comilla escapada
-        else dentro = false
-      } else celda += c
-    } else if (c === '"') {
-      dentro = true
-    } else if (c === sep) {
-      fila.push(celda); celda = ''
-    } else if (c === '\n') {
-      fila.push(celda); filas.push(fila); fila = []; celda = ''
-    } else if (c !== '\r') {
-      celda += c
-    }
-  }
-  // Lo que quede sin cerrar al final del archivo también cuenta.
-  if (celda !== '' || fila.length > 0) { fila.push(celda); filas.push(fila) }
-  // Las filas vacías del final (un salto de línea suelto) no son datos.
-  return filas.filter((f) => f.some((x) => x.trim() !== ''))
-}
-
 /*
- * `pareceExcel` vivía aquí y miraba si el texto empezaba por «PK». Ya no hace
- * falta: el Excel se LEE (ver `src/lib/leerExcel.ts`), no se rechaza, y
- * reconocerlo se hace sobre los bytes con `pareceXlsx` — mirar los primeros
- * caracteres de un binario decodificado como texto es frágil y aquí no hay
- * motivo para hacerlo así.
+ * LEER EL ARCHIVO NO ES COSA DEL CENSO.
+ *
+ * Partir un CSV, entender una fecha española o normalizar el nombre de una
+ * columna hace falta igual para el censo, para el historial de cuotas, para el
+ * libro de caja y para el inventario. Vive en `lib/leerTabla.ts`, y se
+ * reexporta desde aquí para no romper a quien ya lo importaba de este módulo.
  */
-
-/** Un .xls antiguo, que tampoco es texto. */
-export function pareceBinario(texto: string): boolean {
-  // Un CSV no lleva bytes nulos; un binario, casi siempre.
-  return texto.slice(0, 2000).includes('\u0000')
-}
+export { anioDe, detectarSeparador, fechaIso, leerCsv, pareceBinario }
+const normalizar = normalizarCabecera
 
 /* ---------------------------------------------------------------------------
    2. Emparejar columnas
@@ -159,73 +103,21 @@ const SINONIMOS: Record<CampoImportable, string[]> = {
   estado: ['estado', 'situacion', 'activo', 'situacion actual', 'alta baja', ...CABECERAS_AL_REVES],
 }
 
-/** Quita tildes, signos y mayúsculas para poder comparar nombres de columna. */
-function normalizar(t: string): string {
-  return t
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    /*
-     * Fuera la ordinal y los signos de pregunta.
-     *
-     * En una hoja española esto NO es un adorno: las cabeceras se escriben
-     * «Nº de cuenta» y «¿Está de baja?», y sin quitar el «º» y los «¿?» ni una
-     * ni otra coincidían con nada. La del IBAN se quedaba sin emparejar —había
-     * que buscarla a mano en un desplegable de diez— y la de la baja no se
-     * reconocía como la que pregunta al revés, que es peor: importaba a los
-     * activos como bajas y a las bajas como activos.
-     *
-     * Se quitan en los DOS lados, cabecera y sinónimo, porque la lista de
-     * sinónimos se normaliza con esta misma función.
-     */
-    .replace(/[ºª°¿?¡!#]/g, '')
-    .replace(/[._·/\\-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 /**
  * Propone qué columna del archivo va a qué campo. Devuelve, para cada campo, el
  * índice de columna propuesto, o `null` si no se ha reconocido ninguna.
+ *
+ * El emparejador es el común (`lib/importarTabla.ts`): lo comparten el censo,
+ * el historial de cuotas, el libro de caja y el inventario. Tenerlo dos veces
+ * era tenerlo arreglado en uno y roto en el otro — y sus dos vueltas (primero
+ * lo exacto, después lo que empieza igual) son justo lo que evita que un IBAN
+ * acabe en la casilla del número de hermano.
  */
 export function proponerEmparejado(cabeceras: string[]): Record<CampoImportable, number | null> {
-  const norm = cabeceras.map(normalizar)
-  // Los sinónimos también se normalizan: si no, «D.N.I.» de la hoja nunca
-  // empareja con «dni» de la lista, porque uno lleva puntos y el otro no.
-  const sinonimos = Object.fromEntries(
-    Object.entries(SINONIMOS).map(([k, v]) => [k, v.map(normalizar)]),
-  ) as Record<CampoImportable, string[]>
-
-  // Cabeceras que son, ELLAS ENTERAS, el sinónimo de algún campo. Se apartan
-  // del emparejado por prefijo de más abajo: «numero de cuenta» es un IBAN, y
-  // sin esto se lo llevaba «numero» por empezar igual.
-  const reclamadas = new Set(
-    norm.filter((h) => Object.values(sinonimos).some((lista) => lista.includes(h))),
-  )
-
-  const usadas = new Set<number>()
-  const salida = {} as Record<CampoImportable, number | null>
-
-  // Se recorre en el orden de CAMPOS_IMPORTABLES: los importantes eligen antes,
-  // así «nombre» no se queda sin columna porque se la llevó otro campo.
-  // Primera vuelta: coincidencia exacta, que es la que no se equivoca nunca.
-  for (const { id } of CAMPOS_IMPORTABLES) {
-    const i = norm.findIndex((h, idx) => !usadas.has(idx) && sinonimos[id].includes(h))
-    salida[id] = i === -1 ? null : i
-    if (i !== -1) usadas.add(i)
-  }
-
-  // Segunda vuelta: la cabecera EMPIEZA por el sinónimo («telefono movil» →
-  // telefono). Nunca «contiene» a secas, y nunca sobre una cabecera que ya sea
-  // el nombre exacto de otro campo.
-  for (const { id } of CAMPOS_IMPORTABLES) {
-    if (salida[id] !== null) continue
-    const i = norm.findIndex(
-      (h, idx) => !usadas.has(idx) && !reclamadas.has(h) && sinonimos[id].some((n) => h.startsWith(`${n} `)),
-    )
-    if (i !== -1) { salida[id] = i; usadas.add(i) }
-  }
-  return salida
+  return proponerColumnas(
+    CAMPOS_IMPORTABLES.map((c) => ({ ...c, sinonimos: SINONIMOS[c.id] })),
+    cabeceras,
+  ) as Record<CampoImportable, number | null>
 }
 
 /* ---------------------------------------------------------------------------
@@ -276,70 +168,8 @@ export interface Ensayo {
    importaba de aquí. */
 export { limpiarDni }
 
-/**
- * La fecha de nacimiento, siempre en ISO (aaaa-mm-dd).
- *
- * Antes se guardaba TAL CUAL venía. Y las hojas españolas la traen en
- * dd/mm/aaaa, así que el censo se llenaba de «14/03/1971»: una cadena que no
- * es una fecha para nadie. Consecuencia callada: la segmentación por edad
- * («mandar a los mayores de 65», «los menores de edad necesitan tutor») no
- * encontraba a nadie, porque ninguna de esas cadenas se puede comparar.
- *
- * Devuelve null si no se entiende, y entonces se avisa en la fila en vez de
- * guardar basura.
- */
-export function fechaIso(v: string): string | null {
-  const s = v.trim()
-  if (!s) return null
-  // Ya viene en ISO.
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s)
-  if (iso) return armarFecha(Number(iso[1]), Number(iso[2]), Number(iso[3]))
-  // dd/mm/aaaa, dd-mm-aaaa, dd.mm.aaaa — y con el año de dos cifras.
-  const es = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s)
-  if (es) {
-    let anio = Number(es[3])
-    if (anio < 100) {
-      // Dos cifras: 30 → 2030 no tiene sentido para un nacimiento. El corte en
-      // el año en curso es lo que usan las hojas de cálculo.
-      const dosUltimas = new Date().getFullYear() % 100
-      anio += anio <= dosUltimas ? 2000 : 1900
-    }
-    return armarFecha(anio, Number(es[2]), Number(es[1]))
-  }
-  return null
-}
-
-function armarFecha(anio: number, mes: number, dia: number): string | null {
-  if (anio < 1900 || anio > 2100 || mes < 1 || mes > 12 || dia < 1 || dia > 31) return null
-  // Que la fecha exista de verdad: un 31 de febrero se cuela en cualquier
-  // comprobación de rangos y luego revienta al ordenar por edad.
-  const d = new Date(Date.UTC(anio, mes - 1, dia))
-  if (d.getUTCFullYear() !== anio || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return null
-  return `${String(anio).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
-}
-
 function pareceEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim())
-}
-
-/**
- * El año de antigüedad, de lo que sea que venga: «1998», «12/03/1998»,
- * «1998-03-12». Devuelve null si no hay forma de sacar un año creíble.
- */
-export function anioDe(v: string): number | null {
-  const t = v.trim()
-  if (!t) return null
-  const soloAnio = /^\d{4}$/.exec(t)
-  if (soloAnio) {
-    const n = Number(t)
-    return n >= 1400 && n <= 2200 ? n : null
-  }
-  const conFecha = /(\d{4})/.exec(t)
-  if (conFecha) {
-    const n = Number(conFecha[1])
-    return n >= 1400 && n <= 2200 ? n : null
-  }
-  return null
 }
 
 /** La situación, de lo que venga escrito en la hoja. */

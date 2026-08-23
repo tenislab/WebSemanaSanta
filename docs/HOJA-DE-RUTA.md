@@ -199,6 +199,25 @@ queda por conectar (correo, cobros, dominio) en [`CONECTAR.md`](CONECTAR.md).
 
 ---
 
+## Traspaso: no solo el censo
+
+Una hermandad que cambia de programa no trae solo la lista de hermanos. Trae el
+**historial de cuotas** (la memoria de su tesorería: sin ella no se puede
+reclamar un impago de hace dos años), el **libro de caja** del ejercicio y el
+**inventario** con sus valores de seguro. Las tres se importan igual que el
+censo —mismo asistente, misma vista previa fila a fila, mismo deshacer— desde
+Cuotas, Tesorería e Inventario.
+
+Por dentro es un motor con descriptores: `lib/leerTabla.ts` lee el archivo,
+`lib/importarTabla.ts` hace el ensayo y `lib/tablasImportables.ts` dice qué es
+una cuota, un apunte o un enser. **Añadir una cuarta tabla es escribir un
+descriptor**, no otro importador.
+
+Hojas de ensayo con los líos de siempre, y lo que tiene que salir exactamente,
+en [`tablas-de-prueba/LEEME.md`](tablas-de-prueba/LEEME.md).
+
+---
+
 ## Cobros: lo que falta para cobrar de verdad
 
 Las domiciliaciones SEPA y la suscripción de Stripe están a medias, y lo que

@@ -22,6 +22,9 @@ import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
+import ImportarTabla from '../../components/ImportarTabla'
+import { useContextoDeImportacion } from '../../lib/contextoImportacion'
+import { TABLA_MOVIMIENTOS } from '../../lib/tablasImportables'
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -63,6 +66,8 @@ export default function Tesoreria() {
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   /** Por qué no se ha podido guardar el movimiento (antes se salía en silencio). */
   const [errorAlta, setErrorAlta] = useState<string | null>(null)
+  const [importarOpen, setImportarOpen] = useState(false)
+  const ctxImportacion = useContextoDeImportacion()
 
   const filtered = useMemo(() => {
     return movimientos
@@ -155,9 +160,17 @@ export default function Tesoreria() {
             {movimientos.length} movimientos{hayDatosDeEjemplo() ? ' · datos de ejemplo mientras conectamos la base de datos' : ''}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={abrirNuevo}>
-          + Nuevo movimiento
-        </button>
+        <div className="dash-head__actions">
+          {/* Traer el libro de caja al lado de «nuevo movimiento»: es lo mismo
+              —meter apuntes— pero de golpe. Lo que trae una hermandad el primer
+              día es el ejercicio entero en un Excel o el extracto del banco. */}
+          <button className="btn btn-outline" onClick={() => setImportarOpen(true)}>
+            Traer vuestro libro de caja
+          </button>
+          <button className="btn btn-primary" onClick={abrirNuevo}>
+            + Nuevo movimiento
+          </button>
+        </div>
       </div>
 
       <section className="stat-grid">
@@ -383,6 +396,15 @@ export default function Tesoreria() {
           {errorAlta && <p className="form-hint form-hint--error">{errorAlta}</p>}
         </form>
       </Drawer>
+
+      <ImportarTabla
+        abierto={importarOpen}
+        onCerrar={() => setImportarOpen(false)}
+        tabla={TABLA_MOVIMIENTOS}
+        existentes={movimientos}
+        ctx={ctxImportacion}
+        onImportar={(lista) => setMovimientos(lista)}
+      />
     </div>
   )
 }
