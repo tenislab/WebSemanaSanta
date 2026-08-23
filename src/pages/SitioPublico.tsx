@@ -1,6 +1,6 @@
 import { asegurarFuentesDeLaWeb } from '../lib/fuentesDeLaWeb'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import {
   PAREJAS_TIPOGRAFICAS,
   ajustesDeLaWeb,
@@ -24,9 +24,10 @@ import { constaLaSuscripcion, getSuscripcion, tieneCapacidad } from '../lib/susc
 import { haySesionAbierta } from '../lib/sesion'
 import { LogoMark } from '../components/Logo'
 import { icsDeUnActo, nombreDeArchivoIcs } from '../lib/ics'
+import { contarVisita } from '../lib/visitas'
 import SitioContenido, { AvisoFotos, FotoConMarca, Galeria, Parrafos, PieSitio, TarjetaNoticia } from '../components/SitioContenido'
 import { cultosDelCalendario } from '../lib/cultosDelCalendario'
-import { fijarHermandadDeLaPagina } from '../lib/multiHermandad'
+import { fijarHermandadDeLaPagina, getHermandadDeLaPagina } from '../lib/multiHermandad'
 import { isSupabaseConfigured } from '../lib/supabase'
 import {
   baseDeLaWeb,
@@ -62,6 +63,14 @@ export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPub
   // Si la web ya viene dada (se ha entrado por el dominio de la hermandad), no
   // hay nada que esperar: ya está buscada.
   const [esperando, setEsperando] = useState(isSupabaseConfigured && !webPorDominio)
+  /*
+   * De qué hermandad es esta página, como ESTADO y no solo como variable de
+   * módulo: hace falta para que el contador de visitas de abajo espere a
+   * saberlo. Con dominio propio ya viene resuelto desde `Raiz`.
+   */
+  const [deQuienEs, setDeQuienEs] = useState<string | null>(
+    webPorDominio ? getHermandadDeLaPagina() : null,
+  )
 
   // La web de ESTA hermandad, buscada por el slug de la dirección.
   //
@@ -86,12 +95,30 @@ export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPub
       // encontrarla, alguien que pasa de la web de una hermandad a la de otra
       // y falla la segunda seguiría escribiendo al buzón de la primera.
       fijarHermandadDeLaPagina(r?.hermandadId ?? null)
+      setDeQuienEs(r?.hermandadId ?? null)
       setEsperando(false)
     })
     return () => {
       cancelado = true
     }
   }, [slug, webPorDominio])
+
+  /*
+   * LA VISITA SE CUENTA AQUÍ, y depende de la RUTA a propósito.
+   *
+   * Esta es una sola página que se repinta: al pasar de la portada a una
+   * noticia el navegador no recarga nada, así que contando solo al arrancar se
+   * perdía todo lo que no fuera la primera página que se abre — que es
+   * justamente lo que la hermandad quiere saber, si se leen las noticias.
+   *
+   * Sin IP, sin cookies y sin seguir a nadie: solo un número por día y por
+   * página. Ver `lib/visitas.ts`.
+   */
+  const { pathname } = useLocation()
+  useEffect(() => {
+    if (!deQuienEs) return
+    void contarVisita(pathname, deQuienEs)
+  }, [pathname, deQuienEs])
 
   const guardadaAqui = getWebPublica()
   const web = traida ?? guardadaAqui

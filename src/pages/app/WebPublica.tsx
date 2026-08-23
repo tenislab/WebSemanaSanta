@@ -84,6 +84,8 @@ import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml } from '../../lib/seoW
 import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
 import { comprimirImagen, leerArchivo } from '../../lib/imagen'
 import { guardarImagen, hayAlmacen, mudarImagenes, sustituirImagenes } from '../../lib/almacenImagenes'
+import { SIN_VISITAS, diaCorto, nombreDeRuta, resumenDeVisitas, variacion, type ResumenDeVisitas } from '../../lib/visitas'
+import { borrarSuscriptor, getSuscriptores, losQueSePuedenAvisar, type Suscriptor } from '../../lib/suscriptoresWeb'
 import {
   TIPOS_MENSAJE, actualizarMensajeWeb, borrarMensajeWeb, devolverMensajeWeb, getMensajesWeb,
   resumenMensaje, sinLeer, useMensajesWeb,
@@ -211,7 +213,7 @@ const ALTURAS: { id: AlturaHero; label: string }[] = [
   { id: 'completa', label: 'Pantalla completa' },
 ]
 
-type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'cartel' | 'caridad' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta' | 'donativos' | 'loteria' | 'buzon'
+type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'visitas' | 'avisos' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'cartel' | 'caridad' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta' | 'donativos' | 'loteria' | 'buzon'
 
 /**
  * A qué sección de la web corresponde cada pestaña del editor: la vista previa
@@ -317,6 +319,8 @@ const GRUPOS_PESTANAS: { titulo: string; items: { id: Pestana; label: string; ic
     items: [
       { id: 'contacto', label: 'Contacto y mapa', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg> },
       { id: 'buzon', label: 'Buzón de la web', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 6h16v12H4z" /><path d="m4 7 8 6 8-6" /></svg> },
+      { id: 'visitas', label: 'Visitas', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 20V9M10 20V4M16 20v-7M22 20H2" /></svg> },
+      { id: 'avisos', label: 'Avisos por correo', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" /><path d="M10.5 20a2 2 0 0 0 3 0" /></svg> },
       { id: 'compartir', label: 'Al compartir', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="m8.2 10.8 7.6-4.3M8.2 13.2l7.6 4.3" /></svg> },
     ],
   },
@@ -790,6 +794,8 @@ export default function WebPublica() {
           {pestana === 'donativos' && <DonativosTab web={web} hermandad={hermandad} editar={editar} />}
           {pestana === 'loteria' && <LoteriaTab web={web} editar={editar} />}
           {pestana === 'buzon' && <BuzonWebTab />}
+          {pestana === 'visitas' && <VisitasTab />}
+          {pestana === 'avisos' && <AvisosTab web={web} editar={editar} />}
           {pestana === 'contacto' && <ContactoTab web={web} hermandad={hermandad} editar={editar} />}
           {pestana === 'compartir' && <CompartirTab web={web} hermandad={hermandad} editar={editar} enlace={enlace} />}
         </div>
@@ -3794,6 +3800,302 @@ function BoletinesTab({ web, editar, actualizar }: { web: WebPublica; editar: Ed
  * primero que ve la gente de la hermandad, y hasta ahora salía vacío o con lo
  * que el navegador pillara.
  */
+/* ---------------------------- Avisos por correo --------------------------- */
+/**
+ * QUIEN SIGUE A LA HERMANDAD SIN SER HERMANO.
+ *
+ * Vecinos del barrio, devotos, gente que se crió allí y vive fuera. Se enteran
+ * de los cultos por casualidad, porque los avisos van al censo y ellos no están
+ * en el censo — y no pueden estarlo: de ahí cuelgan cuotas, papeletas y
+ * antigüedad.
+ */
+function AvisosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
+  const [lista, setLista] = useState<Suscriptor[]>([])
+  const [cargando, setCargando] = useState(true)
+
+  async function recargar() {
+    setCargando(true)
+    setLista(await getSuscriptores())
+    setCargando(false)
+  }
+  useEffect(() => { void recargar() }, [])
+
+  const confirmados = losQueSePuedenAvisar(lista)
+  const sinConfirmar = lista.length - confirmados.length
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head">
+        <h2 className="settings-card__title">Avisos por correo</h2>
+        <label className={`interruptor${web.avisosDeCultos ? ' interruptor--on' : ''}`}>
+          <input
+            type="checkbox"
+            checked={web.avisosDeCultos}
+            onChange={(e) => editar('avisosDeCultos', e.target.checked)}
+          />
+          <span />
+          <span className="interruptor__texto">
+            <b>{web.avisosDeCultos ? 'Encendido' : 'Apagado'}</b>
+            <small>
+              {web.avisosDeCultos
+                ? 'Al final de los cultos sale «Avísame de los cultos».'
+                : 'Nadie puede apuntarse desde la web.'}
+            </small>
+          </span>
+        </label>
+      </div>
+      <p className="form-hint">
+        Alrededor de una hermandad hay mucha más gente que hermanos. Esta lista es para ellos: un
+        correo y poco más. No entran en el censo — el censo es de hermanos, y de ahí cuelgan las
+        cuotas y las papeletas.
+      </p>
+
+      {/*
+        LO QUE LA HERMANDAD SE COMPROMETE A HACER, escrito antes de encenderlo y
+        no en la letra pequeña. Recoger correos no es gratis: hay obligaciones, y
+        enterarse después es como acaban las multas.
+      */}
+      <div className="banner-inline banner-inline--accent">
+        <span>
+          Al encenderlo, la hermandad se compromete a tres cosas, y las tres las hace la
+          aplicación sola: pedir confirmación por correo antes de escribir a nadie, poner el
+          enlace de baja en cada aviso, y guardar qué aceptó cada uno y cuándo.
+        </span>
+      </div>
+
+      {cargando && <p className="form-hint">Cargando…</p>}
+
+      {!cargando && (
+        <>
+          <section className="stat-grid">
+            <div className="stat-tile">
+              <span className="stat-tile__label">Se les puede avisar</span>
+              <span className="stat-tile__value">{confirmados.length}</span>
+              <span className="stat-tile__trend stat-tile__trend--ok">Correo confirmado</span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-tile__label">Sin confirmar</span>
+              <span className="stat-tile__value">{sinConfirmar}</span>
+              {/*
+                Se explica por qué NO se les escribe. Un número de «pendientes»
+                sin explicar se lee como un fallo, y lo que es es la protección:
+                sin confirmar, cualquiera apunta el correo de otro.
+              */}
+              <span className="stat-tile__trend stat-tile__trend--neutral">
+                No han abierto el enlace del correo
+              </span>
+            </div>
+          </section>
+
+          {lista.length === 0 && (
+            <p className="form-hint">
+              Todavía no se ha apuntado nadie.{' '}
+              {web.avisosDeCultos
+                ? 'El formulario sale al final de la sección de Cultos.'
+                : 'Enciéndelo arriba para que salga el formulario en la web.'}
+            </p>
+          )}
+
+          {lista.length > 0 && (
+            <table className="table-card">
+              <thead>
+                <tr><th>Correo</th><th>Nombre</th><th>Desde</th><th>Estado</th><th /></tr>
+              </thead>
+              <tbody>
+                {lista.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.email}</td>
+                    <td>{s.nombre || '—'}</td>
+                    <td>{diaCorto(s.altaEn.slice(0, 10))}</td>
+                    <td>
+                      <span className={`pill ${s.confirmado ? 'pill--ok' : 'pill--off'}`}>
+                        {s.confirmado ? 'Confirmado' : 'Sin confirmar'}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm rgpd-borrar"
+                        onClick={async () => {
+                          if (!window.confirm(`¿Quitar a ${s.email} de la lista de avisos?`)) return
+                          if (await borrarSuscriptor(s.id)) await recargar()
+                        }}
+                      >
+                        Quitar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+/* -------------------------------- Visitas -------------------------------- */
+/**
+ * EL CONTADOR DE VISITAS.
+ *
+ * «¿Entra alguien en la web?» es la primera pregunta después de publicarla.
+ *
+ * No es Google Analytics y no lo pretende: no hay embudos, ni países, ni de
+ * dónde vienen. Hay tres cosas —cuántas, si suben o bajan, y qué se lee— y
+ * ninguna necesita el cartel de las cookies, porque no se guarda ni una IP.
+ * Ver `lib/visitas.ts`.
+ */
+function VisitasTab() {
+  const [dias, setDias] = useState(30)
+  const [datos, setDatos] = useState<ResumenDeVisitas>(SIN_VISITAS)
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => {
+    let vivo = true
+    setCargando(true)
+    resumenDeVisitas(dias).then((r) => {
+      if (!vivo) return
+      setDatos(r)
+      setCargando(false)
+    })
+    return () => { vivo = false }
+  }, [dias])
+
+  const cambio = variacion(datos.total, datos.totalAnterior)
+  // El día más alto manda la altura de las barras. Con el máximo a cero —web
+  // recién publicada— se dividiría por cero y no se pintaría nada.
+  const techo = datos.dias.reduce((n, d) => (d.visitas > n ? d.visitas : n), 0) || 1
+
+  return (
+    <section className="settings-card">
+      <div className="settings-card__head">
+        <h2 className="settings-card__title">Visitas</h2>
+        <div className="visitas-periodo" role="group" aria-label="Periodo">
+          {[7, 30, 90].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={`chip${dias === n ? ' chip--active' : ''}`}
+              aria-pressed={dias === n}
+              onClick={() => setDias(n)}
+            >
+              {n} días
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/*
+        SE DICE LO QUE ES Y LO QUE NO. Un número sin explicar se lee como
+        «personas que han entrado», y no lo es: si alguien abre tres páginas,
+        son tres. Prefiero un número honesto a uno que impresione más.
+      */}
+      <p className="form-hint">
+        Visitas a páginas, contadas por nosotros. Sin cookies, sin guardar
+        direcciones IP y sin seguir a nadie — por eso vuestra web no necesita el
+        cartel de las cookies. No dice cuántas personas distintas entran: eso no
+        se puede saber sin seguirlas.
+      </p>
+
+      {cargando && <p className="form-hint">Contando…</p>}
+
+      {!cargando && !datos.hayDatos && (
+        <div className="banner-inline banner-inline--alerta">
+          <span>
+            No se ha podido leer el contador. Si es la primera vez, falta ejecutar{' '}
+            <code>supabase/visitas-web.sql</code> en Supabase.
+          </span>
+        </div>
+      )}
+
+      {!cargando && datos.hayDatos && datos.total === 0 && (
+        <p className="form-hint">
+          Todavía no hay visitas en este periodo. Si acabas de publicar la web, dale unos días — o
+          manda el enlace por el grupo de la hermandad, que es lo que de verdad la mueve.
+        </p>
+      )}
+
+      {!cargando && datos.hayDatos && datos.total > 0 && (
+        <>
+          <section className="stat-grid">
+            <div className="stat-tile">
+              <span className="stat-tile__label">Visitas</span>
+              <span className="stat-tile__value">{datos.total.toLocaleString('es-ES')}</span>
+              <span className="stat-tile__trend stat-tile__trend--neutral">Últimos {dias} días</span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-tile__label">Respecto al periodo anterior</span>
+              {/*
+                Sin nada con qué comparar no se pinta un «+100%», que sería
+                inventarse una subida donde solo hay un principio.
+              */}
+              <span className="stat-tile__value">
+                {cambio === null ? '—' : `${cambio > 0 ? '+' : ''}${cambio}%`}
+              </span>
+              <span className={`stat-tile__trend stat-tile__trend--${cambio === null ? 'neutral' : cambio >= 0 ? 'ok' : 'warn'}`}>
+                {cambio === null
+                  ? 'Todavía no hay con qué comparar'
+                  : `Antes: ${datos.totalAnterior.toLocaleString('es-ES')}`}
+              </span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-tile__label">Media al día</span>
+              <span className="stat-tile__value">{Math.round(datos.total / dias).toLocaleString('es-ES')}</span>
+              <span className="stat-tile__trend stat-tile__trend--neutral">{datos.paginas.length} páginas vistas</span>
+            </div>
+          </section>
+
+          {/*
+            El gráfico, con TODOS los días aunque estén a cero. Saltándose los
+            vacíos, dos picos separados por una semana muerta se unen con una
+            línea recta y parece que hubo visitas cuando no las hubo.
+          */}
+          <div className="visitas-grafico" role="img" aria-label={`Visitas por día de los últimos ${dias} días`}>
+            {datos.dias.map((d) => (
+              <span
+                key={d.dia}
+                className="visitas-grafico__barra"
+                style={{ height: `${Math.max(2, (d.visitas / techo) * 100)}%` }}
+                title={`${diaCorto(d.dia)}: ${d.visitas} ${d.visitas === 1 ? 'visita' : 'visitas'}`}
+              />
+            ))}
+          </div>
+          <p className="visitas-grafico__pie">
+            <span>{diaCorto(datos.dias[0]?.dia ?? '')}</span>
+            <span>Máximo en un día: {techo}</span>
+            <span>{diaCorto(datos.dias[datos.dias.length - 1]?.dia ?? '')}</span>
+          </p>
+
+          <h3 className="visitas-titulo">Lo más visto</h3>
+          <table className="table-card visitas-tabla">
+            <thead>
+              <tr><th>Página</th><th className="num">Visitas</th><th className="num">%</th></tr>
+            </thead>
+            <tbody>
+              {/* Diez y no todas: con cuarenta noticias la tabla se come la
+                  pantalla y lo que importa está en las primeras. */}
+              {datos.paginas.slice(0, 10).map((p) => (
+                <tr key={p.ruta}>
+                  <td>
+                    <b>{nombreDeRuta(p.ruta)}</b>
+                    <small className="visitas-tabla__ruta">{p.ruta}</small>
+                  </td>
+                  <td className="num">{p.visitas.toLocaleString('es-ES')}</td>
+                  <td className="num">{Math.round((p.visitas / datos.total) * 100)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {datos.paginas.length > 10 && (
+            <p className="form-hint">Y {datos.paginas.length - 10} páginas más con menos visitas.</p>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 function CompartirTab({
   web, hermandad, editar, enlace,
 }: {

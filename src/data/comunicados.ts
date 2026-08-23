@@ -51,12 +51,25 @@ export interface Comunicado {
 
 export const CANALES: Canal[] = ['Email', 'SMS', 'WhatsApp', 'Push', 'Redes sociales']
 
+/**
+ * El nombre exacto del segmento de los suscriptores de la web.
+ *
+ * En una constante y no escrito a mano en las dos puntas: es lo que compara
+ * `Comunicados` para saber que este comunicado no va al censo sino a la lista
+ * de fuera. Con el texto suelto, cambiar una tilde en el catálogo dejaría de
+ * reconocerlo y el comunicado se mandaría al vacío quedando como «Enviado».
+ */
+export const SEGMENTO_SUSCRIPTORES = 'Suscriptores de la web'
+
 export const SEGMENTOS: string[] = [
   'Todos los hermanos',
   'Hermanos con cuota al día',
   'Hermanos con cuota pendiente',
   'Nazarenos con papeleta de sitio',
   'Junta de Gobierno',
+  // Los de fuera: vecinos y devotos que se apuntaron en la web. No son
+  // hermanos y no están en el censo — ver `lib/suscriptoresWeb.ts`.
+  SEGMENTO_SUSCRIPTORES,
 ]
 
 export const REDES_SOCIALES: RedSocial[] = ['Facebook', 'Instagram', 'X', 'YouTube', 'TikTok']

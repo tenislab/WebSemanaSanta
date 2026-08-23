@@ -89,18 +89,30 @@ create or replace function sembrar_permisos_de_fabrica(p_hermandad_id uuid) retu
   language sql security definer set search_path = public as $$
     insert into permisos_cargo (hermandad_id, cargo, modulo_id)
     select p_hermandad_id, cargo, modulo_id from (values
+      -- ESTA LISTA TIENE QUE SER LA MISMA que `PERMISOS_POR_DEFECTO` de
+      -- `src/lib/permisos.ts`. Son dos copias de lo mismo en dos idiomas, y una
+      -- prueba las compara para que no se vuelvan a despegar.
+      --
+      -- Se despegaron: faltaban «eventos» en cinco cargos y «web» en dos, y el
+      -- Hermano Mayor —que lo puede todo por definición— se quedaba sin poder
+      -- guardar un evento ni tocar la web. La pantalla se lo ofrecía; la base
+      -- lo rechazaba.
       ('Hermano Mayor','hermanos'),('Hermano Mayor','cortejo'),('Hermano Mayor','cuotas'),
       ('Hermano Mayor','papeletas'),('Hermano Mayor','tesoreria'),('Hermano Mayor','inventario'),
-      ('Hermano Mayor','archivo'),('Hermano Mayor','comunicados'),('Hermano Mayor','informes'),
+      ('Hermano Mayor','archivo'),('Hermano Mayor','eventos'),('Hermano Mayor','comunicados'),
+      ('Hermano Mayor','informes'),('Hermano Mayor','web'),
       ('Hermano Mayor','personal'),('Hermano Mayor','configuracion'),
       ('Secretario/a','hermanos'),('Secretario/a','cortejo'),('Secretario/a','papeletas'),
-      ('Secretario/a','archivo'),('Secretario/a','comunicados'),('Secretario/a','informes'),
+      ('Secretario/a','archivo'),('Secretario/a','eventos'),('Secretario/a','comunicados'),
+      ('Secretario/a','informes'),('Secretario/a','web'),
       ('Tesorero/a','tesoreria'),('Tesorero/a','cuotas'),('Tesorero/a','inventario'),('Tesorero/a','informes'),
       ('Fiscal','archivo'),('Fiscal','informes'),
-      ('Mayordomo/Prioste','cortejo'),('Mayordomo/Prioste','inventario'),('Mayordomo/Prioste','informes'),
+      ('Mayordomo/Prioste','cortejo'),('Mayordomo/Prioste','inventario'),
+      ('Mayordomo/Prioste','eventos'),('Mayordomo/Prioste','informes'),
       ('Diputado/a Mayor de Gobierno','hermanos'),('Diputado/a Mayor de Gobierno','cortejo'),
-      ('Diputado/a Mayor de Gobierno','papeletas'),('Diputado/a Mayor de Gobierno','informes'),
-      ('Vocal','comunicados'),('Vocal','informes')
+      ('Diputado/a Mayor de Gobierno','papeletas'),('Diputado/a Mayor de Gobierno','eventos'),
+      ('Diputado/a Mayor de Gobierno','informes'),
+      ('Vocal','eventos'),('Vocal','comunicados'),('Vocal','informes')
     ) as f(cargo, modulo_id)
     on conflict do nothing
   $$;
@@ -116,6 +128,39 @@ begin
     perform sembrar_permisos_de_fabrica(h);
   end loop;
 end $$;
+
+/* ---------------------------------------------------------------------------
+   LOS DOS MÓDULOS QUE NUNCA SE SEMBRARON: «eventos» y «web».
+
+   La lista de arriba se quedó corta desde el principio. Faltaba «eventos» en
+   cinco cargos y «web» en dos, así que en cualquier hermandad ya creada el
+   Hermano Mayor —que lo puede todo por definición— no podía guardar un evento
+   ni publicar la web: la pantalla se lo ofrecía, la política lo rechazaba.
+
+   Y SE AÑADEN SOLO ESTOS DOS, no se resiembra todo. Volver a sembrar la lista
+   entera devolvería permisos que una hermandad haya quitado a propósito —«al
+   Secretario no le dejo tocar el censo»— y eso es peor que el fallo que se
+   viene a arreglar. Nadie ha podido quitar a mano algo que nunca estuvo.
+
+   Es seguro repetirlo.
+--------------------------------------------------------------------------- */
+insert into permisos_cargo (hermandad_id, cargo, modulo_id)
+select h.id, f.cargo, f.modulo_id
+from hermandades h
+cross join (values
+  ('Hermano Mayor','eventos'),('Hermano Mayor','web'),
+  ('Secretario/a','eventos'),('Secretario/a','web'),
+  ('Mayordomo/Prioste','eventos'),
+  ('Diputado/a Mayor de Gobierno','eventos'),
+  ('Vocal','eventos')
+) as f(cargo, modulo_id)
+-- Solo a los cargos que esta hermandad ya reconoce: si nunca se le sembró
+-- «Vocal», no se le inventa uno ahora.
+where exists (
+  select 1 from permisos_cargo pc
+  where pc.hermandad_id = h.id and pc.cargo = f.cargo
+)
+on conflict do nothing;
 
 -- --- 4. Y que toda hermandad nueva nazca con los suyos ----------------------
 --

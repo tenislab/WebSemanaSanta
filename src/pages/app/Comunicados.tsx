@@ -11,6 +11,7 @@ import {
   COMUNICADOS_INICIALES,
   REDES_SOCIALES,
   SEGMENTOS,
+  SEGMENTO_SUSCRIPTORES,
   type Canal,
   type Comunicado,
   type EstadoComunicado,
@@ -59,6 +60,9 @@ import {
 import IconoRed from '../../components/IconoRed'
 import { getWebPublica } from '../../lib/webPublica'
 import { baseDeLaWeb } from '../../lib/seoWeb'
+import {
+  avisarASuscriptores, getSuscriptores, losQueSePuedenAvisar, type Suscriptor,
+} from '../../lib/suscriptoresWeb'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -72,10 +76,30 @@ const PREFIJO_ETIQUETA = 'Etiqueta: '
  *   · `reconocido` si sabemos siquiera a quién se refiere. `false` no es «no
  *                  hay nadie»: es «no lo entiendo», y hay que decirlo.
  */
+/**
+ * Alguien a quien solo le llega el correo: no tiene ficha en el censo ni área
+ * donde recibir el aviso.
+ *
+ * Era `MiembroPersonal[]` —la junta con cuenta pero sin ficha— y de aquí se
+ * usan tres campos: id, nombre y correo. Al abrirlo a esos tres caben también
+ * los suscriptores de la web, que son exactamente el mismo caso: un correo y
+ * un nombre, y nada más.
+ */
+interface SoloCorreo {
+  id: string
+  nombre: string
+  email: string
+}
+
 interface Alcance {
   hermanos: Hermano[]
-  soloCorreo: MiembroPersonal[]
+  soloCorreo: SoloCorreo[]
   reconocido: boolean
+  /**
+   * Este comunicado va a la lista de FUERA, no al censo. Cambia cómo se manda:
+   * uno a uno, cada correo con su enlace de baja.
+   */
+  aSuscriptores?: boolean
 }
 
 function fmt(iso: string | null) {
@@ -108,6 +132,13 @@ export default function Comunicados() {
   const [cuentas, setCuentas] = useCuentasSociales()
   const canales = useLista(CLAVES_CATALOGOS.canalesComunicado, CANALES)
   const segmentos = useLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS)
+  /*
+   * Los de fuera: vecinos y devotos apuntados en la web. Se traen una vez al
+   * abrir la pantalla — no cambian mientras se escribe un comunicado, y
+   * volverlos a pedir en cada tecla sería una consulta por letra.
+   */
+  const [suscriptores, setSuscriptores] = useState<Suscriptor[]>([])
+  useEffect(() => { void getSuscriptores().then(setSuscriptores) }, [])
   const [etiquetas] = useEtiquetas()
   /**
    * `leerDatos` y no `leerPersistido`: con base de datos, lista vacía en vez
@@ -179,6 +210,25 @@ export default function Comunicados() {
   function resolverDestinatario(
     c: Pick<Comunicado, 'destinatarios' | 'criterios'>,
   ): Alcance {
+    /*
+     * LOS DE FUERA, LO PRIMERO. Vecinos y devotos que se apuntaron en la web:
+     * no están en el censo, así que ninguna de las reglas de abajo —que buscan
+     * hermanos— los encontraría, y el comunicado saldría con alcance cero
+     * quedando marcado como «Enviado».
+     *
+     * Y solo los CONFIRMADOS: a quien no abrió el enlace del correo no se le
+     * escribe. Ver `lib/suscriptoresWeb.ts`.
+     */
+    if (c.destinatarios === SEGMENTO_SUSCRIPTORES) {
+      return {
+        hermanos: [],
+        soloCorreo: losQueSePuedenAvisar(suscriptores).map((s) => ({
+          id: s.id, nombre: s.nombre || s.email, email: s.email,
+        })),
+        reconocido: true,
+        aSuscriptores: true,
+      }
+    }
     if (c.criterios) {
       return {
         hermanos: filtrarSegmento(hermanos, c.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota),
@@ -440,6 +490,45 @@ export default function Comunicados() {
     // nombre de la hermandad. Antes esta pantalla se montaba su propio HTML a
     // mano, así que el comunicado —que es el correo que MÁS se manda— era el
     // único que llegaba sin identificar de quién era.
+    /*
+     * A LOS DE FUERA SE LES ESCRIBE UNO A UNO.
+     *
+     * No es un descuido: cada suscriptor lleva SU enlace de baja, con su llave.
+     * Metidos todos en el mismo envío no cabe más que un enlace, así que o no
+     * se pone —y entonces la hermandad está mandando correo sin salida, que es
+     * lo que multa la AEPD— o se pone uno que daría de baja a otra persona.
+     *
+     * Al censo se le sigue mandando de una vez: el hermano tiene su área para
+     * apagar los avisos, no le hace falta enlace de baja.
+     */
+    if (alcance.aSuscriptores) {
+      const origen = window.location.origin
+      const { enviados, fallidos } = await avisarASuscriptores(
+        suscriptores,
+        c.titulo,
+        (baja) => {
+          const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
+          return {
+            texto: `${texto}\n\n—\nSi no quieres recibir más avisos: ${baja}`,
+            html: `${html}<p style="font-size:12px;color:#777;margin-top:24px">`
+              + `Recibes esto porque te apuntaste en la web de la hermandad. `
+              + `<a href="${baja}">Darme de baja</a>.</p>`,
+          }
+        },
+        (m) => enviarCorreo(m),
+        origen,
+      )
+      setEnvioCorreo(
+        fallidos === 0
+          ? { estado: 'hecho', texto: `Enviado por correo a ${enviados} suscriptores de la web.` }
+          : {
+            estado: 'error',
+            texto: `Enviado a ${enviados}. A ${fallidos} no se ha podido: revisa Configuración → Correo.`,
+          },
+      )
+      return
+    }
+
     const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
     const r = await enviarCorreo({ para: direcciones, asunto: c.titulo, texto, html })
     /*

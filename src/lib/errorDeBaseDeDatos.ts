@@ -74,6 +74,25 @@ export function traducirErrorDeEscritura(
   const cosa = comoSeLlama(tabla)
 
   if (esRechazoDePermisos(mensaje, codigo)) {
+    /*
+     * LEER Y ESCRIBIR NO SE EXPLICAN IGUAL, y decirlo mal es peor que no
+     * decirlo. «No se ha guardado nada» delante de alguien que solo estaba
+     * mirando una lista le hace buscar qué ha perdido; y sobre todo le oculta
+     * lo que de verdad pasa, que es que la lista que tiene delante ESTÁ
+     * INCOMPLETA — que es el caso de las solicitudes de alta que no aparecían.
+     */
+    if (operacion === 'leer') {
+      return {
+        mensaje:
+          `Tu cuenta no tiene permiso para leer ${cosa}. Lo que ves en pantalla puede estar `
+          + 'incompleto o vacío, y NO significa que no haya nada.',
+        queHacer:
+          'Entra con la cuenta titular (la que creó la hermandad), que lo puede todo; o ve a '
+          + 'Personal y permisos y dale a tu cargo ese módulo. Para saber exactamente qué falta, '
+          + 'ejecuta supabase/POR-QUE-NO-PUEDO.sql en Supabase.',
+        original: mensaje,
+      }
+    }
     return {
       mensaje:
         `Tu cuenta no tiene permiso para escribir en ${cosa}, así que no se ha guardado nada. `

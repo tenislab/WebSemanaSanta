@@ -34,6 +34,13 @@ arreglar con la hermandad delante. Si sale algo en rojo, se resuelve primero.
    | 6 | `supabase/mensajes-web.sql` | Buzón de los formularios |
    | 7 | `supabase/storage-archivo.sql` | Adjuntos del archivo documental |
    | 8 | `supabase/imagenes.sql` | El almacén de fotos: sin él, la web lleva las imágenes dentro y no salen al compartir el enlace |
+   | 9 | `supabase/visitas-web.sql` | El contador de visitas de la web. Sin cookies: no hace falta cartel |
+   | 10 | `supabase/suscriptores-web.sql` | «Avísame de los cultos» para vecinos y devotos que no son hermanos |
+   | 11 | `supabase/copias.sql` | La copia de seguridad semanal, sola. Sin esto solo hay copia si alguien pulsa el botón |
+
+   Y aparte, cuando esté todo lo anterior: enciende `pg_cron` en
+   *Database → Extensions* y ejecuta `supabase/tareas-programadas.sql`. Va
+   suelto porque el SQL no puede activar la extensión por su cuenta.
 
    El paso 3 **no es opcional y no se puede dejar para luego**. Léelo antes de
    ejecutarlo: al final explica cómo dar de alta al titular a mano.

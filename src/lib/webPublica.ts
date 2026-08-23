@@ -877,6 +877,15 @@ export interface WebPublica {
   /** El botón de «Hazte hermano» abre el formulario de alta en la propia web. */
   altaDesdeWeb: boolean
   /**
+   * «Avísame de los cultos» al final de la sección de Cultos, para quien NO es
+   * hermano: vecinos, devotos, gente que se crió en el barrio y vive fuera.
+   *
+   * Va apagado de fábrica porque recoger correos obliga a la hermandad a
+   * cumplir unas cuantas cosas —confirmar, poder darse de baja, guardar la
+   * prueba del consentimiento—, y eso lo decide ella, no nosotros.
+   */
+  avisosDeCultos: boolean
+  /**
    * Aviso en la portada de que está abierto el reparto de papeletas de sitio,
    * con enlace al área del hermano. Solo sale mientras la ventana esté abierta.
    */
@@ -1184,6 +1193,7 @@ export const WEB_PUBLICA_INICIAL: WebPublica = {
   },
   carteles: [],
   caridad: CARIDAD_VACIA,
+  avisosDeCultos: false,
   formularioContacto: true,
   textoProteccionDatos:
     'Tus datos se usan solo para contestarte y no se ceden a nadie. Puedes pedir que los borremos escribiendo a la hermandad.',

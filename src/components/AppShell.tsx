@@ -1,5 +1,6 @@
 import type { ErrorTraducido } from '../lib/errorDeBaseDeDatos'
 import { useEffect, useMemo, useState, useRef } from 'react'
+import { copiaSemanalSiTocaba } from '../lib/copiaAutomatica'
 import { NavLink, Outlet, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import BarraDeshacer from './BarraDeshacer'
 import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
@@ -195,6 +196,23 @@ export default function AppShell() {
     }
     window.addEventListener('cabildo-sync-error', alFallar)
     return () => window.removeEventListener('cabildo-sync-error', alFallar)
+  }, [])
+
+  /*
+   * LA COPIA DE SEGURIDAD DE LA SEMANA.
+   *
+   * Se lanza al entrar en el panel, y solo hace algo si la última tiene más de
+   * una semana. No hay servidor que la programe —no hay `pg_cron` en el plan
+   * gratuito de Supabase— así que la lanza quien entre, que en una hermandad es
+   * alguien casi todas las semanas. Y si nadie entra en un mes, tampoco hay
+   * datos nuevos que perder.
+   *
+   * En segundo plano y sin decir nada: quien acaba de entrar viene a hacer algo,
+   * no a esperar. Si falla, no se le interrumpe — el aviso de «lleva un mes sin
+   * copia» está en Configuración y salta solo.
+   */
+  useEffect(() => {
+    void copiaSemanalSiTocaba()
   }, [])
   const navigate = useNavigate()
   const location = useLocation()

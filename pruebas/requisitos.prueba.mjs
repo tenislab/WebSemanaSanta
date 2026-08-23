@@ -68,6 +68,8 @@ export default async function ({ cargar, caso }) {
   await avisoDeEjemplo({ cargar, caso })
 
   await loQueVaEnLaBase({ cargar, caso })
+
+  await losPermisosDeFabricaCuadran({ cargar, caso })
 }
 
 /**
@@ -188,4 +190,67 @@ async function loQueVaEnLaBase({ caso }) {
   // Y los adjuntos de la copia, paginados: `list()` da 100 y no avisa.
   const fs = await readFile('src/lib/filestore.ts', 'utf8')
   caso('los adjuntos se leen paginados', true, /limit: DE_UNA_VEZ, offset: desde/.test(fs))
+}
+
+/**
+ * LOS PERMISOS DE FÁBRICA, ESCRITOS DOS VECES.
+ *
+ * Quién puede tocar qué está en dos sitios y en dos idiomas:
+ *
+ *   · `PERMISOS_POR_DEFECTO` en `src/lib/permisos.ts`, que es lo que enseña la
+ *     pantalla de Personal y permisos;
+ *   · `sembrar_permisos_de_fabrica()` en `supabase/permisos-por-hermandad.sql`,
+ *     que es lo que la BASE DE DATOS mira para dejar escribir o no.
+ *
+ * Y se despegaron. Al SQL le faltaba «eventos» en cinco cargos y «web» en dos,
+ * así que el Hermano Mayor —que lo puede todo por definición— no podía guardar
+ * un evento ni publicar la web de su hermandad.
+ *
+ * Es el peor fallo posible de este tipo porque NO da error donde se mira: la
+ * pantalla ofrece el módulo, el botón está ahí, y el rechazo llega al guardar
+ * — leído como que la aplicación está rota.
+ *
+ * Esto compara las dos listas, cargo por cargo.
+ */
+async function losPermisosDeFabricaCuadran({ cargar, caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const permisos = await cargar('src/lib/permisos.ts')
+  const sql = await readFile('supabase/permisos-por-hermandad.sql', 'utf8')
+
+  // Los pares ('Cargo','modulo') del sembrado. Se lee solo el cuerpo de la
+  // función: más abajo hay un relleno con los dos módulos que faltaban, que a
+  // propósito NO es la lista completa.
+  const cuerpo = sql.slice(sql.indexOf('sembrar_permisos_de_fabrica'), sql.indexOf('revoke execute on function sembrar_permisos_de_fabrica'))
+  const enSql = {}
+  for (const [, cargo, modulo] of cuerpo.matchAll(/\('([^']+)','([a-z]+)'\)/g)) {
+    (enSql[cargo] ??= new Set()).add(modulo)
+  }
+  caso('el sembrado del SQL se ha leído', true, Object.keys(enSql).length >= 7)
+
+  for (const [cargo, modulos] of Object.entries(permisos.PERMISOS_POR_DEFECTO)) {
+    // «Hermano de a pie» no lleva ninguno, así que no está en el SQL: correcto.
+    if (modulos.length === 0) {
+      caso(`«${cargo}» no aparece en el SQL, y está bien`, undefined, enSql[cargo])
+      continue
+    }
+    const delSql = enSql[cargo] ?? new Set()
+    const faltan = modulos.filter((x) => !delSql.has(x))
+    const sobran = [...delSql].filter((x) => !modulos.includes(x))
+    caso(`«${cargo}»: al SQL no le falta ninguno`, '', faltan.join(', '))
+    caso(`«${cargo}»: al SQL no le sobra ninguno`, '', sobran.join(', '))
+  }
+
+  /*
+   * Y EL RELLENO PARA LAS QUE YA EXISTEN. Cambiar el sembrado no arregla nada
+   * en una hermandad que ya está creada: sus filas se escribieron el día que
+   * nació. Hace falta añadirle las que faltan.
+   *
+   * Se comprueba también que NO se resiembre la lista entera: eso devolvería
+   * permisos que una hermandad haya quitado a propósito, y es peor que el
+   * fallo que se viene a arreglar.
+   */
+  caso('a las hermandades que ya existen se les añaden los que faltaban', true,
+    /insert into permisos_cargo[\s\S]{0,400}cross join \(values[\s\S]{0,400}'eventos'/.test(sql))
+  caso('y solo esos dos, sin resembrar lo demás', true,
+    /Nadie ha podido quitar a mano algo que nunca estuvo/.test(sql))
 }

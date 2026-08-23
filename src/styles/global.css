@@ -638,7 +638,18 @@ span.logo-mark img { width: 100%; height: 100%; }
 .trust { border-top: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding: 1.6rem 0; }
 .trust .wrap { display: flex; align-items: center; justify-content: space-between; gap: 2rem; flex-wrap: wrap; }
 .trust p { margin: 0; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.09em; color: rgba(245, 237, 230, 0.5); }
-.trust-names { display: flex; gap: 2rem; flex-wrap: wrap; font-family: 'Iowan Old Style', Palatino, Georgia, serif; font-size: 1.05rem; color: rgba(245, 237, 230, 0.75); }
+/* La franja ya no lleva nombres de hermandades: llevaba cinco que no eran
+   clientes. Ahora es una frase y su aclaración, así que se alinean a la
+   izquierda en vez de repartirse a los dos lados. */
+.trust .wrap { justify-content: flex-start; flex-direction: column; align-items: flex-start; gap: 0.4rem; }
+.trust-nota {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 0.88rem !important;
+  color: rgba(245, 237, 230, 0.68) !important;
+  max-width: 62ch;
+  line-height: 1.55;
+}
 
 /* =========================================================================
    Portada — la Semana Santa que viene, y el año cofrade
@@ -5449,6 +5460,59 @@ html:has(.sitio) { scroll-behavior: smooth; }
   margin: 0 0 1.1rem;
   text-align: left;
 }
+
+/* ==========================================================================
+   EL CONTADOR DE VISITAS
+   ==========================================================================
+   No es Google Analytics y no lo pretende: tres cifras, un gráfico de barras y
+   la lista de lo más leído. Lo que una hermandad mira una vez al mes.
+   -------------------------------------------------------------------------- */
+.visitas-periodo { display: flex; gap: 0.4rem; }
+
+/* El gráfico. Barras y no una línea: con treinta días y números pequeños, una
+   línea suaviza los picos y justo los picos son lo que se quiere ver (el día
+   que se mandó el enlace por el grupo). */
+.visitas-grafico {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 130px;
+  margin: 1.6rem 0 0.5rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.visitas-grafico__barra {
+  flex: 1;
+  min-width: 3px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  /* Los días a cero se pintan igual, en una raya casi invisible: saltárselos
+     haría que dos picos separados por una semana muerta se leyeran seguidos. */
+  opacity: 0.85;
+}
+.visitas-grafico__barra:hover { opacity: 1; }
+.visitas-grafico__pie {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.visitas-titulo {
+  font-size: 1rem;
+  margin: 1.6rem 0 0.8rem;
+}
+.visitas-tabla__ruta {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.visitas-tabla .num { font-variant-numeric: tabular-nums; }
 
 /* ---- El cartel ---------------------------------------------------------
    Se enseña grande y con la ficha al lado: es la pieza que se comparte, y

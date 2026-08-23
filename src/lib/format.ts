@@ -62,12 +62,45 @@ export function maskIban(iban: string) {
 }
 
 /**
- * Validación ligera de forma (no dígito de control): dos letras + dos dígitos
- * de control + el resto alfanumérico, longitud entre 15 y 34 caracteres una
- * vez quitados los espacios. Suficiente para detectar errores de escritura
- * sin implementar el cálculo mod-97 completo.
+ * ¿ES ESTE IBAN CORRECTO? Con el dígito de control, no solo con la forma.
+ *
+ * Antes solo se miraba la FORMA —dos letras, dos dígitos, la longitud—, y eso
+ * deja pasar cualquier IBAN con una cifra mal escrita. Aquí eso no es un
+ * detalle: ese IBAN entra en la remesa SEPA, el fichero se manda al banco, y
+ * la hermandad se entera cuando se lo devuelven — después de haberle dicho al
+ * hermano que ya estaba domiciliado, y con la cuota sin cobrar.
+ *
+ * El dígito de control (los dos números después de «ES») está pensado
+ * exactamente para eso: caza una cifra cambiada y caza dos cifras
+ * intercambiadas, que son los dos errores que comete quien copia un IBAN a
+ * mano. Son diez líneas.
+ *
+ * LO QUE SIGUE SIN COMPROBAR, y conviene saberlo: que la cuenta EXISTA. Un
+ * IBAN inventado con el dígito de control bien calculado pasa por aquí. Eso
+ * solo lo sabe el banco.
  */
 export function isPlausibleIban(iban: string) {
-  const compact = iban.replace(/\s+/g, '').toUpperCase()
-  return /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(compact)
+  const compact = iban.replace(/[\s-]+/g, '').toUpperCase()
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(compact)) return false
+  return mod97(compact) === 1
+}
+
+/**
+ * El mod-97 del IBAN (norma ISO 13616): se pasan los cuatro primeros
+ * caracteres al final, cada letra se cambia por su número (A=10 … Z=35) y el
+ * resto de dividir entre 97 tiene que ser 1.
+ *
+ * Se va dividiendo por trozos porque el número entero no cabe en un `number`:
+ * un IBAN español son 24 caracteres, que convertidos pasan de los 20 dígitos y
+ * ahí JavaScript ya redondea — y un resto calculado sobre un número redondeado
+ * daría por bueno cualquier cosa.
+ */
+function mod97(compact: string): number {
+  const movido = compact.slice(4) + compact.slice(0, 4)
+  let resto = 0
+  for (const c of movido) {
+    const valor = c >= 'A' && c <= 'Z' ? String(c.charCodeAt(0) - 55) : c
+    for (const d of valor) resto = (resto * 10 + Number(d)) % 97
+  }
+  return resto
 }

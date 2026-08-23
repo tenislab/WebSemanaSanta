@@ -55,6 +55,16 @@ export default async function ({ caso }) {
     // necesita salir del paso sin ejecutar el fichero entero. Meterlo en el de
     // instalar definiría la misma función dos veces.
     'ARREGLO-RAPIDO-DISPARADOR.sql',
+    /*
+     * Y las tareas programadas, tampoco. No porque no hagan falta, sino porque
+     * ANTES hay que encender la extensión `pg_cron` desde el panel de Supabase
+     * —Database → Extensions— y eso no se puede hacer desde un SQL pegado.
+     *
+     * Metido en el instalador, el fichero entero fallaría en la primera línea
+     * de quien no la haya encendido, y con él todo lo que viene detrás. Va
+     * aparte y con sus instrucciones dentro.
+     */
+    'tareas-programadas.sql',
   ])
   const todos = (await readdir('supabase')).filter((f) => f.endsWith('.sql') && !FUERA.has(f))
   const olvidados = todos.filter((f) => !nombres.includes(f))
@@ -86,4 +96,57 @@ export default async function ({ caso }) {
     /revoke execute on function adoptar_datos_sin_hermandad\(uuid\) from anon, authenticated;/.test(enDisco))
   caso('lleva el tope del acceso por DNI', true, /if v_recientes >= 25 then/.test(enDisco))
   caso('lleva la columna del rastro de remesas', true, /add column if not exists remesada_el/.test(enDisco))
+
+  await elDiagnosticoDiceLaVerdad({ caso })
+}
+
+/**
+ * QUE EL DIAGNÓSTICO DIGA LA VERDAD.
+ *
+ * `POR-QUE-NO-PUEDO.sql` contesta «¿por qué la base me rechaza al crear un
+ * hermano?». Para contestarlo tiene que reproducir la condición de la política
+ * —`auth_es_hermano()`— sobre cada cuenta, porque esa función solo se puede
+ * evaluar sobre la sesión que la llama.
+ *
+ * Y AHÍ ESTÁ EL PELIGRO: son dos copias de la misma regla en dos sitios. La
+ * función se ha redefinido TRES veces (hermano-auth → hermano-y-gestion →
+ * hermano-con-cargo) y el diagnóstico se quedó con la primera. Miraba la marca
+ * `user_metadata.tipo`, que hoy la función no mira para nada.
+ *
+ * Resultado: a un Hermano Mayor —que tiene ficha como cualquiera— le decía
+ * «⛔ NO, la sesión figura como de hermano» cuando la base le deja hacerlo
+ * todo. Y lo mandaba a arreglar lo que no estaba roto, que es peor que no
+ * tener diagnóstico.
+ *
+ * Esto no puede comprobar que las dos reglas sean equivalentes —haría falta
+ * una base de datos— pero sí que el diagnóstico mire LAS MISMAS TRES COSAS que
+ * la función, y que no haya vuelto a la marca vieja.
+ */
+async function elDiagnosticoDiceLaVerdad({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const diag = await readFile('supabase/POR-QUE-NO-PUEDO.sql', 'utf8')
+  // Sin comentarios: el fichero EXPLICA el fallo por escrito, y explicarlo no
+  // puede contar como cometerlo.
+  const sql = diag.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*--.*$/gm, '')
+
+  // La marca vieja ya no decide nada.
+  caso('el veredicto ya no sale de user_metadata', false, /raw_user_meta_data[\s\S]{0,80}as solo_hermano/.test(sql))
+  caso('ni compara el tipo para decidir', false, /when tipo = 'hermano'/.test(sql))
+
+  // Y mira las tres formas de gestionar, las mismas que la función.
+  caso('mira si es titular', true, /from titulares/.test(sql))
+  caso('mira si es personal activo', true, /from personal[\s\S]{0,60}activo/.test(sql))
+  caso('mira el cargo de su propia ficha', true, /cargo <> 'Hermano de a pie'/.test(sql))
+  caso('y exige tener ficha en el censo', true, /tiene_ficha\s*\n?\s*and not/.test(sql))
+
+  // El veredicto sale de ahí y no de otro sitio.
+  caso('el veredicto usa esa condición', true, /when solo_hermano/.test(sql))
+
+  /*
+   * Y NO CAMBIA NADA. Es lo que se le promete a quien lo ejecuta en la base de
+   * datos de su hermandad, con su censo dentro: «esto solo mira». Un `update`
+   * que se colara aquí sería lo peor que puede pasar en este fichero.
+   */
+  caso('el diagnóstico no escribe nada', false,
+    /\b(insert|update|delete|drop|alter|truncate|grant|revoke)\b/i.test(sql))
 }

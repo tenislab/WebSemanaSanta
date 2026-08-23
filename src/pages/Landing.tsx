@@ -393,16 +393,24 @@ export default function Landing() {
         </div>
       </section>
 
+      {/*
+        AQUÍ HABÍA CINCO NOMBRES DE HERMANDADES «que ya lo usan», y no lo usaba
+        ninguna: eran los de los datos de ejemplo —Vera-Cruz, La Esperanza, El
+        Nazareno…— colados en la portada comercial. Eso no es una licencia de
+        marketing, es publicidad engañosa, y en un producto que le pide a una
+        hermandad su censo entero es lo último que uno puede permitirse.
+
+        Lo que se dice ahora es lo que hay: que se está haciendo con
+        hermandades, dónde, y que todavía no hay ninguna funcionando. Poner
+        nombres de verdad, cuando los haya y con su permiso por escrito.
+      */}
       <div className="trust">
         <div className="wrap">
-          <p>Hermandades y cofradías que ya lo usan</p>
-          <div className="trust-names">
-            <span>Vera-Cruz</span>
-            <span>La Esperanza</span>
-            <span>El Nazareno</span>
-            <span>Ntra. Sra. del Rosario</span>
-            <span>La Soledad</span>
-          </div>
+          <p>En colaboración con hermandades de Granada y Cádiz</p>
+          <p className="trust-nota">
+            Se está construyendo con ellas, escuchando cómo trabajan de verdad: la secretaría, la
+            tesorería y el cortejo.
+          </p>
         </div>
       </div>
 

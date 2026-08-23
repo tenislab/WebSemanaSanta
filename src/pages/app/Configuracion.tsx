@@ -32,6 +32,10 @@ import { CANALES, SEGMENTOS } from '../../data/comunicados'
 import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
 import { nuevoId } from '../../lib/supabaseSync'
 import { crearCopia, esCopiaValida, restaurarCopia, resumirCopia, sePuedeRestaurar } from '../../lib/backup'
+import {
+  COPIAS_QUE_SE_GUARDAN, SIN_SABER, diasDesde, estadoDeLasCopias, type EstadoDeLasCopias,
+} from '../../lib/copiaAutomatica'
+import { formatDate } from '../../lib/format'
 import { descargarArchivo } from '../../lib/csv'
 import AvisoFalta from '../../components/AvisoFalta'
 import { contextoActual, requisito, requisitos } from '../../lib/requisitos'
@@ -184,6 +188,11 @@ export default function Configuracion() {
    */
   const precioBase = settings.precioPapeleta
   const [copiaEstado, setCopiaEstado] = useState<string | null>(null)
+  // Cómo están las copias automáticas. Se pregunta al cubo, que es la única
+  // verdad: una marca guardada aparte puede decir que hay copia cuando el
+  // archivo no llegó a subir.
+  const [copias, setCopias] = useState<EstadoDeLasCopias>(SIN_SABER)
+  useEffect(() => { void estadoDeLasCopias().then(setCopias) }, [])
   const backupRef = useRef<HTMLInputElement>(null)
 
   // ---- Cuerpos del cortejo (los pasos y su acompañamiento; nombres libres) ----
@@ -1275,6 +1284,35 @@ export default function Configuracion() {
             navegador: lo que se escribiera aquí lo sobreescribiría la base de datos al recargar. La
             copia que descargues sigue valiendo; volcarla es una operación que hacemos nosotros.
           </p>
+        )}
+        {/*
+          LO QUE HAY GUARDADO, y el aviso si lleva demasiado.
+          El botón de descargar seguía ahí y la hermandad no tenía forma de
+          saber si alguien lo había pulsado alguna vez. Ahora se dice de cuándo
+          es la última y, si lleva más de un mes —o no hay ninguna—, se dice en
+          rojo: cuatro semanas sin copia ya no es «esta semana no ha entrado
+          nadie», es que algo no funciona.
+        */}
+        {copias.seSabe && (
+          <div className={`banner-inline banner-inline--${copias.hayQueAvisar ? 'alerta' : 'accent'}`}>
+            <span>
+              {copias.ultima === null ? (
+                <>
+                  <b>Todavía no hay ninguna copia guardada.</b> Si falta ejecutar{' '}
+                  <code>supabase/copias.sql</code> en Supabase, es por eso.
+                </>
+              ) : (
+                <>
+                  Última copia automática: <b>{formatDate(copias.ultima)}</b>
+                  {' '}({diasDesde(copias.ultima) === 0 ? 'hoy' : `hace ${diasDesde(copias.ultima)} días`}).
+                  {' '}Se guardan las {COPIAS_QUE_SE_GUARDAN} últimas; ahora hay {copias.cuantas}.
+                  {copias.hayQueAvisar && (
+                    <> <b>Lleva más de un mes sin hacerse.</b> Descarga una a mano y avísanos.</>
+                  )}
+                </>
+              )}
+            </span>
+          </div>
         )}
         <div className="settings-actions">
           {copiaEstado && <span className="alert-item alert-item--ok">{copiaEstado}</span>}

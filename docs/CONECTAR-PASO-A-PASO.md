@@ -52,6 +52,13 @@ contenido**, pégalo en el editor y dale a **Run**. Uno por uno y en este orden:
 - [ ] `6  mensajes-web.sql`
 - [ ] `7  storage-archivo.sql`
 - [ ] `8  imagenes.sql`  ← el almacén de fotos
+- [ ] `9  visitas-web.sql`  ← el contador de visitas
+- [ ] `10 suscriptores-web.sql`  ← avisos para quien no es hermano
+- [ ] `11 copias.sql`  ← la copia de seguridad semanal
+
+> **Y una casilla, aparte del SQL:** Supabase → *Database → Extensions* → busca
+> `pg_cron` y actívala. Después ejecuta `supabase/tareas-programadas.sql`. Va
+> aparte porque el SQL no puede encender la extensión por su cuenta.
 
 > ⚠️ **El 3 es crítico y no se puede dejar para luego.** Sin él, cualquiera que
 > se registre en `/registro` obtiene permiso de escritura sobre TODA tu base de

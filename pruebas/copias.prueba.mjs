@@ -1,63 +1,73 @@
 /**
- * Auditoría 2026-08 · Las copias de seguridad.
+ * LA COPIA DE SEGURIDAD AUTOMÁTICA.
  *
- * Dos de los hallazgos, y uno de ellos crítico:
+ * El censo de una hermandad es EL dato que no se puede volver a escribir:
+ * cuatrocientas fichas con su antigüedad, su cuota y su sitio en el cortejo no
+ * se reconstruyen. O están, o se han perdido.
  *
- *   - «Restaurar copia» decía «Copia restaurada. Recargando…», recargaba, y
- *     estaba todo exactamente igual que antes. Escribía en el navegador, y con
- *     la base de datos conectada el navegador es un espejo: al recargar, cada
- *     pantalla volvía a leer de Supabase y lo sobreescribía. Un botón que dice
- *     que ha hecho algo y no lo ha hecho es peor que no tenerlo.
- *   - «Descargar copia» se llevaba solo los módulos que se hubieran abierto,
- *     porque leía del navegador. Quien entraba y le daba directamente se
- *     bajaba un archivo sin el archivo documental, sin inventario y sin
- *     eventos. Y sin decirlo.
+ * Lo que se prueba aquí es la aritmética que decide cuándo hay copia y cuándo
+ * hay que avisar. Si esa cuenta falla, falla en silencio: la hermandad cree que
+ * está cubierta y se entera el día que necesita restaurar.
  */
 export default async function ({ cargar, caso }) {
-  const m = await cargar('src/lib/backup.ts')
+  const m = await cargar('src/lib/copiaAutomatica.ts')
 
-  // Sin base de datos, restaurar es lo correcto: ahí SÍ vive todo.
-  caso('sin base de datos, se puede restaurar', true, m.sePuedeRestaurar())
+  /*
+   * --- LA FECHA VA EN EL NOMBRE ---
+   *
+   * De ahí se saca cuándo fue la última, y no de una marca guardada aparte: una
+   * marca en el navegador diría «ya está hecha» en el ordenador de la
+   * secretaria y «nunca» en el del tesorero; y una en una tabla puede quedarse
+   * diciendo que hay copia cuando el archivo no llegó a subir. Lo que hay en el
+   * cubo es la única verdad.
+   */
+  const f = m.fechaDelNombre('2026-08-23T10-15-00-000Z.json')
+  caso('la fecha se lee del nombre', 2026, f.getUTCFullYear())
+  caso('con su mes', 8, f.getUTCMonth() + 1)
+  caso('y su día', 23, f.getUTCDate())
+  caso('y su hora', 10, f.getUTCHours())
+  // Un archivo que alguien haya subido a mano con otro nombre no se cuenta como
+  // copia: mejor no tenerla en cuenta que darla por buena y no saber de cuándo es.
+  caso('un nombre cualquiera no cuenta', null, m.fechaDelNombre('copia-vieja.json'))
+  caso('ni uno vacío', null, m.fechaDelNombre(''))
 
-  // --- Lo que nunca puede viajar en una copia ---
-  // No son datos de la hermandad: son estado de ESTE navegador.
-  const { readFile } = await import('node:fs/promises')
-  const src = await readFile('src/lib/backup.ts', 'utf8')
-  for (const clave of ['cabildo-demo-user', 'cabildo-hermandad-espejada', 'cabildo-demo-modo']) {
-    caso(`«${clave}» queda fuera de la copia`, true, src.includes(`'${clave}'`))
-  }
+  // --- Los días que han pasado ---
+  const ahora = new Date('2026-08-23T12:00:00Z')
+  caso('hoy son cero días', 0, m.diasDesde(new Date('2026-08-23T09:00:00Z'), ahora))
+  caso('ayer, uno', 1, m.diasDesde(new Date('2026-08-22T09:00:00Z'), ahora))
+  caso('hace una semana, siete', 7, m.diasDesde(new Date('2026-08-16T12:00:00Z'), ahora))
+  caso('hace un mes, treinta y uno', 31, m.diasDesde(new Date('2026-07-23T12:00:00Z'), ahora))
 
-  // --- La copia trae las tablas de verdad ---
-  caso('hay lista de tablas', true, Array.isArray(m.TABLAS_COPIA) && m.TABLAS_COPIA.length > 10)
-  for (const t of ['hermanos', 'cuotas', 'papeletas', 'movimientos', 'documentos', 'enseres', 'eventos']) {
-    caso(`la copia incluye «${t}»`, true, m.TABLAS_COPIA.includes(t))
-  }
+  /*
+   * --- LOS DOS NÚMEROS QUE MANDAN ---
+   *
+   * Una semana entre copias, y aviso al mes. El aviso NO es a la semana a
+   * propósito: que una semana no haya entrado nadie en el panel es normal en
+   * agosto, y un aviso que salta cuando no pasa nada malo se aprende a ignorar
+   * — y entonces ya no avisa el día que sí.
+   */
+  caso('se hace una copia por semana', 7, m.DIAS_ENTRE_COPIAS)
+  caso('y se avisa al mes', 31, m.DIAS_PARA_AVISAR)
+  /*
+   * Y se guardan ocho, no una. Es lo que hace falta para el caso de verdad:
+   * alguien borra algo por error y se descubre tres o cuatro semanas después,
+   * al ir a buscarlo. Con solo la última, la copia buena ya se habría
+   * machacado con el error dentro.
+   */
+  caso('se guardan ocho semanas', 8, m.COPIAS_QUE_SE_GUARDAN)
+  caso('que es más de un mes de margen', true, m.COPIAS_QUE_SE_GUARDAN * m.DIAS_ENTRE_COPIAS > m.DIAS_PARA_AVISAR)
 
-  // --- Reconocer una copia ---
-  // `crearCopia()` no se llama aquí: necesita IndexedDB para los adjuntos y
-  // esto corre en Node, sin navegador. Lo que sí se comprueba es el lector,
-  // que es quien decide si un archivo entra o se rechaza.
-  const copia = { app: 'cabildo', version: 1, exportadoEl: new Date().toISOString(), datos: {}, archivos: [] }
-  caso('una copia con su forma vale', true, m.esCopiaValida(copia))
-  caso('y la de una versión futura se detecta', true, m.resumirCopia({ ...copia, version: 99 }).masNueva)
-
-  // Lo que no tiene forma de copia se rechaza.
-  caso('un JSON cualquiera no cuela', false, m.esCopiaValida({ hola: 1 }))
-  caso('ni null', false, m.esCopiaValida(null))
-
-  // Con base de datos, la copia sale de las tablas y no del navegador.
-  caso('la copia consulta la base de datos', true, /isSupabaseConfigured \? await traerTablas\(\)/.test(src))
-  caso('y apunta lo que no haya podido traer', true, /fallos\.push/.test(src))
-
-  // --- Y que la restauración no mienta ---
-  // Aquí no hay Supabase, así que `restaurarCopia` sí funciona; lo que se
-  // comprueba es que la negativa esté escrita y sea la primera comprobación.
-  caso('restaurar comprueba antes si puede', true, /if \(!sePuedeRestaurar\(\)\)/.test(src))
-  caso('y si no puede, lo dice y no escribe nada', true, /throw new Error\(/.test(src))
-
-  // Y que las pantallas usen esa comprobación, no la reinventen.
-  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
-  caso('el botón de restaurar la respeta', true, /disabled=\{!sePuedeRestaurar\(\)\}/.test(cfg))
-  caso('y se explica por qué', true, /Restaurar está desactivado/.test(cfg))
-  caso('una copia incompleta se avisa', true, /NO se pudo traer/.test(cfg))
+  /*
+   * --- SIN SUPABASE NO SE INVENTA NADA ---
+   *
+   * `seSabe` en falso NO es «no hay copias»: es «no se ha podido preguntar».
+   * Confundir las dos cosas haría saltar el aviso rojo en modo demostración, y
+   * un aviso que sale cuando no toca deja de leerse.
+   */
+  const estado = await m.estadoDeLasCopias()
+  caso('sin base de datos, no se sabe', false, estado.seSabe)
+  caso('y por eso NO se avisa', false, estado.hayQueAvisar)
+  caso('ni se inventa una última', null, estado.ultima)
+  caso('la copia semanal no se lanza', false, await m.copiaSemanalSiTocaba())
+  caso('y la lista sale vacía', 0, (await m.copiasGuardadas()).length)
 }

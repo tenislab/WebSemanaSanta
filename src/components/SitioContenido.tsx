@@ -4,7 +4,7 @@ import { PAREJAS_TIPOGRAFICAS, SECCIONES_INFO, TIPOGRAFIAS, cartelesOrdenados, c
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { LogoMark } from './Logo'
 import { formatDate } from '../lib/format'
-import { FormularioAlta, FormularioContacto, FormularioDonativo, FormularioLoteria } from './FormulariosWeb'
+import { FormularioAlta, FormularioAvisos, FormularioContacto, FormularioDonativo, FormularioLoteria } from './FormulariosWeb'
 import { diasHasta as diasHastaFecha, getCampana, ventanaAbierta } from '../lib/campana'
 import { baseDeRutas } from '../lib/seoWeb'
 import IconoRed from './IconoRed'
@@ -1285,6 +1285,15 @@ function Seccion({
             </article>
           ))}
         </div>
+        {/*
+          «Avísame de los cultos», JUSTO AQUÍ y no en Contacto.
+          Quien acaba de leer que hay quinario es exactamente el que quiere que
+          se lo recuerden. Metido al final de la web, en el formulario de
+          contacto, lo rellena quien ya venía buscándolo — o sea, casi nadie.
+        */}
+        {web.avisosDeCultos && (
+          <FormularioAvisos interactivo={interactivo} nombreHermandad={hermandad.nombreLegal ?? web.titulo} />
+        )}
       </section>
     )
   }

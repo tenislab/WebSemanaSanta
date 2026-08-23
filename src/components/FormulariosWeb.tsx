@@ -8,6 +8,7 @@ import {
   type TipoMensajeWeb,
 } from '../lib/mensajesWeb'
 import { crearSolicitudPrincipal, type SolicitudAlta } from '../lib/solicitudes'
+import { pareceUnCorreo, suscribirse, textoDelConsentimiento } from '../lib/suscriptoresWeb'
 import { nuevoId } from '../lib/supabaseSync'
 
 /**
@@ -107,6 +108,112 @@ function Consentimiento({
 /* ---------------------------------------------------------------------------
    Contacto
    --------------------------------------------------------------------------- */
+
+/**
+ * «AVÍSAME DE LOS CULTOS».
+ *
+ * Es el formulario más corto de la web a propósito: un correo y una casilla. Lo
+ * rellena alguien de pie en la calle que acaba de leer que hay quinario, y cada
+ * campo de más es gente que lo deja a medias.
+ *
+ * NO SE PIDE NI EL TELÉFONO NI EL DNI. Para mandar un aviso por correo hace
+ * falta el correo, y nada más. Pedir lo que no se necesita, además de espantar,
+ * es exactamente lo que el RGPD llama recoger de más.
+ *
+ * El nombre sí se pide, pero opcional: sirve para encabezar el aviso con «Hola,
+ * Manuel» en vez de «Hola», y no cuesta nada dejarlo en blanco.
+ */
+export function FormularioAvisos({
+  interactivo,
+  nombreHermandad,
+}: {
+  interactivo: boolean
+  nombreHermandad: string
+}) {
+  const base = useId()
+  const [email, setEmail] = useState('')
+  const [nombre, setNombre] = useState('')
+  const [consiente, setConsiente] = useState(false)
+  const [error, setError] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [hecho, setHecho] = useState(false)
+  const antiRobot = useAntiRobot()
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!pareceUnCorreo(email)) {
+      setError('Escribe un correo donde te podamos avisar.')
+      return
+    }
+    if (!consiente) {
+      setError('Hay que marcar la casilla para poder guardarte el correo.')
+      return
+    }
+    setError('')
+    // Al robot se le dice que sí y no se guarda nada: enseñándole el error,
+    // reintenta hasta dar con la forma de colarse.
+    if (!interactivo || antiRobot.esRobot()) { setHecho(true); return }
+    setEnviando(true)
+    const r = await suscribirse(email, nombre, nombreHermandad)
+    setEnviando(false)
+    if (r.ok) setHecho(true)
+    else setError(r.error)
+  }
+
+  if (hecho) {
+    return (
+      <Acuse titulo="Ya casi está">
+        Te hemos mandado un correo a <b>{email.trim()}</b> con un enlace. Ábrelo y a partir de ahí
+        te avisamos de los cultos. {/*
+          SE DICE QUE FALTA CONFIRMAR, y no «ya estás apuntado». Sin abrir el
+          enlace no se le escribe, y quien cree que ya está no busca el correo
+          en la bandeja de no deseados — y se queda fuera sin saberlo.
+        */}
+        Si no te llega en unos minutos, mira en la carpeta de correo no deseado.
+      </Acuse>
+    )
+  }
+
+  return (
+    <form className="sitio-form sitio-form--avisos" onSubmit={enviar} noValidate>
+      <h3>Avísame de los cultos</h3>
+      <p className="sitio-form__lead">
+        No hace falta ser hermano. Te escribimos cuando hay culto o salida, y nada más.
+      </p>
+      <div className="sitio-form__grid">
+        <Campo id={`${base}-mail`} etiqueta="Tu correo" error={error && !consiente ? '' : error}>
+          {(p) => (
+            <input {...p} type="email" value={email} autoComplete="email"
+              onChange={(e) => setEmail(e.target.value)} placeholder="tucorreo@ejemplo.com" />
+          )}
+        </Campo>
+        <Campo id={`${base}-nom`} etiqueta="Tu nombre (opcional)">
+          {(p) => (
+            <input {...p} value={nombre} autoComplete="name"
+              onChange={(e) => setNombre(e.target.value)} placeholder="Para saludarte por tu nombre" />
+          )}
+        </Campo>
+      </div>
+      {antiRobot.campo}
+      {/*
+        El consentimiento con el texto EXACTO que se guarda como prueba: lo que
+        se enseña aquí y lo que queda escrito en la base son la misma frase, que
+        es lo único que sirve si algún día alguien reclama.
+      */}
+      <Consentimiento
+        id={`${base}-rgpd`}
+        texto={textoDelConsentimiento(nombreHermandad)}
+        valor={consiente}
+        onChange={setConsiente}
+        error={!consiente && error ? error : ''}
+      />
+      <button type="submit" className="sitio-btn" disabled={enviando}>
+        {enviando ? 'Apuntando…' : 'Avisadme'}
+      </button>
+      {!interactivo && <small className="sitio-form__previa">Vista previa: aquí no se apunta nada.</small>}
+    </form>
+  )
+}
 
 export function FormularioContacto({
   interactivo, textoProteccionDatos,

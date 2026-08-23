@@ -164,7 +164,7 @@ async function elFormularioHabla({ caso }) {
 async function lasCincoOpcionesDelDesplegable({ cargar, caso }) {
   const m = await cargar('src/lib/segmentacion.ts')
   const roles = await cargar('src/lib/rolesPapeleta.ts')
-  const { SEGMENTOS } = await cargar('src/data/comunicados.ts')
+  const { SEGMENTOS, SEGMENTO_SUSCRIPTORES } = await cargar('src/data/comunicados.ts')
 
   const H = (id, extra = {}) => ({
     id, numero: 1, nombre: id, estado: 'Activo', antiguedad: 2000,
@@ -197,9 +197,19 @@ async function lasCincoOpcionesDelDesplegable({ cargar, caso }) {
     return lista.map((h) => h.id)
   }
 
-  // NINGUNA opción del desplegable puede quedarse sin resolver. Esta es la
-  // que habría cazado el fallo el primer día.
-  for (const nombre of SEGMENTOS) {
+  /*
+   * NINGUNA opción del desplegable puede quedarse sin resolver. Esta es la que
+   * habría cazado el fallo el primer día: un segmento que nadie sabe resolver
+   * no da error, manda el comunicado al vacío y lo deja marcado como «Enviado».
+   *
+   * MENOS UNO, y por un motivo que no es una excepción sino lo contrario: los
+   * suscriptores de la web NO están en el censo. Ninguna regla que busque
+   * hermanos puede encontrarlos, así que `Comunicados` los resuelve ANTES de
+   * llegar aquí. Que salga de esta comprobación no lo deja sin cubrir: más
+   * abajo se comprueba que la pantalla sí lo trata.
+   */
+  const FUERA_DEL_CENSO = new Set([SEGMENTO_SUSCRIPTORES])
+  for (const nombre of SEGMENTOS.filter((x) => !FUERA_DEL_CENSO.has(x))) {
     caso(`«${nombre}» se sabe a quién va`, true, aQuien(nombre) !== null)
   }
 
@@ -397,4 +407,25 @@ async function laPantallaLoUsa({ caso }) {
   const herm = (await readFile('src/pages/app/Hermanos.tsx', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
   caso('y en Hermanos también', true, /cargosEfectivos\(/.test(herm))
   caso('el sesgo del censo lo usa', true, /filtrarSegmento\(hermanos, limpiarCriterios\(criterios\), roles, cargosPorHermano, situacionesDeCuota\)/.test(herm))
+
+  /*
+   * Y QUE LOS DE FUERA SÍ SE TRATEN, aunque no pasen por el filtro del censo.
+   *
+   * Sin esto, sacarlos de la comprobación de arriba sería justo el agujero que
+   * esa comprobación viene a tapar: un segmento en el desplegable que nadie
+   * resuelve.
+   */
+  const { readFile: leerFichero } = await import('node:fs/promises')
+  const pantalla = await leerFichero('src/pages/app/Comunicados.tsx', 'utf8')
+  caso('la pantalla reconoce a los suscriptores', true,
+    /c\.destinatarios === SEGMENTO_SUSCRIPTORES/.test(pantalla))
+  // Y solo a los CONFIRMADOS: a quien no abrió el enlace del correo no se le
+  // escribe. Es lo que evita que los envíos acaben marcados como spam.
+  caso('y solo a los confirmados', true, /losQueSePuedenAvisar\(suscriptores\)/.test(pantalla))
+  /*
+   * UNO A UNO, no todos en el mismo correo: cada uno lleva SU enlace de baja.
+   * Mandados juntos no cabe más que un enlace, así que o no se pone —correo sin
+   * salida, que es lo que multa la AEPD— o se pone uno que daría de baja a otro.
+   */
+  caso('y cada uno con su enlace de baja', true, /avisarASuscriptores\(/.test(pantalla))
 }

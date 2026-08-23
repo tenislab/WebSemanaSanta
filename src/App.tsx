@@ -38,6 +38,7 @@ const Signup = lazy(() => import('./pages/Signup'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const PaginaLegal = lazy(() => import('./pages/PaginaLegal'))
 const VerificarPapeleta = lazy(() => import('./pages/VerificarPapeleta'))
+const AvisosWeb = lazy(() => import('./pages/AvisosWeb'))
 
 /*
  * Las páginas del panel, con el «pídelo» separado del componente.
@@ -238,6 +239,9 @@ export default function App() {
 
       <Route path="/legal/:slug" element={<PaginaLegal />} />
       <Route path="/verificar" element={<VerificarPapeleta />} />
+      {/* Confirmar el correo y darse de baja de los avisos de la hermandad.
+          Son los dos enlaces que salen en cada correo que se manda. */}
+      <Route path="/avisos" element={<AvisosWeb />} />
 
       <Route
         path="/app"

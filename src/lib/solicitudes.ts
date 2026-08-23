@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { hermandadDestino } from './multiHermandad'
+import { traducirErrorDeEscritura } from './errorDeBaseDeDatos'
 
 export type EstadoSolicitud = 'Pendiente' | 'Aprobada' | 'Rechazada'
 
@@ -86,7 +87,23 @@ export function getSolicitudes(): SolicitudAlta[] {
   return leerPersistido<SolicitudAlta[]>(STORAGE_KEY, [])
 }
 
-/** Como `getSolicitudes`, pero con Supabase conectado trae la tabla real (solo la ve quien ha iniciado sesión: la secretaría). */
+/**
+ * Como `getSolicitudes`, pero con Supabase conectado trae la tabla real (solo
+ * la ve quien ha iniciado sesión: la secretaría).
+ *
+ * EL ERROR SE MIRA, y aquí está el fallo que arregla esto: la consulta hacía
+ * `if (cancelado || error) return` — o sea, si la base rechazaba la lectura, la
+ * función se iba de puntillas y la pantalla se quedaba con lo que hubiera en el
+ * navegador, que en un ordenador recién estrenado es una lista VACÍA.
+ *
+ * Traducido a lo que ve la secretaría: alguien pide el alta desde la web, la
+ * solicitud está guardada en la base, y en el panel no aparece nada. Ni la
+ * solicitud, ni un aviso, ni un motivo. Se da por hecho que nadie ha pedido
+ * nada y esa persona se queda sin entrar en la hermandad.
+ *
+ * Y el motivo más probable es justo el que no se adivina: los permisos. Es el
+ * mismo rechazo que impedía crear hermanos — ver `POR-QUE-NO-PUEDO.sql`.
+ */
 export function useSolicitudes(): SolicitudAlta[] {
   const [solicitudes, setSolicitudes] = useState<SolicitudAlta[]>(() => getSolicitudes())
   useEffect(() => {
@@ -96,7 +113,23 @@ export function useSolicitudes(): SolicitudAlta[] {
       .from('solicitudes_alta')
       .select('*')
       .then(({ data, error }) => {
-        if (cancelado || error) return
+        if (cancelado) return
+        if (error) {
+          /*
+           * NO se vacía la lista: se deja lo que hubiera. Poner cero solicitudes
+           * porque la consulta falló es afirmar algo que no se sabe, y encima es
+           * la afirmación que hace que nadie mire.
+           */
+          console.error('No se pudieron leer las solicitudes de alta:', error.message)
+          window.dispatchEvent(new CustomEvent('cabildo-sync-error', {
+            detail: {
+              tabla: 'solicitudes_alta',
+              fallos: [`leer: ${error.message}`],
+              traducidos: [traducirErrorDeEscritura('solicitudes_alta', 'leer', error.message, error.code)],
+            },
+          }))
+          return
+        }
         const traidas = (data ?? []).map(rowToSolicitud)
         setSolicitudes(traidas)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(traidas))
@@ -116,7 +149,30 @@ export function useSolicitudes(): SolicitudAlta[] {
 export async function saveSolicitudes(solicitudes: SolicitudAlta[]) {
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data } = await supabase.from('solicitudes_alta').select('id')
+      /*
+       * SI NO SE PUEDE LEER, NO SE ESCRIBE.
+       *
+       * Lo de abajo decide qué crear y qué borrar comparando con lo que hay en
+       * la base. Con `data ?? []` una lectura fallida se convertía en «no hay
+       * nada», y a partir de ahí el guardado trabaja sobre una foto que no es
+       * la de la base: intenta crear otra vez lo que ya existe y da un error de
+       * clave duplicada que no dice nada de lo que pasó de verdad.
+       *
+       * Comparar contra una lista que nunca vino de la base es la misma
+       * trampa que ya se arregló en `supabaseSync`, y allí llegaba a BORRAR.
+       */
+      const { data, error: errorLeer } = await supabase.from('solicitudes_alta').select('id')
+      if (errorLeer) {
+        console.error('No se pudieron leer las solicitudes antes de guardar:', errorLeer.message)
+        window.dispatchEvent(new CustomEvent('cabildo-sync-error', {
+          detail: {
+            tabla: 'solicitudes_alta',
+            fallos: [`leer: ${errorLeer.message}`],
+            traducidos: [traducirErrorDeEscritura('solicitudes_alta', 'leer', errorLeer.message, errorLeer.code)],
+          },
+        }))
+        return
+      }
       const idsActuales = new Set((data ?? []).map((r: { id: string }) => r.id))
       const nextIds = new Set(solicitudes.map((s) => s.id))
       const eliminadas = [...idsActuales].filter((id) => !nextIds.has(id))

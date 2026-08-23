@@ -83,4 +83,49 @@ async function noSePierdaOtraVez({ caso, lee }) {
 
   const familia = await lee('src/components/MiFamilia.tsx')
   caso('«solicitud enviada» solo si de verdad salió', true, /if \(!r\.ok\)/.test(familia))
+
+  /*
+   * --- LAS SOLICITUDES DE ALTA QUE NO APARECÍAN ---
+   *
+   * `useSolicitudes` hacía `if (cancelado || error) return`: si la base
+   * rechazaba la LECTURA, la función se iba de puntillas y la pantalla se
+   * quedaba con lo que hubiera en el navegador, que en un ordenador recién
+   * estrenado es una lista vacía.
+   *
+   * Lo que veía la secretaría: alguien pide el alta desde la web, la solicitud
+   * está guardada en la base, y en el panel no aparece nada. Ni la solicitud,
+   * ni un aviso, ni un motivo — así que se da por hecho que nadie ha pedido
+   * nada, y esa persona se queda sin entrar en la hermandad.
+   */
+  const sol = await lee('src/lib/solicitudes.ts')
+  caso('el error de leer solicitudes ya no se traga', false, /if \(cancelado \|\| error\) return/.test(sol))
+  caso('y se avisa de que no se han podido leer', true,
+    /cabildo-sync-error[\s\S]{0,300}leer: \$\{error\.message\}/.test(sol))
+  /*
+   * Y NO SE VACÍA LA LISTA cuando falla. Poner cero solicitudes porque la
+   * consulta falló es afirmar algo que no se sabe — y encima es justo la
+   * afirmación que hace que nadie mire.
+   */
+  caso('y no se pone la lista a cero', false,
+    /if \(error\)[\s\S]{0,200}setSolicitudes\(\[\]\)/.test(sol))
+
+  /*
+   * Y AL GUARDAR: si no se puede leer, no se escribe. Lo que decide qué crear y
+   * qué borrar se compara con lo que hay en la base; con la lectura fallida
+   * convertida en «no hay nada», el guardado trabaja sobre una foto que no es
+   * la de la base. Es la misma trampa que en `supabaseSync`, donde llegaba a
+   * borrar.
+   */
+  caso('guardar solicitudes no trabaja a ciegas', true, /const \{ data, error: errorLeer \}/.test(sol))
+  caso('y se para si no ha podido leer', true, /if \(errorLeer\) \{[\s\S]*?\n      \}/.test(sol)
+    && /if \(errorLeer\)[\s\S]*?return\n      \}/.test(sol))
+
+  /*
+   * Y QUE EL MENSAJE DIGA LO QUE PASÓ. «No se ha guardado nada» delante de
+   * alguien que solo estaba mirando una lista le hace buscar qué ha perdido, y
+   * le oculta lo único que importa: que la lista está incompleta.
+   */
+  const err = await lee('src/lib/errorDeBaseDeDatos.ts')
+  caso('leer y escribir no se explican igual', true, /if \(operacion === 'leer'\)/.test(err))
+  caso('y al leer se avisa de que puede faltar', true, /puede estar `[\s\S]{0,80}incompleto/.test(err))
 }
