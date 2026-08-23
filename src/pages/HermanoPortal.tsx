@@ -1203,7 +1203,7 @@ export default function HermanoPortal() {
                 {hermandadElegida?.logoDataUrl ? (
                   <img src={hermandadElegida.logoDataUrl} alt="" className="portal__aside-escudo" />
                 ) : (
-                  <LogoMark size={54} />
+                  <LogoMark size={64} />
                 )}
               </span>
             </div>

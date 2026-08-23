@@ -249,7 +249,21 @@ h1, h2, h3,
   justify-content: center;
   flex: none;
 }
-.logo-mark svg { width: 100%; height: 100%; }
+/* La marca es una ilustración: se estira al hueco y se deja `contain` para que
+   no se deforme si alguien le da una caja que no es cuadrada. */
+.logo-mark svg,
+.logo-mark img { width: 100%; height: 100%; object-fit: contain; }
+/* Ni se selecciona ni se arrastra: en la cabecera, arrastrarla sin querer
+   soltaba el archivo en otra pestaña. */
+.logo-mark img { user-select: none; -webkit-user-drag: none; }
+/*
+ * Y con un punto más de peso que las reglas de los contenedores.
+ * La marca cae dentro de sitios que ya tenían su regla para `img` —el lacre
+ * del portal la ponía al 58%— porque en esos sitios alterna con el escudo que
+ * sube la hermandad. Desde que la marca es una ilustración y no un `<svg>`,
+ * esas reglas también la cogían y le cambiaban el tamaño por detrás.
+ */
+span.logo-mark img { width: 100%; height: 100%; }
 
 /* EL LOGOTIPO DE LA PORTADA.
    En la maqueta el nombre va en VERSALES muy espaciadas al lado de la marca:
@@ -3923,7 +3937,9 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
   border: 1.5px solid rgba(226,196,132,0.55);
   box-shadow: inset 0 0 12px rgba(0,0,0,0.35);
 }
-.portal__sello-disco img { width: 58%; height: 58%; object-fit: contain; position: relative; }
+/* El escudo que sube la hermandad, no la marca de Gobergo: esta trae su
+   propio tamaño y se le pide con `size`. */
+.portal__sello-disco .portal__aside-escudo { width: 58%; height: 58%; object-fit: contain; position: relative; }
 .portal__sello-disco .logo-mark { position: relative; }
 .portal__aside-title {
   font-size: 1.8rem; line-height: 1.15; margin: 0; color: #3d240d; text-align: center;

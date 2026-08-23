@@ -26,7 +26,7 @@ export default async function ({ caso }) {
    * nombre (`VERDE`, `ROJO`…) volvió a pasar lo mismo al volver al anterior.
    * Una prueba que hay que actualizar a mano cada vez acaba borrándose.
    */
-  const logo = await readFile('src/components/Logo.tsx', 'utf8')
+  const logo = await readFile('src/lib/marca.ts', 'utf8')
   const coloresDeLaMarca = Object.fromEntries(
     [...logo.matchAll(/const ([A-Z][A-Z_]*) = '(#[0-9A-Fa-f]{3,8})'/g)].map((m) => [m[1], m[2]]),
   )

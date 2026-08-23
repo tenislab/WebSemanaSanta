@@ -58,7 +58,7 @@ export default function PantallaSuscripcion({ nombreHermandad, onActivar, onSali
   return (
     <div className="paywall paywall--packs">
       <div className="paywall__card paywall__card--wide">
-        <LogoMark size={44} />
+        <LogoMark size={64} />
         <p className="eyebrow">Suscripción</p>
         <h1>Activa tu hermandad</h1>
         <p className="paywall__lead">
