@@ -1,3 +1,4 @@
+import { asegurarFuentesDeLaWeb } from '../lib/fuentesDeLaWeb'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -37,6 +38,8 @@ import {
  * SitioContenido, compartido con la vista previa.
  */
 export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPublica } = {}) {
+  // Las doce letras del catálogo, solo aquí: ver lib/fuentesDeLaWeb.ts.
+  useEffect(() => { asegurarFuentesDeLaWeb() }, [])
   const { slug: slugRuta, noticia: slugNot, titular: slugTit } = useParams()
   // Cuando se llega por el dominio propio de la hermandad no hay slug en la
   // dirección —se ha entrado por la raíz— así que se toma el de su web.

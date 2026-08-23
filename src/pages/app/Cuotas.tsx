@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { llano } from '../../lib/buscar'
+import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -133,6 +134,9 @@ export default function Cuotas() {
     rowToCuota,
   )
   const [query, setQuery] = useState('')
+  /* La letra se pinta antes que la tabla: ver el comentario en Hermanos.tsx. */
+  const busqueda = useDeferredValue(query)
+
   // «Avisados» no es un estado del recibo: es el hermano que ha dicho desde su
   // área que ya ha pagado por Bizum o transferencia y espera confirmación.
   const [filter, setFilter] = useState<'Todas' | 'Avisados' | EstadoCuota>('Todas')
@@ -266,17 +270,17 @@ export default function Cuotas() {
             : c.estado === filter,
       )
       .filter((c) => {
-        const q = query.trim().toLowerCase()
+        const q = llano(busqueda)
         if (!q) return true
         const h = hermanoDe(c.hermanoId)
         return (
-          h?.nombre.toLowerCase().includes(q) ||
+          llano(h?.nombre ?? '').includes(q) ||
           String(h?.numero ?? '').includes(q) ||
           String(c.numero).includes(q)
         )
       })
       .sort((a, b) => b.numero - a.numero)
-  }, [cuotas, query, filter, hermanoDe])
+  }, [cuotas, busqueda, filter, hermanoDe])
 
   /**
    * EL CENSO CON SU SITUACIÓN, una fila por hermano.
@@ -291,11 +295,11 @@ export default function Cuotas() {
   )
   const recuento = useMemo(() => recuentoDeSituaciones(situaciones), [situaciones])
   const situacionesFiltradas = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = llano(busqueda)
     return situaciones
       .filter((x) => filtroSituacion === 'Todos' || x.situacion === filtroSituacion)
-      .filter((x) => !q || x.hermano.nombre.toLowerCase().includes(q) || String(x.hermano.numero).includes(q))
-  }, [situaciones, filtroSituacion, query])
+      .filter((x) => !q || llano(x.hermano.nombre).includes(q) || String(x.hermano.numero).includes(q))
+  }, [situaciones, filtroSituacion, busqueda])
 
   const stats = useMemo(() => {
     // Los indicadores hablan del EJERCICIO EN CURSO (antes mezclaban todos los

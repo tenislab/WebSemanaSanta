@@ -1,3 +1,4 @@
+import { llano } from '../../lib/buscar'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import Drawer from '../../components/Drawer'
@@ -344,13 +345,13 @@ export default function Comunicados() {
     return comunicados
       .filter((c) => (filtroCanal === 'Todos' ? true : c.canal === filtroCanal))
       .filter((c) => {
-        const q = query.trim().toLowerCase()
+        const q = llano(query)
         if (!q) return true
         return (
           String(c.numero).includes(q) ||
-          c.titulo.toLowerCase().includes(q) ||
-          c.cuerpo.toLowerCase().includes(q) ||
-          c.destinatarios.toLowerCase().includes(q)
+          llano(c.titulo).includes(q) ||
+          llano(c.cuerpo).includes(q) ||
+          llano(c.destinatarios).includes(q)
         )
       })
       .sort((a, b) => b.fechaCreacion.localeCompare(a.fechaCreacion))

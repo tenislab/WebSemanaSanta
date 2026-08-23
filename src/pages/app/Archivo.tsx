@@ -1,3 +1,4 @@
+import { llano } from '../../lib/buscar'
 import { useMemo, useState, type FormEvent } from 'react'
 import { useCargoDeLaSesion } from '../../lib/permisos'
 import Drawer from '../../components/Drawer'
@@ -109,14 +110,14 @@ export default function Archivo() {
     return documentos
       .filter((d) => (filtroCategoria === 'Todos' ? true : d.categoria === filtroCategoria))
       .filter((d) => {
-        const q = query.trim().toLowerCase()
+        const q = llano(query)
         if (!q) return true
         return (
           String(d.numero).includes(q) ||
-          d.nombre.toLowerCase().includes(q) ||
-          d.descripcion.toLowerCase().includes(q) ||
-          (d.proveedor ?? '').toLowerCase().includes(q) ||
-          (d.archivadoPor ?? '').toLowerCase().includes(q)
+          llano(d.nombre).includes(q) ||
+          llano(d.descripcion).includes(q) ||
+          llano(d.proveedor ?? '').includes(q) ||
+          llano(d.archivadoPor ?? '').includes(q)
         )
       })
       .sort((a, b) => b.fechaAlta.localeCompare(a.fechaAlta))

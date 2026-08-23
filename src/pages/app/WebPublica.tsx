@@ -1,3 +1,4 @@
+import { asegurarFuentesDeLaWeb } from '../../lib/fuentesDeLaWeb'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -402,6 +403,8 @@ function avisosDeLaWeb(web: WebPublica, hermandad: HermandadSettings): AvisoWeb[
 }
 
 export default function WebPublica() {
+  // Las doce letras del catálogo, solo aquí: ver lib/fuentesDeLaWeb.ts.
+  useEffect(() => { asegurarFuentesDeLaWeb() }, [])
   const [web, setWeb] = useWebPublica()
   const hermandad = useHermandadSettings()
   const [pestana, setPestanaState] = useState<Pestana>(

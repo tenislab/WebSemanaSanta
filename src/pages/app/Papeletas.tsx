@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { llano } from '../../lib/buscar'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -135,6 +136,9 @@ export default function Papeletas() {
   )
   const [campana, setCampanaState] = useState<Campana>(() => getCampana())
   const [query, setQuery] = useState('')
+  /* La letra se pinta antes que la tabla: ver el comentario en Hermanos.tsx. */
+  const busqueda = useDeferredValue(query)
+
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todos')
   const [orden, setOrden] = useState<'numero' | 'antiguedad'>('numero')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -214,12 +218,12 @@ export default function Papeletas() {
         return true
       })
       .filter((f) => {
-        const q = query.trim().toLowerCase()
+        const q = llano(busqueda)
         if (!q) return true
         return (
-          f.hermano.nombre.toLowerCase().includes(q) ||
+          llano(f.hermano.nombre).includes(q) ||
           String(f.hermano.numero).includes(q) ||
-          f.hermano.dni.toLowerCase().includes(q)
+          llano(f.hermano.dni).includes(q)
         )
       })
       .sort((a, b) =>
@@ -227,7 +231,7 @@ export default function Papeletas() {
           ? a.hermano.antiguedad - b.hermano.antiguedad || (a.hermano.numero || Infinity) - (b.hermano.numero || Infinity)
           : (a.hermano.numero || Infinity) - (b.hermano.numero || Infinity),
       )
-  }, [hermanos, papeletas, campana, filter, query, orden])
+  }, [hermanos, papeletas, campana, filter, busqueda, orden])
 
   const stats = useMemo(() => {
     const cuenta = { conSitio: 0, porRenovar: 0, noRenovadas: 0, nuevas: 0 }

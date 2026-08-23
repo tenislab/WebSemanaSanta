@@ -1,3 +1,4 @@
+import { llano } from '../../lib/buscar'
 import { useMemo, useState, type FormEvent, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -232,8 +233,8 @@ export default function Cortejo() {
       const estado = reparto.length >= tramo.capacidad ? 'Completo' : 'Con hueco'
       if (estado !== estadoFiltro) return false
     }
-    const q = query.trim().toLowerCase()
-    if (q && !textoBusqueda.toLowerCase().includes(q)) return false
+    const q = llano(query)
+    if (q && !llano(textoBusqueda).includes(q)) return false
     return true
   }
 

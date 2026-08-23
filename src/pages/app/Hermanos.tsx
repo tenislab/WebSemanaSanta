@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
+import { llano } from '../../lib/buscar'
+import { memo, useDeferredValue, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import { limpiarDni, mismoDni } from '../../lib/dni'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -135,6 +136,18 @@ export default function Hermanos() {
   // desde cualquier pantalla sin pasar por el menú.
   const [params, setParams] = useSearchParams()
   const [query, setQuery] = useState(() => params.get('q') ?? '')
+  /*
+   * LA LETRA SE PINTA ANTES QUE LA TABLA.
+   *
+   * Con un censo de hermandad de verdad —800 fichas—, cada letra tecleada en
+   * el buscador disparaba el filtrado y el repintado de la tabla entera en la
+   * misma pulsación. `useDeferredValue` lo parte en dos: la letra entra con
+   * prioridad urgente y la tabla corre justo detrás, interrumpible — si se
+   * teclea rápido, React descarta los repintados intermedios en vez de
+   * encolarlos.
+   */
+  const busqueda = useDeferredValue(query)
+
   useEffect(() => {
     const q = params.get('q')
     const nuevo = params.get('nuevo')
@@ -604,9 +617,9 @@ export default function Hermanos() {
       // mano: si no, filtrar por «Costalero» no encuentra a los costaleros.
       .filter((h) => (filtroEtiqueta ? etiquetasDe(h, roles.get(h.id) ?? []).includes(filtroEtiqueta) : true))
       .filter((h) => {
-        const q = query.trim().toLowerCase()
+        const q = llano(busqueda)
         if (!q) return true
-        return h.nombre.toLowerCase().includes(q) || String(h.numero).includes(q)
+        return llano(h.nombre).includes(q) || String(h.numero).includes(q)
       })
       // Los de baja (sin número activo) van al final, nunca delante del nº 1.
       .sort((a, b) => {
@@ -625,7 +638,7 @@ export default function Hermanos() {
         if (orden.campo === 'antiguedad') return signo * (a.antiguedad - b.antiguedad)
         return signo * ((a.numero || Infinity) - (b.numero || Infinity))
       })
-  }, [sesgados, query, filter, filtroEtiqueta, orden, soloCumples, roles, situacionesDeCuota])
+  }, [sesgados, busqueda, filter, filtroEtiqueta, orden, soloCumples, roles, situacionesDeCuota])
 
   const cumplenEsteMes = useMemo(
     () => hermanos.filter((h) => h.estado !== 'Baja' && cumpleEsteMes(h.fechaNacimiento)).length,
@@ -744,14 +757,17 @@ export default function Hermanos() {
   const marcadosVisibles = useMemo(() => filtered.filter((h) => marcados.has(h.id)), [filtered, marcados])
   const todosMarcados = filtered.length > 0 && marcadosVisibles.length === filtered.length
 
-  function alternarMarca(id: string) {
+  /* `useCallback` y no una función suelta: es una prop de `FilasDelCenso`, y
+     si cambiara de identidad en cada render, el `memo` de las filas no
+     pasaría de largo nunca y el límite no serviría de nada. */
+  const alternarMarca = useCallback((id: string) => {
     setMarcados((prev) => {
       const siguiente = new Set(prev)
       if (siguiente.has(id)) siguiente.delete(id)
       else siguiente.add(id)
       return siguiente
     })
-  }
+  }, [])
   /** Marca o desmarca TODO lo que se está viendo (con los filtros puestos). */
   function alternarTodos() {
     setMarcados((prev) => {
@@ -1072,6 +1088,35 @@ export default function Hermanos() {
     setSelectedId(null)
   }
 
+  /*
+   * EL CENSO IMPRIMIBLE, CONGELADO ENTRE TECLEOS.
+   *
+   * Este listado oculto —solo existe al imprimir— pinta OTRA VEZ todo el
+   * censo filtrado. Sus `filas` se construían inline en el render, así que
+   * cada letra del buscador lo reconstruía entero EN EL CAMINO URGENTE,
+   * aunque la lista no hubiera cambiado todavía. Con el elemento en un
+   * `useMemo`, mientras las dependencias no cambien React recibe el MISMO
+   * elemento y ni entra a compararlo.
+   */
+  const informeImpreso = useMemo(() => (
+      <InformeImpreso
+      className="screen-hidden"
+      hermandad={hermandad}
+      titulo="Censo de hermanos"
+      generadoEl={fechaLarga}
+      resumen={[
+        { etiqueta: 'En este listado', valor: String(filtered.length) },
+        { etiqueta: 'Censo completo', valor: String(hermanos.length) },
+        ...(sesgoActivo ? [{ etiqueta: 'Sesgo', valor: etiquetaSegmento(criterios, camposPropios) }] : []),
+      ]}
+      columnas={['Nº', 'Hermano', 'Estado', 'Antigüedad', 'Cuota']}
+      filas={filtered.map((h) => [
+        h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad,
+        cuotaEnPalabras(situacionesDeCuota.get(h.id) ?? 'sinEmitir'),
+      ])}
+    />
+  ), [hermandad, filtered, hermanos.length, sesgoActivo, criterios, camposPropios, fechaLarga, situacionesDeCuota])
+
   return (
     <div className="dash">
       {avisoAcceso && (
@@ -1347,78 +1392,27 @@ export default function Hermanos() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((h) => (
-              <tr
-                key={h.id}
-                className={h.id === justAddedId ? 'row--flash' : undefined}
-                {...filaQueAbre(() => setSelectedId(h.id))}
-              >
-                <td className="col-marca" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={marcados.has(h.id)}
-                    onChange={() => alternarMarca(h.id)}
-                    aria-label={`Marcar a ${h.nombre}`}
-                  />
-                </td>
-                <td className="num col-opcional">{h.numero > 0 ? h.numero : '—'}</td>
-                <td>
-                  <div className="row-person">
-                    {/* Un tono estable por persona: el censo deja de ser una
-                        columna de círculos grises todos iguales. */}
-                    <span className="row-avatar" style={{ '--tono': tonoDe(h.nombre).fondo } as CSSProperties}>
-                      {initials(h.nombre)}
-                    </span>
-                    <span>
-                      <span className="row-person__name">{h.nombre}</span>
-                      <span className="row-person__sub">{h.email}</span>
-                      {/* En el móvil se ocultan Nº, tramo y antigüedad. */}
-                      <span className="row-person__sub solo-movil">
-                        Nº {h.numero > 0 ? h.numero : '—'} · {cuotaEnPalabras(situacionDe(h.id)).toLowerCase()} · {tramoPorHermano.get(h.id) ?? 'sin papeleta'}
-                      </span>
-                    </span>
-                  </div>
-                </td>
-                <td className="col-opcional">
-                  {tramoPorHermano.get(h.id) ?? <span className="table-muted">Sin papeleta</span>}
-                </td>
-                <td>
-                  <span className={`pill ${estadoClass(h.estado)}`}>{h.estado}</span>
-                  {h.bajaSolicitada && h.estado !== 'Baja' && (
-                    <span
-                      className="pill-avisado"
-                      title={`Pidió la baja${h.bajaSolicitadaEl ? ` el ${h.bajaSolicitadaEl}` : ''}`}
-                    >
-                      Pide la baja
-                    </span>
-                  )}
-                </td>
-                <td className="col-opcional">
-                  <span className={`pill ${cuotaClass(situacionDe(h.id))}`}>{cuotaEnPalabras(situacionDe(h.id))}</span>
-                </td>
-                <td className="num col-opcional">
-                  {/* Sin antigüedad, una raya: el censo llegó a poner «NaN
-                      años» debajo de cada nombre cuando esa columna no venía
-                      en el Excel que se importó. */}
-                  {h.antiguedad || '—'}
-                  {aniosDeHermandad(h.antiguedad) !== null && (
-                    <span className="table-subtle"> · {aniosDeHermandad(h.antiguedad)} años</span>
-                  )}
-                </td>
-                <td className="col-opcional">
-                  <button
-                    className="icon-btn"
-                    title="Ver ficha"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSelectedId(h.id)
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {/*
+              LAS FILAS VIVEN EN UN COMPONENTE MEMORIZADO, y no es manía.
+
+              Cada letra del buscador re-renderiza esta página. Sin el límite
+              de `memo`, React volvía a recorrer las 800 filas EN EL RENDER
+              URGENTE —el de la letra—, aunque la lista filtrada aún no hubiera
+              cambiado: la primera pulsación en un censo de 800 costaba medio
+              segundo, medido en el build de producción. Con el límite, el
+              render urgente compara las props del cuerpo entero (misma lista,
+              gracias a `useDeferredValue`), pasa de largo, y la tabla se
+              actualiza en el render diferido, fuera del camino del dedo.
+            */}
+            <FilasDelCenso
+              lista={filtered}
+              justAddedId={justAddedId}
+              marcados={marcados}
+              situaciones={situacionesDeCuota}
+              tramos={tramoPorHermano}
+              onAbrir={setSelectedId}
+              onMarcar={alternarMarca}
+            />
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={8} className="table-empty">
@@ -2062,21 +2056,7 @@ export default function Hermanos() {
 
       {/* Solicitudes de alta pedidas desde el área del hermano */}
       {/* Documento imprimible: solo aparece en el papel (ver .screen-hidden). */}
-      <InformeImpreso
-        className="screen-hidden"
-        hermandad={hermandad}
-        titulo="Censo de hermanos"
-        generadoEl={fechaLarga}
-        resumen={[
-          { etiqueta: 'En este listado', valor: String(filtered.length) },
-          { etiqueta: 'Censo completo', valor: String(hermanos.length) },
-          ...(sesgoActivo ? [{ etiqueta: 'Sesgo', valor: etiquetaSegmento(criterios, camposPropios) }] : []),
-        ]}
-        columnas={['Nº', 'Hermano', 'Estado', 'Antigüedad', 'Cuota']}
-        filas={filtered.map((h) => [
-          h.numero > 0 ? h.numero : '—', h.nombre, h.estado, h.antiguedad, cuotaEnPalabras(situacionDe(h.id)),
-        ])}
-      />
+      {informeImpreso}
 
       <Drawer
         open={bajasOpen}
@@ -2239,3 +2219,105 @@ export default function Hermanos() {
     </div>
   )
 }
+
+
+/**
+ * El cuerpo de la tabla del censo. Va aparte y dentro de `memo` para que
+ * teclear en el buscador no lo recorra entero en cada letra: ver el comentario
+ * donde se usa. Las props son la lista ya filtrada y valores estables; si
+ * ninguna cambia, el render urgente ni entra aquí.
+ */
+const FilasDelCenso = memo(function FilasDelCenso({
+  lista,
+  justAddedId,
+  marcados,
+  situaciones,
+  tramos,
+  onAbrir,
+  onMarcar,
+}: {
+  lista: Hermano[]
+  justAddedId: string | null
+  marcados: Set<string>
+  situaciones: Map<string, SituacionCuota>
+  tramos: Map<string, string>
+  onAbrir: (id: string) => void
+  onMarcar: (id: string) => void
+}) {
+  return (
+    <>
+      {lista.map((h) => (
+                          <tr
+                key={h.id}
+                className={h.id === justAddedId ? 'row--flash' : undefined}
+                {...filaQueAbre(() => onAbrir(h.id))}
+              >
+                <td className="col-marca" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={marcados.has(h.id)}
+                    onChange={() => onMarcar(h.id)}
+                    aria-label={`Marcar a ${h.nombre}`}
+                  />
+                </td>
+                <td className="num col-opcional">{h.numero > 0 ? h.numero : '—'}</td>
+                <td>
+                  <div className="row-person">
+                    {/* Un tono estable por persona: el censo deja de ser una
+                        columna de círculos grises todos iguales. */}
+                    <span className="row-avatar" style={{ '--tono': tonoDe(h.nombre).fondo } as CSSProperties}>
+                      {initials(h.nombre)}
+                    </span>
+                    <span>
+                      <span className="row-person__name">{h.nombre}</span>
+                      <span className="row-person__sub">{h.email}</span>
+                      {/* En el móvil se ocultan Nº, tramo y antigüedad. */}
+                      <span className="row-person__sub solo-movil">
+                        Nº {h.numero > 0 ? h.numero : '—'} · {cuotaEnPalabras((situaciones.get(h.id) ?? 'sinEmitir')).toLowerCase()} · {tramos.get(h.id) ?? 'sin papeleta'}
+                      </span>
+                    </span>
+                  </div>
+                </td>
+                <td className="col-opcional">
+                  {tramos.get(h.id) ?? <span className="table-muted">Sin papeleta</span>}
+                </td>
+                <td>
+                  <span className={`pill ${estadoClass(h.estado)}`}>{h.estado}</span>
+                  {h.bajaSolicitada && h.estado !== 'Baja' && (
+                    <span
+                      className="pill-avisado"
+                      title={`Pidió la baja${h.bajaSolicitadaEl ? ` el ${h.bajaSolicitadaEl}` : ''}`}
+                    >
+                      Pide la baja
+                    </span>
+                  )}
+                </td>
+                <td className="col-opcional">
+                  <span className={`pill ${cuotaClass((situaciones.get(h.id) ?? 'sinEmitir'))}`}>{cuotaEnPalabras((situaciones.get(h.id) ?? 'sinEmitir'))}</span>
+                </td>
+                <td className="num col-opcional">
+                  {/* Sin antigüedad, una raya: el censo llegó a poner «NaN
+                      años» debajo de cada nombre cuando esa columna no venía
+                      en el Excel que se importó. */}
+                  {h.antiguedad || '—'}
+                  {aniosDeHermandad(h.antiguedad) !== null && (
+                    <span className="table-subtle"> · {aniosDeHermandad(h.antiguedad)} años</span>
+                  )}
+                </td>
+                <td className="col-opcional">
+                  <button
+                    className="icon-btn"
+                    title="Ver ficha"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onAbrir(h.id)
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  </button>
+                </td>
+              </tr>
+      ))}
+    </>
+  )
+})

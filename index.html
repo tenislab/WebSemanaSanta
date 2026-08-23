@@ -12,7 +12,14 @@
     <!-- Fuentes para la web pública de cada hermandad (selector de tipografía) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Merriweather:wght@400;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Montserrat:wght@400;600;700&family=Raleway:wght@400;600;700&family=Poppins:wght@400;600;700&family=Lato:wght@400;700&family=Oswald:wght@400;600&family=Bebas+Neue&family=Dancing+Script:wght@500;700&display=swap" rel="stylesheet" />
+    <!--
+      Solo la letra DEL PANEL. Las doce familias del catálogo del constructor
+      de webs se cargan al entrar en la web pública o en su editor
+      (src/lib/fuentesDeLaWeb.ts): una hoja de estilos externa bloquea el
+      primer pintado, y no se le hace pagar ese bloqueo por trece familias a
+      quien abre el censo desde el móvil.
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500&display=swap" rel="stylesheet" />
     <script>
       // Aplica el tema guardado antes de pintar para evitar parpadeo
       (function () {

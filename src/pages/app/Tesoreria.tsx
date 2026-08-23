@@ -1,5 +1,6 @@
+import { llano } from '../../lib/buscar'
 import { sumaEuros, aCentimos } from '../../lib/format'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useDeferredValue, useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import MovimientoJustificante from '../../components/MovimientoJustificante'
 import {
@@ -52,6 +53,9 @@ export default function Tesoreria() {
     rowToMovimiento,
   )
   const [query, setQuery] = useState('')
+  /* La letra se pinta antes que la tabla: ver el comentario en Hermanos.tsx. */
+  const busqueda = useDeferredValue(query)
+
   const [filter, setFilter] = useState<(typeof FILTROS)[number]>('Todos')
   const [selected, setSelected] = useState<Movimiento | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -68,16 +72,16 @@ export default function Tesoreria() {
         return m.estado === filter
       })
       .filter((m) => {
-        const q = query.trim().toLowerCase()
+        const q = llano(busqueda)
         if (!q) return true
         return (
-          m.concepto.toLowerCase().includes(q) ||
-          m.categoria.toLowerCase().includes(q) ||
+          llano(m.concepto).includes(q) ||
+          llano(m.categoria).includes(q) ||
           String(m.numero).includes(q)
         )
       })
       .sort((a, b) => b.numero - a.numero)
-  }, [movimientos, query, filter])
+  }, [movimientos, busqueda, filter])
 
   const stats = useMemo(() => {
     const conciliados = movimientos.filter((m) => m.estado === 'Conciliado')

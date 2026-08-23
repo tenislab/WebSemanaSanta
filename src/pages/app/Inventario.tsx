@@ -1,3 +1,4 @@
+import { llano } from '../../lib/buscar'
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import { CLAVES_CATALOGOS, useLista } from '../../lib/catalogos'
@@ -53,11 +54,11 @@ export default function Inventario() {
     return enseres
       .filter((e) => (filter === 'Todos' ? true : e.categoria === filter))
       .filter((e) => {
-        const q = query.trim().toLowerCase()
+        const q = llano(query)
         if (!q) return true
         return (
-          e.nombre.toLowerCase().includes(q) ||
-          e.ubicacion.toLowerCase().includes(q) ||
+          llano(e.nombre).includes(q) ||
+          llano(e.ubicacion).includes(q) ||
           String(e.numero).includes(q)
         )
       })

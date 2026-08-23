@@ -1,3 +1,4 @@
+import { llano } from '../lib/buscar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PersonaAsignable } from '../lib/asignables'
 
@@ -62,12 +63,12 @@ export default function HermanoPicker({
 
   const MAX = 8
   const { results, deMas } = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = llano(query)
     // Si lo escrito ES el nombre ya asignado, no se filtra por él: se enseña
     // la lista entera para poder cambiar de persona sin borrar antes.
     const filtrar = q && q !== textoAsignado.toLowerCase()
     const pool = filtrar
-      ? hermanos.filter((h) => h.nombre.toLowerCase().includes(q) || h.marca.toLowerCase().includes(q))
+      ? hermanos.filter((h) => llano(h.nombre).includes(q) || llano(h.marca).includes(q))
       : hermanos
     return { results: pool.slice(0, MAX), deMas: Math.max(0, pool.length - MAX) }
   }, [hermanos, query, textoAsignado])
