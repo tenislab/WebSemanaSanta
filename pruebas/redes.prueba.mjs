@@ -98,8 +98,28 @@ export default async function ({ cargar, caso }) {
   // Todas tienen explicación, que es lo que lee quien no es informático.
   caso('las cinco explican cómo va', 5,
     m.REDES.filter((r) => (m.COMO_PUBLICAR[r]?.comoVa ?? '').length > 20).length)
-  caso('y todas tienen color e inicial', 10,
-    m.REDES.filter((r) => m.COLOR_RED[r]).length + m.REDES.filter((r) => m.INICIAL_RED[r]).length)
+  /*
+   * Y TODAS TIENEN COLOR Y LOGOTIPO.
+   *
+   * Antes eran iniciales dentro de un círculo —una «f», un «IG», una nota
+   * musical para TikTok—, y se leían como un apaño en una pantalla que la
+   * junta enseña a otras hermandades. Ahora es la marca dibujada.
+   *
+   * La prueba está para el día que se añada una sexta red: sin ella, la red
+   * nueva saldría con un hueco donde va el logotipo y nadie se enteraría hasta
+   * verlo en pantalla.
+   */
+  caso('y todas tienen color', 5, m.REDES.filter((r) => m.COLOR_RED[r]).length)
+  caso('y todas tienen logotipo', 5,
+    m.REDES.filter((r) => (m.MARCA_RED[r] ?? []).length > 0).length)
+  // Un trazo sin dibujo es un icono en blanco: se comprueba que cada forma
+  // trae lo suyo.
+  caso('y ningún trazo está vacío', 0,
+    m.REDES.flatMap((r) => m.MARCA_RED[r]).filter((t) => (
+      t.forma === 'path' ? !(t.d ?? '').startsWith('M')
+        : t.forma === 'rect' ? !(t.w > 0 && t.h > 0)
+          : !(t.r > 0)
+    )).length)
 
   await laPantallaYLaBase({ caso })
   await unBotonQueDiceLoQueHace({ cargar, caso })

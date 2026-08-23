@@ -2839,9 +2839,18 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .sitio__foot-barra { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .sitio__foot-legal { margin-top: 0.9rem; font-size: 0.76rem; opacity: 0.8; line-height: 1.6; }
 .sitio__foot-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-.sitio__redes { display: flex; gap: 0.6rem; }
-.sitio__red { color: var(--sitio-color-texto); text-decoration: none; font-size: 0.82rem; font-weight: 600; }
-.sitio__red:hover { text-decoration: underline; }
+/* El pie: los logotipos de las redes, no sus nombres escritos. Heredan el
+   color del texto del sitio, así que funcionan en las webs claras y en las
+   oscuras sin tener que declarar dos paletas. */
+.sitio__redes { display: flex; gap: 0.15rem; flex-wrap: wrap; }
+.sitio__red {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  color: var(--sitio-color-texto); text-decoration: none; opacity: 0.75;
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.sitio__red:hover { opacity: 1; transform: translateY(-1px); background: rgba(128, 128, 128, 0.14); }
+.sitio__red:focus-visible { opacity: 1; outline: 2px solid currentColor; outline-offset: 2px; }
 
 /* Portada sin foto: degradado con los colores de la hermandad (no gris) */
 .sitio__hero--sinfoto {
@@ -3379,48 +3388,141 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .rgpd-borrar:hover { border-color: var(--err-fg); }
 
 /* =========================================================================
-   Comunicados — conexión (simulada) con redes sociales
+   Comunicados — las redes de la hermandad
+   =========================================================================
+   Era un desplegable con cinco tarjetas grandes y cinco botones rojos
+   «Conectar». Cerrado no se veía para qué servía; abierto empujaba media
+   página los comunicados, que son el contenido de la pantalla. Ahora es una
+   TIRA de fichas que cabe de un vistazo y en la que el color dice el estado
+   sin tener que leer: la marca encendida es una cuenta puesta, apagada es que
+   falta. Cada ficha lleva su color en `--marca`.
    ========================================================================= */
-.redes-card {
+.redes-panel {
   background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 1.1rem 1.3rem; margin-bottom: 1.4rem; box-shadow: var(--glass-shadow);
+  padding: 1.1rem 1.3rem 1rem; margin-bottom: 1.4rem; box-shadow: var(--glass-shadow);
 }
-.redes-card__head h2 { font-size: 1rem; margin: 0 0 0.2rem; display: inline-flex; align-items: center; gap: 0.55rem; }
-.redes-card__head p { margin: 0 0 0.9rem; }
-/* Como <summary> plegable: flecha propia + cursor, y sin margen extra al estar cerrada. */
-summary.redes-card__head { cursor: pointer; list-style: none; }
-summary.redes-card__head::-webkit-details-marker { display: none; }
-summary.redes-card__head h2::before {
-  content: '▸'; font-size: 0.8em; color: var(--text-muted); transition: transform 0.15s ease;
+.redes-panel__head { margin-bottom: 0.95rem; }
+.redes-panel__que h2 {
+  font-size: 1rem; margin: 0 0 0.25rem;
+  display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
 }
-details[open] > summary.redes-card__head h2::before { transform: rotate(90deg); }
-summary.redes-card__head p { margin-bottom: 0; }
-details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
-.redes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.8rem; }
-.red-card {
-  display: flex; flex-direction: column; gap: 0.7rem; padding: 0.9rem;
+.redes-panel__que p { margin: 0; max-width: 76ch; }
+/*
+ * El marcador va PEGADO AL TÍTULO y no en la otra punta de la fila.
+ * Suelto a la derecha quedaba a media pantalla de distancia de lo que cuenta,
+ * con un hueco enorme en medio: se leía como una cifra sin dueño.
+ * `tabular-nums` para que no baile al pasar de 1 a 2.
+ */
+.redes-panel__marcador {
+  margin: 0; flex: none; display: inline-flex; align-items: baseline; gap: 0.28rem;
+  padding: 0.16rem 0.5rem; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--line);
+  font-size: 0.72rem; color: var(--text-muted); letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.redes-panel__marcador b { font-size: 0.8rem; color: var(--text); }
+
+.redes-tira { display: flex; flex-wrap: wrap; gap: 0.55rem; }
+
+.red-ficha {
+  position: relative; flex: 1 1 9.5rem; min-width: 0;
+  border-radius: var(--radius-sm);
+  /*
+   * SIN PONER PESA MENOS QUE PUESTA, y esto estaba justo al revés.
+   * Con fondo beige, las que faltaban eran los bloques más oscuros de la tira
+   * y se comían la vista; las que ya estaban, en blanco, parecían apagadas. Lo
+   * hecho se levanta (tarjeta blanca) y lo que falta se retira (transparente
+   * con el borde discontinuo, que ya dice «esto está por hacer» sin gritar).
+   */
+  border: 1px dashed var(--line-strong); background: transparent;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.red-ficha__boton {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%;
+  padding: 0.62rem 0.7rem; background: none; border: 0; border-radius: inherit;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.red-ficha__marca {
+  flex: none; width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  /* Apagada: gris y a media tinta. Es lo que hace que se vea de un vistazo
+     cuáles faltan, sin contar pastillas de estado una por una. */
+  color: var(--text-muted); background: var(--bg-sunken);
+  border: 1px solid var(--line); opacity: 0.55;
+  transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
+}
+.red-ficha__texto { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.red-ficha__texto b { font-size: 0.85rem; line-height: 1.25; }
+.red-ficha__estado {
+  font-size: 0.74rem; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.red-ficha:hover { border-color: var(--marca); transform: translateY(-1px); }
+.red-ficha:hover .red-ficha__marca { opacity: 1; }
+.red-ficha__boton:focus-visible { outline: none; }
+.red-ficha:focus-within { border-color: var(--marca); box-shadow: 0 0 0 3px var(--ring); }
+
+/* Puesta: borde entero, tarjeta levantada y la marca a todo color. */
+.red-ficha--puesta {
+  border-style: solid; border-color: var(--line); background: var(--bg-raised);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.red-ficha--puesta .red-ficha__marca {
+  color: #fff; background: var(--marca); border-color: transparent; opacity: 1;
+}
+.red-ficha--puesta .red-ficha__estado { color: var(--text); }
+.red-ficha--editando { border-style: solid; border-color: var(--marca); }
+
+/* La flecha que abre la cuenta en otra pestaña. Va encima, a la derecha, y
+   solo aparece al pasar por encima o al enfocarla con el teclado: en reposo
+   estorbaba al nombre de la red. */
+.red-ficha__ir {
+  position: absolute; top: 0.25rem; right: 0.3rem;
+  width: 1.4rem; height: 1.4rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.72rem; line-height: 1; color: var(--text-muted); text-decoration: none;
+  opacity: 0; transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.red-ficha:hover .red-ficha__ir, .red-ficha__ir:focus-visible { opacity: 1; }
+.red-ficha__ir:hover { color: var(--marca); background: var(--bg-sunken); }
+
+/* El formulario, debajo de la tira y uno cada vez: abriéndolo dentro de la
+   ficha, la tira entera se descolocaba al escribir. */
+.redes-editor {
+  margin-top: 0.75rem; padding: 0.8rem 0.85rem;
   background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
 }
-.red-card__top { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
-.red-card__badge {
-  width: 34px; height: 34px; border-radius: 50%; flex: none; color: #fff;
-  display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700;
+.redes-editor > label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+.redes-editor > label b { color: var(--text); }
+.redes-editor__fila { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.redes-editor__fila input {
+  flex: 1 1 16rem; min-width: 0; padding: 0.45rem 0.6rem; font: inherit; font-size: 0.85rem;
+  color: var(--text); background: var(--bg-raised);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
 }
-.red-card__name { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.red-card__name b { font-size: 0.88rem; }
-.red-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
-.red-card__connect-row { display: flex; gap: 0.4rem; }
-.red-card__connect-row input {
-  width: 110px; padding: 0.4rem 0.5rem; font: inherit; font-size: 0.82rem;
-  color: var(--text); background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+.redes-editor__fila input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
+.redes-editor .form-hint { margin: 0.45rem 0 0; }
+
+.redes-panel__nota {
+  margin: 0.9rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--line);
+  font-size: 0.78rem; line-height: 1.55; color: var(--text-muted);
 }
-.red-card__connect-row input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
-/* El campo ahora admite la dirección entera pegada del navegador, no solo
-   «@usuario»: con 110px no se veía lo que se estaba escribiendo. */
-.red-card__connect-row { flex-wrap: wrap; width: 100%; }
-.red-card__connect-row input { width: 100%; min-width: 0; flex: 1 1 12rem; }
-.red-card__name a { color: inherit; text-decoration: none; }
-.red-card__name a:hover { text-decoration: underline; }
+.redes-panel__nota b { color: var(--text); }
+
+/* El logotipo, dentro de las filas de publicar. Arriba y no centrado: la
+   explicación ocupa tres líneas y el icono se quedaba solo a media altura,
+   sin nada al lado. */
+.red-marca-mini { flex: none; display: inline-flex; align-self: flex-start; margin-top: 0.12rem; }
+
+@media (max-width: 640px) {
+  .redes-panel { padding: 0.95rem 1rem; }
+  .redes-panel__head { flex-direction: column; gap: 0.6rem; }
+  .redes-panel__marcador { flex-direction: row; align-items: baseline; gap: 0.4rem; text-align: left; }
+  .redes-panel__marcador b { font-size: 1.15rem; }
+  /* En el móvil, dos por fila: cinco fichas en columna son una lista larguísima. */
+  .red-ficha { flex: 1 1 8rem; }
+}
 
 /* Publicar un comunicado en redes: el texto y una fila por red. */
 .redes-publicar__texto {
@@ -3436,7 +3538,6 @@ details[open] > summary.redes-card__head p { margin-bottom: 0.9rem; }
 .redes-publicar__que { display: flex; flex-direction: column; gap: 0.15rem; flex: 1 1 12rem; min-width: 0; }
 .redes-publicar__que b { font-size: 0.86rem; }
 .redes-publicar__que .form-hint { margin: 0.2rem 0 0; }
-.red-card__badge--sm { width: 26px; height: 26px; font-size: 0.68rem; }
 
 /* =========================================================================
    Informes — resumen y tabla dentro del drawer, y documento de impresión

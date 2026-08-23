@@ -7,6 +7,7 @@ import { formatDate } from '../lib/format'
 import { FormularioAlta, FormularioContacto, FormularioDonativo, FormularioLoteria } from './FormulariosWeb'
 import { diasHasta as diasHastaFecha, getCampana, ventanaAbierta } from '../lib/campana'
 import { baseDeRutas } from '../lib/seoWeb'
+import IconoRed from './IconoRed'
 
 /**
  * Deja el foco dentro de una caja mientras esté abierta (el menú de móvil, el
@@ -708,13 +709,22 @@ function Redes({ web, interactivo }: { web: WebPublica; interactivo: boolean }) 
         .map((r) => (
           // En la vista previa no navegan: pulsar una red desde el panel se
           // llevaba al secretario fuera de la aplicación.
+          // EL LOGOTIPO, no el nombre escrito.
+          //
+          // El pie de la web enseñaba «Instagram Facebook X» en texto, y el
+          // propio panel promete que «los iconos aparecen en el pie de la
+          // web». Además, una fila de nombres en un pie no se lee como lo que
+          // es: nadie busca la palabra «Instagram», se busca su marca.
+          // El nombre sigue ahí para los lectores de pantalla.
           <a
             key={r.id}
             href={interactivo ? r.href : undefined}
             {...(interactivo ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
             className="sitio__red"
+            title={r.tipo}
           >
-            {r.tipo}
+            <IconoRed red={r.tipo} tam={20} />
+            <span className="sr-only">{r.tipo}</span>
           </a>
         ))}
     </div>

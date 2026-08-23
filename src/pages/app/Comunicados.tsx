@@ -1,5 +1,5 @@
 import { llano } from '../../lib/buscar'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import Drawer from '../../components/Drawer'
 import AvisoFalta from '../../components/AvisoFalta'
@@ -48,7 +48,6 @@ import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import {
   COLOR_RED,
-  INICIAL_RED,
   enlaceDeLaCuenta,
   accionDePublicar,
   sePuedeCompartirConElMovil,
@@ -57,6 +56,7 @@ import {
   textoParaRedes,
   LIMITE_X,
 } from '../../lib/redesSociales'
+import IconoRed from '../../components/IconoRed'
 import { getWebPublica } from '../../lib/webPublica'
 import { baseDeLaWeb } from '../../lib/seoWeb'
 
@@ -603,102 +603,118 @@ export default function Comunicados() {
         </button>
       </div>
 
-      {/* Desplegable: la gestión de cuentas es configuración, no el día a día — colapsada
-          por defecto para que los avisos (el contenido principal) queden arriba. */}
-      <details className="redes-card">
-        <summary className="redes-card__head">
-          <h2>
-            Redes sociales de la hermandad
-            <span className="pill pill--info">{cuentas.filter((c) => c.conectada).length} de {cuentas.length}</span>
-          </h2>
-          {/* Lo que hace y lo que no, dicho aquí y no en letra pequeña. Antes
-              ponía «conexión simulada», que no explicaba para qué servía
-              entonces conectar nada. */}
-          <p className="table-subtle">
-            Di cuál es la cuenta de la hermandad en cada red. Con eso, los comunicados salen con el texto
-            listo y un botón que abre la red para publicarlo, y los iconos aparecen en el pie de la web.
-          </p>
-        </summary>
-        <div className="redes-grid">
-          {cuentas.map((c) => (
-            <div className="red-card" key={c.red}>
-              <div className="red-card__top">
-                <span className="red-card__badge" style={{ background: COLOR_RED[c.red] }}>
-                  {INICIAL_RED[c.red]}
-                </span>
-                <div className="red-card__name">
-                  <b>{c.red}</b>
-                  {c.conectada && (
-                    enlaceDeLaCuenta(c) ? (
-                      <a
-                        className="table-subtle"
-                        href={enlaceDeLaCuenta(c) as string}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {c.usuario} ↗
-                      </a>
-                    ) : (
-                      <span className="table-subtle">{c.usuario}</span>
-                    )
-                  )}
-                </div>
-              </div>
-              <div className="red-card__foot">
-                <span className={`pill ${c.conectada ? 'pill--ok' : 'pill--off'}`}>
-                  {c.conectada ? 'Conectada' : 'No conectada'}
-                </span>
-                {conectando === c.red ? (
-                  <div className="red-card__connect-row">
-                    <input
-                      type="text"
-                      placeholder="@lahermandad o la dirección de su página"
-                      value={usuarioInput}
-                      onChange={(e) => { setUsuarioInput(e.target.value); setErrorRed('') }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') conectar(c.red) }}
-                      autoFocus
-                    />
-                    <button className="btn btn-primary btn-sm" onClick={() => conectar(c.red)}>
-                      Guardar
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => { setConectando(null); setUsuarioInput(''); setErrorRed('') }}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : c.conectada ? (
-                  <>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => {
-                        setConectando(c.red)
-                        setUsuarioInput(c.enlace ?? c.usuario ?? '')
-                        setErrorRed('')
-                      }}
-                    >
-                      Cambiar cuenta
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => desconectar(c.red)}>
-                      Quitar
-                    </button>
-                  </>
-                ) : (
-                  // Abre el campo; NO conecta a ciegas. Antes esto conectaba
-                  // con «@hermandaddemo» si no se había escrito nada.
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => { setConectando(c.red); setUsuarioInput(''); setErrorRed('') }}
+      {/*
+        LAS CINCO REDES, A LA VISTA Y EN UNA SOLA TIRA.
+        Esto era un desplegable con cinco tarjetas grandes, cada una con su
+        botón «Conectar» en rojo: cerrado no se veía para qué servía, y abierto
+        empujaba los comunicados —que son el contenido de la pantalla— media
+        página hacia abajo. Ahora es una tira de fichas que cabe de un vistazo,
+        siempre visible, y el color dice el estado sin tener que leer: la marca
+        va encendida cuando la cuenta está puesta y apagada cuando no. Al pulsar
+        una ficha, el formulario se abre debajo (uno cada vez, para que la tira
+        no se descoloque).
+      */}
+      <section className="redes-panel" aria-labelledby="redes-titulo">
+        <header className="redes-panel__head">
+          <div className="redes-panel__que">
+            <h2 id="redes-titulo">
+              Redes sociales de la hermandad
+              <span className="redes-panel__marcador">
+                <b>{cuentasConectadas.length}</b> de {cuentas.length} puestas
+              </span>
+            </h2>
+            <p className="table-subtle">
+              Di cuál es la cuenta de la hermandad en cada red. Con eso, los comunicados salen con el
+              texto listo y un botón que abre la red, y los iconos aparecen en el pie de la web.
+            </p>
+          </div>
+        </header>
+
+        <div className="redes-tira">
+          {cuentas.map((c) => {
+            const enlace = enlaceDeLaCuenta(c)
+            return (
+              <div
+                key={c.red}
+                className={`red-ficha${c.conectada ? ' red-ficha--puesta' : ''}${conectando === c.red ? ' red-ficha--editando' : ''}`}
+                style={{ '--marca': COLOR_RED[c.red] } as CSSProperties}
+              >
+                <button
+                  type="button"
+                  className="red-ficha__boton"
+                  onClick={() => {
+                    if (conectando === c.red) { setConectando(null); setUsuarioInput(''); setErrorRed(''); return }
+                    setConectando(c.red)
+                    setUsuarioInput(c.enlace ?? c.usuario ?? '')
+                    setErrorRed('')
+                  }}
+                  aria-expanded={conectando === c.red}
+                >
+                  <span className="red-ficha__marca"><IconoRed red={c.red} tam={22} /></span>
+                  <span className="red-ficha__texto">
+                    <b>{c.red}</b>
+                    {/* El título trae el nombre entero: la ficha es estrecha y
+                        un «@hermandaddelaverac…» no dice cuál es la cuenta. */}
+                    <span className="red-ficha__estado" title={c.conectada ? (c.usuario || undefined) : undefined}>
+                      {c.conectada ? (c.usuario || 'Puesta') : 'Sin poner'}
+                    </span>
+                  </span>
+                </button>
+                {/* El enlace a la cuenta va FUERA del botón: dos cosas que se
+                    pulsan no pueden estar una dentro de otra, y aquí son de
+                    verdad dos —editar y abrir la página de la hermandad—. */}
+                {c.conectada && enlace && (
+                  <a
+                    className="red-ficha__ir"
+                    href={enlace}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Abrir ${c.red} en otra pestaña`}
+                    aria-label={`Abrir la cuenta de ${c.red} en otra pestaña`}
                   >
-                    Conectar
-                  </button>
+                    ↗
+                  </a>
                 )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-        {errorRed && <p className="form-hint form-hint--error">{errorRed}</p>}
+
+        {/* El formulario, debajo de la tira y uno cada vez. */}
+        {conectando && (
+          <div className="redes-editor">
+            <label htmlFor="redCuenta">
+              La cuenta de la hermandad en <b>{conectando}</b>
+            </label>
+            <div className="redes-editor__fila">
+              <input
+                id="redCuenta"
+                type="text"
+                placeholder="@lahermandad o la dirección de su página"
+                value={usuarioInput}
+                onChange={(e) => { setUsuarioInput(e.target.value); setErrorRed('') }}
+                onKeyDown={(e) => { if (e.key === 'Enter') conectar(conectando) }}
+                autoFocus
+              />
+              <button className="btn btn-primary btn-sm" onClick={() => conectar(conectando)}>
+                Guardar
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { setConectando(null); setUsuarioInput(''); setErrorRed('') }}
+              >
+                Cancelar
+              </button>
+              {cuentas.find((c) => c.red === conectando)?.conectada && (
+                <button className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => desconectar(conectando)}>
+                  Quitar
+                </button>
+              )}
+            </div>
+            {errorRed && <p className="form-hint form-hint--error">{errorRed}</p>}
+          </div>
+        )}
+
         {/*
           LA VERDAD SOBRE PUBLICAR SOLO, dicha donde se decide.
           Publicar sin abrir la red exige una aplicación aprobada por cada
@@ -707,13 +723,13 @@ export default function Comunicados() {
           está en la web, cualquiera publica en nombre de la hermandad. Decirlo
           aquí es mejor que un botón que diga «publicado» sin publicar nada.
         */}
-        <p className="form-hint">
+        <p className="redes-panel__nota">
           <b>Publicar se hace en dos pasos, y es de verdad.</b> El comunicado deja el texto preparado y
           un botón que abre la red; se pega y se publica. Publicar sin salir de aquí exige que cada
           plataforma apruebe la aplicación de la hermandad (Meta lo revisa a mano, X cobra por ello), así
           que de momento no lo prometemos.
         </p>
-      </details>
+      </section>
 
       <section className="stat-grid">
         <div className="stat-tile">
@@ -922,8 +938,8 @@ export default function Comunicados() {
                         const largo = sePasaDeLargo(r, texto)
                         return (
                           <div className="redes-publicar__fila" key={r}>
-                            <span className="red-card__badge red-card__badge--sm" style={{ background: COLOR_RED[r] }}>
-                              {INICIAL_RED[r]}
+                            <span className="red-marca-mini" style={{ color: COLOR_RED[r] }}>
+                              <IconoRed red={r} tam={20} />
                             </span>
                             <div className="redes-publicar__que">
                               <b>{r}</b>
