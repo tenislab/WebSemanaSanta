@@ -74,13 +74,50 @@ export function acreedorIncompleto(acreedor: SepaAcreedor): string | null {
  * (RCUR), con una fecha de cobro y un lote por remesa. `ahora` se pasa desde
  * fuera para no depender de Date.now() dentro de esta función pura.
  */
+/**
+ * EL IMPORTE DE UNA LÍNEA, en céntimos enteros.
+ *
+ * Todo el dinero del fichero pasa por aquí, y es lo que hace que la suma de
+ * control cuadre siempre con las líneas. Ver `buildSepaXml`.
+ */
+function centimos(importe: number): number {
+  return Math.round(importe * 100)
+}
+
+/** Céntimos escritos como los quiere el banco: «60.00». */
+function euros(cent: number): string {
+  return (cent / 100).toFixed(2)
+}
+
 export function buildSepaXml(acreedor: SepaAcreedor, recibos: SepaRecibo[], fechaCobro: Date, ahora: Date): string {
   const msgId = `CABILDO-${ahora.getTime()}`
-  const ctrlSum = recibos.reduce((s, r) => s + r.importe, 0).toFixed(2)
   const ibanAcreedor = limpiarIban(acreedor.iban)
 
+  /*
+   * LA SUMA DE CONTROL SE SACA DE LAS LÍNEAS, no de los importes de partida.
+   *
+   * El banco RECHAZA EL FICHERO ENTERO si `CtrlSum` no es exactamente la suma
+   * de los `InstdAmt`. Y antes se calculaban por caminos distintos: cada línea
+   * redondeaba su importe a dos decimales, y la suma de control sumaba los
+   * importes sin redondear y redondeaba al final. Con cualquier importe de más
+   * de dos decimales las dos cuentas se separan:
+   *
+   *     tres recibos de 0,005 €  →  líneas 0,01+0,01+0,01 = 0,03
+   *                                 suma de control        = 0,02
+   *
+   * No es un caso rebuscado: basta con que alguien teclee 12,345 en el importe
+   * de un concepto, o que venga así de una hoja de cálculo. Y el fallo no se
+   * ve al descargar —el XML parece correcto—: se ve tres días después, cuando
+   * el banco devuelve la remesa entera y nadie ha cobrado.
+   *
+   * Ahora se cuenta en CÉNTIMOS ENTEROS, se suman esos, y las dos cifras salen
+   * del mismo sitio. Cuadran por construcción.
+   */
+  const importes = recibos.map((r) => centimos(r.importe))
+  const ctrlSum = euros(importes.reduce((s, c) => s + c, 0))
+
   const transacciones = recibos
-    .map((r) => {
+    .map((r, i) => {
       // Del id del hermano, que NO cambia. Con el número de hermano, cada baja
   // renumera el censo y el mismo hermano se presentaba al banco cada mes con
   // un identificador de mandato distinto —el que era del vecino—; además,
@@ -91,7 +128,7 @@ export function buildSepaXml(acreedor: SepaAcreedor, recibos: SepaRecibo[], fech
         <PmtId>
           <EndToEndId>REC-${r.numero}</EndToEndId>
         </PmtId>
-        <InstdAmt Ccy="EUR">${r.importe.toFixed(2)}</InstdAmt>
+        <InstdAmt Ccy="EUR">${euros(importes[i])}</InstdAmt>
         <DrctDbtTx>
           <MndtRltdInf>
             <MndtId>${escaparXml(mndtId)}</MndtId>

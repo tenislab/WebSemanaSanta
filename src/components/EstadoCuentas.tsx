@@ -2,24 +2,30 @@ import { LogoMark } from './Logo'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import type { Movimiento } from '../data/movimientos'
 import { CATEGORIAS_INGRESO, CATEGORIAS_GASTO } from '../data/movimientos'
-import { formatCurrency } from '../lib/format'
+import { sumaEuros, formatCurrency } from '../lib/format'
 
 /** Año de un movimiento a partir de su fecha ya formateada ("5 ene. 2026" → "2026"). */
 function anioDe(fecha: string): string {
   return fecha.trim().slice(-4)
 }
 
+/**
+ * Reparte los movimientos por partida y suma cada una.
+ *
+ * Cada subtotal se imprime al lado del total en el papel que se lleva al
+ * cabildo, así que se suman con `sumaEuros`: si un importe roto dejara una
+ * partida en «NaN €», el documento saldría con un hueco donde va una cifra —y
+ * es un documento que se firma—.
+ */
 function sumaPorCategoria(movimientos: Movimiento[], categorias: readonly string[]) {
   const porCategoria = new Map<string, number>()
-  let otros = 0
-  for (const m of movimientos) {
-    if (categorias.includes(m.categoria)) {
-      porCategoria.set(m.categoria, (porCategoria.get(m.categoria) ?? 0) + m.importe)
-    } else {
-      otros += m.importe
-    }
+  for (const cat of categorias) {
+    const suyos = movimientos.filter((m) => m.categoria === cat)
+    if (suyos.length > 0) porCategoria.set(cat, sumaEuros(suyos.map((m) => m.importe)))
   }
-  return { porCategoria, otros }
+  // Lo que no encaja en ninguna partida no se pierde: va a «otros».
+  const otros = movimientos.filter((m) => !categorias.includes(m.categoria))
+  return { porCategoria, otros: sumaEuros(otros.map((m) => m.importe)) }
 }
 
 /**
@@ -50,8 +56,8 @@ export default function EstadoCuentas({
   const { porCategoria: ingresosPorCategoria, otros: otrosIngresos } = sumaPorCategoria(ingresos, CATEGORIAS_INGRESO)
   const { porCategoria: gastosPorCategoria, otros: otrosGastos } = sumaPorCategoria(gastos, CATEGORIAS_GASTO)
 
-  const totalIngresos = ingresos.reduce((s, m) => s + m.importe, 0)
-  const totalGastos = gastos.reduce((s, m) => s + m.importe, 0)
+  const totalIngresos = sumaEuros(ingresos.map((m) => m.importe))
+  const totalGastos = sumaEuros(gastos.map((m) => m.importe))
   const beneficio = totalIngresos - totalGastos
   const saldoFinal = saldoInicial + beneficio
 

@@ -8,7 +8,7 @@ import {
   type Enser,
   type EstadoConservacion,
 } from '../../data/enseres'
-import { formatCurrency } from '../../lib/format'
+import { sumaEuros, formatCurrency } from '../../lib/format'
 import { CLAVES_DATOS } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { enserToRow, rowToEnser } from '../../lib/db/enseres'
@@ -68,7 +68,7 @@ export default function Inventario() {
     const total = enseres.length
     const restaurar = enseres.filter((e) => e.estadoConservacion === 'Necesita restauración').length
     const prestados = enseres.filter((e) => e.prestadoA).length
-    const valorAsegurado = enseres.reduce((s, e) => s + (e.valorAsegurado ?? 0), 0)
+    const valorAsegurado = sumaEuros(enseres.map((e) => e.valorAsegurado))
     return { total, restaurar, prestados, valorAsegurado }
   }, [enseres])
 

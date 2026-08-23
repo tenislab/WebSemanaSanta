@@ -1,3 +1,4 @@
+import { sumaEuros, aCentimos } from '../../lib/format'
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import MovimientoJustificante from '../../components/MovimientoJustificante'
@@ -80,9 +81,9 @@ export default function Tesoreria() {
 
   const stats = useMemo(() => {
     const conciliados = movimientos.filter((m) => m.estado === 'Conciliado')
-    const saldo = conciliados.reduce((s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe), 0)
-    const ingresos = movimientos.filter((m) => m.tipo === 'Ingreso').reduce((s, m) => s + m.importe, 0)
-    const gastos = movimientos.filter((m) => m.tipo === 'Gasto').reduce((s, m) => s + m.importe, 0)
+    const saldo = sumaEuros(conciliados.map((m) => (m.tipo === 'Ingreso' ? m.importe : -m.importe)))
+    const ingresos = sumaEuros(movimientos.filter((m) => m.tipo === 'Ingreso').map((m) => m.importe))
+    const gastos = sumaEuros(movimientos.filter((m) => m.tipo === 'Gasto').map((m) => m.importe))
     const pendientes = movimientos.filter((m) => m.estado === 'Pendiente').length
     return { saldo, ingresos, gastos, pendientes }
   }, [movimientos])
@@ -105,7 +106,8 @@ export default function Tesoreria() {
     const concepto = String(data.get('concepto') ?? '').trim()
     const categoria = String(data.get('categoria') ?? '')
     const importeRaw = String(data.get('importe') ?? '')
-    const importe = Number(importeRaw.replace(',', '.'))
+    // Redondeado a céntimos al entrar: ver `aCentimos` en lib/format.ts.
+    const importe = aCentimos(Number(importeRaw.replace(',', '.')))
     const cuenta = String(data.get('cuenta') ?? 'Cuenta bancaria') as CuentaMovimiento
     const fechaRaw = String(data.get('fecha') ?? '')
     // Antes se salía en silencio: pulsabas «Guardar», no pasaba nada y no

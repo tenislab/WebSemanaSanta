@@ -8,6 +8,7 @@ import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
 import { PAPELETAS_INICIALES, type Papeleta } from '../data/papeletas'
 import { INCIDENCIAS_INICIALES, type Incidencia } from '../data/incidencias'
+import { traducirErrorDeEscritura } from './errorDeBaseDeDatos'
 
 /**
  * Protección de datos (RGPD). Herramientas para atender los derechos de un
@@ -91,17 +92,40 @@ export function exportarDatosHermano(datos: DatosHermano): string {
 }
 
 /**
+ * El resultado de un borrado RGPD. Son TRES cosas distintas y hay que
+ * distinguirlas: ver `borrarDatosHermano`.
+ */
+export type ResultadoBorrado =
+  /** Borrado y censo releído. */
+  | { ok: true; censo: Hermano[] }
+  /** Borrado, pero no se pudo releer el censo (fallo de red al recargar). */
+  | { ok: true; censo: null }
+  /** La base NO lo borró. Con el motivo ya traducido a lenguaje llano. */
+  | { ok: false; motivo: string; queHacer: string }
+
+/**
  * Borra al hermano y todos los registros que lo referencian (cuotas,
- * papeletas e incidencias). Devuelve el censo resultante para que la
- * pantalla que lo llama actualice su propio estado.
+ * papeletas e incidencias).
  *
  * Con Supabase conectado, basta con borrar la fila de `hermanos`: sus
  * cuotas y papeletas (y las incidencias de esas papeletas) tienen
  * `on delete cascade` y se borran solas en la base de datos. Sin Supabase,
  * hay que hacer esa cascada a mano sobre las cuatro colecciones en
  * localStorage.
+ *
+ * SE MIRA SI LA BASE LO HA HECHO, y antes no.
+ *
+ * `supabase-js` no lanza excepción cuando la base rechaza un borrado: devuelve
+ * `{ error }` y sigue. Así que un DELETE bloqueado por permisos pasaba
+ * inadvertido, la función releía el censo —con el hermano todavía dentro—, la
+ * pantalla lo repintaba y daba por hecha la supresión.
+ *
+ * Y esto no es un fallo cualquiera: es el derecho de supresión del artículo 17
+ * del RGPD sobre un censo de hermandad, que revela convicciones religiosas y
+ * es categoría especial del artículo 9. Decirle a alguien que sus datos se han
+ * borrado cuando siguen ahí es lo peor que puede hacer esta pantalla.
  */
-export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[] | null> {
+export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBorrado> {
   if (isSupabaseConfigured && supabase) {
     /**
      * TAMBIÉN LO QUE QUEDA FUERA DE SU FICHA.
@@ -127,21 +151,41 @@ export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[] |
     const suDni = (ficha as { dni?: string } | null)?.dni?.trim()
     const suEmail = (ficha as { email?: string } | null)?.email?.trim()
 
-    await supabase.from('hermanos').delete().eq('id', hermanoId)
+    const { error: fallo } = await supabase.from('hermanos').delete().eq('id', hermanoId)
+    if (fallo) {
+      // Se DICE, y se dice en cristiano. Callarlo sería certificar una
+      // supresión que no ha ocurrido.
+      console.error('La base no ha borrado al hermano:', fallo.message)
+      const dicho = traducirErrorDeEscritura('hermanos', 'borrar', fallo.message, fallo.code)
+      return { ok: false, motivo: dicho.mensaje, queHacer: dicho.queHacer }
+    }
 
-    // Las solicitudes de alta, por los dos caminos. Se hace DESPUÉS de borrar
-    // la ficha: si algo de esto fallara, lo importante ya está hecho.
-    if (suDni) await supabase.from('solicitudes_alta').delete().eq('dni', suDni)
-    if (suEmail) await supabase.from('solicitudes_alta').delete().eq('email', suEmail)
+    /*
+     * Las solicitudes de alta, por los dos caminos. Se hace DESPUÉS de borrar
+     * la ficha: si algo de esto fallara, lo importante ya está hecho.
+     *
+     * Si estas dos fallan NO se aborta —la ficha, que es lo gordo, ya no
+     * está—, pero se deja escrito en la consola: esas filas llevan el DNI y la
+     * contraseña que propuso al pedir el alta, así que quedarían huérfanas y
+     * hay que poder rastrearlo.
+     */
+    if (suDni) {
+      const { error } = await supabase.from('solicitudes_alta').delete().eq('dni', suDni)
+      if (error) console.error('Quedó su solicitud de alta (por DNI):', error.message)
+    }
+    if (suEmail) {
+      const { error } = await supabase.from('solicitudes_alta').delete().eq('email', suEmail)
+      if (error) console.error('Quedó su solicitud de alta (por correo):', error.message)
+    }
 
     const { data, error } = await supabase.from('hermanos').select('*').order('numero')
     if (error) {
       // OJO: null = «no se pudo releer», NO «el censo está vacío». Devolver []
       // hacía que un fallo puntual de red borrase el censo entero de la vista.
       console.error('No se pudo recargar el censo tras borrar el hermano:', error.message)
-      return null
+      return { ok: true, censo: null }
     }
-    return (data ?? []).map(rowToHermano)
+    return { ok: true, censo: (data ?? []).map(rowToHermano) }
   }
 
   const { hermanos, cuotas, papeletas, incidencias } = todos()
@@ -177,5 +221,5 @@ export async function borrarDatosHermano(hermanoId: string): Promise<Hermano[] |
     // Una solicitud que no se pueda leer no debe impedir el borrado del resto.
   }
 
-  return hermanosRest
+  return { ok: true, censo: hermanosRest }
 }

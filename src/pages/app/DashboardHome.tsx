@@ -20,7 +20,7 @@ import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
 import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
 import { useCargoDeLaSesion } from '../../lib/permisos'
 import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
-import { formatCurrency } from '../../lib/format'
+import { sumaEuros, formatCurrency } from '../../lib/format'
 import { puedeVerModulo } from '../../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../../lib/suscripcion'
 import { esMiembro } from '../../lib/hermanoFicha'
@@ -142,9 +142,11 @@ export default function DashboardHome() {
     const pctPendientes = cuotas.length ? Math.round((cuotasPendientes / cuotas.length) * 100) : 0
     const papeletasEmitidas = papeletasCampana.filter((p) => p.estado !== 'Anulada' && p.estado !== 'Renuncia').length
     const porRenovar = hermanos.filter((h) => renovacionDeHermano(h.id, papeletas, campana).estado === 'Por renovar').length
-    const saldo = movimientos
-      .filter((m) => m.estado === 'Conciliado')
-      .reduce((s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe), 0)
+    const saldo = sumaEuros(
+      movimientos
+        .filter((m) => m.estado === 'Conciliado')
+        .map((m) => (m.tipo === 'Ingreso' ? m.importe : -m.importe)),
+    )
     const porConciliar = movimientos.filter((m) => m.estado === 'Pendiente').length
 
     const stats = [

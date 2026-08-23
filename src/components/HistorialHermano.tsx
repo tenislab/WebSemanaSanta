@@ -7,6 +7,7 @@ import { getModeloRecibo } from '../lib/modeloRecibo'
 import { ejercicioDe } from '../lib/cuotasEmision'
 import { etiquetaTramo, type Tramo } from '../lib/tramos'
 import { formatCurrency } from '../lib/format'
+import { estaSinCobrar } from '../data/cuotas'
 import { aniosDeHermandad, porAnio, salidasDe } from '../lib/hermanoFicha'
 import type { Cuota } from '../data/cuotas'
 import AvisoFalta from './AvisoFalta'
@@ -41,9 +42,16 @@ function clasePapeleta(estado: Papeleta['estado']) {
  * ¿Puede el hermano pagar este recibo por su cuenta? Lo domiciliado se cobra
  * solo y no hay nada que hacer… salvo que el banco lo haya devuelto o esté en
  * mora: entonces el recibo sigue debiéndose y el hermano necesita otra vía.
+ *
+ * La primera línea NO se escribe a mano —«si está pagada, no»— sino que se le
+ * pregunta a `estaSinCobrar`: es la misma regla que usa el resto de la
+ * aplicación para saber qué se debe, y tenerla escrita aparte aquí es cómo se
+ * separan dos respuestas que tienen que decir lo mismo. La segunda línea sí es
+ * propia de aquí, y es otra pregunta: no «¿se debe?» sino «¿tiene él algo que
+ * hacer?». Un recibo domiciliado y pendiente se debe, pero se cobra solo.
  */
 function sePuedePagar(c: Cuota): boolean {
-  if (c.estado === 'Pagada') return false
+  if (!estaSinCobrar(c)) return false
   return !c.domiciliada || c.estado === 'Devuelta' || c.estado === 'En mora'
 }
 
@@ -79,7 +87,7 @@ export default function HistorialHermano({
 
   const pagado = cuotas.filter((c) => c.estado === 'Pagada').reduce((n, c) => n + c.importe, 0)
   const debe = cuotas
-    .filter((c) => c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta')
+    .filter(estaSinCobrar)
     .reduce((n, c) => n + c.importe, 0)
   const salidas = salidasDe(papeletas)
   const aniosEnLaHermandad = aniosDeHermandad(hermano.antiguedad)

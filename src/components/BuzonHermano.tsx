@@ -21,6 +21,7 @@ export default function BuzonHermano({
   marcarLeido,
   borrar,
   preferencias,
+  errorPreferencias,
   cambiarPreferencia,
 }: {
   avisos: AvisoHermano[]
@@ -29,6 +30,15 @@ export default function BuzonHermano({
   marcarLeido: (id: string, leido: boolean) => void
   borrar: (id: string) => void
   preferencias: PreferenciasAvisos
+  /**
+   * Por qué no se pudo guardar el último cambio, si es que no se pudo.
+   *
+   * Hace falta decirlo: si la base rechaza el cambio, el interruptor vuelve
+   * solo a como estaba, y sin explicación parece que la pantalla no responde
+   * al clic. Y lo que está en juego es que le sigan llegando correos que
+   * acaba de apagar.
+   */
+  errorPreferencias?: string | null
   cambiarPreferencia: (tipo: TipoAviso, quiere: boolean) => void
 }) {
   const [soloSinLeer, setSoloSinLeer] = useState(false)
@@ -117,6 +127,11 @@ export default function BuzonHermano({
               </span>
             </label>
           ))}
+          {errorPreferencias && (
+            <div className="banner banner--error" role="alert">
+              <b>No se ha guardado el cambio.</b> {errorPreferencias}
+            </div>
+          )}
           <p className="form-hint">
             Esto vale para tu buzón, y es lo que la hermandad respetará cuando envíe correos. Lo que
             apagues no se borra: si vuelves a encenderlo, aparece otra vez.

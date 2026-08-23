@@ -13,7 +13,7 @@ import { getSolicitudesPapeleta } from '../../lib/solicitudesPapeleta'
 import { avisosPendientes, avisosPorTipo, type Aviso } from '../../lib/notificaciones'
 import { hoyIso } from '../../lib/hoy'
 import { useConceptosCuota } from '../../lib/conceptosCuota'
-import { ultimoEjercicio } from '../../lib/cuotasEmision'
+import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { resolverSolicitud, MOTIVOS_DE_RECHAZO } from '../../lib/familia'
 
 /**
@@ -80,10 +80,7 @@ export default function Notificaciones() {
    * Y no aparece de la nada en una hermandad recién creada: sin hermanos,
    * `hermanosSinCuota()` no devuelve a nadie y no hay aviso.
    */
-  const ejercicio = useMemo(
-    () => ultimoEjercicio(cuotas) ?? new Date().getFullYear(),
-    [cuotas],
-  )
+  const ejercicio = useMemo(() => ejercicioDeCuotas(cuotas), [cuotas])
   const conceptoCuota = conceptos[0]?.nombre ?? null
 
   const avisos = useMemo(

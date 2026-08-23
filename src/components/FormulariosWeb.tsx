@@ -1,3 +1,4 @@
+import { limpiarDni } from '../lib/dni'
 import { useId, useRef, useState, type ReactNode } from 'react'
 import {
   enviarMensajeWeb,
@@ -222,7 +223,9 @@ export function FormularioAlta({
     const solicitud: SolicitudAlta = {
       id: nuevoId(),
       nombre: datos.nombre.trim(),
-      dni: datos.dni.trim().toUpperCase(),
+      // Limpio desde el primer momento: si entra con puntos, no coincidirá
+      // con nada después —ni con el censo, ni con su propio acceso—.
+      dni: limpiarDni(datos.dni),
       email: datos.email.trim(),
       telefono: datos.telefono.trim(),
       clavePropuesta: datos.clave,

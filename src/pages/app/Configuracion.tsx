@@ -1,3 +1,4 @@
+import { aCentimos } from '../../lib/format'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { LogoMark } from '../../components/Logo'
 import { useAuth } from '../../context/AuthContext'
@@ -1187,7 +1188,10 @@ export default function Configuracion() {
                     min="0"
                     step="0.5"
                     value={c.importe}
-                    onChange={(e) => updateConceptoCuota(c.id, 'importe', Number(e.target.value) || 0)}
+                    /* A céntimos aquí, que es de donde salen los importes de casi
+                       todos los recibos: si el catálogo guarda 12,345, ese medio
+                       céntimo acaba en la remesa y el banco la rechaza entera. */
+                    onChange={(e) => updateConceptoCuota(c.id, 'importe', aCentimos(Number(e.target.value)))}
                     aria-label="Importe de la cuota en euros"
                   />
                   <span>€</span>

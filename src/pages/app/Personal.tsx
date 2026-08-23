@@ -1,3 +1,4 @@
+import { limpiarDni, mismoDni } from '../../lib/dni'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -409,7 +410,11 @@ export default function Personal() {
     const data = new FormData(form)
     const nombre = String(data.get('nombre') ?? '').trim()
     const email = String(data.get('email') ?? '').trim().toLowerCase()
-    const dni = String(data.get('dni') ?? '').trim().toUpperCase()
+    /* LIMPIO, como en todas partes. Antes se guardaba tal cual se teclea, así
+       que un DNI con puntos entraba con puntos en la ficha… y esa persona no
+       podía entrar luego en su área escribiendo «12345678A», que es como se
+       escribe normalmente. Ver lib/dni.ts. */
+    const dni = limpiarDni(String(data.get('dni') ?? ''))
     const clave = String(data.get('clave') ?? '').trim()
     const cargo = String(data.get('cargo') ?? '') as Cargo
 
@@ -425,7 +430,7 @@ export default function Personal() {
       setError('La contraseña debe tener al menos 6 caracteres.')
       return
     }
-    if (hermanos.some((h) => h.dni.toUpperCase() === dni)) {
+    if (hermanos.some((h) => mismoDni(h.dni, dni))) {
       setError(`Ya hay alguien en el censo con el DNI ${dni}.`)
       return
     }

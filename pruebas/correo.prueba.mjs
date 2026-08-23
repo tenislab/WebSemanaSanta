@@ -50,6 +50,7 @@ export default async function ({ cargar, caso }) {
   localStorage.removeItem(m.CLAVE_CORREO)
 
   await correoAuditoria({ cargar, caso })
+  await losDescartadosSeCuentan({ caso })
 }
 
 /**
@@ -240,4 +241,37 @@ async function correoAuditoria({ cargar, caso }) {
   // El sondeo se contesta antes de comprobar nada: va sin sesión, por diseño.
   caso('el sondeo se contesta el primero', true,
     /if \(req\.method === 'OPTIONS'\) return new Response\('ok', \{ headers: cabeceras \}\)/.test(fuente))
+}
+
+/**
+ * A QUIÉN NO LE HA LLEGADO, QUE SE SEPA.
+ *
+ * Las direcciones mal escritas se descartaban en silencio. Una hermandad
+ * marcaba 612 destinatarios, y si cuarenta tenían el correo mal en el censo
+ * —que en un censo importado de un Excel es lo normal— la pantalla decía
+ * «enviado a 572» y nadie caía en la diferencia.
+ *
+ * Esos cuarenta no se enteran de nada: ni de los cabildos, ni de los cultos,
+ * ni de que se les ha emitido la cuota. Y como el comunicado queda guardado
+ * como «Enviado», no vuelve a intentarse nunca.
+ */
+export async function losDescartadosSeCuentan({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const sin = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/.*$/gm, '')
+
+  const correo = sin(await readFile('src/lib/correo.ts', 'utf8'))
+  caso('el resultado dice cuántos se quedaron fuera', true, /sinCorreoValido\?: number/.test(correo))
+  caso('y se calculan de verdad', true, /const sinCorreoValido = limpias\.length - para\.length/.test(correo))
+  // En TODAS las salidas, no solo en la buena: si falla el envío, saber que
+  // además cuarenta no tenían correo sigue siendo lo que hay que arreglar.
+  caso('viaja en todas las respuestas', true,
+    (correo.match(/sinCorreoValido/g) ?? []).length >= 6)
+
+  const com = sin(await readFile('src/pages/app/Comunicados.tsx', 'utf8'))
+  caso('la pantalla lo enseña', true, /r\.sinCorreoValido/.test(com))
+  // El texto se arma con singular y plural, así que la frase no está entera:
+  // se busca a dónde manda, que es lo que tiene que decir.
+  caso('y dice qué hacer', true, /en Hermanos/.test(com) && /rev[ií]salos?/.test(com))
+  // No se pinta en verde: 40 hermanos incomunicados no es un envío correcto.
+  caso('no se da por bueno si falta alguien', true, /fuera > 0 \? 'error' : 'hecho'/.test(com))
 }

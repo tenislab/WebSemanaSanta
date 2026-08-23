@@ -4,7 +4,7 @@ import { formatCurrency } from '../lib/format'
 import { edadDe } from '../lib/hermanoFicha'
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
-import type { Cuota } from '../data/cuotas'
+import { deudaDe, type Cuota } from '../data/cuotas'
 import type { SolicitudAlta } from '../lib/solicitudes'
 import { etiquetaDeSolicitud, explicarSolicitud } from '../lib/familia'
 
@@ -103,10 +103,7 @@ export default function MiFamilia({
       {aCargo.map((h) => {
         const suya = papeletas.find((p) => p.hermanoId === h.id && p.anio === anioCampana && p.estado !== 'Anulada')
         const tramo = tramoDe(suya?.tramoId ?? null)
-        const debe = cuotas
-          .filter((c) => c.hermanoId === h.id)
-          .filter((c) => c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta')
-          .reduce((n, c) => n + c.importe, 0)
+        const debe = deudaDe(cuotas.filter((c) => c.hermanoId === h.id))
         const edad = edadDe(h.fechaNacimiento)
         return (
           <div className="familia-ficha" key={h.id}>

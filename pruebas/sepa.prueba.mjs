@@ -22,4 +22,47 @@ export default async function ({ cargar, caso }) {
   caso('la fecha de cobro es la pedida', true, xml.includes('<ReqdColltnDt>2026-08-23</ReqdColltnDt>'))
   caso('esquema pain.008.001.02', true, xml.includes('pain.008.001.02'))
   caso('el IBAN va sin espacios', true, xml.includes('<IBAN>ES9121000418450200051332</IBAN>'))
+
+  await laSumaDeControlCuadraSiempre({ m, acreedor, deudor, caso })
+}
+
+/**
+ * LA SUMA DE CONTROL, CUADRE COMO CUADRE EL IMPORTE.
+ *
+ * El banco RECHAZA EL FICHERO ENTERO si `CtrlSum` no es exactamente la suma de
+ * los `InstdAmt`. Y se calculaban por dos caminos distintos: cada línea
+ * redondeaba su importe a dos decimales, y la suma de control sumaba los
+ * importes SIN redondear y redondeaba al final.
+ *
+ * Con cualquier importe de más de dos decimales, las dos cuentas se separan:
+ * tres recibos de 0,005 € daban líneas de 0,01+0,01+0,01 = 0,03 y una suma de
+ * control de 0,02. Basta con que alguien teclee 12,345 en el importe de un
+ * concepto o que venga así de una hoja de cálculo.
+ *
+ * Y el fallo NO SE VE al descargar —el XML parece correcto—: se ve tres días
+ * después, cuando el banco devuelve la remesa entera y no ha cobrado nadie.
+ */
+async function laSumaDeControlCuadraSiempre({ m, acreedor, deudor, caso }) {
+  const cuadra = (importes) => {
+    const xml = m.buildSepaXml(
+      acreedor,
+      importes.map((importe, i) => ({ numero: i + 1, deudor: deudor(`H${i}`, `h${i}`), importe, concepto: 'Cuota' })),
+      new Date(2027, 2, 1),
+      new Date(2027, 1, 14, 10, 0),
+    )
+    const control = xml.match(/<CtrlSum>([\d.]+)<\/CtrlSum>/)[1]
+    const lineas = [...xml.matchAll(/<InstdAmt Ccy="EUR">([\d.]+)<\/InstdAmt>/g)].map((x) => Number(x[1]))
+    return control === lineas.reduce((a, b) => a + b, 0).toFixed(2)
+  }
+
+  caso('con importes normales', true, cuadra([60, 18, 25]))
+  caso('con céntimos', true, cuadra([20.10, 20.10, 20.10]))
+  // Los tres casos que NO cuadraban.
+  caso('con medios céntimos', true, cuadra([0.005, 0.005, 0.005]))
+  caso('con tres decimales', true, cuadra([12.345, 12.345]))
+  caso('con muchos medios céntimos', true, cuadra(Array(10).fill(1.005)))
+  // Y el clásico de la coma flotante, que sí cuadraba y tiene que seguir.
+  caso('con 0,1 + 0,2', true, cuadra([0.1, 0.2]))
+  // Una remesa de una hermandad de verdad: 600 recibos.
+  caso('con seiscientos recibos', true, cuadra(Array(600).fill(37.5)))
 }

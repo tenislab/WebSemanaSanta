@@ -112,6 +112,17 @@ export interface ResultadoEnvio {
   enviados?: number
   /** Qué ha fallado, en cristiano y sin adornos. */
   error?: string
+  /**
+   * Cuántas direcciones se han descartado por no ser un correo válido.
+   *
+   * Se descartaban en silencio. Una hermandad marcaba 612 destinatarios, y si
+   * cuarenta tenían el correo mal escrito en el censo —que en un censo
+   * importado de un Excel es lo normal— la pantalla decía «enviado a 572» y
+   * nadie caía en la diferencia. Esos cuarenta no se enteran de nada: ni de
+   * los cabildos, ni de los cultos, ni de que se les ha emitido la cuota. Y
+   * como el comunicado queda en «Enviado», no vuelve a intentarse nunca.
+   */
+  sinCorreoValido?: number
 }
 
 /**
@@ -142,8 +153,13 @@ export async function enviarCorreo(mensaje: {
   if (!ajustes.activo) {
     return { ok: false, error: 'El envío de correo está apagado en Configuración → Correo.' }
   }
-  const para = mensaje.para.map((d) => d.trim()).filter((d) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d))
-  if (para.length === 0) return { ok: false, error: 'Ninguno de los destinatarios tiene un correo válido.' }
+  const limpias = mensaje.para.map((d) => d.trim())
+  const para = limpias.filter((d) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d))
+  /* Los que se quedan fuera SE CUENTAN, y quien llama los enseña. Descartar en
+     silencio a alguien de una lista de destinatarios es dejarlo sin enterarse
+     de nada, sin que nadie llegue a saberlo. */
+  const sinCorreoValido = limpias.length - para.length
+  if (para.length === 0) return { ok: false, error: 'Ninguno de los destinatarios tiene un correo válido.', sinCorreoValido }
 
   /**
    * MÁS DE 50: se trocea aquí.
@@ -168,7 +184,7 @@ export async function enviarCorreo(mensaje: {
       else fallos.push(r.error ?? 'error desconocido')
     }
     if (enviados === 0) {
-      return { ok: false, error: fallos[0] ?? 'No se pudo mandar ninguna tanda.' }
+      return { ok: false, error: fallos[0] ?? 'No se pudo mandar ninguna tanda.', sinCorreoValido }
     }
     // Si algunas salieron y otras no, se dice: «se ha enviado» a secas sería
     // mentira y nadie sabría a quién hay que volver a escribirle.
@@ -177,9 +193,10 @@ export async function enviarCorreo(mensaje: {
         ok: true,
         enviados,
         error: `Salieron ${enviados} de ${para.length}. El resto falló: ${fallos[0]}`,
+        sinCorreoValido,
       }
     }
-    return { ok: true, enviados }
+    return { ok: true, enviados, sinCorreoValido }
   }
 
   try {
@@ -190,10 +207,10 @@ export async function enviarCorreo(mensaje: {
       // El cuerpo del error trae el motivo de verdad (dominio sin verificar,
       // clave ausente…). Sin él, todo se leía como «error desconocido».
       const detalle = await leerDetalle(error)
-      return { ok: false, error: detalle ?? explicarFalloDeEnvio(error) }
+      return { ok: false, error: detalle ?? explicarFalloDeEnvio(error), sinCorreoValido }
     }
-    if (data?.error) return { ok: false, error: data.error }
-    return { ok: true, enviados: data?.enviados ?? para.length }
+    if (data?.error) return { ok: false, error: data.error, sinCorreoValido }
+    return { ok: true, enviados: data?.enviados ?? para.length, sinCorreoValido }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudo contactar con el servidor de correo.' }
   }

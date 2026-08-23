@@ -51,6 +51,67 @@ export interface Cuota {
   pagoComunicado?: { metodo: MetodoPago; fecha: string } | null
 }
 
+/**
+ * ¿ESTÁ COBRADA? Una sola respuesta para toda la aplicación.
+ *
+ * Esta regla estaba copiada SEIS veces —en el área del hermano, en «Mi
+ * familia», en el historial de la ficha, en Papeletas, en Cuotas y en el
+ * cálculo de la deuda—, siempre como `estado === 'Pendiente' || 'En mora' ||
+ * 'Devuelta'`. Copiada funciona; el problema es el día que se añada un estado
+ * nuevo (una cuota condonada, una fraccionada, una exenta): habría que
+ * acordarse de los seis sitios, y de los que se olviden saldría dinero mal
+ * contado sin ningún aviso. Es de las cosas que no se notan hasta que un
+ * hermano reclama.
+ *
+ * Va como `Record` de TODOS los estados y no como lista: así, al añadir uno,
+ * TypeScript no compila hasta que se diga si esa cuota está cobrada o no. El
+ * compilador hace de recordatorio, que es más fiable que acordarse.
+ */
+const COBRADA: Record<EstadoCuota, boolean> = {
+  Pagada: true,
+  Pendiente: false,
+  'En mora': false,
+  // Devuelta es dinero que ENTRÓ y volvió: se sigue debiendo.
+  Devuelta: false,
+}
+
+/** La cuota sigue sin cobrar: pendiente, en mora o devuelta por el banco. */
+export function estaSinCobrar(c: Cuota): boolean {
+  return !COBRADA[c.estado]
+}
+
+/**
+ * Lo que se debe de un puñado de recibos, en euros.
+ *
+ * Dos cosas, y las dos por lo mismo —que esta cifra se le enseña a la gente—:
+ *
+ *   · Sin deshilachar los céntimos. Sumar decimales en coma flotante deja
+ *     59,999999999, que en el recibo de una hermandad parece que el programa
+ *     no sabe sumar.
+ *
+ *   · UN RECIBO ROTO NO SE LLEVA POR DELANTE LA CUENTA ENTERA. Basta con un
+ *     importe que no sea un número —la celda vacía de un Excel, un valor nulo
+ *     de la base— para que la suma dé NaN, y entonces la deuda de TODA la
+ *     hermandad se lee «NaN €»: en Cuotas, en la ficha de cada hermano, en su
+ *     propia área y en el estado de cuentas que se lleva al cabildo. Un dato
+ *     malo entre seiscientos buenos no puede borrar los seiscientos.
+ *
+ *     El recibo roto sigue enseñando su propio importe en su fila, así que el
+ *     problema no se esconde: se acota.
+ */
+export function deudaDe(cuotas: Cuota[]): number {
+  const cent = cuotas.filter(estaSinCobrar).reduce((n, c) => {
+    /* `Number(...)` primero, y no solo `isFinite`: Postgres devuelve las
+       columnas `numeric` como TEXTO («60.00»), y aunque los conversores de
+       `lib/db` ya lo pasan a número, una copia guardada en el navegador de una
+       versión anterior puede traerlo como cadena. Convertir antes de sumar
+       cuesta nada y evita que un espejo antiguo deje la deuda en cero. */
+    const importe = Number(c.importe)
+    return n + (Number.isFinite(importe) ? Math.round(importe * 100) : 0)
+  }, 0)
+  return cent / 100
+}
+
 /** Método de cobro de una cuota, tolerando datos antiguos que solo tienen `domiciliada`. */
 export function metodoDeCuota(c: Cuota): MetodoCobro {
   return c.metodoCobro ?? (c.domiciliada ? 'Domiciliación' : 'Transferencia')

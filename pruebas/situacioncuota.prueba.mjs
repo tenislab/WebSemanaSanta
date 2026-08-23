@@ -121,6 +121,58 @@ export default async function ({ cargar, caso }) {
     ['alDia', 'debe', 'sinEmitir', 'noAplica'].filter((s) => m.etiquetaDeSituacion(s).texto.length > 3).length)
 
   await nadieSeFiaDelBooleano({ caso })
+  await todosMiranElMismoAno({ cargar, caso })
+}
+
+/**
+ * Y LAS CINCO PANTALLAS MIRAN EL MISMO AÑO.
+ *
+ * La situación de cuota de un hermano se pinta en cinco sitios —el censo, su
+ * ficha, Cuotas, Informes y su propia área— y cada uno elegía el ejercicio por
+ * su cuenta: unos el último con recibos emitidos y otros el año natural.
+ *
+ * Con la hermandad al día coinciden, así que no se nota. El día que no —en
+ * enero, con la cuota del año pasado emitida y la de este todavía no— Cuotas
+ * diría «al corriente» y el censo «sin cuota emitida» DEL MISMO HERMANO. Dos
+ * pantallas contestando cosas distintas a la misma pregunta, y sobre dinero,
+ * es peor que contestar mal las dos: no se sabe cuál creer.
+ */
+async function todosMiranElMismoAno({ cargar, caso }) {
+  const e = await cargar('src/lib/cuotasEmision.ts')
+  const c = (ejercicio) => ({
+    id: 'x', numero: 1, hermanoId: 'h1', concepto: 'Cuota anual', importe: 60,
+    estado: 'Pendiente', ejercicio, fechaEmision: `03 feb ${ejercicio}`,
+    fechaCobro: `18 feb ${ejercicio}`, domiciliada: true,
+  })
+
+  caso('el ejercicio es el último con recibos', 2027, e.ejercicioDeCuotas([c(2025), c(2027), c(2026)]))
+  // Y sin ningún recibo, el año natural: una hermandad que acaba de entrar no
+  // tiene «último ejercicio», y hay que hablarle de alguno.
+  caso('sin recibos, el año en curso', new Date().getFullYear(), e.ejercicioDeCuotas([]))
+
+  const { readFile } = await import('node:fs/promises')
+  const sinComentarios = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+  const PANTALLAS = [
+    'src/pages/app/Hermanos.tsx',
+    'src/pages/app/Cuotas.tsx',
+    'src/pages/app/Informes.tsx',
+    'src/pages/app/Comunicados.tsx',
+    'src/pages/HermanoPortal.tsx',
+  ]
+  for (const f of PANTALLAS) {
+    const texto = sinComentarios(await readFile(f, 'utf8'))
+    caso(`${f.split('/').pop()} lo pregunta`, true, /ejercicioDeCuotas\(/.test(texto))
+  }
+
+  /*
+   * Y NINGUNA se lo inventa con `getCampana().anio`, que es el año de la
+   * SEMANA SANTA que viene y va por delante del ejercicio contable. Mezclarlos
+   * es lo que dejaba la pantalla de Cuotas diciendo «0 recibos del ejercicio
+   * 2027 · 10 en total» con la tesorería llena.
+   */
+  const cuotas = sinComentarios(await readFile('src/pages/app/Cuotas.tsx', 'utf8'))
+  caso('los indicadores no cuentan el año de la campaña', false,
+    /stats\.total} recibos del ejercicio \{ejercicioEnCurso/.test(cuotas))
 }
 
 /**

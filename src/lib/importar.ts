@@ -1,3 +1,4 @@
+import { limpiarDni } from './dni'
 import type { EstadoHermano, Hermano } from '../data/hermanos'
 
 /**
@@ -270,10 +271,10 @@ export interface Ensayo {
   avisos: string[]
 }
 
-/** Un DNI/NIE español bien formado. No se comprueba la letra: hay censos antiguos con erratas y rechazarlos entero sería peor. */
-export function limpiarDni(v: string): string {
-  return v.replace(/[\s.-]/g, '').toUpperCase()
-}
+/* La regla vive en `lib/dni.ts`: no es cosa del importador, es cosa de todo el
+   que escriba o busque un DNI. Se reexporta para no romper lo que ya la
+   importaba de aquí. */
+export { limpiarDni }
 
 /**
  * La fecha de nacimiento, siempre en ISO (aaaa-mm-dd).

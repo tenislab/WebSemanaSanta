@@ -84,11 +84,35 @@ function guardarPrefsEnLocal(hermanoId: string, prefs: PreferenciasAvisos) {
   localStorage.setItem(CLAVE_PREFS, JSON.stringify({ ...todas, [hermanoId]: prefs }))
 }
 
-/** Guarda lo que el hermano elige. En su ficha, para que lo vea todo el mundo. */
-export async function savePreferenciasAvisos(hermanoId: string, prefs: PreferenciasAvisos) {
+/**
+ * Guarda lo que el hermano elige. En su ficha, para que lo vea todo el mundo.
+ *
+ * DEVUELVE SI HA SALIDO, y antes no.
+ *
+ * `supabase-js` no lanza excepción cuando la base rechaza una escritura:
+ * devuelve `{ error }` y sigue. Aquí ese error no se miraba y la promesa ni se
+ * esperaba, así que un rechazo de permisos pasaba en silencio: el interruptor
+ * se quedaba apagado en SU navegador, la copia de la hermandad seguía diciendo
+ * que sí, y al hermano le seguían llegando los correos que acababa de apagar
+ * —convencido de haberlos apagado—. Es la peor forma de fallar de un
+ * interruptor: la que hace pensar que funcionó.
+ */
+export async function savePreferenciasAvisos(
+  hermanoId: string,
+  prefs: PreferenciasAvisos,
+): Promise<{ ok: boolean; error?: string }> {
   guardarPrefsEnLocal(hermanoId, prefs)
-  if (!isSupabaseConfigured || !supabase) return
-  await supabase.from('hermanos').update({ avisos_preferencias: prefs }).eq('id', hermanoId)
+  if (!isSupabaseConfigured || !supabase) return { ok: true }
+  const { error } = await supabase.from('hermanos').update({ avisos_preferencias: prefs }).eq('id', hermanoId)
+  if (error) {
+    console.error('No se pudieron guardar las preferencias de avisos:', error.message)
+    return {
+      ok: false,
+      error: 'No se ha podido guardar en la base de datos, así que puede que te sigan '
+        + 'llegando. Inténtalo otra vez en un momento; si sigue igual, dilo en secretaría.',
+    }
+  }
+  return { ok: true }
 }
 
 /**
@@ -192,11 +216,14 @@ export function useAvisosHermano(hermanoId: string | null): {
   borrar: (id: string) => void
   preferencias: PreferenciasAvisos
   cambiarPreferencia: (tipo: TipoAviso, quiere: boolean) => void
+  /** Por qué no se pudo guardar el último cambio, si es que no se pudo. */
+  errorPreferencias: string | null
 } {
   const [todos, setTodos] = useState<AvisoHermano[]>(() => getAvisosHermano())
   const [preferencias, setPreferencias] = useState<PreferenciasAvisos>(() =>
     hermanoId ? getPreferenciasAvisos(hermanoId) : {},
   )
+  const [errorPrefs, setErrorPrefs] = useState<string | null>(null)
   useEffect(() => {
     const sync = () => {
       setTodos(getAvisosHermano())
@@ -234,12 +261,30 @@ export function useAvisosHermano(hermanoId: string | null): {
     guardar(getAvisosHermano().filter((a) => a.id !== id))
   }
 
-  function cambiarPreferencia(tipo: TipoAviso, quiere: boolean) {
+  /**
+   * Cambia un interruptor y SE ESPERA A SABER SI SE HA GUARDADO.
+   *
+   * Si la base lo rechaza, el interruptor VUELVE a como estaba y se dice por
+   * qué. Dejarlo apagado mientras los correos siguen llegando es peor que no
+   * haber ofrecido el interruptor: la persona cree que ya está resuelto y no
+   * vuelve a intentarlo ni lo dice en secretaría.
+   */
+  async function cambiarPreferencia(tipo: TipoAviso, quiere: boolean) {
     if (!hermanoId) return
+    const antes = preferencias
     const siguientes = { ...preferencias, [tipo]: quiere }
     setPreferencias(siguientes)
-    savePreferenciasAvisos(hermanoId, siguientes)
+    setErrorPrefs(null)
+    const r = await savePreferenciasAvisos(hermanoId, siguientes)
+    if (!r.ok) {
+      setPreferencias(antes)
+      guardarPrefsEnLocal(hermanoId, antes)
+      setErrorPrefs(r.error ?? 'No se ha podido guardar.')
+    }
   }
 
-  return { avisos, sinLeer, marcarLeidos, marcarLeido, borrar, preferencias, cambiarPreferencia }
+  return {
+    avisos, sinLeer, marcarLeidos, marcarLeido, borrar,
+    preferencias, cambiarPreferencia, errorPreferencias: errorPrefs,
+  }
 }

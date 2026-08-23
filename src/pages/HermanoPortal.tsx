@@ -1,3 +1,4 @@
+import { limpiarDni, mismoDni } from '../lib/dni'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
@@ -13,7 +14,7 @@ import CarneHermano from '../components/CarneHermano'
 import MiFamilia from '../components/MiFamilia'
 import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
-import { CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
+import { deudaDe, CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
 import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
 import { useHermandadSettings } from '../lib/hermandadSettings'
 import {
@@ -70,6 +71,7 @@ import {
 import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
 import { solicitudesDeMiFamilia } from '../lib/familia'
 import { situacionDeHermano, etiquetaDeSituacion } from '../lib/estadoCuotaHermano'
+import { ejercicioDeCuotas } from '../lib/cuotasEmision'
 import { fijarHermandadDeLaPagina, hermandadesPublicas, type HermandadPublica } from '../lib/multiHermandad'
 import { codigoDeHermano } from '../lib/codigoHermano'
 
@@ -111,10 +113,6 @@ const MENSAJE_BAJA =
 
 function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function normaliza(texto: string) {
-  return texto.trim().toUpperCase()
 }
 
 type TablaMuestra<T> = Record<string, [T[], (updater: (prev: T[]) => T[]) => void]>
@@ -350,10 +348,7 @@ export default function HermanoPortal() {
    */
   const miDeuda = useMemo(() => {
     if (!hermanoPrincipal) return 0
-    return cuotas
-      .filter((c) => c.hermanoId === hermanoPrincipal.id)
-      .filter((c) => c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta')
-      .reduce((n, c) => n + c.importe, 0)
+    return deudaDe(cuotas.filter((c) => c.hermanoId === hermanoPrincipal.id))
   }, [cuotas, hermanoPrincipal])
 
   /**
@@ -363,7 +358,7 @@ export default function HermanoPortal() {
    */
   const miSituacionDeCuota = useMemo(
     () => (hermanoPrincipal
-      ? situacionDeHermano(cuotas, hermanoPrincipal, new Date().getFullYear()).situacion
+      ? situacionDeHermano(cuotas, hermanoPrincipal, ejercicioDeCuotas(cuotas)).situacion
       : 'sinEmitir'),
     [cuotas, hermanoPrincipal],
   )
@@ -389,6 +384,7 @@ export default function HermanoPortal() {
     borrar: borrarAviso,
     preferencias: preferenciasAvisos,
     cambiarPreferencia: cambiarPreferenciaAviso,
+    errorPreferencias: errorPreferenciasAvisos,
   } = useAvisosHermano(hermanoActivo?.id ?? null)
   const nombreHermandadActiva = esPrincipal ? nombrePrincipal : hermandadMuestra?.nombre ?? 'tu hermandad'
   const colorActivo = esPrincipal ? hermandadPrincipal.colorPrimario : hermandadMuestra?.color ?? '#caa24a'
@@ -523,7 +519,10 @@ export default function HermanoPortal() {
   async function recuperarClave() {
     setErrorLogin(null)
     setRecuperacion(null)
-    const dni = normaliza(dniInput)
+    /* `limpiarDni` y no `normaliza`: este DNI viaja a la base de datos, y allí
+       están guardados sin puntos ni guiones. Escrito «12.345.678-A» no
+       encontraba a nadie y la recuperación decía que no existe esa cuenta. */
+    const dni = limpiarDni(dniInput)
     if (!dni) {
       setRecuperacion({ tipo: 'aviso', texto: 'Escribe tu DNI y volvemos a intentarlo.' })
       return
@@ -566,7 +565,11 @@ export default function HermanoPortal() {
   async function identificar(e: FormEvent) {
     e.preventDefault()
     if (!hermandadElegida) return
-    const dni = normaliza(dniInput)
+    /* Limpio: va dentro de `resolver_email_hermano`, y en la base los DNI
+       están sin puntos. Con `normaliza` a secas, quien escribiera el suyo
+       puntuado NO PODÍA ENTRAR, y el mensaje decía que los datos no son
+       correctos — que es exactamente lo contrario de lo que pasaba. */
+    const dni = limpiarDni(dniInput)
 
     // Con la base de datos conectada, la hermandad elegida es una de verdad y
     // su id viaja en la consulta. Es imprescindible: el DNI ya no es único en
@@ -615,7 +618,7 @@ export default function HermanoPortal() {
     }
 
     if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
-      const encontrado = hermanos.find((h) => normaliza(h.dni) === dni && h.claveAcceso === claveInput)
+      const encontrado = hermanos.find((h) => mismoDni(h.dni, dni) && h.claveAcceso === claveInput)
       if (!encontrado) {
         setErrorLogin('DNI o contraseña incorrectos.')
         return
@@ -632,7 +635,7 @@ export default function HermanoPortal() {
     }
 
     const censo = censosMuestra[hermandadElegida.id]?.[0] ?? []
-    const encontrado = censo.find((c) => normaliza(c.dni) === dni && c.claveAcceso === claveInput)
+    const encontrado = censo.find((c) => mismoDni(c.dni, dni) && c.claveAcceso === claveInput)
     if (!encontrado) {
       setErrorLogin('DNI o contraseña incorrectos.')
       return
@@ -649,7 +652,11 @@ export default function HermanoPortal() {
     if (!hermandadElegida) return
     const data = new FormData(e.currentTarget)
     const nombre = String(data.get('nombre') ?? '').trim()
-    const dni = normaliza(String(data.get('dni') ?? ''))
+    /* Limpio antes de guardarlo en la solicitud: si entra con puntos, se queda
+       con puntos en la base y luego no coincide con nada — ni con su ficha
+       cuando se apruebe, ni con el barrido de supresión del RGPD, que busca
+       las solicitudes por DNI para borrarlas. */
+    const dni = limpiarDni(String(data.get('dni') ?? ''))
     const email = String(data.get('email') ?? '').trim()
     const telefono = String(data.get('telefono') ?? '').trim()
     const clavePropuesta = String(data.get('clavePropuesta') ?? '')
@@ -666,8 +673,8 @@ export default function HermanoPortal() {
       usarSupabase
         ? false
         : hermandadElegida.id === ID_HERMANDAD_PRINCIPAL
-          ? hermanos.some((h) => normaliza(h.dni) === dni)
-          : (censosMuestra[hermandadElegida.id]?.[0] ?? []).some((h) => normaliza(h.dni) === dni)
+          ? hermanos.some((h) => mismoDni(h.dni, dni))
+          : (censosMuestra[hermandadElegida.id]?.[0] ?? []).some((h) => mismoDni(h.dni, dni))
     if (yaEsHermano) {
       setErrorSolicitud('Ya hay un hermano/a con ese DNI en esta hermandad. Prueba a iniciar sesión.')
       return
@@ -1660,6 +1667,7 @@ export default function HermanoPortal() {
           borrar={borrarAviso}
           preferencias={preferenciasAvisos}
           cambiarPreferencia={cambiarPreferenciaAviso}
+          errorPreferencias={errorPreferenciasAvisos}
         />
 
         {/* Calendario de la hermandad: lo que viene, con las repeticiones ya

@@ -481,6 +481,30 @@ h1, h2, h3,
 .hero-clave span:last-child { font-size: 0.79rem; color: rgba(245,237,230,0.62); line-height: 1.35; }
 @media (max-width: 720px) { .hero-claves { grid-template-columns: minmax(0, 1fr); } }
 
+/*
+ * EL TITULAR, EN EL MÓVIL: QUE PUEDA PARTIRSE.
+ *
+ * Arriba lleva `text-wrap: nowrap` y tiene su motivo: el salto de línea de
+ * «Gestiona tu hermandad / desde un solo lugar» está puesto a mano, y si el
+ * navegador mete otro por su cuenta el titular sale en tres renglones
+ * descuadrados.
+ *
+ * Pero en una pantalla de 390 px «GESTIONA TU HERMANDAD» en versales no cabe
+ * de ninguna manera, y con `nowrap` no se encoge: se sale. Y al salirse
+ * arrastraba la PÁGINA ENTERA 39 px a lo ancho, así que la portada —lo primero
+ * que ve una hermandad que entra desde el teléfono— se movía de lado al
+ * tocarla, con una franja vacía a la derecha.
+ *
+ * Aquí se le deja partir, y con `balance` para que las dos líneas queden
+ * parejas en vez de una larga y una de dos palabras.
+ */
+@media (max-width: 720px) {
+  .hero-copy h1 {
+    text-wrap: balance;
+    font-size: clamp(1.55rem, 7.5vw, 2.2rem);
+  }
+}
+
 .bullets { list-style: none; padding: 0; margin: 1.8rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
 .bullets li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; color: rgba(245, 237, 230, 0.9); }
 .bullets svg { width: 18px; height: 18px; color: #d6bc8a; flex: none; }

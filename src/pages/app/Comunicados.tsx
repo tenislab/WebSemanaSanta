@@ -43,6 +43,7 @@ import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
 import { CUOTAS_INICIALES } from '../../data/cuotas'
 import { situacionDeTodos } from '../../lib/estadoCuotaHermano'
+import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import {
   COLOR_RED,
@@ -127,8 +128,9 @@ export default function Comunicados() {
    */
   const situacionesDeCuota = useMemo(() => {
     const cuotas = leerDatos(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
-    const ejercicio = new Date().getFullYear()
-    return new Map(situacionDeTodos(cuotas, hermanos, ejercicio).map((s) => [s.hermano.id, s.situacion]))
+    return new Map(
+      situacionDeTodos(cuotas, hermanos, ejercicioDeCuotas(cuotas)).map((s) => [s.hermano.id, s.situacion]),
+    )
   }, [hermanos])
 
   /** Si el destinatario es una etiqueta, devuelve los hermanos que la tienen (con su email). */
@@ -439,10 +441,23 @@ export default function Comunicados() {
     // único que llegaba sin identificar de quién era.
     const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
     const r = await enviarCorreo({ para: direcciones, asunto: c.titulo, texto, html })
+    /*
+     * Y SE DICE A CUÁNTOS NO LES HA LLEGADO. Las direcciones mal escritas se
+     * descartaban en silencio: la hermandad marcaba 612 destinatarios, la
+     * pantalla decía «enviado a 572» y nadie caía en la diferencia. Esos
+     * cuarenta no se enteran de nada —ni de los cabildos, ni de los cultos, ni
+     * de que se les ha emitido la cuota—, y como el comunicado queda en
+     * «Enviado», no vuelve a intentarse nunca.
+     */
+    const fuera = r.sinCorreoValido ?? 0
+    const aviso = fuera > 0
+      ? ` ${fuera} ${fuera === 1 ? 'no tenía' : 'no tenían'} un correo válido en el censo: `
+        + `${fuera === 1 ? 'revísalo' : 'revísalos'} en Hermanos, porque a ${fuera === 1 ? 'esa persona' : 'esas personas'} no les llega nada.`
+      : ''
     setEnvioCorreo(
       r.ok
-        ? { estado: 'hecho', texto: `Enviado por correo a ${r.enviados} hermanos.` }
-        : { estado: 'error', texto: r.error ?? 'No se pudo mandar el correo.' },
+        ? { estado: fuera > 0 ? 'error' : 'hecho', texto: `Enviado por correo a ${r.enviados} hermanos.${aviso}` }
+        : { estado: 'error', texto: `${r.error ?? 'No se pudo mandar el correo.'}${aviso}` },
     )
   }
 

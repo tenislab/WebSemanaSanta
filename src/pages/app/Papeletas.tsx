@@ -9,13 +9,13 @@ import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
 import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../../lib/modeloPapeleta'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, METODOS_PAGO_PAPELETA, type MetodoPagoPapeleta, type Papeleta } from '../../data/papeletas'
-import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
+import { estaSinCobrar, CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
 import { useConvocatoria, enviarConvocatoria, destinatariosConvocatoria } from '../../lib/convocatoria'
 import { useSolicitudesPapeleta, type SolicitudPapeleta } from '../../lib/solicitudesPapeleta'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
-import { formatDate, formatCurrency } from '../../lib/format'
+import { sumaEuros, formatDate, formatCurrency } from '../../lib/format'
 import {
   useTramos,
   tramosDeCuerpo,
@@ -116,7 +116,7 @@ export default function Papeletas() {
   const deudaDe = useMemo(() => {
     const map = new Map<string, number>()
     cuotasTodas.forEach((c) => {
-      if (c.estado === 'Pendiente' || c.estado === 'En mora' || c.estado === 'Devuelta') {
+      if (estaSinCobrar(c)) {
         map.set(c.hermanoId, (map.get(c.hermanoId) ?? 0) + c.importe)
       }
     })
@@ -242,7 +242,7 @@ export default function Papeletas() {
     // Estadísticas centradas en las papeletas de la campaña activa.
     const activas = papeletas.filter((p) => p.anio === campana.anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia')
     const emitidas = activas.length
-    const recaudado = activas.filter((p) => p.estado === 'Pagada' || p.estado === 'Entregada').reduce((s, p) => s + p.importe, 0)
+    const recaudado = sumaEuros(activas.filter((p) => p.estado === 'Pagada' || p.estado === 'Entregada').map((p) => p.importe))
     const entregadas = activas.filter((p) => p.estado === 'Entregada').length
     const pendientePago = activas.filter((p) => p.estado === 'Asignada').length
     const solicitudes = activas.filter((p) => p.estado === 'Solicitada').length

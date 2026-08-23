@@ -21,7 +21,9 @@ import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import {
   CUOTAS_INICIALES,
   METODOS_COBRO,
+  deudaDe,
   esAvisado,
+  estaSinCobrar,
   metodoDeCuota,
   metodoEnFrase,
   type ConceptoCuota,
@@ -32,7 +34,7 @@ import {
 import { useConceptosCuota } from '../../lib/conceptosCuota'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
-import { formatCurrency, formatDate } from '../../lib/format'
+import { aCentimos, formatCurrency, formatDate } from '../../lib/format'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
@@ -48,6 +50,7 @@ import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
 import { getCampana } from '../../lib/campana'
 import {
+  ejercicioDeCuotas,
   emitirCuotasAnuales,
   hermanosSinCuota,
   ultimoEjercicio,
@@ -217,7 +220,7 @@ export default function Cuotas() {
    * recibos, y si no hay ninguno, el año natural. La campaña se sigue usando
    * para proponer la emisión del año que viene, que es otra cosa distinta.
    */
-  const ejercicioMirado = ultimoEmitido ?? new Date().getFullYear()
+  const ejercicioMirado = ejercicioDeCuotas(cuotas)
   const [emisionOpen, setEmisionOpen] = useState(false)
   const [ejercicioEmision, setEjercicioEmision] = useState(ejercicioEnCurso)
   const [conceptoEmision, setConceptoEmision] = useState('')
@@ -302,9 +305,7 @@ export default function Cuotas() {
     const cobrado = base.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
     // Deuda viva: pendientes, devueltas y en mora de CUALQUIER ejercicio (la de
     // años anteriores sigue debiéndose, no puede desaparecer del indicador).
-    const pendiente = cuotas
-      .filter((c) => c.estado === 'Pendiente' || c.estado === 'Devuelta' || c.estado === 'En mora')
-      .reduce((s, c) => s + c.importe, 0)
+    const pendiente = deudaDe(cuotas)
     const pagadas = base.filter((c) => c.estado === 'Pagada').length
     const alDia = total ? Math.round((pagadas / total) * 100) : 0
     return { total, cobrado, pendiente, alDia }
@@ -578,7 +579,8 @@ export default function Cuotas() {
     const hermanoId = String(data.get('hermanoId') ?? '')
     const concepto = String(data.get('concepto') ?? '') as ConceptoCuota
     const importeRaw = String(data.get('importe') ?? '')
-    const importe = Number(importeRaw.replace(',', '.'))
+    // Redondeado a céntimos al entrar: ver `aCentimos` en lib/format.ts.
+    const importe = aCentimos(Number(importeRaw.replace(',', '.')))
     const fechaCobroRaw = String(data.get('fechaCobro') ?? '')
     const metodoCobro = String(data.get('metodoCobro') ?? 'Domiciliación') as MetodoCobro
     const periodicidad = String(data.get('periodicidad') ?? 'puntual')
@@ -630,7 +632,8 @@ export default function Cuotas() {
           <p className="eyebrow">Cuotas</p>
           <h1>Cuotas y recibos</h1>
           <p className="dash-head__lead">
-            {stats.total} recibos del ejercicio {ejercicioMirado} · {cuotas.length} en total ·
+            {stats.total} recibo{stats.total === 1 ? '' : 's'} del ejercicio {ejercicioMirado} ·{' '}
+            {cuotas.length} en total ·
             datos de ejemplo mientras conectamos la base de datos.{' '}
             <Link to="/app/configuracion" className="dash-head__link">
               Personalizar datos de la hermandad
@@ -649,7 +652,7 @@ export default function Cuotas() {
               title={
                 recibosRemesables.length === 0
                   ? 'No hay recibos pendientes domiciliados con IBAN'
-                  : `${recibosRemesables.length} recibos pendientes domiciliados`
+                  : `${recibosRemesables.length} recibo${recibosRemesables.length === 1 ? '' : 's'} pendiente${recibosRemesables.length === 1 ? '' : 's'} domiciliado${recibosRemesables.length === 1 ? '' : 's'}`
               }
             >
               Preparar remesa <small>{recibosRemesables.length}</small>
@@ -1053,8 +1056,7 @@ export default function Cuotas() {
         subtitle={selected ? `Nº ${String(selected.numero).padStart(4, '0')}` : undefined}
         footer={
           selected && (() => {
-            const sinCobrar =
-              selected.estado === 'Pendiente' || selected.estado === 'En mora' || selected.estado === 'Devuelta'
+            const sinCobrar = estaSinCobrar(selected)
             return (
             <>
               {/* En un recibo sin cobrar, la acción importante es cobrarlo, no
@@ -1263,7 +1265,7 @@ export default function Cuotas() {
         open={remesaOpen}
         onClose={() => setRemesaOpen(false)}
         title="Remesa bancaria"
-        subtitle={`${recibosRemesables.length} recibos pendientes domiciliados`}
+        subtitle={`${recibosRemesables.length} recibo${recibosRemesables.length === 1 ? '' : 's'} pendiente${recibosRemesables.length === 1 ? '' : 's'} domiciliado${recibosRemesables.length === 1 ? '' : 's'}`}
         footer={
           <>
             <button className="btn btn-ghost" onClick={exportarRemesaCsv}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
-import { limpiarDni } from '../../lib/importar'
+import { limpiarDni, mismoDni } from '../../lib/dni'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -13,6 +13,7 @@ import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { esMiembro, aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
 import { getAsistencias, historialDeAsistencia, asistenciaEnUnaFrase } from '../../lib/asistencia'
+import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { crearAccesoHermano } from '../../lib/accesos'
@@ -239,12 +240,14 @@ export default function Hermanos() {
   const [cuotasDelCenso] = useSupabaseTable<Cuota>(
     'cuotas', CLAVES_DATOS.cuotas, CUOTAS_INICIALES, cuotaToRow, rowToCuota,
   )
-  const ejercicioDeCuotas = new Date().getFullYear()
+  /* El MISMO año que miran Cuotas, Informes y el área del hermano. Cada uno
+     lo elegía por su cuenta y en enero se contradecían: ver lib/cuotasEmision. */
+  const ejercicioMirado = ejercicioDeCuotas(cuotasDelCenso)
   const situacionesDeCuota = useMemo(
     () => new Map(
-      situacionDeTodos(cuotasDelCenso, hermanos, ejercicioDeCuotas).map((s) => [s.hermano.id, s.situacion]),
+      situacionDeTodos(cuotasDelCenso, hermanos, ejercicioMirado).map((s) => [s.hermano.id, s.situacion]),
     ),
-    [cuotasDelCenso, hermanos, ejercicioDeCuotas],
+    [cuotasDelCenso, hermanos, ejercicioMirado],
   )
   /** La situación de uno, con «sin emitir» de respaldo mientras cargan los recibos. */
   const situacionDe = (id: string): SituacionCuota => situacionesDeCuota.get(id) ?? 'sinEmitir'
@@ -256,8 +259,8 @@ export default function Hermanos() {
    * cuánto viene atrasado de otros años y cuántos recibos tiene este.
    */
   const suSituacionDeCuota = useMemo(
-    () => (selected ? situacionDeHermano(cuotasDelCenso, selected, ejercicioDeCuotas) : null),
-    [cuotasDelCenso, selected, ejercicioDeCuotas],
+    () => (selected ? situacionDeHermano(cuotasDelCenso, selected, ejercicioMirado) : null),
+    [cuotasDelCenso, selected, ejercicioMirado],
   )
   const sesgados = useMemo(
     () => (sesgoActivo
@@ -481,7 +484,10 @@ export default function Hermanos() {
     let duplicado = false
     let suNumero = 0
     setHermanos((prev) => {
-      if (prev.some((h) => h.dni.toUpperCase() === sol.dni.toUpperCase())) {
+      // Con `limpiarDni`, igual que la comprobación de arriba: con
+      // `toUpperCase()` a secas, «12.345.678-A» y «12345678A» pasaban por
+      // personas distintas y la misma entraba dos veces.
+      if (prev.some((h) => mismoDni(h.dni, sol.dni))) {
         duplicado = true
         return prev
       }
@@ -858,7 +864,11 @@ export default function Hermanos() {
     let duplicado = false
     let suNumero = 0
     setHermanos((prev) => {
-      if (prev.some((h) => h.dni.trim().toUpperCase() === dni)) {
+      // El tecleado ya viene limpio; el del censo hay que limpiarlo también.
+      // Comparar uno limpio contra otro sin limpiar es no comparar nada: un
+      // censo importado con puntos no reconocía al que ya estaba dentro, y la
+      // misma persona se daba de alta DOS VECES, con dos números.
+      if (prev.some((h) => mismoDni(h.dni, dni))) {
         duplicado = true
         return prev
       }
@@ -1037,14 +1047,27 @@ export default function Hermanos() {
         'Esta acción ejerce el derecho de supresión (RGPD) y no se puede deshacer. ¿Continuar?',
     )
     if (!ok) return
-    const censo = await borrarDatosHermano(hermano.id)
-    if (censo === null) {
-      // El borrado se hizo, pero no se pudo releer el censo: se quita solo a ese
-      // hermano de la lista en vez de dejarla vacía por un fallo de red.
+    const r = await borrarDatosHermano(hermano.id)
+    /*
+     * SI LA BASE NO LO HA BORRADO, SE DICE. Antes no se miraba: el borrado se
+     * daba por hecho, se releía el censo —con el hermano todavía dentro— y se
+     * repintaba la lista. La persona quedaba «suprimida» en la pantalla de
+     * confirmación y seguía en el censo, que sobre el artículo 17 del RGPD es
+     * lo peor que puede pasar aquí.
+     */
+    if (!r.ok) {
+      setAvisoAcceso(
+        `NO se han borrado los datos de ${hermano.nombre}. ${r.motivo} ${r.queHacer}`,
+      )
+      return
+    }
+    if (r.censo === null) {
+      // El borrado SÍ se hizo, pero no se pudo releer el censo: se quita solo a
+      // ese hermano de la lista en vez de dejarla vacía por un fallo de red.
       setHermanos((prev) => prev.filter((h) => h.id !== hermano.id))
       window.alert('Los datos se han borrado, pero no se pudo actualizar el listado. Recarga la página para verlo al día.')
     } else {
-      setHermanos(censo)
+      setHermanos(r.censo)
     }
     setSelectedId(null)
   }
@@ -1555,10 +1578,10 @@ export default function Hermanos() {
             {suSituacionDeCuota && (
             <section className="ficha-bloque ficha-cuotas">
               <h4>Cuotas</h4>
-              <p className="table-subtle">{situacionEnUnaFrase(suSituacionDeCuota, ejercicioDeCuotas)}</p>
+              <p className="table-subtle">{situacionEnUnaFrase(suSituacionDeCuota, ejercicioMirado)}</p>
               <ul className="ficha-bloque__filas">
                 <li>
-                  <b>{ejercicioDeCuotas}</b>
+                  <b>{ejercicioMirado}</b>
                   <span className={`pill ${cuotaClass(suSituacionDeCuota.situacion)}`}>
                     {cuotaEnPalabras(suSituacionDeCuota.situacion)}
                   </span>

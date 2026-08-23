@@ -44,6 +44,29 @@ export function ultimoEjercicio(cuotas: Cuota[]): number | null {
 }
 
 /**
+ * EL EJERCICIO DEL QUE SE HABLA CUANDO SE HABLA DE CUOTAS.
+ *
+ * Es el último con recibos emitidos y, si no hay ninguno, el año natural.
+ *
+ * Existe porque tiene que ser UNO. La situación de cuota de un hermano se
+ * pinta en cinco sitios —el censo, su ficha, Cuotas, Informes y su propia
+ * área—, y cada uno elegía el año por su cuenta: unos el último emitido y
+ * otros el año natural. Con la hermandad al día coinciden, así que no se nota;
+ * el día que no —en enero, con la cuota del año anterior emitida y la de este
+ * no— Cuotas diría «al corriente» y el censo «sin cuota emitida» DEL MISMO
+ * HERMANO. Dos pantallas contestando cosas distintas a la misma pregunta, y
+ * sobre dinero, es peor que contestar mal las dos: no se sabe cuál creer.
+ *
+ * OJO, no confundir con el año de la CAMPAÑA (`getCampana().anio`), que es la
+ * Semana Santa que viene y va por delante del ejercicio contable. Mezclarlos
+ * es lo que dejaba la pantalla de Cuotas diciendo «0 recibos» con la tesorería
+ * llena.
+ */
+export function ejercicioDeCuotas(cuotas: Cuota[]): number {
+  return ultimoEjercicio(cuotas) ?? new Date().getFullYear()
+}
+
+/**
  * Hermanos ACTIVOS (o nuevos) que aún no tienen una cuota de ese concepto en
  * ese ejercicio. Son los candidatos a la emisión anual.
  *

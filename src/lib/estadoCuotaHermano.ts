@@ -1,5 +1,5 @@
 import type { Cuota } from '../data/cuotas'
-import { esAvisado } from '../data/cuotas'
+import { deudaDe, esAvisado, estaSinCobrar } from '../data/cuotas'
 import type { Hermano } from '../data/hermanos'
 import { ejercicioDe } from './cuotasEmision'
 
@@ -55,8 +55,6 @@ export interface SituacionDeHermano {
   desde: number | null
 }
 
-const SIN_COBRAR = new Set(['Pendiente', 'En mora', 'Devuelta'])
-
 /** Los que no pagan cuota: los de baja y los civiles. Es lo que significa ser civil. */
 export function leTocaPagar(h: Hermano): boolean {
   return h.estado !== 'Baja' && !h.civil
@@ -76,12 +74,10 @@ export function situacionDeHermano(
   ejercicio: number,
 ): SituacionDeHermano {
   const suyas = cuotas.filter((c) => c.hermanoId === hermano.id)
-  const sinCobrar = suyas.filter((c) => SIN_COBRAR.has(c.estado))
+  const sinCobrar = suyas.filter(estaSinCobrar)
   const delEjercicio = suyas.filter((c) => ejercicioDe(c) === ejercicio)
-  const deudaTotal = redondear(sinCobrar.reduce((n, c) => n + c.importe, 0))
-  const deudaDelEjercicio = redondear(
-    sinCobrar.filter((c) => ejercicioDe(c) === ejercicio).reduce((n, c) => n + c.importe, 0),
-  )
+  const deudaTotal = deudaDe(sinCobrar)
+  const deudaDelEjercicio = deudaDe(sinCobrar.filter((c) => ejercicioDe(c) === ejercicio))
   const anios = sinCobrar.map(ejercicioDe).filter((a): a is number => a != null)
 
   const situacion: SituacionCuota = !leTocaPagar(hermano)
@@ -142,6 +138,8 @@ export function recuentoDeSituaciones(situaciones: SituacionDeHermano[]) {
     noAplica: cuantos('noAplica'),
     /** Sobre los que SÍ pagan cuota: meter a los civiles en el porcentaje lo hunde sin motivo. */
     conCuota: situaciones.filter((x) => x.situacion !== 'noAplica').length,
+    /* Cada `deudaTotal` viene ya saneada de `deudaDe`, así que aquí no puede
+       colarse un NaN; el redondeo es solo para los céntimos. */
     deuda: redondear(situaciones.reduce((n, x) => n + x.deudaTotal, 0)),
   }
 }

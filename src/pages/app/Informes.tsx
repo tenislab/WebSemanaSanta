@@ -4,7 +4,7 @@ import InformeImpreso from '../../components/InformeImpreso'
 import EstadoCuentas from '../../components/EstadoCuentas'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
-import { formatCurrency, formatDate } from '../../lib/format'
+import { sumaEuros, formatCurrency, formatDate } from '../../lib/format'
 import { toCsv, descargarArchivo } from '../../lib/csv'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
@@ -19,6 +19,7 @@ import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { enserToRow, rowToEnser } from '../../lib/db/enseres'
 import { useTramos, etiquetaTramo, type Tramo } from '../../lib/tramos'
 import { etiquetaDeSituacion, situacionDeTodos } from '../../lib/estadoCuotaHermano'
+import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
@@ -87,7 +88,7 @@ function construirInformes(
   // informes con los datos que se le pasan. Un hook aquí dentro se saltaría el
   // orden de llamada de React.
   const situacionesDeCuota = new Map(
-    situacionDeTodos(cuotasActuales, hermanosActuales, new Date().getFullYear())
+    situacionDeTodos(cuotasActuales, hermanosActuales, ejercicioDeCuotas(cuotasActuales))
       .map((x) => [x.hermano.id, x.situacion]),
   )
   const alDia = hermanosActuales.filter((h) => situacionesDeCuota.get(h.id) === 'alDia').length
@@ -109,7 +110,7 @@ function construirInformes(
   const porCobrar = pendiente + enMora
   const domiciliadas = cuotasActuales.filter((c) => c.domiciliada).length
 
-  const recaudadoPapeletas = papeletasActuales.filter((p) => p.estado !== 'Anulada').reduce((s, p) => s + p.importe, 0)
+  const recaudadoPapeletas = sumaEuros(papeletasActuales.filter((p) => p.estado !== 'Anulada').map((p) => p.importe))
   const entregadas = papeletasActuales.filter((p) => p.estado === 'Entregada').length
   const pendientesPapeleta = papeletasActuales.filter((p) => p.estado === 'Solicitada' || p.estado === 'Asignada').length
 
@@ -131,8 +132,8 @@ function construirInformes(
   const aforoTotal = tramos.reduce((s, t) => s + t.capacidad, 0)
   const ocupadosTotal = filasCortejo.reduce((s, f) => s + f.ocupados, 0)
 
-  const ingresos = movimientosActuales.filter((m) => m.tipo === 'Ingreso').reduce((s, m) => s + m.importe, 0)
-  const gastos = movimientosActuales.filter((m) => m.tipo === 'Gasto').reduce((s, m) => s + m.importe, 0)
+  const ingresos = sumaEuros(movimientosActuales.filter((m) => m.tipo === 'Ingreso').map((m) => m.importe))
+  const gastos = sumaEuros(movimientosActuales.filter((m) => m.tipo === 'Gasto').map((m) => m.importe))
   const balanceConciliado = movimientosActuales.filter((m) => m.estado === 'Conciliado').reduce(
     (s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe),
     0,
