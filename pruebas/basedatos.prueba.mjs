@@ -2244,4 +2244,76 @@ async function elEncargoDeRedesSeReparte({ sql, caso }) {
     insert into tareas_redes (encargo_id, titulo, que, hermano_id)
       values (gen_random_uuid(), 'Sin red', 'publicar', ${VOCAL});`)
   caso('una tarea de publicar sin red no entra', 'no', sinRed.deja)
+
+  /*
+   * 9. EL GUARDIÁN NO PUEDE ESTORBAR A LA PROPIA BASE.
+   *
+   * `hermano_id` es `on delete set null` y `hermandad_id` es `on delete
+   * cascade`. Las dos cosas hacen que Postgres toque ESTA tabla cuando se
+   * borra en OTRA — y esos toques pasaban por el guardián, con el permiso de
+   * quien estuviera borrando. Dos fallos, los dos silenciosos hasta que
+   * alguien lo intenta:
+   *
+   *   · Dar de baja a un hermano con un encargo abierto se caía con «Esta
+   *     tarea no es tuya», que además manda a mirar al sitio equivocado. Le
+   *     pasa a quien lleva el módulo «hermanos» pero no redes: el Diputado
+   *     Mayor de Gobierno, sin ir más lejos.
+   *   · Y borrar una hermandad con un solo encargo se caía con «Un encargo no
+   *     se borra». Eso muerde en `BORRAR-PRUEBAS.sql`, que es el archivo que
+   *     se ejecuta para quitar las de prueba cuando entra la primera de
+   *     verdad. Es el mismo tropiezo que ya cuenta `borrar-una-hermandad.sql`,
+   *     con otra tabla.
+   */
+  const DIP = "'ea000000-0000-0000-0000-0000000000aa'"
+  const UDIP = "'e9999999-9999-9999-9999-999999999999'"
+  const SEVA = "'ec000000-0000-0000-0000-0000000000cc'"
+  const USEVA = "'eb000000-0000-0000-0000-0000000000bb'"
+  await sql(`
+    insert into auth.users (id, email) values (${UDIP}, 'dip@e.es'), (${USEVA}, 'seva@e.es')
+      on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, cargo) values
+      (${DIP}, ${H}, 'Diputado Mayor', '80000009Z', 709, 'Activo', ${UDIP}, 'dip@e.es',
+       'Diputado/a Mayor de Gobierno'),
+      (${SEVA}, ${H}, 'Se va', '80000010Y', 710, 'Activo', ${USEVA}, 'seva@e.es', null)
+      on conflict (id) do nothing;
+  `)
+  // El Diputado lleva «hermanos» pero NO redes: es el caso exacto.
+  // `psql` cuela sus propias líneas (BEGIN, SET, ROLLBACK) en la salida: se
+  // coge solo la que es un sí o un no.
+  const siNo = (t) => t.split('\n').map((x) => x.trim()).filter((x) => x === 'true' || x === 'false').pop() ?? ''
+  const comoDip = (q) => sql(`
+    begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UDIP};
+      ${q} rollback;`).then(siNo)
+  caso('el diputado lleva hermanos', 'true', await comoDip(`select modulo_permitido('hermanos')::text;`))
+  caso('y no lleva redes', 'false',
+    await comoDip(`select (modulo_permitido('comunicados') or modulo_permitido('web'))::text;`))
+
+  await como(UJEFE.slice(1, -1), `
+    insert into tareas_redes (encargo_id, titulo, que, red, hermano_id)
+      values (gen_random_uuid(), 'El post del que se va', 'publicar', 'Instagram', ${SEVA});`)
+  const baja = await como(UDIP.slice(1, -1), `delete from hermanos where id = ${SEVA};`)
+  caso('se puede dar de baja a un hermano con un encargo abierto', 'sí', baja.deja)
+  caso('y el hermano se ha ido de verdad', '0',
+    numero(await sql(`select count(*) from hermanos where id = ${SEVA}`)))
+  // La tarea NO se borra: se queda sin dueño, para que quien lleva redes la
+  // vea huérfana y se la dé a otro en vez de que desaparezca sin más.
+  caso('su encargo se queda sin repartir, no se pierde', '1',
+    numero(await sql(`select count(*) from tareas_redes
+      where titulo = 'El post del que se va' and hermano_id is null`)))
+
+  /*
+   * Y la hermandad entera. Se hace en una transacción que se deshace: si no,
+   * se llevaría por delante el resto de comprobaciones de este archivo.
+   */
+  const fuera = await sql(`
+    begin;
+      delete from hermandades where id = ${H};
+      select count(*) from tareas_redes where hermandad_id = ${H};
+    rollback;`).then(() => 'sí').catch(() => 'no')
+  caso('se puede borrar una hermandad que tiene encargos', 'sí', fuera)
+
+  // Pero un encargo suelto sigue sin poder borrarse, que es la regla de fondo.
+  await como(UJEFE.slice(1, -1), `delete from tareas_redes where titulo = 'El post del que se va';`)
+  caso('y un encargo suelto sigue sin borrarse', '1',
+    numero(await sql(`select count(*) from tareas_redes where titulo = 'El post del que se va'`)))
 }

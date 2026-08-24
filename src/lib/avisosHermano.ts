@@ -65,6 +65,25 @@ export const TIPOS_AVISO: { id: TipoAviso; nombre: string; icono: string; explic
 
 const CLAVE = 'cabildo-avisos-hermano'
 const CLAVE_PREFS = 'cabildo-avisos-preferencias'
+/*
+ * LOS QUE EL HERMANO SE HA QUITADO DE LA VISTA.
+ *
+ * Hace falta guardarlos aparte, y esta es la razón: el hermano NO tiene
+ * permiso para borrar de la base —su política solo le deja marcar `leido`— y
+ * eso es lo correcto, porque un aviso es la constancia de que se le comunicó
+ * algo. La baja, el cambio de cuenta o el recibo cobrado son cosas que a la
+ * hermandad le interesa poder demostrar que se dijeron.
+ *
+ * Pero «quitar de la vista» tampoco funcionaba: se borraba de la copia local y
+ * se marcaba leído en la base, y a la siguiente recarga volvía a bajarse de la
+ * base y reaparecía. El hermano pulsaba la equis, el aviso desaparecía, y al
+ * volver a entrar estaba otra vez. Un botón que se deshace solo.
+ *
+ * Así que lo que se quita se apunta por su id y se filtra al enseñarlo. La
+ * fila sigue en la base, que es lo que hay que conservar, y de su buzón se va
+ * de verdad.
+ */
+const CLAVE_OCULTOS = 'cabildo-avisos-ocultos'
 
 /** Qué avisos quiere recibir cada hermano. Lo que no está, se recibe. */
 export type PreferenciasAvisos = Partial<Record<TipoAviso, boolean>>
@@ -166,8 +185,77 @@ export function getAvisosHermano(): AvisoHermano[] {
   return leerPersistido<AvisoHermano[]>(CLAVE, [])
 }
 
+/** Los que este hermano se ha quitado de la vista. */
+export function getAvisosOcultos(): string[] {
+  return leerPersistido<string[]>(CLAVE_OCULTOS, [])
+}
+
+/**
+ * Apunta uno como quitado. No lo borra de la base: ver el comentario de
+ * `CLAVE_OCULTOS`.
+ */
+export function ocultarAviso(id: string): void {
+  const ya = getAvisosOcultos()
+  if (ya.includes(id)) return
+  try {
+    // Con tope, como la copia de avisos: son ids sueltos y ocupan poco, pero
+    // esto lo toca el hermano una y otra vez durante años.
+    localStorage.setItem(CLAVE_OCULTOS, JSON.stringify([id, ...ya].slice(0, 2000)))
+  } catch {
+    // Sin sitio no se puede recordar; se seguirá viendo, que es lo menos malo.
+  }
+}
+
+/**
+ * Cuántos avisos se guardan en ESTA copia del navegador.
+ *
+ * No es el buzón del hermano: el suyo vive en la base y se trae por su id.
+ * Esta copia solo existe para dos cosas —que quien acaba de hacer la acción
+ * lo vea al instante sin esperar a la red, y que el modo demostración
+ * funcione sin base de datos—, y para las dos sobra con lo reciente.
+ *
+ * Sin tope, un comunicado a ochocientos hermanos escribía OCHOCIENTAS filas
+ * de golpe, cada una con el cuerpo entero repetido. Tres o cuatro envíos y se
+ * acababa el hueco que da el navegador, que son unos cinco megas.
+ */
+const CUANTOS_CABEN = 500
+
+/**
+ * GUARDAR LA COPIA NUNCA PUEDE LANZAR.
+ *
+ * Lo que había aquí era un `setItem` a pelo, y el orden de `enviarAhora` en
+ * Comunicados lo convertía en algo caro:
+ *
+ *   1. Se marca el comunicado como «Enviado», con su fecha y su alcance.
+ *   2. Se escriben los avisos en el buzón.   ← reventaba aquí
+ *   3. Se manda el correo.
+ *
+ * Si el paso 2 lanza, el 3 no llega a ejecutarse: el comunicado queda
+ * registrado como enviado a ochenta y cuatro personas y no le ha llegado a
+ * nadie. Sin error en pantalla y sin forma de enterarse.
+ *
+ * Lo mismo con un aviso suelto: una cuota dada por pagada no puede caerse
+ * porque el navegador esté lleno. El dato es lo importante; esta copia es un
+ * adorno para que la pantalla responda antes.
+ */
 function saveAvisos(lista: AvisoHermano[]) {
-  localStorage.setItem(CLAVE, JSON.stringify(lista))
+  const recortada = lista.length > CUANTOS_CABEN ? lista.slice(0, CUANTOS_CABEN) : lista
+  try {
+    localStorage.setItem(CLAVE, JSON.stringify(recortada))
+  } catch {
+    /*
+     * Segundo intento con mucho menos. Si el navegador está lleno por otra
+     * cosa —una copia de seguridad a medias, un censo grande espejado—,
+     * quedarse sin NINGÚN aviso local hace que la pantalla de quien acaba de
+     * mandarlo parezca no haber hecho nada.
+     */
+    try {
+      localStorage.setItem(CLAVE, JSON.stringify(recortada.slice(0, 20)))
+    } catch {
+      // Ni eso. Se sigue: lo que importa ya está camino de la base.
+      console.warn('No cabe la copia local de los avisos; se leerán de la base.')
+    }
+  }
 }
 
 /**
@@ -330,9 +418,11 @@ export function useAvisosHermano(hermanoId: string | null): {
     hermanoId ? getPreferenciasAvisos(hermanoId) : {},
   )
   const [errorPrefs, setErrorPrefs] = useState<string | null>(null)
+  const [ocultos, setOcultos] = useState<string[]>(() => getAvisosOcultos())
   useEffect(() => {
     const sync = () => {
       setTodos(getAvisosHermano())
+      setOcultos(getAvisosOcultos())
       if (hermanoId) setPreferencias(getPreferenciasAvisos(hermanoId))
     }
     window.addEventListener('storage', sync)
@@ -374,7 +464,11 @@ export function useAvisosHermano(hermanoId: string | null): {
   // Se filtra al enseñarlos y no al crearlos: si el hermano vuelve a activar un
   // tipo, recupera lo que le habían mandado en vez de encontrarse el hueco.
   const avisos = hermanoId
-    ? todos.filter((a) => a.hermanoId === hermanoId && quiereAviso(preferencias, a.tipo))
+    ? todos.filter(
+        (a) => a.hermanoId === hermanoId
+          && quiereAviso(preferencias, a.tipo)
+          && !ocultos.includes(a.id),
+      )
     : []
   const sinLeer = avisos.filter((a) => !a.leido).length
 
@@ -416,6 +510,14 @@ export function useAvisosHermano(hermanoId: string | null): {
    */
   function borrar(id: string) {
     guardar(todos.filter((a) => a.id !== id))
+    /*
+     * Y se apunta, que es lo que hacía falta. Quitarlo solo de la lista no
+     * bastaba: los avisos se vuelven a bajar de la base en cada recarga —el
+     * hermano no puede borrarlos de ahí, y no debe— así que el que se quitaba
+     * reaparecía a la siguiente visita.
+     */
+    ocultarAviso(id)
+    setOcultos((prev) => (prev.includes(id) ? prev : [id, ...prev]))
     if (hermanoId) marcarEnLaBase(hermanoId, [id], true)
   }
 

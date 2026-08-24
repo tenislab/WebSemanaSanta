@@ -2795,7 +2795,61 @@ begin
   end if;
 
   if tg_op = 'DELETE' then
+    /*
+     * Salvo cuando se va la hermandad entera: `hermandad_id` es `on delete
+     * cascade`, y esa cascada pasa por aquí.
+     *
+     * Sin esto, una hermandad con un solo encargo no se puede borrar, y el
+     * error que sale —«Un encargo no se borra»— manda a mirar al sitio
+     * equivocado. Muerde justo en `BORRAR-PRUEBAS.sql`, que es el archivo que
+     * se ejecuta para quitar las hermandades de prueba cuando entra la primera
+     * de verdad. Es exactamente el mismo tropiezo que ya cuenta
+     * `borrar-una-hermandad.sql`, con otra tabla.
+     *
+     * Se reconoce porque la hermandad YA NO ESTÁ: la fila se acaba de borrar
+     * en esta misma orden. Nadie puede colarse por aquí para borrar un
+     * encargo suelto sin llevarse la hermandad por delante.
+     */
+    if not exists (select 1 from hermandades where id = old.hermandad_id) then
+      return old;
+    end if;
     raise exception 'Un encargo no se borra. Si ya no hace falta, márcalo como hecho con una nota.';
+  end if;
+
+  /*
+   * PRIMERO: ¿ES LA PROPIA BASE LIMPIANDO TRAS UN BORRADO?
+   *
+   * `hermano_id` y `hecha_por` llevan `on delete set null`. Cuando se da de
+   * baja a un hermano, Postgres lanza UN UPDATE sobre esta tabla para dejarlos
+   * a nulo — y ese UPDATE pasa por aquí, con el permiso de quien esté
+   * borrando.
+   *
+   * Y quien borra hermanos es quien lleva el módulo «hermanos»: el Diputado
+   * Mayor de Gobierno, por ejemplo, que NO lleva redes. Así que caía en la
+   * rama de abajo y se llevaba un «Esta tarea no es tuya», que además no
+   * explica nada. Resultado: no se podía dar de baja a un hermano que tuviera
+   * un encargo abierto, y el mensaje mandaba a mirar al sitio equivocado.
+   *
+   * Se reconoce por su forma exacta: el hermano al que apuntaba YA NO EXISTE
+   * (la fila se acaba de borrar en esta misma orden) y lo único que cambia es
+   * ese campo. Un responsable no puede colarse por aquí para quitarse la
+   * tarea de encima: tendría que borrarse a sí mismo del censo primero.
+   */
+  if (old.hermano_id is not null and new.hermano_id is null
+      and not exists (select 1 from hermanos where id = old.hermano_id))
+     or (old.hecha_por is not null and new.hecha_por is null
+      and not exists (select 1 from hermanos where id = old.hecha_por)) then
+    if new.hermandad_id is not distinct from old.hermandad_id
+       and new.encargo_id is not distinct from old.encargo_id
+       and new.titulo is not distinct from old.titulo
+       and new.texto is not distinct from old.texto
+       and new.que is not distinct from old.que
+       and new.red is not distinct from old.red
+       and new.estado is not distinct from old.estado
+       and new.creado_en is not distinct from old.creado_en
+       and new.notas is not distinct from old.notas then
+      return new;
+    end if;
   end if;
 
   -- UPDATE. Dos permisos distintos y muy desiguales.
