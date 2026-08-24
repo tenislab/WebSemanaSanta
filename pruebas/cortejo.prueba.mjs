@@ -18,6 +18,71 @@ export default async function ({ cargar, caso }) {
   caso('el que sobra es el más antiguo', ['a'], r.filter((x) => x.estado === 'Excede aforo').map((x) => x.hermano.id))
   caso('el que sobra no repite el puesto 1', 3, r.find((x) => x.estado === 'Excede aforo').puesto)
 
+  /*
+   * EL QUE TODAVÍA NO TIENE NÚMERO NO SE PONE EL PRIMERO.
+   *
+   * `censo.ts` lo dice con todas las letras: «una ficha recién importada puede
+   * llegar con 0 mientras se termina de numerar», y su `enElEscalafon()` deja
+   * fuera de la numeración a quien lleva 0. Pero `puedeSalirEnElCortejo()` no
+   * mira el número, así que ese hermano SÍ entraba en el reparto — y al
+   * ordenar por número a secas, el 0 es el más bajo de todos.
+   *
+   * En un tramo por solicitud eso lo pone EN CABEZA, por delante del hermano
+   * nº 1, que lleva cuarenta años esperando ese sitio. Y no da error: da un
+   * orden impreso que nadie cuadra hasta el día de la salida.
+   *
+   * Lo que toca es lo contrario: sin número no hay antigüedad que alegar, así
+   * que va al final. Y en el reparto automático —donde los modernos van
+   * delante— va el primero, que es el mismo criterio visto del revés: el que
+   * no tiene número es el más nuevo de todos.
+   *
+   * `Papeletas.tsx` ya lo hacía así al imprimir (`numero || Infinity`). Sin
+   * esto, la lista impresa y el reparto decían cosas distintas del mismo
+   * hermano.
+   */
+  {
+    const conSinNumero = new Map(hermanos)
+    conSinNumero.set('z', H('z', 0))
+    const hDe2 = (id) => conSinNumero.get(id)
+
+    // Por solicitud: manda el más antiguo, y el que no tiene número no lo es.
+    const tS = [T('s1', 'Cristo', 'Insignia', 3, 'solicitud')]
+    const pS = [P('q1', 'z', 's1'), P('q2', 'a', 's1'), P('q3', 'b', 's1')]
+    const rS = repartoDeCuerpo('Cristo', tS, pS, hDe2, new Set())
+    caso('sin número no se pone delante del más antiguo', ['a', 'b', 'z'],
+      rS.map((x) => x.hermano.id))
+
+    // Por número: los modernos delante, y sin número es el más moderno.
+    const tN = [T('n1', 'Cristo', 'Cirio', 6)]
+    const pN = [P('w1', 'a', 'n1'), P('w2', 'e', 'n1'), P('w3', 'z', 'n1')]
+    const rN = repartoDeCuerpo('Cristo', tN, pN, hDe2, new Set())
+    caso('y en el reparto por número va el primero', ['z', 'e', 'a'],
+      rN.map((x) => x.hermano.id))
+
+    /*
+     * Y DOS SIN NÚMERO NO DEJAN LA LISTA EN CUALQUIER ORDEN.
+     *
+     * Aquí está la razón de que el tope sea un número grande y FINITO y no
+     * `Infinity`: dos veces `Infinity` restadas dan `NaN`, y una comparación
+     * que devuelve `NaN` deja la ordenación indefinida — la misma lista podría
+     * salir de una forma al imprimirla y de otra al volver a entrar.
+     *
+     * Los dos van detrás del que sí tiene número, y entre ellos manda el
+     * desempate de siempre: la papeleta. `x1` es la de `z`, así que va antes
+     * que `y`. Lo que importa no es cuál de los dos gana, sino que gane
+     * siempre el mismo.
+     */
+    conSinNumero.set('y', H('y', 0))
+    const pDos = [P('x1', 'z', 's1'), P('x2', 'y', 's1'), P('x3', 'a', 's1')]
+    const rDos = repartoDeCuerpo('Cristo', tS, pDos, hDe2, new Set())
+    caso('dos sin número van detrás y en orden fijo', ['a', 'z', 'y'],
+      rDos.map((x) => x.hermano.id))
+    // Y otra vez, con las papeletas en otro orden de entrada: mismo resultado.
+    const rOtra = repartoDeCuerpo('Cristo', tS, [pDos[2], pDos[1], pDos[0]], hDe2, new Set())
+    caso('y no depende del orden en que lleguen', ['a', 'z', 'y'],
+      rOtra.map((x) => x.hermano.id))
+  }
+
   const conBaja = new Map(hermanos)
   conBaja.set('e', H('e', 50, 'Baja'))
   const r2 = repartoDeCuerpo('Cristo', tramos, paps, (id) => conBaja.get(id), new Set())

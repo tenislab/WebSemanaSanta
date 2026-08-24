@@ -129,7 +129,45 @@ Deno.serve(async (req: Request) => {
 
   const objeto = evento.data?.object ?? {}
 
-  if (evento.type === 'checkout.session.completed') {
+  /*
+   * PAGAR NO ES LO MISMO QUE TERMINAR EL FORMULARIO.
+   *
+   * `checkout.session.completed` significa «el cliente ha terminado», no «el
+   * dinero está». Con tarjeta las dos cosas pasan a la vez, pero con los
+   * métodos de notificación diferida —SEPA y Bizum, justo los que una
+   * hermandad va a querer— Stripe manda este aviso con `payment_status:
+   * 'unpaid'` y el cobro tarda días en confirmarse. O en fallar.
+   *
+   * Sin mirar esto, una hermandad quedaba con la suscripción activada por
+   * haber rellenado el formulario, y si el adeudo se devolvía no había nada
+   * que la desactivara: `async_payment_failed` no llega a
+   * `customer.subscription.deleted`.
+   *
+   * Aquí NO se fijan los métodos de pago (`crear-suscripcion` no manda
+   * `payment_method_types`), así que los que haya encendidos en el panel de
+   * Stripe entran solos. Por eso esto no puede depender de la configuración.
+   *
+   * `no_payment_required` cuenta como bueno: es lo que devuelve una prueba
+   * gratuita o un cupón del 100%.
+   */
+  const YA_COBRADO = new Set(['paid', 'no_payment_required'])
+
+  // `async_payment_succeeded` es el mismo caso visto días después: el adeudo
+  // SEPA ha entrado de verdad. Se trata igual que el completado.
+  if (
+    evento.type === 'checkout.session.completed'
+    || evento.type === 'checkout.session.async_payment_succeeded'
+  ) {
+    const estadoPago = objeto.payment_status as string | undefined
+    if (!YA_COBRADO.has(estadoPago ?? '')) {
+      /*
+       * Todavía no hay dinero. Se reconoce con 200 y no se activa nada: si el
+       * cobro llega, Stripe manda `async_payment_succeeded` y se entra por
+       * aquí otra vez; si no llega, no se ha regalado nada.
+       */
+      console.log('checkout sin cobrar todavía (%s), no se activa:', estadoPago, objeto.id)
+      return respuesta({ recibido: true })
+    }
     /*
      * `crear-suscripcion` puso `client_reference_id` y `metadata.usuario` al
      * abrir la sesión de pago (ver ese archivo): son el mismo id, por si

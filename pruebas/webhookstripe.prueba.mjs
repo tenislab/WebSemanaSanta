@@ -55,6 +55,34 @@ export default async function ({ caso }) {
   caso('el usuario sale de client_reference_id o de metadata.usuario', true,
     /client_reference_id[\s\S]{0,40}metadata\.usuario/.test(fuente))
 
+  /*
+   * 3 bis. TERMINAR EL FORMULARIO NO ES HABER PAGADO.
+   *
+   * `checkout.session.completed` significa «el cliente ha terminado». Con
+   * tarjeta eso y el cobro son lo mismo, pero con los métodos de notificación
+   * diferida —SEPA y Bizum, justo los que una hermandad va a querer— Stripe
+   * manda ese aviso con `payment_status: 'unpaid'` y el dinero tarda días en
+   * confirmarse, o no llega.
+   *
+   * Y aquí NO se fijan los métodos de pago: `crear-suscripcion` no manda
+   * `payment_method_types`, así que entra lo que esté encendido en el panel de
+   * Stripe. O sea que esto no puede depender de la configuración.
+   *
+   * Sin la comprobación, la hermandad quedaba activada por rellenar el
+   * formulario, y si el adeudo se devolvía no había nada que la desactivara:
+   * un pago diferido que falla no llega a `customer.subscription.deleted`.
+   */
+  caso('no activa sin que el pago esté cobrado', true, /payment_status/.test(fuente))
+  caso('y «pagado» incluye la prueba gratuita', true,
+    /'paid'[\s\S]{0,30}'no_payment_required'/.test(fuente))
+  // Y el cobro que llega días después entra por el mismo sitio.
+  caso('atiende el cobro diferido cuando por fin entra', true,
+    /checkout\.session\.async_payment_succeeded/.test(fuente))
+  // Sin cobrar se contesta 200 y no se activa: un error haría que Stripe lo
+  // reintentara para siempre.
+  caso('sin cobrar se reconoce pero no se activa', true,
+    /no se activa[\s\S]{0,120}recibido: true/.test(fuente))
+
   caso('desactiva con customer.subscription.deleted', true, /customer\.subscription\.deleted/.test(fuente))
   caso('llamando a cancelar_suscripcion_por_stripe', true, /llamarRpc\('cancelar_suscripcion_por_stripe'/.test(fuente))
 

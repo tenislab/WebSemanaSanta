@@ -42,6 +42,33 @@ export function puedeSalirEnElCortejo(h: { estado: string; civil?: boolean } | u
   return Boolean(h) && h!.estado !== 'Baja' && !h!.civil
 }
 
+/**
+ * EL NÚMERO A EFECTOS DE ORDEN, CON EL 0 EN SU SITIO.
+ *
+ * El 0 no es «el número más bajo»: es «todavía no tiene número». Lo dice
+ * `censo.ts`, cuyo `enElEscalafon()` deja fuera de la numeración a quien lleva
+ * 0, y pasa de verdad —«una ficha recién importada puede llegar con 0 mientras
+ * se termina de numerar».
+ *
+ * Ordenando por el número a secas, ese hermano salía EN CABEZA de un tramo por
+ * solicitud, por delante del nº 1 que lleva cuarenta años esperando ese sitio.
+ * Sin error: solo un orden impreso que nadie cuadra hasta el día de la salida.
+ *
+ * Puesto al final de la escala, las dos ordenaciones dicen lo mismo desde sus
+ * dos lados: por solicitud manda la antigüedad y sin número no hay antigüedad
+ * que alegar, así que va detrás; por número los modernos van delante y el que
+ * no tiene número es el más nuevo de todos, así que va primero.
+ *
+ * Un número grande y FINITO, no `Infinity`: dos hermanos sin número darían
+ * `Infinity - Infinity`, que es `NaN`, y una comparación que devuelve `NaN`
+ * deja la lista en cualquier orden. `Papeletas.tsx` usa `|| Infinity` para
+ * imprimir, donde nunca coinciden dos.
+ */
+const SIN_NUMERO = Number.MAX_SAFE_INTEGER
+function paraOrdenar(numero: number): number {
+  return numero > 0 ? numero : SIN_NUMERO
+}
+
 function candidatosDe(
   papeletas: Papeleta[],
   predicado: (p: Papeleta) => boolean,
@@ -99,7 +126,8 @@ export function repartoDeCuerpo(
     .filter((t) => !esAutomatico(t))
     .forEach((tramo) => {
       const solicitantes = candidatosDe(papeletas, (p) => p.tramoId === tramo.id, hermanoDe).sort(
-        (a, b) => a.hermano.numero - b.hermano.numero || a.papeleta.id.localeCompare(b.papeleta.id),
+        (a, b) => paraOrdenar(a.hermano.numero) - paraOrdenar(b.hermano.numero)
+          || a.papeleta.id.localeCompare(b.papeleta.id),
       )
       solicitantes.forEach(({ papeleta, hermano }, i) => {
         const estado: EstadoAsignacion = i >= tramo.capacidad ? 'Excede aforo' : estadoDe(papeleta, incidenciasAbiertas)
@@ -111,7 +139,8 @@ export function repartoDeCuerpo(
   gruposAutomaticos(tramosCuerpo).forEach(({ tramos: grupo }) => {
     const idsGrupo = new Set(grupo.map((t) => t.id))
     const pool = candidatosDe(papeletas, (p) => p.tramoId !== null && idsGrupo.has(p.tramoId), hermanoDe).sort(
-      (a, b) => b.hermano.numero - a.hermano.numero || a.papeleta.id.localeCompare(b.papeleta.id),
+      (a, b) => paraOrdenar(b.hermano.numero) - paraOrdenar(a.hermano.numero)
+        || a.papeleta.id.localeCompare(b.papeleta.id),
     )
 
     let idx = 0
