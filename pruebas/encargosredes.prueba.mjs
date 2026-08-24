@@ -104,6 +104,41 @@ export default async function ({ cargar, caso }) {
 
   await avisos({ caso })
   await sinEspejoEnElPortal({ caso })
+  await seVe({ caso })
+}
+
+/**
+ * QUE SE VEA, QUE ES LO QUE FALLABA.
+ *
+ * Todo lo de arriba estaba bien y aun así la respuesta fue «no veo lo de
+ * notificaciones en la zona de hermano». Y tenía razón: el apartado existía,
+ * pero estaba a media página —debajo de la cuota, la papeleta, el tramo y los
+ * datos personales— y se llamaba «Mi buzón». Quien entra a ver si tiene algo
+ * mira arriba; si arriba no hay nada, no hay nada.
+ *
+ * Construir algo que nadie encuentra es no haberlo construido.
+ */
+async function seVe({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const buzon = await readFile('src/components/BuzonHermano.tsx', 'utf8')
+
+  // Arriba, entre las tarjetas de resumen, donde se mira sin bajar.
+  const tarjetas = portal.slice(portal.indexOf('className="portal__cards"'), portal.indexOf('{!consent &&'))
+  caso('hay una tarjeta de notificaciones arriba', true, /Notificaciones/.test(tarjetas))
+  caso('y es un botón, no un adorno', true, /portal__card-mini--boton/.test(tarjetas))
+  caso('que lleva al apartado de un salto', true, /getElementById\('mis-avisos'\)/.test(tarjetas))
+  // Sale también cuando no hay nada: «Nada nuevo» es una respuesta, y no
+  // encontrar el apartado no lo es.
+  caso('dice algo aunque no haya nada', true, /Nada nuevo/.test(tarjetas))
+  // Y cuenta las dos cosas que esperan, no solo una.
+  caso('cuenta avisos y encargos juntos', true, /avisosSinLeer \+ misEncargos\.length/.test(portal))
+
+  // Y se llama como lo busca la gente. Se buscaba «notificaciones» y ponía
+  // «buzón»: la palabra importa cuando se busca algo con los ojos.
+  caso('el apartado se llama notificaciones', true, /Mis notificaciones/.test(buzon))
+  caso('y ya no se llama «Mi buzón»', false, />\s*Mi buzón/.test(buzon))
+  caso('el ancla sigue siendo la misma', true, /id="mis-avisos"/.test(buzon))
 }
 
 /**

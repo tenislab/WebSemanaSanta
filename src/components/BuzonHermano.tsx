@@ -49,7 +49,7 @@ export default function BuzonHermano({
     <section className="portal__section" id="mis-avisos">
       <div className="portal__avisos-head">
         <h2>
-          Mi buzón
+          Mis notificaciones
           {sinLeer > 0 && <span className="portal__avisos-badge">{sinLeer}</span>}
         </h2>
         <div className="assign-box__row">
@@ -68,7 +68,7 @@ export default function BuzonHermano({
       {visibles.length === 0 ? (
         <p className="form-hint">
           {avisos.length === 0
-            ? 'No tienes ningún aviso. Aquí te llegará lo que te mande la hermandad.'
+            ? 'No tienes ninguna notificación. Aquí te llegará lo que te mande la hermandad: cuotas, papeletas, comunicados y lo que te encargue la junta.'
             : 'No te queda nada sin leer.'}
         </p>
       ) : (

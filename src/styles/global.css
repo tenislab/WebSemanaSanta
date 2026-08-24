@@ -4313,6 +4313,17 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .portal__card-mini--ok::before { background: var(--ok-fg, #2e7d32); }
 .portal__card-mini--warn::before { background: var(--warn-fg, #b8860b); }
 .portal__card-mini--accent::before { background: var(--gold); }
+/* Al saltar desde la tarjeta, la sección quedaba pegada al borde de arriba y
+   se le comía el redondeo: un dedo de aire y se lee como que ha llegado. */
+#mis-avisos { scroll-margin-top: 1.2rem; }
+.portal__card-mini--boton {
+  /* Un botón no hereda ni la alineación ni la tipografía de la página, así que
+     se le devuelven: si no, el texto sale centrado y con la fuente del sistema
+     y la tarjeta desentona justo al lado de las otras cuatro. */
+  font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%;
+}
+.portal__card-mini--boton:hover { border-color: var(--line-strong); }
+.portal__card-mini--boton:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .portal__card-mini__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
 .portal__card-mini__value { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
 .portal__card-mini__sub { font-size: 0.78rem; color: var(--text-muted); }

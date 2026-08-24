@@ -488,6 +488,12 @@ export default function HermanoPortal() {
     cambiarPreferencia: cambiarPreferenciaAviso,
     errorPreferencias: errorPreferenciasAvisos,
   } = useAvisosHermano(hermanoActivo?.id ?? null)
+  /*
+   * Lo que le espera, en un solo número: avisos sin leer más encargos por
+   * hacer. Separarlos en dos cuentas obliga a sumar de cabeza para responder
+   * a «¿tengo algo?», que es la única pregunta que se hace desde arriba.
+   */
+  const pendientesDeVer = avisosSinLeer + misEncargos.length
   const nombreHermandadActiva = esPrincipal ? nombrePrincipal : hermandadMuestra?.nombre ?? 'tu hermandad'
   const colorActivo = esPrincipal ? hermandadPrincipal.colorPrimario : hermandadMuestra?.color ?? '#caa24a'
   const contactoActivo = esPrincipal
@@ -1743,6 +1749,38 @@ export default function HermanoPortal() {
                       : campana.anio}
               </span>
             </div>
+            {/*
+              NOTIFICACIONES, ARRIBA DEL TODO.
+              El buzón existía, pero estaba a media página —debajo de la cuota,
+              la papeleta, el tramo y los datos personales— y se llamaba «Mi
+              buzón». Quien entra a ver si tiene algo nuevo no baja hasta ahí:
+              mira arriba, no ve nada, y da por hecho que no hay nada.
+
+              Así que el aviso sube a donde se mira, y es un botón: lleva a la
+              sección de un salto. Sale SIEMPRE, también cuando no hay nada,
+              porque «Nada nuevo» es una respuesta y no encontrar el apartado
+              no lo es.
+            */}
+            <button
+              type="button"
+              className={`portal__card-mini portal__card-mini--boton${
+                pendientesDeVer > 0 ? ' portal__card-mini--warn' : ' portal__card-mini--ok'}`}
+              onClick={() => {
+                document.getElementById('mis-avisos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+            >
+              <span className="portal__card-mini__label">Notificaciones</span>
+              <span className="portal__card-mini__value">
+                {pendientesDeVer > 0 ? pendientesDeVer : 'Al día'}
+              </span>
+              <span className="portal__card-mini__sub">
+                {misEncargos.length > 0
+                  ? `${avisosSinLeer} sin leer · ${misEncargos.length} por hacer`
+                  : pendientesDeVer > 0
+                    ? `${avisosSinLeer} sin leer`
+                    : 'Nada nuevo'}
+              </span>
+            </button>
             <div className="portal__card-mini portal__card-mini--accent">
               <span className="portal__card-mini__label">Mi papeleta {campana.anio}</span>
               <span className="portal__card-mini__value">
