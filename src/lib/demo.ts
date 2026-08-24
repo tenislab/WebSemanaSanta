@@ -115,6 +115,26 @@ export function demoModo(): 'llena' | 'vacia' | null {
  * esté configurado pero en pausa. Así el acceso demo funciona siempre.
  */
 export function modoDemoActivo(): boolean {
+  /*
+   * CON BASE DE DATOS CONECTADA NO HAY DEMOSTRACIÓN, HAYA LO QUE HAYA
+   * GUARDADO EN ESTE NAVEGADOR.
+   *
+   * La marca solo se puede encender desde pantallas que están detrás de
+   * `!isSupabaseConfigured`, así que cuando Supabase SÍ está configurado y la
+   * marca existe, es un resto: de cuando esta web se probaba sin base de
+   * datos, o de un navegador que jugó con la demostración antes del despliegue.
+   *
+   * Y ese resto no era inofensivo. `useSupabaseTable` decide al montarse si
+   * lee de la base o del navegador, y esta función era la mitad de esa
+   * decisión: con la marca vieja puesta, la secretaría abría el panel con
+   * Supabase conectado y trabajaba contra su propio navegador —altas, cuotas,
+   * papeletas— sin escribir nada en la base y sin un solo aviso. `limpiarModoDemo()`
+   * la borra al iniciar sesión, pero eso llega tarde si la tabla ya se montó.
+   *
+   * Así, el resto es inofensivo para siempre y no depende de que nadie se
+   * acuerde de limpiarlo a tiempo.
+   */
+  if (isSupabaseConfigured) return false
   try {
     // Los dos sitios: en `localStorage` lo deja «sembrar datos de ejemplo»
     // (deliberado, dura entre sesiones); en `sessionStorage`, el acceso rápido

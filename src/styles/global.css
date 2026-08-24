@@ -1072,7 +1072,10 @@ span.logo-mark img { width: 100%; height: 100%; }
    ========================================================================= */
 .auth-form { display: flex; flex-direction: column; gap: 1.05rem; }
 .field { display: flex; flex-direction: column; gap: 0.45rem; }
-.field label { font-size: 0.8rem; font-weight: 600; color: rgba(244, 236, 255, 0.92); }
+/* Lo mismo que en `.checkbox`, y por lo mismo: `.field` se usa también en el
+   área del hermano, sobre fondo claro. */
+.field label { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.glass-panel .field label, .auth-form .field label { color: rgba(244, 236, 255, 0.92); }
 .field-row { display: flex; align-items: baseline; justify-content: space-between; }
 .field-link { font-size: 0.78rem; color: var(--oro-300); text-decoration: none; }
 .field-link:hover { text-decoration: underline; }
@@ -1092,7 +1095,17 @@ span.logo-mark img { width: 100%; height: 100%; }
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .field input::placeholder,
-.input-wrap input::placeholder { color: rgba(244, 236, 255, 0.4); }
+/*
+ * DE AQUÍ ABAJO, TODO LO QUE USA EL BLANCO DEL CRISTAL OSCURO VA ATADO A
+ * `.auth-form` O `.glass-panel`.
+ *
+ * No es manía: `.fineprint`, `.input-affix` y `.input-wrap` son nombres
+ * genéricos que hoy solo usa la pantalla de entrar, pero el día que alguien
+ * los reutilice en una pantalla clara se volverán invisibles sin un error de
+ * por medio. Es exactamente lo que le pasó a `.checkbox` y a `.field label`.
+ * `pruebas/contraste.prueba.mjs` comprueba que no se escape ninguno.
+ */
+.auth-form .input-wrap input::placeholder { color: rgba(244, 236, 255, 0.4); }
 .field input:focus,
 .input-wrap input:focus {
   outline: none;
@@ -1103,7 +1116,7 @@ span.logo-mark img { width: 100%; height: 100%; }
 
 .input-wrap { position: relative; display: flex; align-items: center; }
 .input-wrap input { padding-right: 5.2rem; }
-.input-affix {
+.auth-form .input-affix {
   position: absolute; right: 0.45rem;
   border: none; background: transparent;
   font: inherit; font-size: 0.78rem; font-weight: 600;
@@ -1112,14 +1125,26 @@ span.logo-mark img { width: 100%; height: 100%; }
 }
 .input-affix:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
 
-.checkbox { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.84rem; color: rgba(244, 236, 255, 0.78); cursor: pointer; line-height: 1.4; }
-/* En el panel (tarjetas de ajustes) el checkbox va sobre fondo del tema, no sobre cristal oscuro. */
-.settings-card .checkbox, .dash .checkbox { color: var(--text); }
+/*
+ * EL COLOR POR DEFECTO ES EL LEGIBLE, Y EL BLANCO ES LA EXCEPCIÓN.
+ *
+ * Estaba al revés: el color de fábrica era un blanco casi puro —escrito para
+ * el cristal oscuro de la pantalla de entrar— y se le devolvía el color del
+ * tema solo dentro de `.settings-card` y `.dash`. El área del hermano no es
+ * ninguna de las dos, así que allí los textos salían en blanco sobre blanco:
+ * los títulos de «Qué quiero recibir» eran invisibles, mientras que sus
+ * explicaciones —que sí traen su propio color— se leían perfectamente.
+ *
+ * Puesto así, cualquier pantalla nueva hereda lo que se lee. Solo el cristal
+ * oscuro, que es UNO, tiene que pedir lo suyo.
+ */
+.checkbox { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.84rem; color: var(--text); cursor: pointer; line-height: 1.4; }
+.glass-panel .checkbox, .auth-form .checkbox { color: rgba(244, 236, 255, 0.78); }
 .checkbox input { width: 16px; height: 16px; margin-top: 0.15rem; accent-color: var(--oro-500); flex: none; }
 .checkbox a { color: var(--oro-300); text-decoration: none; }
 .checkbox a:hover { text-decoration: underline; }
 
-.fineprint { font-size: 0.76rem; color: rgba(244, 236, 255, 0.5); text-align: center; margin: 0.2rem 0 0; line-height: 1.5; }
+.auth-form .fineprint { font-size: 0.76rem; color: rgba(244, 236, 255, 0.5); text-align: center; margin: 0.2rem 0 0; line-height: 1.5; }
 
 /* botón dorado premium dentro del cristal */
 .glass-panel .btn-primary {
