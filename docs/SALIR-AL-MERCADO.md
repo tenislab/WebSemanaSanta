@@ -281,13 +281,24 @@ deja el cumplimiento de PCI en el mínimo.
    supabase functions deploy crear-suscripcion
    ```
 
-5. Prueba con la cuenta de test de Stripe (`sk_test_...` y tarjeta
-   `4242 4242 4242 4242`) **antes** de poner las claves de verdad.
+5. **El webhook**, que es lo que activa la suscripción cuando el dinero entra
+   DE VERDAD y no cuando el navegador vuelve de Stripe (`supabase/functions/webhook-stripe/`):
 
-⬜ **Queda por hacer:** el webhook que apunta el cobro cuando Stripe lo
-confirma. Hoy la cuenta se activa al volver del pago; con el webhook se activa
-cuando el dinero entra de verdad, que es lo correcto. Para empezar a vender no
-bloquea, pero conviene tenerlo antes de tener muchos clientes.
+   ```
+   supabase functions deploy webhook-stripe --no-verify-jwt
+   supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
+   ```
+
+   Y en el panel de Stripe: **Developers → Webhooks → Add endpoint**, con la
+   URL que da el comando de arriba y estos dos eventos:
+   `checkout.session.completed` y `customer.subscription.deleted`. Ejecuta
+   antes `supabase/webhook-stripe.sql` (ya va dentro de `ACTUALIZAR.sql`):
+   sin él, `activar_suscripcion` no tiene permiso para que la llame el
+   webhook.
+
+6. Prueba con la cuenta de test de Stripe (`sk_test_...` y tarjeta
+   `4242 4242 4242 4242`) **antes** de poner las claves de verdad. El propio
+   panel de Stripe deja mandar un evento de prueba al webhook sin pagar nada.
 
 ### 3.b · Lo que los hermanos pagan a su hermandad
 
@@ -299,11 +310,12 @@ Hay **tres formas**, y las tres están ya en la aplicación:
 desde Cuotas. Se descarga y se sube a la banca electrónica. No hace falta
 contratar nada: se usa la cuenta que ya tiene la hermandad.
 
-⚠️ **Antes de la primera remesa real, hablar con el banco.** Gobergo todavía no
-guarda los mandatos SEPA firmados: el identificador de mandato lo compone a
-partir del número de hermano. Es un punto de partida razonable, pero el banco
-tiene que dar el visto bueno, y por ley hace falta la orden firmada de cada
-hermano. Está avisado en el propio código.
+✅ **El mandato SEPA se firma de verdad.** El hermano lo firma desde su propia
+área, con un clic sobre el texto legal de la domiciliación (igual que el
+consentimiento del boletín). Queda guardado quién, cuándo, con qué IBAN y qué
+texto aceptó. Un recibo domiciliado sin mandato vigente para su IBAN actual no
+entra en la remesa: se cae de la lista con el motivo a la vista, junto a los
+que se caían por un IBAN inválido. Ver `supabase/mandatos-sepa.sql`.
 
 **2. Bizum o transferencia**
 
@@ -378,13 +390,15 @@ en ningún sitio.
 | Aislamiento entre hermandades | ✅ Probado, 47 comprobaciones |
 | Correos de la hermandad | ✅ Montado · ⬜ falta contratar el proveedor |
 | Correos de cuenta (confirmación, contraseña) | ⬜ Falta el SMTP propio en Supabase |
-| Remesas SEPA | ✅ Genera el fichero · ⚠️ sin mandatos firmados guardados |
-| Suscripción por Stripe | ✅ Preparado · ⬜ falta la cuenta y los precios · ⬜ falta el webhook |
+| Remesas SEPA | ✅ Genera el fichero · ✅ mandatos firmados por el hermano |
+| Suscripción por Stripe | ✅ Webhook montado · ⬜ falta la cuenta y los precios |
 | Cobro de las hermandades a sus hermanos | ✅ SEPA, Bizum y enlace de pasarela |
 | Textos legales | ⬜ Con huecos por rellenar |
 | Contrato de encargo (art. 28) | ⬜ Redactado, sin firmar con nadie |
 | Copias de seguridad | ⬜ Hay que activarlas en Supabase |
 
 **Lo que NO haría todavía:** cobrar a una hermandad grande antes de haber hecho
-una remesa SEPA de verdad con su banco. Es lo único que puede salir caro y lo
-único que no se puede probar sin un banco delante.
+una remesa SEPA de verdad con su banco, aunque ya lleve mandatos firmados. El
+mandato es lo que le pide la ley y lo que enseñar si un hermano reclama; que
+el fichero concreto que genera Gobergo lo acepte SIN peros el banco de esa
+hermandad en concreto es algo que solo confirma un envío real.

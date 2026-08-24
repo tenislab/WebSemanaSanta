@@ -267,6 +267,8 @@ export default async function ({ caso }) {
   await nadieGuardaContrasenasEnClaro({ sql, caso })
   await losFormulariosPublicosTienenFreno({ sql, caso })
   await hermanoDeDosHermandades({ sql, caso })
+  await elWebhookDeStripeActivaLaSuscripcion({ sql, caso })
+  await elMandatoSepaLoFirmaElPropioHermano({ sql, caso })
 }
 
 /**
@@ -482,7 +484,7 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
   // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
   caso('los dos módulos ya no salen pendientes', false,
     enFalso.some((x) => /eventos|«web»/.test(x)))
-  caso('y comprueba diez cosas', 10, filas.length)
+  caso('y comprueba doce cosas', 12, filas.length)
 
   // Y que haya hecho lo suyo de verdad, no solo decirlo.
   caso('ha rellenado los dos módulos que faltaban', true,
@@ -1776,4 +1778,288 @@ async function cadaCargoEnLoSuyo({ sql, caso }) {
         || '|' || (select count(*) from hermanos where hermandad_id = ${HD})
         || '|' || (select count(*) from registro_actividad where hermandad_id = ${HD});
     `)).trim())
+}
+
+/**
+ * EL WEBHOOK DE STRIPE, DE VERDAD: solo `service_role` activa, y con la
+ * hermandad correcta.
+ *
+ * `activar_suscripcion_por_usuario` es la función que llamaría el webhook
+ * cuando Stripe avisa de un cobro confirmado. Estaba revocada de todo el
+ * mundo —ni siquiera `service_role`, que es con la que habla el servidor,
+ * podía llamarla— y aquí se comprueba lo contrario de lo que se venía a
+ * arreglar: que YA NO lo esté, que siga sin poder llamarla nadie más, y que
+ * resuelva la hermandad correcta a partir de quién pagó.
+ */
+async function elWebhookDeStripeActivaLaSuscripcion({ sql, caso }) {
+  const H = "'d0000000-0000-0000-0000-00000000000d'"
+  const TITULAR = "'d1111111-1111-1111-1111-111111111111'"
+  const HUERFANO = "'d2222222-2222-2222-2222-222222222222'"
+
+  await sql(`
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. del Webhook') on conflict (id) do nothing;
+    insert into auth.users (id, email) values (${TITULAR}, 'titular@ejemplo.es') on conflict (id) do nothing;
+    insert into titulares (auth_user_id, hermandad_id) values (${TITULAR}, ${H})
+      on conflict (auth_user_id) do update set hermandad_id = excluded.hermandad_id;
+  `)
+
+  // 1. `service_role` llama con el usuario que pagó, y activa SU hermandad.
+  await sql(`
+    begin;
+      set local role service_role;
+      select activar_suscripcion_por_usuario(${TITULAR}, 'todo', 'mensual', 'cus_123', 'sub_123');
+    commit;
+  `)
+  const primeraActivacion = (await sql(
+    `select activa || '|' || pack || '|' || stripe_customer_id || '|' || stripe_subscription_id
+       from suscripciones where hermandad_id = ${H}`,
+  )).trim()
+  caso('Stripe activa la suscripción de la hermandad que pagó', 'true|todo|cus_123|sub_123', primeraActivacion)
+
+  /*
+   * 2. Un alta a mano desde el editor SQL (`activar_suscripcion` de cuatro
+   * parámetros, sin referencia de Stripe) NO BORRA la referencia que ya
+   * había. Es justo lo que arregla el `coalesce` del fichero: sin él, cada
+   * alta manual habría dejado la suscripción sin saber a qué cliente de
+   * Stripe pertenece.
+   */
+  await sql(`
+    begin;
+      set local role service_role;
+      select activar_suscripcion(${H}, 'basico', 'anual', '2027-06-01'::date);
+    commit;
+  `)
+  const trasAltaManual = (await sql(
+    `select pack || '|' || periodo || '|' || stripe_customer_id || '|' || stripe_subscription_id
+       from suscripciones where hermandad_id = ${H}`,
+  )).trim()
+  caso('y el alta a mano no borra la referencia de Stripe que ya había',
+    'basico|anual|cus_123|sub_123', trasAltaManual)
+
+  // 3. Nadie más puede llamarla: ni una sesión de hermano, ni una anónima.
+  const comoAlgoQueNoEsServiceRole = async (rol, sentencia) => {
+    try {
+      await sql(`
+        begin;
+          set local role ${rol};
+          ${sentencia}
+        rollback;
+      `)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) {
+      return { deja: 'no', motivo: String(e?.stderr ?? e) }
+    }
+  }
+  const porAuthenticated = await comoAlgoQueNoEsServiceRole(
+    'authenticated',
+    `select activar_suscripcion_por_usuario(${TITULAR}, 'todo', 'mensual', 'x', 'y');`,
+  )
+  caso('una sesión autenticada no puede activar suscripciones', 'no', porAuthenticated.deja)
+  caso('y falla por permiso, no por otra cosa', true,
+    /permission denied for function activar_suscripcion_por_usuario/.test(porAuthenticated.motivo))
+  caso('tampoco una sesión anónima', 'no',
+    (await comoAlgoQueNoEsServiceRole(
+      'anon', `select activar_suscripcion_por_usuario(${TITULAR}, 'todo', 'mensual', 'x', 'y');`,
+    )).deja)
+
+  // 4. Si Stripe confirma un cobro de alguien sin hermandad, no se calla.
+  const sinHermandad = await comoAlgoQueNoEsServiceRole(
+    'service_role',
+    `select activar_suscripcion_por_usuario(${HUERFANO}, 'todo', 'mensual', 'x', 'y');`,
+  )
+  caso('un usuario sin hermandad no activa nada en silencio', 'no', sinHermandad.deja)
+  caso('y el aviso dice que no se ha encontrado la hermandad', true,
+    /No se ha encontrado ninguna hermandad/.test(sinHermandad.motivo))
+
+  // 5. Y cuando Stripe avisa de una baja, se desactiva por el id de Stripe.
+  await sql(`
+    begin;
+      set local role service_role;
+      select cancelar_suscripcion_por_stripe('sub_123');
+    commit;
+  `)
+  caso('y una baja de Stripe desactiva la suscripción', 'f',
+    (await sql(`select activa from suscripciones where hermandad_id = ${H}`)).trim())
+  caso('ni el propio hermano puede cancelar una suscripción', 'no',
+    (await comoAlgoQueNoEsServiceRole('authenticated', `select cancelar_suscripcion_por_stripe('sub_123');`)).deja)
+}
+
+/**
+ * EL MANDATO SEPA, FIRMADO DE VERDAD Y SOLO POR QUIEN TOCA.
+ *
+ * Aquí se comprueba lo que dice el propio fichero en sus comentarios: que
+ * solo el titular de la cuenta firma la suya, que tesorería puede revocar
+ * pero no fabricar ni reescribir una firma, y que sin IBAN en la ficha no hay
+ * mandato que firmar.
+ */
+async function elMandatoSepaLoFirmaElPropioHermano({ sql, caso }) {
+  const H = "'c0000000-0000-0000-0000-00000000000c'"
+  const HNO1 = "'c1111111-1111-1111-1111-111111111111'" // con IBAN
+  const HNO2 = "'c2222222-2222-2222-2222-222222222222'" // sin IBAN
+  const UID1 = "'c3333333-3333-3333-3333-333333333333'"
+  const UID2 = "'c4444444-4444-4444-4444-444444444444'"
+  const STAFF = "'c5555555-5555-5555-5555-555555555555'"
+  const IBAN = 'ES1234567890123456789012'
+
+  await sql(`
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. del Mandato') on conflict (id) do nothing;
+    insert into auth.users (id, email) values
+      (${UID1}, 'hno1@ejemplo.es'), (${UID2}, 'hno2@ejemplo.es'), (${STAFF}, 'staff@ejemplo.es')
+      on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, iban) values
+      (${HNO1}, ${H}, 'Con Iban', '90000001A', 601, 'Activo', ${UID1}, '${IBAN}'),
+      (${HNO2}, ${H}, 'Sin Iban', '90000002B', 602, 'Activo', ${UID2}, null)
+      on conflict (id) do nothing;
+    -- Titular: es la vía más corta para dar acceso de tesorería en la prueba,
+    -- y es justo el mismo camino que usa «modulo_permitido()» de verdad.
+    insert into titulares (auth_user_id, hermandad_id) values (${STAFF}, ${H})
+      on conflict (auth_user_id) do update set hermandad_id = excluded.hermandad_id;
+  `)
+
+  const como = async (uid, sentencia) => {
+    try {
+      await sql(`
+        begin;
+          set local role authenticated;
+          set local "request.jwt.claim.sub" = '${uid}';
+          ${sentencia}
+        commit;
+      `)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) {
+      return { deja: 'no', motivo: String(e?.stderr ?? e) }
+    }
+  }
+  // Igual que `como`, pero deshace: para probar sin dejar la fila escrita.
+  const comoSinGuardar = async (uid, sentencia) => {
+    try {
+      await sql(`
+        begin;
+          set local role authenticated;
+          set local "request.jwt.claim.sub" = '${uid}';
+          ${sentencia}
+        rollback;
+      `)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) {
+      return { deja: 'no', motivo: String(e?.stderr ?? e) }
+    }
+  }
+
+  // 1. El hermano firma la suya, y la base rellena TODO lo demás.
+  const firma = await como(UID1.slice(1, -1),
+    `insert into mandatos_sepa (hermano_id, iban, referencia) values (${HNO1}, 'lo que sea', 'lo que sea');`)
+  caso('el hermano firma su propia domiciliación', 'sí', firma.deja)
+  const fila = (await sql(
+    // La referencia sale del propio id de la fila (ver comentario del disparador
+    // en «mandatos-sepa.sql»), no del hermano: se comprueba contra ESE id, no
+    // contra uno inventado a mano.
+    `select iban || '|' || (referencia = 'MND' || replace(id::text, '-', '')) || '|' || (revocado_en is null)
+       from mandatos_sepa where hermano_id = ${HNO1}`,
+  )).trim()
+  caso('con SU IBAN, una referencia que sale de su propio id y sin revocar', `${IBAN}|true|true`, fila)
+
+  // 2. No puede firmar la de otro.
+  const firmaAjena = await comoSinGuardar(UID1.slice(1, -1),
+    `insert into mandatos_sepa (hermano_id, iban, referencia) values (${HNO2}, 'x', 'x');`)
+  caso('no puede firmar la domiciliación de otro hermano', 'no', firmaAjena.deja)
+
+  // 3. Sin IBAN en la ficha, no hay nada que firmar.
+  const sinIban = await comoSinGuardar(UID2.slice(1, -1),
+    `insert into mandatos_sepa (hermano_id, iban, referencia) values (${HNO2}, 'x', 'x');`)
+  caso('sin IBAN en la ficha no se puede firmar', 'no', sinIban.deja)
+  caso('y lo dice, no se calla', true,
+    /no tiene ninguna cuenta bancaria/.test(sinIban.motivo))
+
+  // 4. Tesorería no puede fabricar una firma a nombre de nadie.
+  const staffFirma = await comoSinGuardar(STAFF.slice(1, -1),
+    `insert into mandatos_sepa (hermano_id, iban, referencia) values (${HNO1}, 'x', 'x');`)
+  caso('tesorería no puede fabricar una firma', 'no', staffFirma.deja)
+
+  // 5. Tesorería SÍ puede revocar.
+  const revoca = await como(STAFF.slice(1, -1),
+    `update mandatos_sepa set revocado_en = now() where hermano_id = ${HNO1};`)
+  caso('tesorería puede revocar el mandato', 'sí', revoca.deja)
+  caso('y queda revocado', 'f',
+    (await sql(`select (revocado_en is null) from mandatos_sepa where hermano_id = ${HNO1}`)).trim())
+
+  // 6. Pero no puede «desrevocarlo» después.
+  await como(STAFF.slice(1, -1), `update mandatos_sepa set revocado_en = null where hermano_id = ${HNO1};`)
+  caso('un mandato revocado no se puede reactivar', 'f',
+    (await sql(`select (revocado_en is null) from mandatos_sepa where hermano_id = ${HNO1}`)).trim())
+
+  // 7. Ni cambiarle el IBAN o el texto a lo firmado.
+  await como(STAFF.slice(1, -1),
+    `update mandatos_sepa set iban = 'ES000000000000000000', texto_aceptado = 'otra cosa'
+       where hermano_id = ${HNO1};`)
+  caso('ni el IBAN ni el texto de una firma se pueden reescribir', `${IBAN}|Autorizo`,
+    (await sql(
+      `select iban || '|' || left(texto_aceptado, 8) from mandatos_sepa where hermano_id = ${HNO1}`,
+    )).trim())
+
+  /*
+   * 8. Y el propio hermano no puede revocarse ni tocarse su mandato: solo
+   * tesorería. Aquí NO se puede mirar si lanza una excepción: sin una
+   * política de UPDATE que le cumpla, Postgres no da error — simplemente
+   * actualiza CERO filas y contesta que ha ido bien, igual que pasaba con el
+   * `upsert` de `elHermanoCambiaSuFicha`. Hay que mirar cuántas filas tocó.
+   */
+  const filasQueToca = await sql(`
+    begin;
+      set local role authenticated;
+      set local "request.jwt.claim.sub" = '${UID1.slice(1, -1)}';
+      with x as (update mandatos_sepa set revocado_en = now() where hermano_id = ${HNO1} returning 1)
+        select count(*) from x;
+    rollback;
+  `)
+  const numero = (l) => l.split('\n').map((s) => s.trim()).filter((s) => /^\d+$/.test(s)).pop() ?? ''
+  caso('el hermano no puede tocar su propio mandato una vez firmado', '0', numero(filasQueToca))
+
+  // 9. Ahora se le apunta un IBAN al segundo hermano y firma el suyo también,
+  // para comprobar el aislamiento con DOS mandatos firmados en la hermandad.
+  await sql(`update hermanos set iban = 'ES9876543210987654321098' where id = ${HNO2};`)
+  const firmaHno2 = await como(UID2.slice(1, -1),
+    `insert into mandatos_sepa (hermano_id, iban, referencia) values (${HNO2}, 'x', 'x');`)
+  caso('con el IBAN ya puesto, el segundo hermano sí puede firmar el suyo', 'sí', firmaHno2.deja)
+
+  const loQueVeHno1 = await sql(`
+    begin;
+      set local role authenticated;
+      set local "request.jwt.claim.sub" = '${UID1.slice(1, -1)}';
+      select count(*) from mandatos_sepa;
+    rollback;
+  `)
+  caso('cada hermano solo ve su propio mandato', '1', numero(loQueVeHno1))
+
+  const loQueVeStaff = await sql(`
+    begin;
+      set local role authenticated;
+      set local "request.jwt.claim.sub" = '${STAFF.slice(1, -1)}';
+      select count(*) from mandatos_sepa where hermandad_id = ${H};
+    rollback;
+  `)
+  caso('tesorería ve los dos mandatos de su hermandad', '2', numero(loQueVeStaff))
+
+  /*
+   * 10. UN HERMANO CON CARGO TAMBIÉN FIRMA LA SUYA.
+   *
+   * Este es el que se coló al escribir el disparador: comprobaba
+   * `auth_es_hermano()`, que da FALSO en cuanto el hermano lleva cualquier
+   * cargo —Fiscal, Vocal, diputado de tramo, no hace falta ser Tesorero/a—,
+   * porque esa función contesta «¿esta cuenta gestiona?», no «¿de quién es
+   * esta ficha?». Con eso puesto, un fiscal no podía firmar su propia
+   * domiciliación: la base le decía «Solo el propio hermano puede firmar su
+   * domiciliación», siendo él mismo el propio hermano.
+   */
+  const HNO3 = "'c6666666-6666-6666-6666-666666666666'"
+  const UID3 = "'c7777777-7777-7777-7777-777777777777'"
+  await sql(`
+    insert into auth.users (id, email) values (${UID3}, 'fiscal@ejemplo.es') on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, iban, cargo, email) values
+      (${HNO3}, ${H}, 'Con Cargo', '90000003C', 603, 'Activo', ${UID3}, '${IBAN}', 'Fiscal', 'fiscal@ejemplo.es')
+      on conflict (id) do nothing;
+  `)
+  const firmaConCargo = await como(UID3.slice(1, -1),
+    `insert into mandatos_sepa (hermano_id, iban, referencia) values (${HNO3}, 'x', 'x');`)
+  caso('un hermano con cargo (Fiscal) también firma la suya', 'sí', firmaConCargo.deja)
 }

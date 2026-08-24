@@ -3,10 +3,10 @@
  * pain.008.001.02), el fichero XML que se presenta al banco para cobrar
  * recibos domiciliados. Se genera entero en el navegador, sin backend.
  *
- * El identificador de mandato (MndtId) y su fecha de firma se sintetizan a
- * partir del número de hermano y su antigüedad, porque la app todavía no
- * guarda mandatos SEPA firmados de verdad: es un valor de partida razonable,
- * pero conviene revisarlo con el banco antes del primer envío real.
+ * El identificador de mandato (MndtId) y su fecha de firma salen del mandato
+ * firmado de verdad por el hermano (`mandatos_sepa`, ver
+ * `lib/mandatosSepa.ts`): quien monta la remesa en `Cuotas.tsx` ya ha
+ * comprobado que existe uno vigente antes de llegar aquí.
  */
 
 import { ibanValido, limpiarIban, porQueNoValeElIban } from './iban'
@@ -20,14 +20,12 @@ export interface SepaAcreedor {
 export interface SepaDeudor {
   nombre: string
   iban: string
-  /**
-   * Id del hermano en la base. Es lo que identifica el mandato, porque NO
-   * cambia: el número de hermano se renumera con cada baja.
-   */
-  hermanoId?: string
-  /** Solo para mostrar; ya no se usa para el identificador de mandato. */
+  /** `mandatos_sepa.referencia` del mandato vigente: el `MndtId` sale de aquí, no se inventa. */
+  mandatoId: string
+  /** `mandatos_sepa.firmado_en` del mandato vigente. */
+  fechaFirma: Date
+  /** Solo para mostrar. */
   numeroHermano: number
-  antiguedad: number
 }
 
 export interface SepaRecibo {
@@ -182,25 +180,10 @@ export function buildSepaXml(acreedor: SepaAcreedor, recibos: SepaRecibo[], fech
 
   const transacciones = recibos
     .map((r, i) => {
-      /*
-       * EL IDENTIFICADOR DE MANDATO: DEL ID DEL HERMANO, Y EN 35 CARACTERES.
-       *
-       * Del id del hermano porque NO cambia: con el número de hermano, cada
-       * baja renumera el censo y el mismo hermano se presentaba al banco cada
-       * mes con un identificador distinto —el que era del vecino—, y todos los
-       * de baja compartían «MND-0».
-       *
-       * Y en 35 porque `MndtId` es `Max35Text`. Aquí ponía `MND-` + el id, y
-       * el id es un UUID de 36 caracteres: 40 en total, CINCO DE MÁS, en todas
-       * y cada una de las líneas. Eso no se ve al descargar el fichero —el XML
-       * parece perfecto— y no se ve hasta que el banco rechaza la remesa
-       * entera, con los recibos sin cobrar y el mes empezado.
-       *
-       * Quitarle los guiones al UUID lo deja en 32, y con «MND» delante son 35
-       * justos. Sigue saliendo del mismo sitio y sigue sin cambiar nunca.
-       */
-  const mndtId = cabe(`MND${String(r.deudor.hermanoId ?? r.deudor.numeroHermano).replace(/-/g, '').toUpperCase()}`, 35)
-      const fechaFirma = `${r.deudor.antiguedad}-01-01`
+      // El identificador y la fecha del mandato salen del que firmó de
+      // verdad el hermano (`mandatos_sepa`): no hay nada que sintetizar aquí.
+      const mndtId = r.deudor.mandatoId
+      const fechaFirma = fechaIso(r.deudor.fechaFirma)
       return `      <DrctDbtTxInf>
         <PmtId>
           <EndToEndId>REC-${r.numero}</EndToEndId>

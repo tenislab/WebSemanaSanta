@@ -53,6 +53,8 @@ export const PIEZAS_ACTUALIZACION = [
   ['numero-de-recibo-unico.sql', 'Que no pueda haber dos recibos con el mismo número'],
   ['borrar-una-hermandad.sql', 'Que una hermandad se pueda borrar (el registro lo impedía)'],
   ['documentos-restringidos.sql', 'Que el documento restringido lo sea también en la base'],
+  ['webhook-stripe.sql', 'Que la suscripción se active cuando Stripe confirma el cobro, no antes'],
+  ['mandatos-sepa.sql', 'El mandato SEPA firmado de verdad, por el propio hermano'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -178,7 +180,11 @@ select * from (values
   ('Copias de seguridad',
    (select count(*) > 0 from storage.buckets where id = 'copias')),
   ('Limpieza automática (pg_cron, se activa a mano)',
-   (select count(*) > 0 from pg_extension where extname = 'pg_cron'))
+   (select count(*) > 0 from pg_extension where extname = 'pg_cron')),
+  ('Webhook de Stripe (activar_suscripcion_por_usuario)',
+   (select count(*) > 0 from pg_proc where proname = 'activar_suscripcion_por_usuario')),
+  ('Mandatos SEPA firmados por el hermano',
+   (select to_regclass('public.mandatos_sepa') is not null))
 ) as t(que, esta)
 order by esta, que;
 `

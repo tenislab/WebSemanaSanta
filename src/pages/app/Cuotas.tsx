@@ -51,6 +51,7 @@ import ImportarTabla from '../../components/ImportarTabla'
 import { useContextoDeImportacion } from '../../lib/contextoImportacion'
 import { TABLA_CUOTAS } from '../../lib/tablasImportables'
 import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
+import { useMandatosSepa, mandatoVigente } from '../../lib/mandatosSepa'
 import { ibanValido, porQueNoValeElIban } from '../../lib/iban'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
 import {
@@ -323,6 +324,14 @@ export default function Cuotas() {
     return (id: string) => map.get(id)
   }, [hermanos])
 
+  // El mandato SEPA vigente de cada hermano: sin él no hay recibo que
+  // domiciliar, por muy bueno que sea su IBAN. Ver `lib/mandatosSepa.ts`.
+  const [mandatos] = useMandatosSepa()
+  const mandatoDe = useMemo(
+    () => (hermanoId: string, iban: string | null | undefined) => mandatoVigente(mandatos, hermanoId, iban),
+    [mandatos],
+  )
+
   // Recibos que el hermano dice tener pagados y a la tesorería aún le constan
   // sin cobrar: son los que hay que confirmar contra el extracto del banco.
   const avisados = useMemo(() => cuotas.filter(esAvisado), [cuotas])
@@ -567,6 +576,11 @@ export default function Cuotas() {
         // El IBAN tiene que estar Y valer. Uno mal escrito no se queda en una
         // línea rechazada: el banco tira el fichero ENTERO. Ver `lib/iban.ts`.
         if (c.estado !== 'Pendiente' || !c.domiciliada || !ibanValido(hermanoDe(c.hermanoId)?.iban ?? '')) return false
+        // Y hace falta un mandato FIRMADO vigente para ESE IBAN: sin él no hay
+        // orden del hermano que enseñarle al banco si reclama el cargo. Ver
+        // `supabase/mandatos-sepa.sql` y `lib/mandatosSepa.ts`.
+        const h = hermanoDe(c.hermanoId)!
+        if (!mandatoDe(h.id, h.iban)) return false
         // Ya salió en un fichero descargado: no puede volver a entrar sola.
         // Mandar dos veces el mismo recibo al banco son dos cargos al hermano,
         // y el segundo vuelve devuelto y con comisión.
@@ -575,7 +589,7 @@ export default function Cuotas() {
         // Si la fecha no se puede interpretar, se incluye (no se pierde el recibo).
         return !cobro || cobro <= limiteRemesa
       }),
-    [cuotas, hermanoDe, limiteRemesa],
+    [cuotas, hermanoDe, mandatoDe, limiteRemesa],
   )
 
   /**
@@ -588,19 +602,30 @@ export default function Cuotas() {
    *
    * En una hermandad son bastantes: el IBAN se importa del Excel de siempre,
    * donde alguien lo tecleó a mano hace años. Faltan cifras, sobran, está el
-   * número de cuenta antiguo sin el «ES» delante, o sencillamente no está.
+   * número de cuenta antiguo sin el «ES» delante, o sencillamente no está. Y
+   * desde que existe el mandato firmado, hay un motivo más: el IBAN vale, pero
+   * el hermano todavía no ha firmado su domiciliación desde su área.
    */
   const fueraDeLaRemesa = useMemo(() => {
     const fuera = cuotas
       .filter((c) => c.estado === 'Pendiente' && c.domiciliada && !c.remesadaEl)
       .map((c) => ({ cuota: c, hermano: hermanoDe(c.hermanoId) }))
-      .filter((x) => x.hermano && !ibanValido(x.hermano.iban ?? ''))
+      .filter((x) => x.hermano != null)
+      .map((x) => ({
+        ...x,
+        motivo: !ibanValido(x.hermano!.iban ?? '')
+          ? porQueNoValeElIban(x.hermano!.iban ?? '') ?? ''
+          : !mandatoDe(x.hermano!.id, x.hermano!.iban)
+            ? 'no ha firmado todavía el mandato SEPA de domiciliación'
+            : null,
+      }))
+      .filter((x) => x.motivo != null)
       .map((x) => ({
         id: x.cuota.id,
         nombre: x.hermano!.nombre,
         numero: x.hermano!.numero,
         importe: x.cuota.importe,
-        motivo: porQueNoValeElIban(x.hermano!.iban ?? '') ?? '',
+        motivo: x.motivo as string,
       }))
     // Una fila por hermano, no una por recibo: al tesorero le sirve la lista de
     // a quién hay que pedirle el IBAN, y repetir al mismo cuatro veces —una por
@@ -612,7 +637,7 @@ export default function Cuotas() {
       else porHermano.set(f.numero, { ...f, recibos: 1 })
     }
     return [...porHermano.values()].sort((a, b) => a.numero - b.numero)
-  }, [cuotas, hermanoDe])
+  }, [cuotas, hermanoDe, mandatoDe])
 
   const dineroFuera = useMemo(
     () => sumaEuros(fueraDeLaRemesa.map((f) => f.importe)),
@@ -657,11 +682,19 @@ export default function Cuotas() {
     if (avisoAcreedor || !fechaRemesa) return
     const recibos = recibosRemesables.map((c) => {
       const h = hermanoDe(c.hermanoId)!
+      // Vigente por construcción: `recibosRemesables` ya exige que exista.
+      const mandato = mandatoDe(h.id, h.iban)!
       return {
         numero: c.numero,
         importe: c.importe,
         concepto: `${c.concepto} — ${hermandad.nombreLegal || 'Hermandad'}`,
-        deudor: { nombre: h.nombre, iban: h.iban ?? '', hermanoId: h.id, numeroHermano: h.numero, antiguedad: h.antiguedad },
+        deudor: {
+          nombre: h.nombre,
+          iban: h.iban ?? '',
+          numeroHermano: h.numero,
+          mandatoId: mandato.referencia,
+          fechaFirma: new Date(mandato.firmadoEn),
+        },
       }
     })
     const xml = buildSepaXml(acreedor, recibos, new Date(`${fechaRemesa}T00:00:00`), new Date())

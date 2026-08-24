@@ -9,10 +9,12 @@ export default async function ({ cargar, caso }) {
   caso('un IBAN con espacios vale', null, m.acreedorIncompleto({ ...acreedor, iban: 'ES91 2100 0418 4502 0005 1332' }))
   caso('sin identificador de acreedor avisa', true, /acreedor/i.test(m.acreedorIncompleto({ ...acreedor, identificadorAcreedor: '' })))
 
-  const deudor = (nombre, hermanoId) => ({ nombre, hermanoId, numeroHermano: 1, antiguedad: 2000, iban: 'ES7921000813610123456789' })
+  const deudor = (nombre, mandatoId) => ({
+    nombre, mandatoId, numeroHermano: 1, fechaFirma: new Date(2020, 0, 1), iban: 'ES7921000813610123456789',
+  })
   const recibos = [
-    { numero: 1, deudor: deudor('Juan Pérez', 'h1'), importe: 18, concepto: 'Cuota' },
-    { numero: 2, deudor: deudor('Ana <Gil> & Cía', 'h2'), importe: 60.5, concepto: 'Cuota & más' },
+    { numero: 1, deudor: deudor('Juan Pérez', 'MNDH1'), importe: 18, concepto: 'Cuota' },
+    { numero: 2, deudor: deudor('Ana <Gil> & Cía', 'MNDH2'), importe: 60.5, concepto: 'Cuota & más' },
   ]
   const xml = m.buildSepaXml(acreedor, recibos, new Date(2026, 7, 23), new Date(2026, 7, 18, 10, 30))
   caso('dos adeudos', 2, (xml.match(/<DrctDbtTxInf>/g) || []).length)
@@ -101,13 +103,16 @@ export async function _limitesDelBanco({ cargar, caso }) {
     iban: 'ES9121000418450200051332',
     identificadorAcreedor: 'ES23000B12345678',
   }
-  // Un id como los que hace la aplicación de verdad: `crypto.randomUUID()`.
+  // El id del mandato como lo genera de verdad el disparador de la base
+  // (`mandatos_sepa_firma()`): «MND» + el id de la fila, sin guiones. Aquí ya
+  // no se sintetiza nada — llega hecho, y `buildSepaXml` solo lo usa.
   const uuid = '3f2a9c14-8b7d-4e51-9a02-6c1d5e8f7b39'
+  const mandatoId = `MND${uuid.replace(/-/g, '').toUpperCase()}`
   const recibos = [{
     numero: 1,
     deudor: {
       nombre: 'Peñalver Núñez, María del Rocío de la Santísima Trinidad y de los Ángeles Custodios',
-      hermanoId: uuid, numeroHermano: 7, antiguedad: 1998,
+      mandatoId, numeroHermano: 7, fechaFirma: new Date(2026, 5, 12),
       iban: 'ES7921000813610123456789',
     },
     importe: 60,
@@ -119,7 +124,8 @@ export async function _limitesDelBanco({ cargar, caso }) {
 
   // --- 1. Longitudes. Ni uno de más.
   caso('MndtId cabe en 35', true, dentro('MndtId').every((v) => v.length <= 35))
-  caso('y es el del UUID, sin guiones', 'MND3F2A9C148B7D4E519A026C1D5E8F7B39', dentro('MndtId')[0])
+  caso('y es el del mandato firmado, tal cual', mandatoId, dentro('MndtId')[0])
+  caso('la fecha de firma es la del mandato, no una inventada', true, xml.includes('<DtOfSgntr>2026-06-12</DtOfSgntr>'))
   caso('MsgId cabe en 35', true, dentro('MsgId').every((v) => v.length <= 35))
   caso('PmtInfId cabe en 35', true, dentro('PmtInfId').every((v) => v.length <= 35))
   caso('EndToEndId cabe en 35', true, dentro('EndToEndId').every((v) => v.length <= 35))
@@ -144,8 +150,8 @@ export async function _limitesDelBanco({ cargar, caso }) {
     numero: i + 1,
     deudor: {
       nombre: `Muñoz Peñalver, José María ${i}`,
-      hermanoId: `${uuid.slice(0, 34)}${String(i % 100).padStart(2, '0')}`,
-      numeroHermano: i + 1, antiguedad: 2000,
+      mandatoId: `MND${uuid.replace(/-/g, '').slice(0, 30).toUpperCase()}${String(i % 100).padStart(2, '0')}`,
+      numeroHermano: i + 1, fechaFirma: new Date(2020, 0, 1),
       iban: 'ES7921000813610123456789',
     },
     importe: 45.5,

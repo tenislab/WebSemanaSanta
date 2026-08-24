@@ -20,6 +20,7 @@ export const CLAVES_DATOS = {
   comunicados: 'cabildo-comunicados',
   cuentasSociales: 'cabildo-cuentas-sociales',
   eventos: 'cabildo-eventos',
+  mandatosSepa: 'cabildo-mandatos-sepa',
 } as const
 
 /** Lee una colección guardada, o devuelve los datos de ejemplo si aún no hay nada. */

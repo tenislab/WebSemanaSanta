@@ -1,5 +1,5 @@
 import { limpiarDni, mismoDni } from '../lib/dni'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import EscudoHermandad from '../components/EscudoHermandad'
@@ -51,7 +51,8 @@ import { useAuth } from '../context/AuthContext'
 import { hermanoToRow, rowToHermano } from '../lib/db/hermanos'
 import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
 import { cuotaToRow, rowToCuota } from '../lib/db/cuotas'
-import { formatCurrency, formatDate } from '../lib/format'
+import { formatCurrency, formatDate, maskIban } from '../lib/format'
+import { useMandatosSepa, mandatoVigente, textoDelMandatoSepa } from '../lib/mandatosSepa'
 import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
 import { descargarArchivo } from '../lib/csv'
 import { estiloTema, inicialesHermandad } from '../lib/color'
@@ -340,6 +341,73 @@ export default function HermanoPortal() {
    * descargar sus datos.
    */
   const deBaja = hermanoPrincipal?.estado === 'Baja'
+
+  // Su domiciliación SEPA: solo ve la suya (RLS), y solo la firma él. Ver
+  // `lib/mandatosSepa.ts` y `supabase/mandatos-sepa.sql`.
+  const [misMandatos, setMisMandatos] = useMandatosSepa()
+  const miMandatoVigente = useMemo(
+    () => (hermanoPrincipal ? mandatoVigente(misMandatos, hermanoPrincipal.id, hermanoPrincipal.iban) : null),
+    [misMandatos, hermanoPrincipal],
+  )
+  const [firmando, setFirmando] = useState(false)
+  // Guarda de verdad contra el doble clic: `firmando` en el estado no sirve
+  // sola, porque `setFirmando(true)` no se ve hasta el siguiente pintado y un
+  // segundo clic dentro del mismo instante lee el mismo `false` que el
+  // primero. La referencia sí se actualiza al momento.
+  const firmandoRef = useRef(false)
+  /*
+   * LA REFERENCIA DE VERDAD LA PONE LA BASE, no este navegador.
+   *
+   * `setMisMandatos` abre la fila con una referencia en blanco —la real la
+   * calcula el disparador `mandatos_sepa_firma()` a partir del id, y ese
+   * cálculo no vuelve aquí: `useSupabaseTable` no trae de vuelta la fila que
+   * acaba de crear—. Sin esto, el aviso de «domiciliación firmada» se
+   * quedaría enseñando una referencia vacía hasta que el hermano recargara
+   * la página. Se guarda aparte y no reescribiendo `misMandatos`: hacerlo con
+   * `setMisMandatos` lo trataría como un cambio a sincronizar, y esta cuenta
+   * no tiene permiso para modificar un mandato ya firmado (con razón: eso es
+   * justo lo que evita que se pueda falsificar una firma después de puesta).
+   */
+  const [referenciaConfirmada, setReferenciaConfirmada] = useState<Record<string, string>>({})
+  async function firmarMandatoSepa() {
+    if (!hermanoPrincipal || firmandoRef.current) return
+    firmandoRef.current = true
+    setFirmando(true)
+    const id = nuevoId()
+    // La base rellena el IBAN y la fecha de verdad también: aquí solo hace
+    // falta abrir la fila. Ver el disparador `mandatos_sepa_firma()`.
+    setMisMandatos((prev) => [
+      ...prev,
+      {
+        id,
+        hermanoId: hermanoPrincipal.id,
+        iban: hermanoPrincipal.iban ?? '',
+        referencia: '',
+        textoAceptado: textoDelMandatoSepa(nombreHermandadActiva),
+        firmadoEn: new Date().toISOString(),
+      },
+    ])
+    if (usarSupabase && supabase) {
+      /*
+       * `setMisMandatos` lanza el INSERT por su cuenta y sin esperarlo (ver
+       * `useSupabaseTable`): cuando se llega aquí puede que todavía no haya
+       * llegado a la base. Un solo intento se encontraría con frecuencia sin
+       * fila que traer, así que se insiste unas pocas veces antes de rendirse
+       * — y si nunca llega, el mandato sigue firmado igual; solo se enseñará
+       * la referencia la próxima vez que se recargue esta página.
+       */
+      for (let intento = 0; intento < 5; intento++) {
+        if (intento > 0) await new Promise((r) => setTimeout(r, 400))
+        const { data } = await supabase.from('mandatos_sepa').select('referencia').eq('id', id).maybeSingle()
+        if (data?.referencia) {
+          setReferenciaConfirmada((prev) => ({ ...prev, [id]: data.referencia as string }))
+          break
+        }
+      }
+    }
+    firmandoRef.current = false
+    setFirmando(false)
+  }
   /*
    * ¿Lleva cargo en la hermandad? Entonces desde su área tiene que poder
    * llegar al panel sin cerrar sesión, porque es la misma persona.
@@ -2168,6 +2236,42 @@ export default function HermanoPortal() {
             </div>
           </form>
         </section>
+
+        {/* Domiciliación SEPA: solo aparece si es él mismo, con su propia ficha. */}
+        {esPrincipal && hermanoPrincipal && (
+          <section className="portal__section">
+            <h2>Mi domiciliación bancaria (SEPA)</h2>
+            {!hermanoPrincipal.iban ? (
+              <p className="form-hint">
+                Tu ficha no tiene ninguna cuenta bancaria apuntada. Pide a secretaría que te la
+                añada y podrás firmar tu domiciliación desde aquí.
+              </p>
+            ) : miMandatoVigente ? (
+              <div className="banner-inline banner-inline--ok">
+                Domiciliación firmada el {formatDate(new Date(miMandatoVigente.firmadoEn))} para la
+                cuenta {maskIban(hermanoPrincipal.iban)}. Referencia del mandato:{' '}
+                {referenciaConfirmada[miMandatoVigente.id] || miMandatoVigente.referencia
+                  || 'confirmando con el banco…'}
+                .
+              </div>
+            ) : (
+              <>
+                <p className="form-hint">
+                  Tu cuenta es {maskIban(hermanoPrincipal.iban)}. Todavía no has firmado la orden
+                  que autoriza a {nombreHermandadActiva} a cobrarte los recibos domiciliados en
+                  ella — sin esto, tus cuotas domiciliadas no entran en la remesa que se manda al
+                  banco.
+                </p>
+                <p className="form-hint">{textoDelMandatoSepa(nombreHermandadActiva)}</p>
+                <div className="assign-box__row">
+                  <button type="button" className="btn btn-primary" onClick={firmarMandatoSepa} disabled={firmando}>
+                    Firmar mi domiciliación
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        )}
 
         {/* Cambiar contraseña */}
         <section className="portal__section">
