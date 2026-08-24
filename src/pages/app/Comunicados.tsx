@@ -38,9 +38,9 @@ import {
   type CriteriosSegmento,
 } from '../../lib/segmentacion'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
-import { agregarAvisoAVarios, getPreferenciasAvisos, quiereAviso } from '../../lib/avisosHermano'
+import { agregarAvisoAVarios, agregarAvisoHermano, getPreferenciasAvisos, quiereAviso } from '../../lib/avisosHermano'
 import { correoDisponible, enviarCorreo, getAjustesCorreo } from '../../lib/correo'
-import { cuerpoCorreo } from '../../lib/avisosCorreo'
+import { avisarPorCorreo, cuerpoCorreo } from '../../lib/avisosCorreo'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
@@ -441,9 +441,52 @@ export default function Comunicados() {
         : undefined,
     })
     setTareasRedes((prev) => [...prev, ...nuevas])
+
+    /*
+     * Y SE LE AVISA. Esto es la mitad que pedía el encargo: si la tarea solo
+     * aparece cuando al responsable se le ocurre entrar en su área, no se ha
+     * repartido nada — se ha dejado escrito en un sitio donde nadie mira.
+     *
+     * Un aviso POR PERSONA y no por tarea: a quien le tocan las tres redes le
+     * llegarían tres correos iguales seguidos, que se lee como un fallo. Se
+     * agrupa lo suyo en un solo mensaje que dice qué le toca.
+     *
+     * Va DESPUÉS de guardar, como en Cuotas: si el correo falla, el encargo ya
+     * está y lo verá igual la próxima vez que entre.
+     */
+    const porPersona = new Map<string, string[]>()
+    for (const t of nuevas) {
+      if (!t.hermanoId) continue
+      const ya = porPersona.get(t.hermanoId)
+      if (ya) ya.push(loQueHayQueHacer(t))
+      else porPersona.set(t.hermanoId, [loQueHayQueHacer(t)])
+    }
+    for (const [hermanoId, quehaceres] of porPersona) {
+      const texto = `Te han encargado «${titulo}»: ${quehaceres.join(' y ')}.`
+      agregarAvisoHermano(hermanoId, texto, 'encargo', 'Tienes un encargo')
+      const h = hermanos.find((x) => x.id === hermanoId)
+      if (h) {
+        void avisarPorCorreo(
+          [{ id: h.id, nombre: h.nombre, email: h.email }],
+          'encargo',
+          'Tienes un encargo de la hermandad',
+          [texto, ...(String(data.get('texto') ?? '').trim() ? [`Texto del post: ${String(data.get('texto')).trim()}`] : [])],
+          'Lo tienes también en tu área de hermano, con el botón para marcarlo hecho.',
+        )
+      }
+    }
+
     form.reset()
-    setEncargoHecho(`Encargado y repartido en ${nuevas.length} tarea${nuevas.length === 1 ? '' : 's'}.`)
-    setTimeout(() => setEncargoHecho(''), 3000)
+    const aCuantos = porPersona.size
+    setEncargoHecho(
+      `Encargado en ${nuevas.length} tarea${nuevas.length === 1 ? '' : 's'}`
+      + (aCuantos > 0
+        ? `, y avisad${aCuantos === 1 ? 'o' : 'os'} ${aCuantos} responsable${aCuantos === 1 ? '' : 's'}.`
+        // Sin responsables no se dice «repartido»: se ha dejado preparado, y
+        // hay que volver para asignarlo o no lo hará nadie.
+        : '. Nadie lo tiene asignado todavía.'),
+    )
+    setTimeout(() => setEncargoHecho(''), 4000)
   }
   const rolesDisponibles = useMemo(
     () => etiquetasQueSonAutomaticas(tramosReales),

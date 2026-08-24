@@ -38,7 +38,11 @@ export default async function ({ cargar, caso }) {
   // Los avisos de antes no llevaban tipo: se tratan como cambios de ficha.
   caso('un aviso sin tipo es de ficha', false, av.quiereAviso({ ficha: false }, undefined))
   caso('y se recibe si la ficha está encendida', true, av.quiereAviso({ ficha: true }, undefined))
-  caso('hay cuatro tipos de aviso', 4, av.TIPOS_AVISO.length)
+  // Cinco desde que la junta se reparte los posts: el encargo tiene su
+  // propio interruptor porque no es lo mismo que un comunicado —lo recibe
+  // quien lleva un cargo, y es trabajo, no información.
+  caso('hay cinco tipos de aviso', 5, av.TIPOS_AVISO.length)
+  caso('y uno es el encargo de la junta', true, av.TIPOS_AVISO.some((t) => t.id === 'encargo'))
   caso('cada uno con su icono', true, av.TIPOS_AVISO.every((t) => t.icono && t.nombre && t.explica))
 
   // --- H6: el carné digital ---

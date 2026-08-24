@@ -101,4 +101,97 @@ export default async function ({ cargar, caso }) {
       return `${v.hechas} de ${v.total}`
     })())
   }
+
+  await avisos({ caso })
+  await sinEspejoEnElPortal({ caso })
+}
+
+/**
+ * Y LA OTRA MITAD DEL ENCARGO: QUE SE ENTEREN.
+ *
+ * Repartir la tarea y no avisar a nadie no es repartir: es dejarla escrita en
+ * una pantalla donde el responsable no va a entrar. Lo que se pidió fue que
+ * «les salte lo que tienen que hacer», y eso son dos cosas distintas que se
+ * pueden romper por separado —el aviso del área y el correo—, ninguna de las
+ * dos con pantalla que lo delate si desaparece.
+ *
+ * Se mira el código porque esto no es una función que se pueda llamar: vive
+ * dentro del formulario. Una prueba de la fuente es fea, pero una prueba fea
+ * de algo que falla en silencio vale más que ninguna.
+ */
+async function avisos({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  const crear = src.slice(src.indexOf('function crearEncargo'), src.indexOf('const rolesDisponibles'))
+  caso('el encargo existe todavía', true, crear.length > 200)
+
+  caso('al repartir se deja el aviso en su área', true, /agregarAvisoHermano\(/.test(crear))
+  caso('y se le escribe además', true, /avisarPorCorreo\(/.test(crear))
+  caso('con su tipo propio, que él puede apagar', true, /'encargo'/.test(crear))
+  // Un aviso POR PERSONA: a quien le tocan las tres redes le llegarían tres
+  // correos idénticos seguidos, y eso se lee como un fallo, no como tres
+  // encargos.
+  caso('agrupado por persona, no por tarea', true, /porPersona/.test(crear))
+  // El correo no se espera: el encargo ya está guardado y un correo que tarda
+  // no puede dejar el formulario colgado.
+  caso('el correo no bloquea el guardado', true, /void avisarPorCorreo/.test(crear))
+
+  // Y que las dos funciones estén de verdad traídas: sin esto compila mal, pero
+  // la lección de hoy es que «lo escribí» y «está enchufado» no son lo mismo.
+  caso('el aviso está importado', true, /import \{[^}]*agregarAvisoHermano/s.test(src))
+  caso('y el correo también', true, /import \{[^}]*avisarPorCorreo/s.test(src))
+
+  /*
+   * EL TIPO NUEVO TIENE QUE ESTAR EN LOS TRES SITIOS.
+   *
+   * Si falta en `TIPOS_AVISO`, el hermano no tiene forma de apagarlo y en el
+   * buzón le sale un sobre genérico. Si falta en `INTERRUPTOR`, el correo se
+   * cae al mandarlo. Ninguna de las dos da la cara al probar a mano.
+   */
+  const avisosH = await readFile('src/lib/avisosHermano.ts', 'utf8')
+  const correo = await readFile('src/lib/avisosCorreo.ts', 'utf8')
+  caso('«encargo» es un tipo de aviso', true, /TipoAviso =[^\n]*'encargo'/.test(avisosH))
+  caso('con su interruptor en el área del hermano', true, /id: 'encargo'/.test(avisosH))
+  caso('y su interruptor de la hermandad', true, /encargo: '(comunicados|cuotas|papeletas|ficha)'/.test(correo))
+}
+
+/**
+ * EL ESPEJO DEL ÁREA DEL HERMANO.
+ *
+ * Todas las tablas del portal se montan con `sinEspejo`, y no es un detalle:
+ * el hermano y el panel comparten la misma clave del navegador y ven filas
+ * distintas (RLS). Sin `sinEspejo`, la vista recortada del hermano pisa la
+ * lista completa de la secretaria por el aviso de `storage` — con el panel
+ * abierto en otra pestaña, sus cuatrocientos hermanos se convierten en uno.
+ *
+ * Ya pasó una vez. Se comprueba de golpe para que la tabla que se añada
+ * mañana no lo repita: se mira que NINGÚN hook de tabla se monte sin él.
+ */
+async function sinEspejoEnElPortal({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  /*
+   * La lista de hooks a vigilar NO se escribe a mano: se saca de quién usa
+   * `useSupabaseTable`, que es exactamente donde está el peligro. Un hook con
+   * su propia clave y de solo lectura —`useTramos`, por ejemplo, que enseña
+   * los mismos tramos al hermano y al panel— no pisa nada de nadie.
+   *
+   * Sacándolo así, la tabla que se añada mañana entra sola en la prueba.
+   */
+  const { readdir } = await import('node:fs/promises')
+  const conEspejo = new Set()
+  for (const f of await readdir('src/lib')) {
+    if (!f.endsWith('.ts')) continue
+    const t = await readFile(`src/lib/${f}`, 'utf8')
+    for (const m of t.matchAll(/export function (use[A-Z]\w+)\([^)]*\)[^{]*\{([\s\S]{0,900}?)\n\}/g)) {
+      if (m[2].includes('useSupabaseTable')) conEspejo.add(m[1])
+    }
+  }
+  caso('se encuentran los hooks de tabla', true, conEspejo.size >= 3)
+
+  const desnudos = [...conEspejo].filter((n) => new RegExp(`${n}\\(\\s*\\)`).test(src))
+  caso('ninguna tabla del portal se monta sin espejo', '', desnudos.sort().join(', '))
+  // Y las dos de hoy, por su nombre, que son las que se olvidaron.
+  caso('los mandatos SEPA, con espejo', true, /useMandatosSepa\(sinEspejo\)/.test(src))
+  caso('los encargos de redes, con espejo', true, /useTareasRedes\(sinEspejo\)/.test(src))
 }

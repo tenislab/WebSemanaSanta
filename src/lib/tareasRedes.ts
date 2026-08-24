@@ -137,8 +137,16 @@ export function comoVa(tareas: TareaRed[]): { hechas: number; total: number } {
  *
  * Quien lleva redes las ve todas; un responsable, solo las suyas. Lo decide la
  * base (RLS), no este hook: aquí se lee lo que llegue.
+ *
+ * Y JUSTO POR ESO EL ÁREA DEL HERMANO TIENE QUE PASAR `sinEspejo`. Los dos
+ * montan este mismo hook con la misma clave de navegador pero ven cosas muy
+ * distintas: al hermano la base solo le devuelve LAS SUYAS. Sin `sinEspejo`,
+ * su área guarda esas dos en el navegador, el aviso de almacenamiento llega a
+ * la pestaña del panel, y quien lleva redes ve cómo sus cuarenta encargos se
+ * convierten en dos delante de sus ojos. Está contado entero en
+ * `supabaseSync.ts`, y ya pasó una vez con el censo.
  */
-export function useTareasRedes() {
+export function useTareasRedes(opciones?: { sinEspejo?: boolean }) {
   return useSupabaseTable<TareaRed>(
     'tareas_redes',
     CLAVES_DATOS.tareasRedes,
@@ -146,5 +154,6 @@ export function useTareasRedes() {
     tareaRedToRow,
     rowToTareaRed,
     'creado_en',
+    opciones,
   )
 }

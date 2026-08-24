@@ -50,7 +50,7 @@ export function textoDelMandatoSepa(hermandad: string): string {
  * hermandad; un hermano, solo el suyo. Lo decide la base (RLS), no este
  * hook — aquí se lee lo que llegue, sea cual sea la vista.
  */
-export function useMandatosSepa() {
+export function useMandatosSepa(opciones?: { sinEspejo?: boolean }) {
   return useSupabaseTable<MandatoSepa>(
     'mandatos_sepa',
     CLAVES_DATOS.mandatosSepa,
@@ -58,6 +58,7 @@ export function useMandatosSepa() {
     mandatoSepaToRow,
     rowToMandatoSepa,
     'firmado_en',
+    opciones,
   )
 }
 

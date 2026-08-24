@@ -345,7 +345,7 @@ export default function HermanoPortal() {
 
   // Su domiciliación SEPA: solo ve la suya (RLS), y solo la firma él. Ver
   // `lib/mandatosSepa.ts` y `supabase/mandatos-sepa.sql`.
-  const [misMandatos, setMisMandatos] = useMandatosSepa()
+  const [misMandatos, setMisMandatos] = useMandatosSepa(sinEspejo)
   const miMandatoVigente = useMemo(
     () => (hermanoPrincipal ? mandatoVigente(misMandatos, hermanoPrincipal.id, hermanoPrincipal.iban) : null),
     [misMandatos, hermanoPrincipal],
@@ -357,7 +357,7 @@ export default function HermanoPortal() {
    * `supabase/encargos-redes.sql`), así que aquí no hace falta filtrar por
    * seguridad — `misTareasPendientes` filtra para no enseñar las cerradas.
    */
-  const [tareasRedes, setTareasRedes] = useTareasRedes()
+  const [tareasRedes, setTareasRedes] = useTareasRedes(sinEspejo)
   const misEncargos = useMemo(
     () => misTareasPendientes(tareasRedes, hermanoPrincipal?.id),
     [tareasRedes, hermanoPrincipal],

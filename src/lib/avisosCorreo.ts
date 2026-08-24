@@ -49,6 +49,17 @@ const INTERRUPTOR: Record<Exclude<TipoAviso, 'importante'>, 'comunicados' | 'cuo
   cuota: 'cuotas',
   papeleta: 'papeletas',
   ficha: 'ficha',
+  /*
+   * LO QUE LE ENCARGA LA JUNTA VA POR EL INTERRUPTOR DE COMUNICADOS, y no por
+   * uno nuevo en Configuración.
+   *
+   * La hermandad ya decide ahí si escribe a su gente o no; abrirle un
+   * interruptor aparte para esto le da una decisión más que tomar sobre algo
+   * que solo afecta a la media docena de personas que llevan cargo. En el área
+   * del hermano SÍ tiene el suyo propio (`TIPOS_AVISO`), que es donde importa:
+   * ahí lo apaga quien lo recibe, no quien lo manda.
+   */
+  encargo: 'comunicados',
 }
 
 /**

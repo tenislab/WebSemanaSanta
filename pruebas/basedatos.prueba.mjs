@@ -485,7 +485,12 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
   // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
   caso('los dos módulos ya no salen pendientes', false,
     enFalso.some((x) => /eventos|«web»/.test(x)))
-  caso('y comprueba doce cosas', 12, filas.length)
+  caso('y comprueba trece cosas', 13, filas.length)
+  // Lo último que se ha añadido, por su nombre: el recuento de arriba avisa
+  // si el inventario pierde una línea, pero no de CUÁL, y quien ejecuta esto
+  // en Supabase se guía por lo que lee.
+  caso('los encargos de redes salen en el inventario', true,
+    filas.some((f) => /Encargos de redes/.test(f)))
 
   // Y que haya hecho lo suyo de verdad, no solo decirlo.
   caso('ha rellenado los dos módulos que faltaban', true,

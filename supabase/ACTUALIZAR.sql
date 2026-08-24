@@ -2948,6 +2948,8 @@ select * from (values
   ('Webhook de Stripe (activar_suscripcion_por_usuario)',
    (select count(*) > 0 from pg_proc where proname = 'activar_suscripcion_por_usuario')),
   ('Mandatos SEPA firmados por el hermano',
-   (select to_regclass('public.mandatos_sepa') is not null))
+   (select to_regclass('public.mandatos_sepa') is not null)),
+  ('Encargos de redes repartidos a la junta',
+   (select to_regclass('public.tareas_redes') is not null))
 ) as t(que, esta)
 order by esta, que;
