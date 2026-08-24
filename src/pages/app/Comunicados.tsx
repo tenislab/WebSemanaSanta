@@ -19,6 +19,7 @@ import {
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
+import { useTareasRedes, tareasDeUnEncargo, porEncargo, comoVa, loQueHayQueHacer } from '../../lib/tareasRedes'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { getCampana } from '../../lib/campana'
 import { useTramos } from '../../lib/tramos'
@@ -382,6 +383,68 @@ export default function Comunicados() {
     { sinEspejo: true },
   )
   const cargosPorHermano = useMemo(() => cargosEfectivos(hermanos, personal), [hermanos, personal])
+
+  /* ---------------------------------------------------------------------
+     Encargos de redes: se escribe una vez y se reparte solo
+     --------------------------------------------------------------------- */
+  const [tareasRedes, setTareasRedes] = useTareasRedes()
+  const [encargoHecho, setEncargoHecho] = useState('')
+  const [encargoError, setEncargoError] = useState('')
+  /*
+   * A QUIÉN SE LE PUEDE ENCARGAR: la junta, no el censo entero.
+   *
+   * Se mira el cargo EFECTIVO —el de su ficha o el de personal, que es lo que
+   * ya calcula `cargosEfectivos` para todo lo demás— y no una lista aparte: si
+   * fuera aparte, cambiar la junta obligaría a acordarse de cambiarla también
+   * aquí, y no se acordaría nadie.
+   *
+   * Y se dejan fuera las bajas: encargarle un post a quien ya no está es
+   * mandar trabajo a un sitio del que nadie va a contestar.
+   */
+  const laJunta = useMemo(
+    () => hermanos
+      .filter((h) => h.estado !== 'Baja' && (cargosPorHermano.get(h.id)?.length ?? 0) > 0)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [hermanos, cargosPorHermano],
+  )
+  /** Los encargos con algo pendiente. Los terminados no estorban la pantalla. */
+  const encargosAbiertos = useMemo(
+    () => porEncargo(tareasRedes).filter((g) => g.tareas.some((t) => t.estado === 'pendiente')),
+    [tareasRedes],
+  )
+
+  function crearEncargo(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const form = e.currentTarget
+    const data = new FormData(form)
+    const titulo = String(data.get('titulo') ?? '').trim()
+    // Y se dice qué falta, en vez de no hacer nada: un botón que no responde
+    // no se lee como «me falta un dato», se lee como «esto está roto».
+    if (!titulo) {
+      setEncargoError('Pon de qué es el post, aunque sea en tres palabras: es lo que verá quien lo tenga que hacer.')
+      return
+    }
+    setEncargoError('')
+    const redes = data.getAll('redes').map((v) => String(v)) as RedSocial[]
+    const quienSube = String(data.get('quienSube') ?? '')
+    const nuevas = tareasDeUnEncargo({
+      titulo,
+      texto: String(data.get('texto') ?? ''),
+      redes,
+      quienCrea: String(data.get('quienCrea') ?? ''),
+      // El mismo responsable para todas las redes: es como se reparte de
+      // verdad —quien lleva las redes las lleva todas— y pedir uno por red
+      // haría el formulario el doble de largo para el caso raro. Se puede
+      // cambiar tarea a tarea después.
+      quienPublica: quienSube
+        ? Object.fromEntries(redes.map((r) => [r, quienSube])) as Partial<Record<RedSocial, string>>
+        : undefined,
+    })
+    setTareasRedes((prev) => [...prev, ...nuevas])
+    form.reset()
+    setEncargoHecho(`Encargado y repartido en ${nuevas.length} tarea${nuevas.length === 1 ? '' : 's'}.`)
+    setTimeout(() => setEncargoHecho(''), 3000)
+  }
   const rolesDisponibles = useMemo(
     () => etiquetasQueSonAutomaticas(tramosReales),
     [tramosReales],
@@ -860,6 +923,110 @@ export default function Comunicados() {
           plataforma apruebe la aplicación de la hermandad (Meta lo revisa a mano, X cobra por ello), así
           que de momento no lo prometemos.
         </p>
+      </section>
+
+      {/*
+        ENCARGAR UN POST Y QUE SE REPARTA SOLO.
+        Va justo debajo de las redes porque es lo que se hace CON ellas, y
+        encima de los comunicados porque un encargo es trabajo pendiente y un
+        comunicado es algo ya enviado.
+      */}
+      <section className="redes-panel" aria-labelledby="encargos-titulo">
+        <header className="redes-panel__head">
+          <div className="redes-panel__que">
+            <h2 id="encargos-titulo">
+              Encargar un post
+              {encargosAbiertos.length > 0 && (
+                <span className="redes-panel__marcador">
+                  <b>{encargosAbiertos.length}</b> sin terminar
+                </span>
+              )}
+            </h2>
+            <p className="table-subtle">
+              Se escribe una vez y salen solas las tareas: escribirlo y subirlo a cada red. Cada
+              responsable lo ve en su área de hermano, sin entrar aquí.
+            </p>
+          </div>
+        </header>
+
+        <form className="app-form" onSubmit={crearEncargo}>
+          <div className="form-row">
+            <label htmlFor="encargoTitulo">De qué es el post</label>
+            <input id="encargoTitulo" name="titulo" type="text" required
+              placeholder="Besamanos de la Virgen, sábado 12" />
+          </div>
+          <div className="form-row">
+            <label htmlFor="encargoTexto">Texto (opcional)</label>
+            <textarea id="encargoTexto" name="texto" rows={3}
+              placeholder="Lo que quieres que se publique. Si lo dejas vacío, lo escribe quien se encargue." />
+          </div>
+          <div className="assign-box">
+            <label id="encargoRedesLabel">En qué redes</label>
+            <div role="group" aria-labelledby="encargoRedesLabel" className="assign-box__row">
+              {REDES_SOCIALES.map((r) => (
+                <label key={r} className="checkbox-row" htmlFor={`encargoRed-${r}`}>
+                  <input id={`encargoRed-${r}`} type="checkbox" name="redes" value={r} />
+                  {r}
+                </label>
+              ))}
+            </div>
+          </div>
+          {/*
+            SOLO SE OFRECE A LA JUNTA. Repartirle un post a un hermano de a pie
+            sería mandarle trabajo que no ha aceptado; y además no podría verlo,
+            porque quien no lleva nada no entra al panel.
+          */}
+          <div className="form-grid-2">
+            <div className="form-row">
+              <label htmlFor="encargoQuienCrea">Quién lo escribe</label>
+              <select id="encargoQuienCrea" name="quienCrea" defaultValue="">
+                <option value="">Sin repartir todavía</option>
+                {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+              </select>
+            </div>
+            <div className="form-row">
+              <label htmlFor="encargoQuienSube">Quién lo sube a las redes</label>
+              <select id="encargoQuienSube" name="quienSube" defaultValue="">
+                <option value="">Sin repartir todavía</option>
+                {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="assign-box__row">
+            <button type="submit" className="btn btn-primary">Encargar y repartir</button>
+            {encargoHecho && <span className="alert-item alert-item--ok">{encargoHecho}</span>}
+            {encargoError && <span className="alert-item alert-item--alerta">{encargoError}</span>}
+          </div>
+        </form>
+
+        {encargosAbiertos.length > 0 && (
+          <ul className="lista-limpia" style={{ marginTop: '1rem' }}>
+            {encargosAbiertos.map((g) => {
+              const va = comoVa(g.tareas)
+              return (
+                <li key={g.encargoId} className="assign-box" style={{ marginBottom: '0.6rem' }}>
+                  <div>
+                    <strong>{g.titulo}</strong>
+                    <span className="table-subtle"> · {va.hechas} de {va.total} hechas</span>
+                    <ul className="lista-limpia">
+                      {g.tareas.map((t) => (
+                        <li key={t.id}>
+                          {t.estado === 'hecha' ? '✅' : '⬜'} {loQueHayQueHacer(t)}
+                          {' — '}
+                          {/* Sin responsable no es «de nadie»: es un encargo a medio
+                              repartir, y hay que poder verlo de un vistazo. */}
+                          {t.hermanoId
+                            ? (hermanos.find((h) => h.id === t.hermanoId)?.nombre ?? 'alguien que ya no está en el censo')
+                            : <b>sin repartir</b>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </section>
 
       <section className="stat-grid">

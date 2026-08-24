@@ -53,6 +53,7 @@ import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
 import { cuotaToRow, rowToCuota } from '../lib/db/cuotas'
 import { formatCurrency, formatDate, maskIban } from '../lib/format'
 import { useMandatosSepa, mandatoVigente, textoDelMandatoSepa } from '../lib/mandatosSepa'
+import { useTareasRedes, misTareasPendientes, loQueHayQueHacer } from '../lib/tareasRedes'
 import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
 import { descargarArchivo } from '../lib/csv'
 import { estiloTema, inicialesHermandad } from '../lib/color'
@@ -349,6 +350,22 @@ export default function HermanoPortal() {
     () => (hermanoPrincipal ? mandatoVigente(misMandatos, hermanoPrincipal.id, hermanoPrincipal.iban) : null),
     [misMandatos, hermanoPrincipal],
   )
+  /*
+   * LOS ENCARGOS DE REDES QUE LE HAN REPARTIDO.
+   *
+   * La base solo le deja ver los suyos y solo le deja darlos por hechos (ver
+   * `supabase/encargos-redes.sql`), así que aquí no hace falta filtrar por
+   * seguridad — `misTareasPendientes` filtra para no enseñar las cerradas.
+   */
+  const [tareasRedes, setTareasRedes] = useTareasRedes()
+  const misEncargos = useMemo(
+    () => misTareasPendientes(tareasRedes, hermanoPrincipal?.id),
+    [tareasRedes, hermanoPrincipal],
+  )
+  function marcarEncargoHecho(id: string) {
+    setTareasRedes((prev) => prev.map((t) => (t.id === id ? { ...t, estado: 'hecha' as const } : t)))
+  }
+
   const [firmando, setFirmando] = useState(false)
   // Guarda de verdad contra el doble clic: `firmando` en el estado no sirve
   // sola, porque `setFirmando(true)` no se ve hasta el siguiente pintado y un
@@ -1756,6 +1773,43 @@ export default function HermanoPortal() {
               Entendido
             </button>
           </div>
+        )}
+
+        {/*
+          LO QUE LE HAN ENCARGADO. Va ANTES del buzón a propósito: el buzón son
+          cosas que han pasado y esto son cosas que hay que hacer, y lo segundo
+          se lee primero. Solo sale si tiene algo pendiente — a un hermano que
+          no lleva redes no le aparece nunca un apartado vacío.
+        */}
+        {esPrincipal && hermanoPrincipal && misEncargos.length > 0 && (
+          <section className="portal__section">
+            <h2>Lo que tengo que hacer</h2>
+            <p className="form-hint">
+              Encargos de la junta. Cuando termines uno, márcalo y quien lo pidió lo verá hecho.
+            </p>
+            <ul className="lista-limpia">
+              {misEncargos.map((t) => (
+                <li key={t.id} className="assign-box" style={{ marginBottom: '0.6rem' }}>
+                  <div>
+                    <strong>{loQueHayQueHacer(t)}</strong>
+                    <p className="form-hint" style={{ margin: '0.2rem 0' }}>{t.titulo}</p>
+                    {/* El texto del post, para no tener que pedirlo por WhatsApp. */}
+                    {t.texto && <p style={{ whiteSpace: 'pre-wrap', margin: '0.4rem 0' }}>{t.texto}</p>}
+                    {t.notas && <p className="form-hint">{t.notas}</p>}
+                  </div>
+                  <div className="assign-box__row">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => marcarEncargoHecho(t.id)}
+                    >
+                      Ya está hecho
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {/* Avisos de la secretaría: cambios que la hermandad ha hecho en tus datos */}

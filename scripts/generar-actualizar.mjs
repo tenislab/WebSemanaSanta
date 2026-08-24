@@ -55,6 +55,7 @@ export const PIEZAS_ACTUALIZACION = [
   ['documentos-restringidos.sql', 'Que el documento restringido lo sea también en la base'],
   ['webhook-stripe.sql', 'Que la suscripción se active cuando Stripe confirma el cobro, no antes'],
   ['mandatos-sepa.sql', 'El mandato SEPA firmado de verdad, por el propio hermano'],
+  ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
 ]
 
 const CABECERA = `-- =============================================================================

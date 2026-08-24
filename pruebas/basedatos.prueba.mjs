@@ -269,6 +269,7 @@ export default async function ({ caso }) {
   await hermanoDeDosHermandades({ sql, caso })
   await elWebhookDeStripeActivaLaSuscripcion({ sql, caso })
   await elMandatoSepaLoFirmaElPropioHermano({ sql, caso })
+  await elEncargoDeRedesSeReparte({ sql, caso })
 }
 
 /**
@@ -2123,4 +2124,119 @@ async function elMandatoSepaLoFirmaElPropioHermano({ sql, caso }) {
   const firmaConCargo = await como(UID3.slice(1, -1),
     `insert into mandatos_sepa (hermano_id, iban, referencia) values (${HNO3}, 'x', 'x');`)
   caso('un hermano con cargo (Fiscal) también firma la suya', 'sí', firmaConCargo.deja)
+}
+
+/**
+ * ENCARGAR UN POST: QUIÉN REPARTE Y QUIÉN PUEDE DECIR «HECHO».
+ *
+ * Lo que hay que sujetar aquí es el desnivel entre los dos permisos: quien
+ * lleva redes reparte y corrige; el responsable SOLO puede dar la suya por
+ * hecha. Si eso se afloja, cualquiera de la junta puede quitarse un encargo de
+ * encima pasándoselo a otro, o cambiarle el texto al post después de que se
+ * haya publicado.
+ */
+async function elEncargoDeRedesSeReparte({ sql, caso }) {
+  const H = "'e0000000-0000-0000-0000-00000000000e'"
+  const JEFE = "'e1111111-1111-1111-1111-111111111111'"   // lleva comunicados
+  const VOCAL = "'e2222222-2222-2222-2222-222222222222'"  // hermano con cargo, responsable
+  const OTRO = "'e3333333-3333-3333-3333-333333333333'"   // otro hermano cualquiera
+  const UJEFE = "'e4444444-4444-4444-4444-444444444444'"
+  const UVOCAL = "'e5555555-5555-5555-5555-555555555555'"
+  const UOTRO = "'e6666666-6666-6666-6666-666666666666'"
+
+  await sql(`
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. de las Redes') on conflict (id) do nothing;
+    insert into auth.users (id, email) values
+      (${UJEFE}, 'jefe@e.es'), (${UVOCAL}, 'vocal@e.es'), (${UOTRO}, 'otro@e.es')
+      on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, cargo) values
+      (${JEFE}, ${H}, 'Quien lleva redes', '80000001A', 701, 'Activo', ${UJEFE}, 'jefe@e.es', 'Hermano Mayor'),
+      (${VOCAL}, ${H}, 'Vocal de juventud', '80000002B', 702, 'Activo', ${UVOCAL}, 'vocal@e.es', 'Fiscal'),
+      (${OTRO}, ${H}, 'Hermano de a pie', '80000003C', 703, 'Activo', ${UOTRO}, 'otro@e.es', null)
+      on conflict (id) do nothing;
+    select sembrar_permisos_de_fabrica(${H});
+  `)
+  const como = async (uid, sentencia) => {
+    try {
+      await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = '${uid}'; ${sentencia} commit;`)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) { return { deja: 'no', motivo: String(e?.stderr ?? e) } }
+  }
+  const numero = (t) => t.split('\n').map((s) => s.trim()).filter((s) => /^\d+$/.test(s)).pop() ?? ''
+
+  // 1. Quien lleva redes encarga y reparte.
+  const ENCARGO = "'e7777777-7777-7777-7777-777777777777'"
+  const TAREA = "'e8888888-8888-8888-8888-888888888888'"
+  const encarga = await como(UJEFE.slice(1, -1), `
+    insert into tareas_redes (id, encargo_id, titulo, texto, que, red, hermano_id)
+      values (${TAREA}, ${ENCARGO}, 'Besamanos', 'Este sábado', 'publicar', 'Instagram', ${VOCAL});
+  `)
+  caso('quien lleva redes puede encargar un post', 'sí', encarga.deja)
+
+  /*
+   * 2. Y UN HERMANO DE A PIE NO. No es que no le salga el botón: es que la
+   * base no le deja, que es lo único que cuenta.
+   */
+  const colado = await como(UOTRO.slice(1, -1), `
+    insert into tareas_redes (encargo_id, titulo, que, red, hermano_id)
+      values (gen_random_uuid(), 'Colado', 'publicar', 'Instagram', ${OTRO});
+  `)
+  caso('un hermano de a pie no puede repartirse trabajo', 'no', colado.deja)
+
+  // 3. El responsable la ve, aunque no lleve redes.
+  caso('el responsable ve la suya', '1', numero(await sql(`
+    begin; set local role authenticated; set local "request.jwt.claim.sub" = '${UVOCAL.slice(1, -1)}';
+    select count(*) from tareas_redes where id = ${TAREA}; rollback;`)))
+  // Y quien no tiene nada que ver, no.
+  caso('y quien no tiene nada que ver, no la ve', '0', numero(await sql(`
+    begin; set local role authenticated; set local "request.jwt.claim.sub" = '${UOTRO.slice(1, -1)}';
+    select count(*) from tareas_redes where id = ${TAREA}; rollback;`)))
+
+  // 4. El responsable la da por hecha, y la fecha la pone la base.
+  const cierra = await como(UVOCAL.slice(1, -1), `update tareas_redes set estado = 'hecha' where id = ${TAREA};`)
+  caso('el responsable puede darla por hecha', 'sí', cierra.deja)
+  caso('y la base apunta cuándo, sin que nadie se la invente', '1',
+    numero(await sql(`select count(*) from tareas_redes where id = ${TAREA} and hecha_en is not null`)))
+  caso('y quién la hizo', '1',
+    numero(await sql(`select count(*) from tareas_redes where id = ${TAREA} and hecha_por = ${VOCAL}`)))
+
+  /*
+   * 5. PERO NADA MÁS. Ni pasársela a otro para quitársela de encima, ni
+   * cambiarle el texto al post después de publicado. Se intenta y se comprueba
+   * que la fila NO se ha movido — porque estas dos las deja pasar el disparador
+   * en silencio (devuelve la fila como estaba) en vez de dar un error, que es
+   * lo correcto: no hay nada que avisar, simplemente no es suyo.
+   */
+  await como(UVOCAL.slice(1, -1), `update tareas_redes set hermano_id = ${OTRO} where id = ${TAREA};`)
+  caso('el responsable NO puede pasársela a otro', '1',
+    numero(await sql(`select count(*) from tareas_redes where id = ${TAREA} and hermano_id = ${VOCAL}`)))
+  await como(UVOCAL.slice(1, -1), `update tareas_redes set titulo = 'Otra cosa', texto = 'Cambiado' where id = ${TAREA};`)
+  caso('ni cambiarle el texto al post', '1',
+    numero(await sql(`select count(*) from tareas_redes where id = ${TAREA} and titulo = 'Besamanos'`)))
+
+  // 6. Quien lleva redes sí puede reasignarla: para eso la reparte él.
+  await como(UJEFE.slice(1, -1), `update tareas_redes set hermano_id = ${OTRO} where id = ${TAREA};`)
+  caso('quien lleva redes sí puede reasignarla', '1',
+    numero(await sql(`select count(*) from tareas_redes where id = ${TAREA} and hermano_id = ${OTRO}`)))
+
+  /*
+   * 7. Y NO SE BORRA: un encargo hecho es lo que demuestra que se hizo.
+   *
+   * Se mira si la FILA SIGUE AHÍ, y no si dio error. Sin política de borrado,
+   * Postgres no protesta: borra cero filas y contesta que todo ha ido bien
+   * —es el mismo caso que el `upsert` de `elHermanoCambiaSuFicha`— así que
+   * esperar una excepción daría por buena una prueba que no comprueba nada.
+   */
+  await como(UJEFE.slice(1, -1), `delete from tareas_redes where id = ${TAREA};`)
+  caso('un encargo no se borra, ni siquiera quien lo repartió', '1',
+    numero(await sql(`select count(*) from tareas_redes where id = ${TAREA}`)))
+
+  /*
+   * 8. UNA TAREA DE PUBLICAR TIENE QUE DECIR EN QUÉ RED. Sin esto se cuelan
+   * tareas que no dicen qué hacer, y el responsable ve «Subilo a undefined».
+   */
+  const sinRed = await como(UJEFE.slice(1, -1), `
+    insert into tareas_redes (encargo_id, titulo, que, hermano_id)
+      values (gen_random_uuid(), 'Sin red', 'publicar', ${VOCAL});`)
+  caso('una tarea de publicar sin red no entra', 'no', sinRed.deja)
 }

@@ -52,6 +52,7 @@ export default async function ({ cargar, caso }) {
   caso('sin probar no dice nada', '', m.explicarEstado('sinProbar', 'x.es'))
 
   await dominioRaiz({ cargar, caso })
+  await laPuertaPrincipalNoSeCuelga({ cargar, caso })
   await rutasConDominioPropio({ cargar, caso })
 }
 
@@ -150,4 +151,64 @@ async function rutasConDominioPropio({ cargar, caso }) {
   // falla no puede ser incondicional: se llamaría a sí misma y el navegador
   // daría «demasiadas redirecciones».
   caso('la función no se redirige a sí misma', true, /ruta\.pathname !== '\/'/.test(w))
+}
+
+/**
+ * LA PUERTA PRINCIPAL NO PUEDE QUEDARSE COLGADA.
+ *
+ * Pasó de verdad: `www.gobergo.com` se quedó en «Cargando…» un buen rato, sin
+ * que nadie hubiera tocado nada. El mecanismo, entero:
+ *
+ *   1. `VITE_DOMINIO_APP` no estaba puesta —está comentada en `.env.example`,
+ *      y encima el ejemplo decía `.es` cuando el dominio real es `.com`—.
+ *   2. Sin ella, `esCasaDeGobergo()` NO puede saber que gobergo.com es la
+ *      casa, así que devuelve falso.
+ *   3. Y entonces la portada le pregunta a la base de datos de qué hermandad
+ *      es este dominio... en CADA visita.
+ *   4. `cargarWebPorDominio` no tenía tope de espera. Con el plan gratuito de
+ *      Supabase, que duerme el proyecto tras unas horas sin visitas, la
+ *      primera visita del día se comía el arranque entero mirando la pantalla
+ *      de carga.
+ *
+ * Se arregla por los dos lados, y los dos hacen falta: definir la variable
+ * quita la consulta, y el tope de espera protege igualmente a quien no la haya
+ * definido — que es justo quien se lo va a encontrar.
+ */
+export async function laPuertaPrincipalNoSeCuelga({ cargar, caso }) {
+  const m = await cargar('src/lib/dominio.ts')
+  const { readFile } = await import('node:fs/promises')
+
+  /*
+   * 1. EL CASO EXACTO QUE FALLÓ. Con la variable puesta, gobergo.com y su www
+   * son casa: se pintan al momento y no se consulta nada.
+   */
+  caso('con la variable puesta, gobergo.com es casa', true,
+    m.esCasaDeGobergo('gobergo.com', 'gobergo.com'))
+  caso('y www.gobergo.com también', true,
+    m.esCasaDeGobergo('www.gobergo.com', 'gobergo.com'))
+  /*
+   * Y SIN LA VARIABLE, NO LO ES. Esto no es un fallo de `esCasaDeGobergo` —no
+   * puede adivinar cuál es tu dominio— pero es la razón por la que la portada
+   * acababa consultando, así que queda escrito aquí.
+   */
+  caso('sin la variable no puede saberlo, y por eso consulta', false,
+    m.esCasaDeGobergo('www.gobergo.com', ''))
+
+  // 2. EL TOPE DE ESPERA, que es lo que protege cuando la variable falta.
+  const raiz = await readFile('src/pages/Raiz.tsx', 'utf8')
+  caso('la portada tiene un tope de espera', true, /const ESPERA_MAXIMA = \d+/.test(raiz))
+  caso('y se usa para dejar de bloquear', true,
+    /setTimeout\([\s\S]{0,80}setBuscando\(false\)[\s\S]{0,40}ESPERA_MAXIMA\)/.test(raiz))
+  /*
+   * Y LO QUE NO SE PUEDE PERDER AL PONER EL TOPE: la consulta sigue viva. Si
+   * contesta tarde y resulta que el dominio SÍ es de una hermandad, su web
+   * entra igualmente. Cortar la consulta dejaría a esa hermandad enseñando la
+   * página de venta de Gobergo en su propio dominio, que es peor que la espera.
+   */
+  caso('pero la consulta sigue viva y puede llegar tarde', true,
+    /clearTimeout\(reloj\)[\s\S]{0,120}setWeb\(r\.web\)/.test(raiz))
+
+  // 3. Y que el aviso del .env.example diga lo que cuesta no ponerla.
+  const env = await readFile('.env.example', 'utf8')
+  caso('el .env.example avisa de lo que pasa sin ella', true, /Cargando/.test(env))
 }

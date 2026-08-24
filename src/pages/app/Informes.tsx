@@ -21,7 +21,7 @@ import { useTramos, etiquetaTramo, type Tramo } from '../../lib/tramos'
 import { etiquetaDeSituacion, situacionDeTodos } from '../../lib/estadoCuotaHermano'
 import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { repartoCompleto } from '../../lib/cortejo'
-import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
+import { CLAVES_DATOS } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
 import { getCamposPropios, valorLegible } from '../../lib/camposPropios'
 import { filaQueAbre } from '../../lib/foco'
@@ -355,21 +355,43 @@ export default function Informes() {
     }
   }, [imprimiendoEstado])
 
+  /**
+   * LOS CUATRO NÚMEROS DE ARRIBA SALEN DE LO MISMO QUE LOS INFORMES DE ABAJO.
+   *
+   * No era así, y en la misma pantalla se contradecían. Los informes ya venían
+   * de la base —`useSupabaseTable`, ahí arriba—, pero estos cuatro recuadros
+   * seguían leyéndose del navegador con `leerDatos`, que es lo que esta página
+   * dejó de hacer hace tiempo (está contado en la cabecera del archivo). Dos
+   * fuentes distintas para la misma pregunta.
+   *
+   * Lo que se veía, con la tesorería en la base diciendo 12.000 €:
+   *
+   *   · En un navegador recién estrenado —otro ordenador, o después de borrar
+   *     los datos— `leerDatos` devuelve VACÍO cuando hay base de datos
+   *     conectada (a propósito: ver `lib/persistencia.ts`). Así que el
+   *     Balance salía 0 € y el censo 0 hermanos, con los informes de debajo
+   *     enseñando las cifras de verdad.
+   *   · Y en el ordenador de siempre salía la copia que ese navegador dejó la
+   *     última vez, que es de la última visita, no de ahora.
+   *
+   * Y ENCIMA NO SE ACTUALIZABA NUNCA: la lista de dependencias estaba vacía,
+   * así que esto se calculaba una vez al abrir la pantalla y se quedaba
+   * congelado aunque los datos de la base llegaran un segundo después —que es
+   * lo normal, porque llegan por la red—. Los informes de abajo sí se
+   * recalculaban. De ahí que una misma pantalla dijera dos cosas.
+   */
   const kpis = useMemo(() => {
-    const hermanos = leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
-    const cuotas = leerDatos(CLAVES_DATOS.cuotas, CUOTAS_INICIALES)
     const anio = getCampana().anio
-    const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anio)
-    const movimientos = leerDatos(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
     const totalHermanos = hermanos.length
     const cobrado = sumaEuros(cuotas.filter((c) => c.estado === 'Pagada').map((c) => c.importe))
-    const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada' && p.estado !== 'Renuncia').length
+    const papeletasEmitidas = papeletas
+      .filter((p) => p.anio === anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia').length
     const balance = movimientos.filter((m) => m.estado === 'Conciliado').reduce(
       (s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe),
       0,
     )
     return { totalHermanos, cobrado, papeletasEmitidas, balance }
-  }, [])
+  }, [hermanos, cuotas, papeletas, movimientos])
 
   function exportarCsv(informe: Informe) {
     const csv = toCsv(informe.columnas, informe.filas)
@@ -383,7 +405,13 @@ export default function Informes() {
           <p className="eyebrow">Informes</p>
           <h1>Informes y exportación</h1>
           <p className="dash-head__lead">
-            {informes.length} informes · calculados en vivo a partir de los datos guardados en este navegador.
+            {/* Decía «los datos guardados en este navegador», que era de cuando
+                esta pantalla leía del navegador. Trabaja contra la base de la
+                hermandad desde hace tiempo, y dejarlo escrito así hacía dudar
+                de si lo que se está mirando es lo de todos o lo de este
+                ordenador — que es justo la duda que no puede tener quien
+                presenta unas cuentas. */}
+            {informes.length} informes · calculados en vivo con los datos de la hermandad.
           </p>
         </div>
       </div>

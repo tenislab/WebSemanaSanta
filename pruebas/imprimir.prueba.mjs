@@ -67,6 +67,34 @@ export default async function ({ caso }) {
   // ella el Estado de Cuentas se quedaría tapando la pantalla para siempre.
   caso('con red de seguridad', true, /setTimeout\(recoger, 10000\)/.test(informes))
 
+  /*
+   * Y TODA LA PANTALLA MIRA AL MISMO SITIO.
+   *
+   * Los informes ya se calculaban con los datos de la base —está contado en la
+   * cabecera de `Informes.tsx`: el Estado de Cuentas llegó a imprimirse con
+   * todas las partidas a 0,00 €— pero el arreglo se quedó a medias. Los cuatro
+   * recuadros de arriba (Hermanos, Cobrado, Papeletas, BALANCE) seguían
+   * leyéndose del navegador con `leerDatos`, así que la misma pantalla decía
+   * dos cosas: los recuadros, una; los informes de debajo, otra.
+   *
+   * Con base de datos conectada `leerDatos` devuelve VACÍO si este navegador
+   * no tiene copia (ver `lib/persistencia.ts`), así que en un ordenador
+   * recién estrenado el Balance de tesorería salía 0 € encima de unos
+   * informes con las cifras de verdad.
+   *
+   * Se comprueba que no queda ni un `leerDatos` en la pantalla: mientras haya
+   * uno, hay dos fuentes para la misma pregunta.
+   */
+  caso('Informes no lee ninguna colección del navegador', false, /\bleerDatos\(/.test(informes))
+  /*
+   * Y QUE LOS RECUADROS SE RECALCULEN. La lista de dependencias estaba vacía,
+   * o sea que se calculaban una vez al abrir y se quedaban congelados aunque
+   * los datos de la base llegaran un segundo después — que es lo que pasa
+   * siempre, porque llegan por la red.
+   */
+  caso('y los recuadros se recalculan cuando llegan los datos', true,
+    /const kpis = useMemo\([\s\S]*?\}, \[hermanos, cuotas, papeletas, movimientos\]\)/.test(informes))
+
   const papeletas = await readFile('src/pages/app/Papeletas.tsx', 'utf8')
   caso('las papeletas en masa, igual', true, papeletas.includes("window.addEventListener('afterprint', recoger"))
   caso('y también con red', true, /setTimeout\(recoger, 10000\)/.test(papeletas))

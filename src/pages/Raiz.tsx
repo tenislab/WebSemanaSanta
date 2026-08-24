@@ -46,6 +46,17 @@ import { LogoMark } from '../components/Logo'
  * que enseñar, y plantar ahí la página de venta sería mentir sobre lo que se
  * ha pedido. Se manda a la portada.
  */
+/**
+ * Lo máximo que la puerta principal se queda esperando a la base de datos.
+ *
+ * Tres segundos y medio son de sobra para una consulta que devuelve una fila
+ * por un índice; si tarda más, no es que vaya lenta, es que no está
+ * respondiendo. Y no se pone más corto porque en una conexión de móvil mala
+ * una consulta normal puede pasar del segundo, y cortar ahí enseñaría la
+ * página genérica a una hermandad que sí tiene su web puesta.
+ */
+const ESPERA_MAXIMA = 3500
+
 export default function Raiz({ soloWeb = false }: { soloWeb?: boolean } = {}) {
   const host = typeof window !== 'undefined' ? window.location.hostname : ''
   // En casa no se pregunta nada: se pinta la página de Gobergo al momento. Sin
@@ -59,8 +70,28 @@ export default function Raiz({ soloWeb = false }: { soloWeb?: boolean } = {}) {
   useEffect(() => {
     if (enCasa) return
     let cancelado = false
+    /*
+     * SE DEJA DE ESPERAR, PERO NO DE ESCUCHAR.
+     *
+     * `cargarWebPorDominio` no tenía ningún tope: si la base tardaba en
+     * contestar —el proyecto despertando de la pausa, que en el plan gratuito
+     * es lo normal después de unas horas sin visitas— esta pantalla se quedaba
+     * en «Cargando…» EXACTAMENTE lo que tardara. Sin error, sin límite y sin
+     * nada que hacer más que mirarla. Y le pasa a quien entra por la puerta
+     * principal, que muchas veces es alguien que viene a ver qué es esto.
+     *
+     * Pasado el tope se deja de bloquear y se pinta lo que corresponda a un
+     * dominio del que todavía no se sabe nada, que es la página de Gobergo.
+     * Pero la consulta SIGUE VIVA a propósito: si al final contesta que este
+     * dominio es de una hermandad, su web entra igualmente. Así el caso lento
+     * acaba enseñando lo correcto en vez de quedarse en lo genérico.
+     */
+    const reloj = setTimeout(() => {
+      if (!cancelado) setBuscando(false)
+    }, ESPERA_MAXIMA)
     cargarWebPorDominio(host).then((r) => {
       if (cancelado) return
+      clearTimeout(reloj)
       if (r) {
         setWeb(r.web)
         fijarHermandadDeLaPagina(r.hermandadId)
@@ -69,6 +100,7 @@ export default function Raiz({ soloWeb = false }: { soloWeb?: boolean } = {}) {
     })
     return () => {
       cancelado = true
+      clearTimeout(reloj)
     }
   }, [host, enCasa])
 

@@ -92,6 +92,7 @@ export default async function ({ caso }) {
         // El fichero se llama `mandatosSepa.ts` y la tabla `mandatos_sepa`:
         // mismo caso que `solicitudPapeletaToRow`.
         mandatoSepaToRow: 'mandatos_sepa',
+        tareaRedToRow: 'tareas_redes',
       }
       const tabla = ALIAS[m[1]] ?? [...tablas.keys()]
         .filter((t) => t === base || t === `${base}s` || base.startsWith(t))

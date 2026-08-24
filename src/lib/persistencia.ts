@@ -21,6 +21,7 @@ export const CLAVES_DATOS = {
   cuentasSociales: 'cabildo-cuentas-sociales',
   eventos: 'cabildo-eventos',
   mandatosSepa: 'cabildo-mandatos-sepa',
+  tareasRedes: 'cabildo-tareas-redes',
 } as const
 
 /** Lee una colección guardada, o devuelve los datos de ejemplo si aún no hay nada. */

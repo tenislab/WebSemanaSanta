@@ -132,10 +132,23 @@ async function elFormularioHabla({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const src = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
 
-  // Ningún `return` a secas dentro del guardado.
-  const guardar = src.slice(src.indexOf('const data = new FormData(form)'))
-  const mudos = (guardar.slice(0, 2600).match(/^\s*if \([^)]*\) return$/gm) ?? []).length
-  caso('no queda ningún return mudo', 0, mudos)
+  /*
+   * Ningún `return` a secas dentro de los formularios de esta pantalla.
+   *
+   * SE ANCLA EN EL NOMBRE DE CADA FUNCIÓN, y no en «el primer FormData que
+   * aparezca», que es como estaba. Con eso, el día que alguien añadió otro
+   * formulario más arriba —el de encargar un post— esta comprobación se pasó
+   * sola a vigilar el nuevo y dejó de mirar el de comunicados, sin que nada
+   * fallara: la cobertura se pierde en silencio, que es la manera más fácil de
+   * quedarse sin ella.
+   */
+  const mudosDe = (nombre) => {
+    const i = src.indexOf(`function ${nombre}(`)
+    if (i < 0) return `no se encuentra ${nombre}`
+    return (src.slice(i, i + 2600).match(/^\s*if \([^)]*\) return$/gm) ?? []).length
+  }
+  caso('el guardado del comunicado no tiene returns mudos', 0, mudosDe('handleCreate'))
+  caso('ni el de encargar un post', 0, mudosDe('crearEncargo'))
 
   caso('dice si falta el título', true, /Ponle un título al comunicado/.test(src))
   caso('dice si está vacío', true, /El comunicado está vacío/.test(src))
