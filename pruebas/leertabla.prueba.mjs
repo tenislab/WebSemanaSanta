@@ -17,6 +17,8 @@
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/leerTabla.ts')
 
+  await lasEnesSobreviven({ m, caso })
+
   // --- Importes: las dos convenciones a la vez ---
   caso('a la española, con millares y decimales', 1234.56, m.importeDe('1.234,56'))
   caso('a la inglesa, con millares y decimales', 1234.56, m.importeDe('1,234.56'))
@@ -113,4 +115,48 @@ export default async function ({ cargar, caso }) {
   // Una hora suelta NO es una fecha: quitarle la hora dejaría la cadena vacía
   // y no puede colarse como fecha de nada.
   caso('una hora suelta no es una fecha', null, m.fechaIso('12:30'))
+}
+
+/**
+ * LAS EÑES SOBREVIVEN AL VIAJE, VENGA EL ARCHIVO COMO VENGA.
+ *
+ * El archivo se leía SIEMPRE como UTF-8, y el CSV que suelta el Excel de una
+ * hermandad española no lo es: es Windows-1252. Ahí cada tilde y cada eñe es
+ * un byte que en UTF-8 no significa nada.
+ *
+ * Y no fallaba con un error, que se habría visto: `TextDecoder` cambiaba cada
+ * byte que no entendía por un rombo y seguía. «MARÍA IBÁÑEZ MUÑOZ» entraba
+ * como «MAR?A IB??EZ MU?OZ», el importador no encontraba ningún problema —el
+ * DNI estaba bien, el nombre no iba vacío— y la pantalla daba las mil ciento
+ * ochenta y ocho altas en verde. El censo entero con los nombres rotos y ni un
+ * aviso en ninguna parte.
+ *
+ * Se comprueban las cuatro maneras en que Excel puede soltar el mismo fichero,
+ * porque la hermandad elige una del desplegable sin saber lo que significa.
+ */
+async function lasEnesSobreviven({ m, caso }) {
+  const nombre = 'MARÍA IBÁÑEZ MUÑOZ'
+  const linea = `DNI;Nombre\n12345678Z;${nombre}\n`
+  const leer = (b) => m.leerCsv(m.textoDelArchivo(new Uint8Array(b)))[1][1]
+
+  // «CSV (delimitado por comas)» en un Windows en español: el caso que rompía.
+  caso('un CSV de Excel en Windows-1252 conserva las eñes', nombre,
+    leer(Buffer.from(linea, 'latin1')))
+  caso('y uno en UTF-8 sigue igual de bien', nombre,
+    leer(Buffer.from(linea, 'utf8')))
+  // «CSV UTF-8 (delimitado por comas)», que añade la marca de bytes delante.
+  caso('«CSV UTF-8», con su marca al principio', nombre,
+    leer(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(linea, 'utf8')])))
+  // «Texto Unicode (*.txt)», que sale en UTF-16.
+  caso('«Texto Unicode», que va en UTF-16', nombre,
+    leer(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(linea, 'utf16le')])))
+
+  /*
+   * Y EL ORDEN NO SE PUEDE INVERTIR. Casi cualquier archivo es «válido» en
+   * Windows-1252 —no hay byte que le siente mal—, así que probarlo antes que
+   * UTF-8 rompería las eñes en el sentido contrario. Esta comprobación es la
+   * que lo sujeta: un UTF-8 sin marca tiene que seguir leyéndose como UTF-8.
+   */
+  caso('un UTF-8 sin marca no se confunde con Windows-1252', 'Muñoz, José María',
+    m.textoDelArchivo(new Uint8Array(Buffer.from('Muñoz, José María', 'utf8'))))
 }

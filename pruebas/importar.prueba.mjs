@@ -2,6 +2,8 @@
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/importar.ts')
 
+  await nadieSeCaePorUnaCasillaRara({ cargar, caso })
+
   // --- Detectar el separador ---
   // En España Excel suelta punto y coma; medio mundo exporta con coma.
   caso('punto y coma', ';', m.detectarSeparador('a;b;c\n1;2;3'))
@@ -363,4 +365,74 @@ async function numeroEnLaVistaPrevia({ cargar, caso }) {
   ]
   const ensSub = m.ensayar(conSubtitulo, m.proponerEmparejado(conSubtitulo[0]), [], 2026)
   caso('un subtítulo suelto sí se señala', 1, ensSub.errores)
+}
+
+/**
+ * NO PERDER AL HERMANO POR NO ENTENDER UNA CASILLA SUYA.
+ *
+ * Dos columnas tiraban la ficha ENTERA cuando no se entendían: la situación y
+ * el año de antigüedad. Y son justo las dos que peor vienen en un censo
+ * llevado a mano durante veinte años.
+ *
+ * La cuenta es sencilla: un hermano fuera del censo no tiene número, ni cuota,
+ * ni sitio en el cortejo, y su antigüedad —que es lo único que no se puede
+ * reconstruir— se pierde. Frente a eso, apuntarlo con un valor de partida y
+ * decirlo en un aviso es media tarde de repaso para la secretaría. Volver a
+ * teclear trescientas fichas, no.
+ */
+export async function nadieSeCaePorUnaCasillaRara({ cargar, caso }) {
+  const m = await cargar('src/lib/importar.ts')
+
+  // --- Las palabras con las que una hermandad escribe «ya no está» ---
+  caso('«Fallecido» es una baja', 'Baja', m.estadoDe('Fallecido', false))
+  caso('«Difunto» también', 'Baja', m.estadoDe('Difunto', false))
+  caso('«Baja voluntaria» también', 'Baja', m.estadoDe('Baja voluntaria', false))
+  caso('y «D.E.P.»', 'Baja', m.estadoDe('D.E.P.', false))
+  /*
+   * Y EL «NO» DE UNA COLUMNA TITULADA «ACTIVO». Antes solo se entendía el sí:
+   * una columna «¿Activo? Sí/No» importaba los «Sí» y RECHAZABA todos los
+   * «No», que en un censo viejo son entre el veinte y el treinta por ciento.
+   */
+  caso('un «No» en la columna de activo es una baja', 'Baja', m.estadoDe('No', false))
+  caso('«Honorario» sigue siendo hermano', 'Activo', m.estadoDe('Honorario', false))
+  // Y lo de siempre no se ha movido.
+  caso('«Activo» sigue siendo activo', 'Activo', m.estadoDe('Activo', false))
+  caso('«Baja» sigue siendo baja', 'Baja', m.estadoDe('Baja', false))
+  caso('lo que no se reconoce sigue devolviendo null', null, m.estadoDe('Cumpliendo', false))
+
+  const CENSO = []
+  // El emparejado se saca de la propia cabecera, como hace la pantalla.
+  const EMP = m.proponerEmparejado(['DNI', 'Nombre', 'Antigüedad', 'Situación'])
+  const filas = (extra) => [
+    ['DNI', 'Nombre', 'Antigüedad', 'Situación'],
+    ['11111111A', 'Ana Sánchez', '1998', 'Activo'],
+    extra,
+  ]
+
+  // --- Una situación rara entra con aviso, no como error ---
+  {
+    const e = m.ensayar(filas(['22222222B', 'Luis Gómez', '2001', 'Cumpliendo']), EMP, CENSO)
+    caso('la situación rara NO tira la ficha', 0, e.filas.filter((f) => f.queLePasa === 'error').length)
+    caso('el hermano entra igualmente', 2, e.filas.filter((f) => f.queLePasa !== 'error').length)
+    caso('y se dice en qué situación ha quedado', true,
+      e.avisos.some((a) => /no se entiende la situación/i.test(a)))
+  }
+
+  // --- Un año que no se entiende, igual ---
+  {
+    const e = m.ensayar(filas(['33333333C', 'Rocío Peñalver', 'años 80', 'Activo']), EMP, CENSO)
+    caso('el año raro tampoco tira la ficha', 0, e.filas.filter((f) => f.queLePasa === 'error').length)
+    caso('y se avisa de con qué antigüedad ha entrado', true,
+      e.avisos.some((a) => /no se entiende el año/i.test(a)))
+  }
+
+  /*
+   * LO QUE NO SE PUEDE HABER ROTO: lo que SÍ tiene que seguir siendo un error.
+   * Sin DNI no hay ficha posible —es la identidad y la clave con la que se
+   * reconoce a quien ya está— así que esa fila se queda fuera y se dice.
+   */
+  {
+    const e = m.ensayar(filas(['', 'Sin Dni', '1998', 'Activo']), EMP, CENSO)
+    caso('sin DNI la fila SÍ es un error', 1, e.filas.filter((f) => f.queLePasa === 'error').length)
+  }
 }

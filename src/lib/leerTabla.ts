@@ -99,6 +99,54 @@ export function pareceBinario(texto: string): boolean {
   return texto.slice(0, 2000).includes('\u0000')
 }
 
+/**
+ * EL TEXTO DEL ARCHIVO, CON SUS EÑES.
+ *
+ * Se leía siempre como UTF-8 y punto. Y el CSV que suelta el Excel de una
+ * hermandad española NO es UTF-8: es Windows-1252, que es lo que Excel usa al
+ * «Guardar como → CSV (delimitado por comas)» en un Windows en español. Ahí
+ * cada tilde y cada eñe es UN byte que en UTF-8 no significa nada.
+ *
+ * Y lo peor era cómo fallaba. `TextDecoder` sin más NO protesta: cambia cada
+ * byte que no entiende por el rombo de interrogación y sigue. Así que
+ * «MARÍA IBÁÑEZ MUÑOZ» entraba como «MAR?A IB??EZ MU?OZ», el importador no
+ * veía ningún problema —el DNI estaba bien, el nombre no iba vacío— y la
+ * pantalla daba las 1.188 altas en verde. El censo entero con los nombres
+ * rotos y ni un aviso.
+ *
+ * Lo que se hace es preguntárselo al propio archivo, en este orden:
+ *
+ *   1. Si trae marca de orden de bytes (BOM), esa manda: la puso quien lo
+ *      escribió y no hay nada que adivinar. Excel la pone al exportar
+ *      «CSV UTF-8» y al exportar «Texto Unicode», que sale en UTF-16.
+ *   2. Si no, se intenta UTF-8 EN SERIO (`fatal`), que revienta en vez de
+ *      inventar. Un texto válido en UTF-8 lo es casi siempre a propósito.
+ *   3. Y si revienta, es de los de antes: Windows-1252.
+ *
+ * EL ORDEN IMPORTA, y al revés no funcionaría: casi cualquier archivo es
+ * «válido» en Windows-1252 —no hay byte que le siente mal—, así que probarlo
+ * primero se tragaría también los UTF-8 de verdad y rompería las eñes en el
+ * sentido contrario.
+ */
+export function textoDelArchivo(bytes: Uint8Array): string {
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return new TextDecoder('utf-8').decode(bytes.subarray(3))
+  }
+  // «Texto Unicode (*.txt)» del Excel, que va en UTF-16 con su marca delante.
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(bytes.subarray(2))
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder('utf-16be').decode(bytes.subarray(2))
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    // No era UTF-8. El CSV de toda la vida del Excel español.
+    return new TextDecoder('windows-1252').decode(bytes)
+  }
+}
+
 /* ---------------------------------------------------------------------------
    2. Entender cómo se llaman las columnas
    --------------------------------------------------------------------------- */
@@ -232,6 +280,46 @@ export function anioDe(v: string): number | null {
     const n = Number(t)
     return n >= 1400 && n <= 2200 ? n : null
   }
+  /*
+   * LA FECHA ENTERA MANDA SOBRE «LAS PRIMERAS CUATRO CIFRAS QUE VEA».
+   *
+   * Antes esto era un `/(\d{4})/` a secas sobre el texto, y eso hacía dos
+   * destrozos a la vez:
+   *
+   *   · `12/03/98` no tiene ninguna tirada de cuatro cifras, así que devolvía
+   *     null y la ficha ENTERA se caía por «no se entiende el año». Un censo
+   *     llevado desde los noventa puede traer así todas sus antigüedades.
+   *   · Y al revés, un número de serie de Excel colaba una antigüedad
+   *     inventada: `21000` daba **2100** y `15000` daba **1500**, con la fila
+   *     entrando tan tranquila. La antigüedad es lo que ordena el cortejo y la
+   *     prioridad de papeletas, así que salía mal y en silencio, que es peor
+   *     que salir mal y a gritos.
+   *
+   * Pasando primero por `fechaIso` se resuelven los dos: entiende el año de
+   * dos cifras igual que en el resto del importador —una columna no puede
+   * entender una fecha que la de al lado no entiende— y una serie suelta no es
+   * una fecha, así que ya no se cuela.
+   */
+  const comoFecha = fechaIso(t)
+  if (comoFecha) {
+    const n = Number(comoFecha.slice(0, 4))
+    if (n >= 1400 && n <= 2200) return n
+  }
+  /*
+   * UN NÚMERO PELADO QUE NO TIENE CUATRO CIFRAS NO ES UN AÑO.
+   *
+   * Va ANTES del respaldo de abajo, y es lo que impide el destrozo silencioso:
+   * `21000` es un número de serie de Excel —una fecha que se ha quedado sin
+   * formatear— y por el respaldo se convertía en el año **2100**. Entraba sin
+   * una queja y dejaba la antigüedad del hermano inventada, que es lo que
+   * ordena el cortejo y la prioridad de las papeletas.
+   *
+   * Y un «12» pelado tampoco es un año, aunque pudiera ser 2012: puede ser un
+   * mes, una cuenta de algo o media fecha. Esa decisión ya estaba tomada antes
+   * («un año imposible, no») y se respeta — adivinar aquí saldría mal más
+   * veces de las que saldría bien.
+   */
+  if (/^\d+$/.test(t)) return null
   const conFecha = /(\d{4})/.exec(t)
   if (conFecha) {
     const n = Number(conFecha[1])

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import ImportarCenso from './ImportarCenso'
 import ImportarTabla from './ImportarTabla'
 import { ExcelIlegible, leerLibro, pareceXlsx, type Hoja } from '../lib/leerExcel'
-import { leerCsv, pareceBinario } from '../lib/leerTabla'
+import { leerCsv, pareceBinario, textoDelArchivo } from '../lib/leerTabla'
 import { hojaQueCuadra, proponerColumnas, faltanColumnas, type CampoDeTabla } from '../lib/importarTabla'
 import { hojaDelCenso, CAMPOS_IMPORTABLES, proponerEmparejado } from '../lib/importar'
 import { TABLA_CUOTAS, TABLA_MOVIMIENTOS, TABLA_ENSERES } from '../lib/tablasImportables'
@@ -107,7 +107,7 @@ export default function TraerDatos() {
       return
     }
 
-    const texto = new TextDecoder('utf-8').decode(bytes)
+    const texto = textoDelArchivo(bytes)
     if (pareceBinario(texto)) {
       setErrorArchivo(
         'Este archivo no es texto ni una hoja de Excel moderna. Si es un .xls de los antiguos, '

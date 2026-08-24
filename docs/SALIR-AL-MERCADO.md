@@ -389,7 +389,7 @@ en ningún sitio.
 |---|---|
 | Aislamiento entre hermandades | ✅ Probado, 47 comprobaciones |
 | Correos de la hermandad | ✅ Montado · ⬜ falta contratar el proveedor |
-| Correos de cuenta (confirmación, contraseña) | ⬜ Falta el SMTP propio en Supabase |
+| Correos de cuenta (confirmación, contraseña) | ✅ SMTP propio puesto (Resend, `no-responder@gobergo.com`) |
 | Remesas SEPA | ✅ Genera el fichero · ✅ mandatos firmados por el hermano |
 | Suscripción por Stripe | ✅ Webhook montado · ⬜ falta la cuenta y los precios |
 | Cobro de las hermandades a sus hermanos | ✅ SEPA, Bizum y enlace de pasarela |

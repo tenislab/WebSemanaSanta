@@ -137,3 +137,92 @@ comment on column documentos.cargos_con_acceso is
   'Cargos que pueden ver este documento. NULL = institucional, lo ve quien tenga el '
   'módulo de archivo. Con lista, la base lo comprueba de verdad: antes solo lo hacía la '
   'pantalla, y el panel se descargaba todos los documentos igualmente.';
+
+-- ============================================================================
+--   Y EL PDF, QUE ES LO QUE DE VERDAD NO PUEDE SALIR
+-- ============================================================================
+--
+-- Todo lo de arriba tapa LA FICHA del documento: su nombre, su categoría, su
+-- descripción. Y estaba a medias, porque el expediente no es la ficha: es el
+-- PDF escaneado que cuelga de ella, y ese vivía en el almacén con otra
+-- política, puesta en `multi-hermandad.sql`, que solo miraba dos cosas:
+--
+--     bucket_id = 'documentos'
+--     and split_part(name, '/', 1) = hermandad_actual()::text
+--     and not auth_es_hermano()
+--
+-- O sea: separa una hermandad de otra —eso sí— y deja fuera al hermano de a
+-- pie. Pero DENTRO de la hermandad no distingue: cualquiera de la junta se
+-- descarga cualquier adjunto, incluido el del expediente que la pantalla le
+-- esconde y que la política de arriba le acaba de negar.
+--
+-- COMPROBADO, con la Secretaria y un expediente restringido al Hermano Mayor:
+--
+--     la fila del expediente ..... no la ve      ✓ como debe ser
+--     el PDF de ese expediente ... SÍ lo alcanza ✗
+--     y al listar la carpeta ..... ve el fichero ✗ de ahí saca el id
+--
+-- Y ese último renglón es el que lo hace fácil: el nombre del fichero ES el id
+-- del documento, así que listando la carpeta —una llamada, la misma que usa la
+-- aplicación en `lib/filestore.ts`— se tiene la lista de todo lo que hay y se
+-- descarga uno por uno. No hace falta adivinar nada.
+--
+-- Es EL MISMO FALLO DE SIEMPRE una vez más, y van unas cuantas: lo que esconde
+-- la pantalla no protege nada. Aquí se había arreglado la mitad visible y se
+-- había dejado abierta la que guarda el contenido.
+
+/**
+ * ¿Puedo abrir el adjunto que se llama así?
+ *
+ * El nombre dentro del cubo es `<hermandad>/<id del documento>`, así que del
+ * propio nombre se saca a qué documento pertenece y se le pregunta lo mismo
+ * que a la ficha.
+ *
+ * SI NO HAY FICHA, SE DEJA PASAR, y no es un descuido. El adjunto se sube
+ * ANTES de crear la fila (`Archivo.tsx` sube el fichero y después guarda el
+ * documento), así que en ese instante no hay ficha que consultar todavía; y si
+ * el guardado se cae por el camino queda un fichero huérfano que, sin esta
+ * salida, no podría borrar ni quien lo subió. No abre nada: para que un
+ * adjunto restringido quedara huérfano habría que borrar su ficha, y para
+ * borrarla hay que poder verla — o sea, poder abrirlo ya.
+ */
+create or replace function puedo_abrir_el_adjunto(p_nombre text) returns boolean
+  language sql stable security definer set search_path = public as $$
+    select not exists (
+        select 1 from documentos d where d.id::text = split_part(p_nombre, '/', 2)
+      )
+      or exists (
+        select 1 from documentos d
+         where d.id::text = split_part(p_nombre, '/', 2)
+           and puedo_ver_documento(d.cargos_con_acceso)
+      )
+  $$;
+grant execute on function puedo_abrir_el_adjunto(text) to authenticated;
+
+/*
+ * LEER Y ESCRIBIR PIDEN COSAS DISTINTAS, y tiene que ser así.
+ *
+ * `using` (descargar, listar, reemplazar, borrar) sí puede preguntar por la
+ * ficha: a esas alturas existe.
+ *
+ * `with check` (subir) NO puede, porque cuando se sube todavía no hay ficha
+ * —es el orden que lleva `Archivo.tsx`—. Exigirlo ahí no cerraría ningún
+ * agujero y rompería toda subida de adjuntos, que es peor que el problema.
+ * Lo que sí se le añade es el módulo de archivo, que es lo que se pide en las
+ * otras cuatro políticas y aquí faltaba.
+ */
+drop policy if exists "documentos_mi_hermandad" on storage.objects;
+create policy "documentos_mi_hermandad" on storage.objects for all to authenticated
+  using (
+    bucket_id = 'documentos'
+    and split_part(name, '/', 1) = hermandad_actual()::text
+    and not auth_es_hermano()
+    and modulo_permitido('archivo')
+    and puedo_abrir_el_adjunto(name)
+  )
+  with check (
+    bucket_id = 'documentos'
+    and split_part(name, '/', 1) = hermandad_actual()::text
+    and not auth_es_hermano()
+    and modulo_permitido('archivo')
+  );

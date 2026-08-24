@@ -329,15 +329,68 @@ export const TABLA_CUOTAS: TablaImportable<Cuota> = {
     }
   },
 
+  /**
+   * UN RECIBO YA COBRADO NO SE «DES-PAGA» DESDE UNA IMPORTACIÓN.
+   *
+   * Es el caso que costaba dinero de verdad, y no es rebuscado: es LO NORMAL
+   * al migrar. El programa de antes casi nunca sabe si un recibo se cobró —esa
+   * información estaba en el extracto del banco, no en su base— así que su
+   * exportación lo trae TODO como «Pendiente». El tesorero la sube para
+   * «completar el histórico», la vista previa le dice tranquilamente «ya está ·
+   * se actualiza», y cada recibo que él había marcado pagado en Gobergo vuelve
+   * a pendiente. Domiciliados y pendientes, entran en la siguiente remesa: a
+   * todos los hermanos se les cobra otra vez algo que ya pagaron.
+   *
+   * Y se descubre cuando llegan los cargos al banco, con ocho semanas de
+   * devoluciones y una comisión por cada una.
+   *
+   * Así que el estado pagado se respeta y se dice cuántos. Corregir un recibo
+   * mal marcado se sigue pudiendo hacer, uno a uno y desde Cuotas, que es
+   * donde se ve lo que se está tocando.
+   */
+  alActualizar(datos, existente) {
+    if (existente.estado === 'Pagada' && datos.estado && datos.estado !== 'Pagada') {
+      // Se quita también lo que colgaba del cobro: dejar el estado en «Pagada»
+      // y meterle la fecha de pago vacía del archivo sería peor que las dos
+      // cosas por separado.
+      const { estado: _e, fechaPago: _f, metodoCobro: _m, ...resto } = datos
+      return { datos: resto, motivo: 'pagada' }
+    }
+    return { datos }
+  },
+
   avisosDelConjunto(filas) {
     const avisos: string[] = []
+    /*
+     * LOS QUE SE HAN RESPETADO VAN LOS PRIMEROS. Es lo único de esta pantalla
+     * que habla de dinero que ya está cobrado, y quien lo lee tiene que poder
+     * decidir si el archivo que está subiendo es el bueno.
+     */
+    const respetados = filas.filter((f) => f.queLePasa !== 'error' && f.protegido === 'pagada')
+    if (respetados.length > 0) {
+      avisos.push(
+        `${respetados.length} ${respetados.length === 1 ? 'recibo ya constaba pagado' : 'recibos ya constaban pagados'} en Gobergo `
+        + 'y el archivo los trae sin pagar: se quedan como pagados. Es lo normal cuando el programa '
+        + 'anterior no sabía qué se había cobrado. Si de verdad hay que corregir alguno, se hace desde Cuotas.',
+      )
+    }
     const remesables = filas.filter(
       (f) => f.queLePasa !== 'error' && f.datos.domiciliada === true && (f.datos.estado ?? 'Pendiente') !== 'Pagada',
     )
     if (remesables.length > 0) {
+      /*
+       * ANTES ESTE AVISO PROMETÍA «saldrán en la próxima remesa al banco», y
+       * desde que el mandato SEPA se firma de verdad (`lib/mandatosSepa.ts`)
+       * eso ya no es cierto: sin firma vigente no entran. Y decirlo mal aquí
+       * tiene una consecuencia fea — el tesorero abre la remesa, no ve estos
+       * recibos, da el aviso por ruido, y meses después, cuando los hermanos
+       * han ido firmando, le salen todos de golpe en una sola remesa.
+       */
       avisos.push(
         `${remesables.length} ${remesables.length === 1 ? 'recibo entra pendiente y domiciliado' : 'recibos entran pendientes y domiciliados'}: `
-        + 'saldrán en la próxima remesa al banco. Si son históricos ya cobrados, marcadlos como pagados en el archivo antes de importar.',
+        + 'quedan a la espera de cobro. Si son históricos ya cobrados, marcadlos como pagados en el archivo antes de importar. '
+        + 'No saldrán al banco hasta que cada hermano haya firmado su domiciliación desde su área, '
+        + 'así que revisadlos antes de lanzar la primera remesa.',
       )
     }
     const conDeuda = new Set(filas.filter((f) => f.queLePasa !== 'error').map((f) => f.datos.hermanoId))
@@ -540,7 +593,21 @@ export const TABLA_MOVIMIENTOS: TablaImportable<Movimiento> = {
         avisos.push(`la categoría «${categoriaTexto}» no está en vuestro catálogo, va a «${datos.categoria}»`)
       }
     } else if (datos.tipo) {
-      datos.categoria = cuales[cuales.length - 1] ?? 'Otros ingresos'
+      /*
+       * EL MISMO FALLO QUE SE ARREGLÓ CUATRO LÍNEAS MÁS ARRIBA, y aquí se
+       * había quedado sin arreglar: se cogía LA ÚLTIMA del catálogo dando por
+       * hecho que la última es la de «otros». Lo es en el catálogo de fábrica,
+       * y deja de serlo en cuanto la hermandad añade una partida suya, que es
+       * lo primero que hace cualquiera.
+       *
+       * Esta rama es la del archivo SIN columna de categorías —un extracto del
+       * banco, que no las trae— así que no cae en una fila suelta: se lleva el
+       * libro de caja ENTERO a la partida que la hermandad acabara de crear. Y
+       * sin ningún aviso, porque aquí tampoco lo había: el Estado de Cuentas
+       * salía cuadrado y con todo colgando de donde no era.
+       */
+      datos.categoria = categoriaDeOtros(cuales)
+      avisos.push(`el archivo no trae categorías, así que este apunte va a «${datos.categoria}»`)
     }
 
     const cuentaTexto = leer('cuenta')

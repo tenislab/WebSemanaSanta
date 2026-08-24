@@ -113,6 +113,21 @@ export interface TablaImportable<T extends { id: string; numero: number }> {
    * hecho.
    */
   avisosDelConjunto?: (filas: FilaDeTabla<T>[], ctx: ContextoDeTabla) => string[]
+  /**
+   * LO QUE EL ARCHIVO NO PUEDE DESHACER DE LO QUE YA ESTÁ GUARDADO.
+   *
+   * Hay un caso en que actualizar es peor que no importar: cuando el archivo
+   * viene de un programa que NO sabía si algo estaba cobrado y lo trae todo
+   * como pendiente. Ahí actualizar «al pie de la letra» borra el trabajo hecho
+   * en Gobergo, y en cuotas eso significa volver a cobrarle a un hermano un
+   * recibo que ya pagó.
+   *
+   * Se le da a cada tabla la oportunidad de proteger lo suyo: recibe lo que
+   * trae el archivo Y lo que ya hay, y devuelve lo que de verdad se va a
+   * escribir. `motivo` es una etiqueta corta para poder contarlos y decirlo una
+   * sola vez, en vez de soltar ochocientas líneas iguales.
+   */
+  alActualizar?: (datos: Partial<T>, existente: T) => { datos: Partial<T>; motivo?: string }
 }
 
 /* ---------------------------------------------------------------------------
@@ -293,6 +308,8 @@ export interface FilaDeTabla<T> {
   sub: string
   /** La fila tal cual venía, para poder devolvérsela a la hermandad corregible. */
   original: string[]
+  /** Qué se le ha respetado a lo ya guardado, si `alActualizar` protegió algo. */
+  protegido?: string
 }
 
 export interface EnsayoDeTabla<T> {
@@ -401,15 +418,29 @@ export function ensayarTabla<T extends { id: string; numero: number }>(
     const existente = leida.huella ? guardados.get(leida.huella) : undefined
     const queLePasa: QueLePasa = problemas.length > 0 ? 'error' : existente ? 'actualiza' : 'nuevo'
 
+    /*
+     * Lo que el archivo NO puede deshacer de lo que ya hay. Se resuelve AQUÍ,
+     * en el ensayo, y no al escribir: así la vista previa enseña exactamente
+     * lo que se va a guardar, que es de lo que se fía quien pulsa el botón.
+     */
+    let datos = leida.datos
+    let protegido: string | undefined
+    if (queLePasa === 'actualiza' && existente && tabla.alActualizar) {
+      const r = tabla.alActualizar(datos, existente)
+      datos = r.datos
+      protegido = r.motivo
+    }
+
     salida.push({
       linea,
       queLePasa,
       problemas,
-      datos: leida.datos,
+      datos,
       idExistente: existente?.id,
       titulo: leida.titulo,
       sub: leida.sub,
       original: fila,
+      protegido,
     })
   })
 

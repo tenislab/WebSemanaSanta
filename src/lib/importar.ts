@@ -1,6 +1,6 @@
 import { limpiarDni } from './dni'
 import {
-  anioDe, detectarSeparador, fechaIso, leerCsv, normalizarCabecera, pareceBinario,
+  anioDe, detectarSeparador, fechaIso, leerCsv, normalizarCabecera, pareceBinario, textoDelArchivo,
 } from './leerTabla'
 import { hojaQueCuadra, proponerColumnas, sinPreambulo, type SinPreambulo } from './importarTabla'
 import type { EstadoHermano, Hermano } from '../data/hermanos'
@@ -32,7 +32,7 @@ import type { EstadoHermano, Hermano } from '../data/hermanos'
  * libro de caja y para el inventario. Vive en `lib/leerTabla.ts`, y se
  * reexporta desde aquí para no romper a quien ya lo importaba de este módulo.
  */
-export { anioDe, detectarSeparador, fechaIso, leerCsv, pareceBinario }
+export { anioDe, detectarSeparador, fechaIso, leerCsv, pareceBinario, textoDelArchivo }
 const normalizar = normalizarCabecera
 
 /* ---------------------------------------------------------------------------
@@ -229,9 +229,23 @@ export function estadoDe(v: string, cabeceraNegativa = false): EstadoHermano | n
     // quien lo ha escrito así estaba diciendo la situación, no respondiendo.
   }
 
-  if (['baja', 'bajas', 'de baja', 'no activo', 'inactivo'].includes(t)) return 'Baja'
-  if (['nuevo', 'nueva', 'alta', 'pendiente'].includes(t)) return 'Nuevo'
-  if (['activo', 'activa', 'si', 'x', 'alta activa', 'ok'].includes(t)) return 'Activo'
+  /*
+   * LAS PALABRAS CON LAS QUE UNA HERMANDAD ESCRIBE «YA NO ESTÁ».
+   *
+   * Un censo llevado a mano durante veinte años no dice «Baja»: dice
+   * «Fallecido», «Difunto», «D.E.P.», «Baja voluntaria», «Se dio de baja». Y
+   * son muchas filas — en un censo viejo, entre el 20 y el 30 por ciento.
+   */
+  if ([
+    'baja', 'bajas', 'de baja', 'no activo', 'inactivo', 'no',
+    'fallecido', 'fallecida', 'difunto', 'difunta', 'dep', 'd e p', 'r i p', 'rip',
+    'baja voluntaria', 'se dio de baja', 'causo baja', 'expulsado', 'expulsada',
+  ].includes(t)) return 'Baja'
+  if (['nuevo', 'nueva', 'alta', 'pendiente', 'solicitante'].includes(t)) return 'Nuevo'
+  if ([
+    'activo', 'activa', 'si', 'x', 'alta activa', 'ok', 'true', 'verdadero', '1',
+    'al corriente', 'de alta', 'vigente', 'honorario', 'honoraria',
+  ].includes(t)) return 'Activo'
   return null
 }
 
@@ -364,12 +378,41 @@ export function ensayar(
 
     const antText = dato(fila, 'antiguedad')
     let antiguedad = anioDe(antText)
-    if (antText && antiguedad === null) problemas.push(`No se entiende el año «${antText}»`)
+    /*
+     * UN AÑO QUE NO SE ENTIENDE TAMPOCO TIRA LA FICHA, por lo mismo que la
+     * situación de aquí abajo: era `problemas.push`, o sea el hermano fuera
+     * del censo entero. Y esa columna es de las que peor vienen —«ingresó de
+     * niño», «años 80», una casilla con formato de Excel a medio deshacer—.
+     *
+     * Perder al hermano por no saber desde cuándo está es peor que apuntarlo
+     * con la antigüedad de este año y decirlo: sin ficha no tiene número, ni
+     * cuota, ni sitio en el cortejo. Y con el aviso delante, la secretaría
+     * puede corregir la antigüedad de esas pocas a mano, que es media tarde;
+     * volver a teclear la ficha entera, no.
+     */
+    if (antText && antiguedad === null) {
+      avisos.push(`Línea ${linea}: no se entiende el año «${antText}», se apunta con la antigüedad de ${anioEnCurso}`)
+    }
     if (antiguedad === null) antiguedad = anioEnCurso
 
     const estadoText = dato(fila, 'estado')
     let estado = estadoDe(estadoText, situacionAlReves)
-    if (estadoText && estado === null) problemas.push(`No se entiende la situación «${estadoText}»`)
+    /*
+     * UNA SITUACIÓN RARA NO TIRA LA FICHA. Antes esto era `problemas.push`, o
+     * sea la ficha ENTERA fuera del censo, y en un censo llevado a mano
+     * veinte años esa columna trae de todo: «Honorario», «Protector»,
+     * «Cumpliendo», abreviaturas que solo entiende quien las escribió.
+     *
+     * Perder al hermano por no saber cómo está es la peor de las dos
+     * salidas: sin ficha no tiene ni número, ni antigüedad, ni cuota — y su
+     * antigüedad es justo lo que no se puede reconstruir. Entra, y se dice en
+     * qué situación ha quedado para que se repase. Es lo mismo que ya hace el
+     * inventario con los estados de conservación que no reconoce.
+     */
+    if (estadoText && estado === null) {
+      estado = antiguedad >= anioEnCurso ? 'Nuevo' : 'Activo'
+      avisos.push(`Línea ${linea}: no se entiende la situación «${estadoText}», entra como «${estado}»`)
+    }
     if (estado === null) estado = antiguedad >= anioEnCurso ? 'Nuevo' : 'Activo'
 
     const existente = dni ? porDni.get(dni) : undefined

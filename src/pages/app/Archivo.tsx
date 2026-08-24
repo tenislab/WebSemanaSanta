@@ -622,7 +622,16 @@ export default function Archivo() {
           <div className="form-row">
             <label htmlFor="archivo">Archivo (PDF, imagen…)</label>
             <input id="archivo" name="archivo" type="file" accept=".pdf,image/*" />
-            <p className="form-hint">Opcional. Se guarda en este navegador; con la base de datos pasará a almacenamiento en la nube.</p>
+            {/* El aviso decía SIEMPRE «se guarda en este navegador», y con la
+                base de datos conectada eso es falso desde hace tiempo: el
+                adjunto sube al almacén de la hermandad (ver `lib/filestore.ts`)
+                y lo ve toda la junta. Decirle a la secretaria que el escaneo se
+                queda en su portátil es justo lo que hace que no lo suba. */}
+            <p className="form-hint">
+              {hayDatosDeEjemplo()
+                ? 'Opcional. Sin base de datos conectada se guarda solo en este navegador.'
+                : 'Opcional. Se guarda en el archivo de la hermandad, no en este ordenador.'}
+            </p>
           </div>
 
           <div className="assign-box">

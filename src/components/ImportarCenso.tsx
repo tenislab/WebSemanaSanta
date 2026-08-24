@@ -3,7 +3,7 @@ import Drawer from './Drawer'
 import { descargarArchivo } from '../lib/csv'
 import { nuevoId } from '../lib/supabaseSync'
 import {
-  CAMPOS_IMPORTABLES, aplicar, censoSinPreambulo, csvDeErrores, ensayar, hojaDelCenso, leerCsv, pareceBinario,
+  CAMPOS_IMPORTABLES, aplicar, censoSinPreambulo, csvDeErrores, ensayar, hojaDelCenso, leerCsv, pareceBinario, textoDelArchivo,
   proponerEmparejado, type CampoImportable, type Ensayo,
 } from '../lib/importar'
 import { ExcelIlegible, leerLibro, pareceXlsx, type Hoja } from '../lib/leerExcel'
@@ -147,7 +147,7 @@ export default function ImportarCenso({
       return
     }
 
-    const texto = new TextDecoder('utf-8').decode(bytes)
+    const texto = textoDelArchivo(bytes)
     if (pareceBinario(texto)) {
       setErrorArchivo(
         'Este archivo no es texto ni una hoja de Excel moderna. Si es un .xls de los antiguos, '

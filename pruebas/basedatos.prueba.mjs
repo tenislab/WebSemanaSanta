@@ -1764,6 +1764,67 @@ async function cadaCargoEnLoSuyo({ sql, caso }) {
   `)
   caso('ni quitarle la restricción', true, /(^|\s)0(\s|$)/m.test(loLibera))
 
+  /*
+   * Y EL PDF, QUE ES LO QUE DE VERDAD NO PUEDE SALIR.
+   *
+   * Todo lo de arriba tapa LA FICHA. El expediente no es la ficha: es el PDF
+   * escaneado que cuelga de ella, y ese vivía en el almacén con otra política
+   * que solo separaba una hermandad de otra. Dentro de la hermandad no
+   * distinguía: la Secretaria no veía la fila del expediente y aun así se
+   * descargaba su PDF.
+   *
+   * Y era fácil, no había que adivinar nada: el fichero se llama como el id
+   * del documento, así que listando la carpeta —la misma llamada que hace
+   * `lib/filestore.ts`— salía la lista entera y se bajaba uno por uno.
+   *
+   * Se comprueba con el almacén de verdad, porque es donde estaba el agujero:
+   * mirar solo la tabla `documentos` es justo lo que dejó pasar esto.
+   */
+  const idDe = async (numero) => (await sql(
+    `select id from documentos where hermandad_id = ${HD} and numero = ${numero}`,
+  )).split('\n').map((l) => l.trim()).find((l) => /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(l)) ?? ''
+  const idReservado = await idDe(9702)   // solo Hermano Mayor
+  const idInstitucional = await idDe(9703) // sin restringir
+  await sql(`
+    insert into storage.objects (bucket_id, name) values
+      ('documentos', ${HD} || '/' || '${idReservado}'),
+      ('documentos', ${HD} || '/' || '${idInstitucional}');
+  `)
+  const alcanza = async (i, id) => (await comoCargo(i,
+    `select count(*) from storage.objects where name like '%${id}';`,
+  )).split('\n').map((l) => l.trim()).filter((l) => /^\d+$/.test(l)).pop() ?? ''
+
+  caso('el Hermano Mayor sí se descarga el PDF de su informe reservado', '1',
+    await alcanza(0, idReservado))
+  caso('pero la Secretaria NO se descarga ese PDF', '0', await alcanza(1, idReservado))
+  // Y no se ha cerrado de más: el documento institucional lo sigue abriendo.
+  caso('y el PDF institucional lo abre igual', '1', await alcanza(1, idInstitucional))
+  // Listar la carpeta es de donde salían los identificadores.
+  const alListar = async (i) => (await comoCargo(i,
+    `select count(*) from storage.objects where bucket_id = 'documentos';`,
+  )).split('\n').map((l) => l.trim()).filter((l) => /^\d+$/.test(l)).pop() ?? ''
+  caso('al listar la carpeta, el Hermano Mayor ve los dos ficheros', '2', await alListar(0))
+  caso('y la Secretaria solo el que puede abrir', '1', await alListar(1))
+
+  /*
+   * Y SUBIR UN ADJUNTO TIENE QUE SEGUIR FUNCIONANDO. El fichero se sube ANTES
+   * de crear la ficha (así lo hace `Archivo.tsx`), así que en ese momento no
+   * hay ficha que consultar: si la comprobación se hubiera puesto también al
+   * escribir, no se podría adjuntar nada. Esta es la mitad que un arreglo
+   * apresurado rompe sin enterarse.
+   */
+  const sube = async (i, carpeta) => {
+    try {
+      await comoCargo(i,
+        `insert into storage.objects (bucket_id, name) values ('documentos', '${carpeta}' || '/' || gen_random_uuid()::text);`)
+      return 'sí'
+    } catch { return 'no' }
+  }
+  caso('la Secretaria puede subir un adjunto nuevo', 'sí', await sube(1, HD.slice(1, -1)))
+  caso('y no puede colarlo en la carpeta de otra hermandad', 'no',
+    await sube(1, '99999999-9999-9999-9999-999999999999'))
+  await sql(`delete from storage.objects where bucket_id = 'documentos';`)
+
   let borrada = ''
   try {
     await sql(`delete from hermandades where id = ${HD};`)

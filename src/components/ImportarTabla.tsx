@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Drawer from './Drawer'
 import { descargarArchivo } from '../lib/csv'
 import { nuevoId } from '../lib/supabaseSync'
-import { leerCsv, pareceBinario } from '../lib/leerTabla'
+import { leerCsv, pareceBinario, textoDelArchivo } from '../lib/leerTabla'
 import {
   aplicarTabla, csvDeProblemas, ensayarTabla, faltanColumnas, hojaQueCuadra, proponerColumnas, sinPreambulo,
   type ContextoDeTabla, type Emparejado, type EnsayoDeTabla, type TablaImportable,
@@ -168,7 +168,7 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
       return
     }
 
-    const texto = new TextDecoder('utf-8').decode(bytes)
+    const texto = textoDelArchivo(bytes)
     if (pareceBinario(texto)) {
       setErrorArchivo(
         'Este archivo no es texto ni una hoja de Excel moderna. Si es un .xls de los antiguos, '

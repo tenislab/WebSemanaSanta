@@ -44,6 +44,8 @@ export default async function ({ cargar, caso }) {
   let n = 0
   const idFalso = () => `nuevo-${(n += 1)}`
 
+  await unRecibopagadoNoSeDespaga({ motor, tablas, ensayar, idFalso, caso })
+
   /* =========================================================================
      1. Historial de cuotas
      ========================================================================= */
@@ -214,7 +216,20 @@ export default async function ({ cargar, caso }) {
       ['DNI', 'Importe', 'Año', 'Estado', 'Forma de pago'],
       ['11111111A', '60', '2022', 'Pendiente', 'Domiciliación'],
     ])
-    caso('avisa de que saldrá en la remesa', true, ensayo.avisos.some((a) => a.includes('remesa al banco')))
+    caso('avisa de que queda pendiente de cobro', true,
+      ensayo.avisos.some((a) => a.includes('pendiente y domiciliado')))
+    /*
+     * Y DICE LA VERDAD SOBRE CUÁNDO SALE. El aviso prometía «saldrán en la
+     * próxima remesa al banco», y desde que el mandato SEPA se firma de verdad
+     * (`lib/mandatosSepa.ts`) eso ya no es cierto: sin firma vigente no entran.
+     *
+     * Prometerlo mal tiene una consecuencia fea, y no es que el texto quede
+     * feo: el tesorero abre la remesa, no ve estos recibos, da el aviso por
+     * ruido — y meses después, cuando los hermanos han ido firmando, le salen
+     * todos de golpe en una sola remesa.
+     */
+    caso('y dice que hace falta la firma del hermano antes', true,
+      ensayo.avisos.some((a) => /firmado su domiciliación/.test(a)))
   }
 
   /* =========================================================================
@@ -614,4 +629,73 @@ async function laCabeceraNoEsLaPrimeraFila({ cargar, caso }) {
   ]
   caso('gana la pestaña de las cuotas aunque lleve título', 1, m.hojaQueCuadra(hojas, CAMPOS))
   caso('y el censo sigue eligiendo la suya', 0, censo.hojaDelCenso(hojas))
+}
+
+/**
+ * UN RECIBO YA COBRADO NO SE «DES-PAGA» AL REIMPORTAR.
+ *
+ * Es el fallo que costaba dinero de verdad, y el camino para llegar a él es el
+ * NORMAL al migrar, no uno rebuscado:
+ *
+ *   1. La hermandad importa su histórico de cuotas del programa de antes.
+ *   2. El tesorero va marcando pagados los recibos según cuadra el banco.
+ *   3. Semanas después vuelve a subir la misma exportación —o una más
+ *      completa— para «terminar de traer el histórico».
+ *
+ * Y el programa de antes casi nunca sabe qué se cobró: esa información estaba
+ * en el extracto, no en su base, así que su exportación lo trae TODO como
+ * «Pendiente». La vista previa decía tranquilamente «ya está · se actualiza» y
+ * cada recibo marcado pagado volvía a pendiente. Domiciliados y pendientes,
+ * entraban en la siguiente remesa: a todos los hermanos se les cobraba otra
+ * vez algo que ya habían pagado.
+ *
+ * Se descubre cuando llegan los cargos al banco, con ocho semanas de
+ * devoluciones y una comisión por cada una.
+ */
+async function unRecibopagadoNoSeDespaga({ motor, tablas, ensayar, idFalso, caso }) {
+  const CUOTAS = tablas.TABLA_CUOTAS
+  // Lo que YA hay en Gobergo: el tesorero lo marcó pagado al cuadrar el banco.
+  const yaPagado = {
+    id: 'c1', numero: 412, hermanoId: 'h1', concepto: 'Cuota anual', importe: 60,
+    estado: 'Pagada', ejercicio: 2025, fechaEmision: '01 ene 2025', fechaCobro: '01 ene 2025',
+    domiciliada: true, fechaPago: '05 feb 2025', metodoCobro: 'Domiciliación',
+  }
+  const { ensayo } = ensayar(CUOTAS, [
+    ['DNI', 'Importe', 'Ejercicio', 'Concepto', 'Estado'],
+    ['11111111A', '60', '2025', 'Cuota anual', 'Pendiente'],
+  ], [yaPagado])
+
+  caso('el archivo reconoce el recibo que ya estaba', 'actualiza', ensayo.filas[0].queLePasa)
+
+  const { lista } = motor.aplicarTabla(
+    ensayo, [yaPagado], CUOTAS, { conLosQueYaEstan: 'actualizar' }, idFalso,
+  )
+  const r = lista[0]
+  caso('el recibo pagado SIGUE pagado después de reimportar', 'Pagada', r.estado)
+  // Y lo que colgaba del cobro se queda con él: dejar «Pagada» pero borrarle la
+  // fecha de pago sería peor que las dos cosas por separado.
+  caso('y conserva su fecha de pago', '05 feb 2025', r.fechaPago)
+  caso('y su forma de cobro', 'Domiciliación', r.metodoCobro)
+  // Lo que de verdad importa: que no se le vuelva a cobrar.
+  caso('así que NO vuelve a entrar en la remesa', false,
+    r.estado === 'Pendiente' && r.domiciliada === true)
+
+  // Y no se hace a la callada: se dice cuántos se han respetado.
+  caso('se avisa de los que se han respetado', true,
+    ensayo.avisos.some((a) => /ya constaba pagado|ya constaban pagados/.test(a)))
+
+  /*
+   * LO QUE NO SE PUEDE HABER ROTO ARREGLANDO ESTO. Un recibo que estaba
+   * PENDIENTE y el archivo trae PAGADO sí tiene que actualizarse: es
+   * justamente para lo que se reimporta, para traer los cobros que faltaban.
+   */
+  const pendiente = { ...yaPagado, id: 'c2', estado: 'Pendiente', fechaPago: undefined }
+  const segundo = ensayar(CUOTAS, [
+    ['DNI', 'Importe', 'Ejercicio', 'Concepto', 'Estado'],
+    ['11111111A', '60', '2025', 'Cuota anual', 'Pagada'],
+  ], [pendiente])
+  const tras = motor.aplicarTabla(
+    segundo.ensayo, [pendiente], CUOTAS, { conLosQueYaEstan: 'actualizar' }, idFalso,
+  ).lista[0]
+  caso('y al revés SÍ se actualiza: pendiente que el archivo trae pagado', 'Pagada', tras.estado)
 }
