@@ -69,4 +69,67 @@ export default async function ({ cargar, caso }) {
 
   caso('el nombre del archivo sale del enlace', 'solemne-quinario.ics', m.nombreDeArchivoIcs('solemne-quinario'))
   caso('y sin enlace no queda sin nombre', 'culto.ics', m.nombreDeArchivoIcs(''))
+
+  await _lineasQueCabenEnUnaLinea({ cargar, caso })
+}
+
+/**
+ * EL LARGO DE CADA LÍNEA, que el formato mide en BYTES.
+ *
+ * RFC 5545 manda que ninguna línea pase de 75 octetos y que las largas se
+ * partan con la continuación empezada por un espacio. Una descripción de un
+ * culto se pasa siempre —«Solemne Quinario en honor de Nuestro Padre Jesús…»—
+ * y aquí no se partía ninguna.
+ *
+ * Los calendarios de móvil suelen tragarlas, pero no todos: los hay que se
+ * quedan con lo que cabe y cortan la frase a media palabra en la agenda de
+ * quien guardó el culto, sin dar ningún error.
+ */
+export async function _lineasQueCabenEnUnaLinea({ cargar, caso }) {
+  const m = await cargar('src/lib/ics.ts')
+  const bytes = (t) => new TextEncoder().encode(t).length
+
+  const largo = 'Solemne Quinario en honor y gloria de Nuestro Padre Jesús de la Salud y María '
+    + 'Santísima de las Angustias Coronada, predicado por el Rvdo. Padre Don José María '
+    + 'Fernández Núñez, con exposición del Santísimo y bendición solemne.'
+  const ics = m.icsDeUnActo({
+    id: 'q1', titulo: largo, fechaIso: '2027-03-15', hora: '20:30',
+    lugar: 'Parroquia de San Juan Bautista, plaza Mayor número 14, bajo el arco',
+    descripcion: largo, url: 'https://ejemplo.gobergo.com/w/hermandad/c/solemne-quinario-2027',
+  })
+
+  const lineas = ics.split('\r\n').filter((l) => l !== '')
+  caso('ninguna línea pasa de 75 bytes', '', lineas.filter((l) => bytes(l) > 75).map((l) => bytes(l)).join(', '))
+  // Y las continuaciones se reconocen por el espacio de delante.
+  caso('las partidas siguen con un espacio', true, lineas.some((l) => l.startsWith(' ')))
+
+  /*
+   * Y AL VOLVER A JUNTARLAS TIENE QUE SALIR LO MISMO. Plegar mal —perdiendo un
+   * carácter o metiendo uno de más— no da error en ninguna parte: el título
+   * simplemente aparece mal escrito en el calendario de quien lo guardó.
+   */
+  const desplegado = ics.replace(/\r\n /g, '')
+  // Con la coma escapada, que es como va dentro del campo.
+  const escapado = largo.replace(/,/g, '\\,')
+  caso('el título entero sigue ahí', true, desplegado.includes(`SUMMARY:${escapado}`))
+  caso('y el lugar también, con su coma escapada', true,
+    desplegado.includes('LOCATION:Parroquia de San Juan Bautista\\, plaza Mayor'))
+
+  /*
+   * Con tildes y eñes, que es lo que hay en español: contando LETRAS en vez de
+   * bytes, una línea de 75 letras con tildes se pasa del límite igualmente. Y
+   * partir por la mitad de una «ñ» deja medio carácter, que ya no es ninguna
+   * letra y hace que el calendario rechace el archivo.
+   */
+  const conEnies = 'ñ'.repeat(120)
+  const ics2 = m.icsDeUnActo({ id: 'q2', titulo: conEnies, fechaIso: '2027-03-15', hora: '20:30' })
+  const l2 = ics2.split('\r\n').filter((l) => l !== '')
+  caso('con eñes tampoco se pasa ninguna', '', l2.filter((l) => bytes(l) > 75).map((l) => bytes(l)).join(', '))
+  caso('y no se parte ninguna eñe por la mitad', false, /\ufffd/.test(ics2))
+  caso('las 120 eñes siguen enteras', true, ics2.replace(/\r\n /g, '').includes(`SUMMARY:${conEnies}`))
+
+  // Un acto corriente no se toca: nada que plegar, nada que se note.
+  const corto = m.icsDeUnActo({ id: 'q3', titulo: 'Misa de hermandad', fechaIso: '2027-03-15', hora: '20:30' })
+  caso('un acto corto no se pliega', false, corto.split('\r\n').some((l) => l.startsWith(' ')))
+  caso('y sigue teniendo su título de una pieza', true, corto.includes('SUMMARY:Misa de hermandad\r\n'))
 }

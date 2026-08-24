@@ -113,14 +113,11 @@ Gobergo, o la web de la hermandad que tenga puesto ese dominio. Diciéndole cuá
 es el tuyo, se salta la consulta. Sin ponerla funciona igual, solo que
 preguntando a la base de datos en cada visita a la portada.
 
-```
-VITE_SIN_MODO_LOCAL=1
-```
-
-Sin ella, si Supabase deja de responder la aplicación sigue funcionando con
-los datos del navegador. Eso está bien mientras se monta y es un problema con
-hermandades de verdad: la secretaría trabajaría contra un censo que no es el
-suyo. Con la variable puesta, se cae con su error y se vuelve en un rato.
+El modo local de reserva ya viene **apagado de fábrica**: si Supabase deja de
+responder, la aplicación enseña su error en vez de seguir con los datos del
+navegador. No hay que poner nada. (Antes había que acordarse de
+`VITE_SIN_MODO_LOCAL=1`; ahora es al revés, y `VITE_MODO_LOCAL=1` solo se usa
+para desarrollar sin base de datos.)
 
 > Después de añadirla, **Redeploy**. Vercel no aplica las variables a lo que ya
 > está construido.

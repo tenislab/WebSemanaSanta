@@ -37,6 +37,12 @@ export interface Hermano {
   /** Id de su cuenta real de Supabase Auth, una vez creada (null en modo demostración o hasta que se cree). */
   authUserId: string | null
   /**
+   * Cómo se llama su cuenta POR DENTRO: hermandad + DNI. No es su correo —ese
+   * es `email` y sirve para los avisos—. Nulo en las fichas de antes de este
+   * cambio, que siguen entrando con su correo de siempre.
+   */
+  correoAcceso?: string | null
+  /**
    * El cargo que lleva en la junta, si lleva alguno. Vacío = hermano de a pie.
    *
    * VA AQUÍ, EN SU FICHA, Y NO EN UNA SEGUNDA CUENTA. En una hermandad nadie
@@ -154,6 +160,28 @@ const NOMBRES_DEMO = [
   'Laura Campos Bueno', 'Diego Santos Robles', 'Ángela Herrero Gil', 'Raúl Montes Vega',
   'Patricia León Casas', 'Emilio Nieto Bravo', 'Silvia Ortega Peña',
 ]
+/**
+ * Un IBAN de ejemplo con sus dígitos de control BIEN CALCULADOS.
+ *
+ * Antes se inventaban («ES70», «ES71»…) y ninguno era un IBAN de verdad. Daba
+ * igual mientras nadie los comprobara; desde que la remesa comprueba el IBAN
+ * —porque un IBAN malo hace que el banco rechace el fichero entero— esos
+ * hermanos de ejemplo salían todos como «su IBAN no vale», y la demostración
+ * enseñaba un fallo que no existe.
+ *
+ * La cuenta sigue siendo inventada. Lo único de verdad son las dos cifras que
+ * la convierten en un IBAN bien formado.
+ */
+function ibanDeEjemplo(bban: string): string {
+  let resto = 0
+  for (const c of `${bban}ES00`) {
+    const n = c >= 'A' && c <= 'Z' ? String(c.charCodeAt(0) - 55) : c
+    for (const d of n) resto = (resto * 10 + Number(d)) % 97
+  }
+  const control = String(98 - resto).padStart(2, '0')
+  return `ES${control} ${bban.slice(0, 4)} ${bban.slice(4, 8)} ${bban.slice(8, 10)} ${bban.slice(10)}`
+}
+
 const LETRAS_DNI = 'TRWAGMYFPDXBNJZSQVHLCKE'
 
 function generarHermanosDemo(): Hermano[] {
@@ -178,7 +206,8 @@ function generarHermanosDemo(): Hermano[] {
       telefono: `6${String(10000000 + i * 91).slice(0, 8)}`,
       direccion: `C/ Ejemplo, ${10 + i}`,
       cuotaAlDia: i % 3 !== 0,
-      iban: i % 5 === 0 ? null : `ES${String(70 + (i % 29)).padStart(2, '0')} 2100 ${String(1000 + i).padStart(4, '0')} ${String(20 + i).padStart(2, '0')} ${String(10000000 + i * 131).slice(0, 8)}`,
+      // 4 + 4 + 2 + 10 = las veinte cifras que lleva una cuenta española.
+      iban: i % 5 === 0 ? null : ibanDeEjemplo(`2100${String(1000 + i).padStart(4, '0')}${String(20 + i).padStart(2, '0')}${String(1000000000 + i * 131).slice(0, 10)}`),
       dni: `${dniNum}${LETRAS_DNI[dniNum % 23]}`,
       claveAcceso: CLAVE_DEMO_HERMANOS,
       authUserId: null,
@@ -187,21 +216,21 @@ function generarHermanosDemo(): Hermano[] {
 }
 
 export const HERMANOS_INICIALES: Hermano[] = [
-  { id: 'h1', numero: 89, nombre: 'Ana Sánchez del Río', estado: 'Activo', antiguedad: 1991, fechaNacimiento: '1960-06-09', email: 'ana.sanchez@example.com', telefono: '622 104 558', direccion: 'C/ Alfarería, 12', cuotaAlDia: true, iban: 'ES47 2100 0813 6102 0012 3456', dni: '12345678A', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h2', numero: 214, nombre: 'María Reyes Ortega', estado: 'Activo', antiguedad: 1998, fechaNacimiento: '1972-11-26', email: 'maria.reyes@example.com', telefono: '655 302 119', direccion: 'C/ Feria, 44', cuotaAlDia: true, iban: 'ES12 0049 1500 0512 3456 7892', dni: '23456789B', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h3', numero: 340, nombre: 'Juan Luis Cabrera', estado: 'Activo', antiguedad: 2004, fechaNacimiento: '1982-05-17', email: 'juanluis.cabrera@example.com', telefono: '611 887 220', direccion: 'Avda. de la Palmera, 8', cuotaAlDia: false, iban: 'ES60 0182 0304 4102 0158 9001', dni: '34567890C', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h4', numero: 501, nombre: 'Francisco Gómez Nieto', estado: 'Activo', antiguedad: 2012, fechaNacimiento: '1985-10-16', email: 'fran.gomez@example.com', telefono: '699 445 011', direccion: 'C/ Betis, 21', cuotaAlDia: false, iban: 'ES03 2038 5788 6360 0056 8237', dni: '45678901D', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null, etiquetas: ['Diputado de tramo'] },
+  { id: 'h1', numero: 89, nombre: 'Ana Sánchez del Río', estado: 'Activo', antiguedad: 1991, fechaNacimiento: '1960-06-09', email: 'ana.sanchez@example.com', telefono: '622 104 558', direccion: 'C/ Alfarería, 12', cuotaAlDia: true, iban: 'ES52 2100 0813 6102 0012 3456', dni: '12345678A', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h2', numero: 214, nombre: 'María Reyes Ortega', estado: 'Activo', antiguedad: 1998, fechaNacimiento: '1972-11-26', email: 'maria.reyes@example.com', telefono: '655 302 119', direccion: 'C/ Feria, 44', cuotaAlDia: true, iban: 'ES60 0049 1500 0512 3456 7892', dni: '23456789B', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h3', numero: 340, nombre: 'Juan Luis Cabrera', estado: 'Activo', antiguedad: 2004, fechaNacimiento: '1982-05-17', email: 'juanluis.cabrera@example.com', telefono: '611 887 220', direccion: 'Avda. de la Palmera, 8', cuotaAlDia: false, iban: 'ES45 0182 0304 4102 0158 9001', dni: '34567890C', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h4', numero: 501, nombre: 'Francisco Gómez Nieto', estado: 'Activo', antiguedad: 2012, fechaNacimiento: '1985-10-16', email: 'fran.gomez@example.com', telefono: '699 445 011', direccion: 'C/ Betis, 21', cuotaAlDia: false, iban: 'ES81 2038 5788 6360 0056 8237', dni: '45678901D', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null, etiquetas: ['Diputado de tramo'] },
   { id: 'h5', numero: 612, nombre: 'Carmen Pérez Luna', estado: 'Activo', antiguedad: 2016, fechaNacimiento: '1982-01-19', email: 'carmen.perez@example.com', telefono: '633 210 774', direccion: 'C/ Sierpes, 3', cuotaAlDia: true, iban: 'ES91 2100 0418 4502 0005 1332', dni: '56789012E', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   { id: 'h6', numero: 0, nombre: 'Antonio Vega Morales', estado: 'Baja', antiguedad: 1985, fechaNacimiento: '1965-01-01', email: 'antonio.vega@example.com', telefono: '600 112 334', direccion: 'C/ San Jacinto, 15', cuotaAlDia: false, iban: null, dni: '67890123F', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   { id: 'h7', numero: 733, nombre: 'Isabel Ramírez Cortés', estado: 'Nuevo', antiguedad: 2026, fechaNacimiento: '2001-02-05', email: 'isabel.ramirez@example.com', telefono: '644 908 213', direccion: 'C/ Pureza, 30', cuotaAlDia: true, iban: null, dni: '78901234G', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h8', numero: 178, nombre: 'Manuel Jiménez Ruiz', estado: 'Activo', antiguedad: 1996, fechaNacimiento: '1954-11-17', email: 'manuel.jimenez@example.com', telefono: '677 554 902', direccion: 'C/ Castilla, 61', cuotaAlDia: true, iban: 'ES71 0075 1234 5606 0012 3457', dni: '89012345H', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h9', numero: 425, nombre: 'Lucía Fernández Soto', estado: 'Activo', antiguedad: 2007, fechaNacimiento: '1978-06-21', email: 'lucia.fernandez@example.com', telefono: '688 337 145', direccion: 'C/ Rodrigo de Triana, 9', cuotaAlDia: true, iban: 'ES27 2085 8720 2103 0012 3458', dni: '90123456J', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h10', numero: 690, nombre: 'Pedro Molina Aguilar', estado: 'Activo', antiguedad: 2014, fechaNacimiento: '1980-07-16', email: 'pedro.molina@example.com', telefono: '612 776 480', direccion: 'C/ Evangelista, 18', cuotaAlDia: false, iban: 'ES38 2038 6109 9930 0012 3459', dni: '01234567K', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h8', numero: 178, nombre: 'Manuel Jiménez Ruiz', estado: 'Activo', antiguedad: 1996, fechaNacimiento: '1954-11-17', email: 'manuel.jimenez@example.com', telefono: '677 554 902', direccion: 'C/ Castilla, 61', cuotaAlDia: true, iban: 'ES87 0075 1234 5606 0012 3457', dni: '89012345H', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h9', numero: 425, nombre: 'Lucía Fernández Soto', estado: 'Activo', antiguedad: 2007, fechaNacimiento: '1978-06-21', email: 'lucia.fernandez@example.com', telefono: '688 337 145', direccion: 'C/ Rodrigo de Triana, 9', cuotaAlDia: true, iban: 'ES96 2085 8720 2103 0012 3458', dni: '90123456J', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h10', numero: 690, nombre: 'Pedro Molina Aguilar', estado: 'Activo', antiguedad: 2014, fechaNacimiento: '1980-07-16', email: 'pedro.molina@example.com', telefono: '612 776 480', direccion: 'C/ Evangelista, 18', cuotaAlDia: false, iban: 'ES85 2038 6109 9930 0012 3459', dni: '01234567K', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   { id: 'h11', numero: 731, nombre: 'Rocío Domínguez Vargas', estado: 'Nuevo', antiguedad: 2026, fechaNacimiento: '2003-12-03', email: 'rocio.dominguez@example.com', telefono: '691 220 667', direccion: 'C/ Pagés del Corro, 55', cuotaAlDia: true, iban: null, dni: '11223344L', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h12', numero: 302, nombre: 'José Antonio Reina', estado: 'Activo', antiguedad: 2001, fechaNacimiento: '1965-03-06', email: 'joseantonio.reina@example.com', telefono: '666 803 512', direccion: 'C/ Dos de Mayo, 7', cuotaAlDia: true, iban: 'ES55 0081 0345 6100 0123 4560', dni: '22334455M', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h13', numero: 45, nombre: 'Rafael Ortiz Bermejo', estado: 'Activo', antiguedad: 1988, fechaNacimiento: '1949-10-19', email: 'rafael.ortiz@example.com', telefono: '655 019 442', direccion: 'C/ Águilas, 6', cuotaAlDia: true, iban: 'ES19 0128 0257 3801 0012 3461', dni: '33445566N', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h12', numero: 302, nombre: 'José Antonio Reina', estado: 'Activo', antiguedad: 2001, fechaNacimiento: '1965-03-06', email: 'joseantonio.reina@example.com', telefono: '666 803 512', direccion: 'C/ Dos de Mayo, 7', cuotaAlDia: true, iban: 'ES02 0081 0345 6100 0123 4560', dni: '22334455M', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h13', numero: 45, nombre: 'Rafael Ortiz Bermejo', estado: 'Activo', antiguedad: 1988, fechaNacimiento: '1949-10-19', email: 'rafael.ortiz@example.com', telefono: '655 019 442', direccion: 'C/ Águilas, 6', cuotaAlDia: true, iban: 'ES76 0128 0257 3801 0012 3461', dni: '33445566N', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   { id: 'h14', numero: 610, nombre: 'Diego Fernández Ríos', estado: 'Activo', antiguedad: 2020, fechaNacimiento: '1988-11-17', email: 'diego.fernandez@example.com', telefono: '622 887 015', direccion: 'C/ Bailén, 14', cuotaAlDia: true, iban: null, dni: '44556677P', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
-  { id: 'h15', numero: 520, nombre: 'Beatriz Muñoz Casas', estado: 'Activo', antiguedad: 2021, fechaNacimiento: '2001-05-08', email: 'beatriz.munoz@example.com', telefono: '611 340 928', direccion: 'C/ Pureza, 55', cuotaAlDia: false, iban: 'ES40 2100 5731 1502 0012 3462', dni: '55667788Q', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
+  { id: 'h15', numero: 520, nombre: 'Beatriz Muñoz Casas', estado: 'Activo', antiguedad: 2021, fechaNacimiento: '2001-05-08', email: 'beatriz.munoz@example.com', telefono: '611 340 928', direccion: 'C/ Pureza, 55', cuotaAlDia: false, iban: 'ES85 2100 5731 1502 0012 3462', dni: '55667788Q', claveAcceso: CLAVE_DEMO_HERMANOS, authUserId: null },
   ...generarHermanosDemo(),
 ]
 

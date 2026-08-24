@@ -27,10 +27,11 @@ import {
   precioDeTramo,
   type Tramo,
 } from '../../lib/tramos'
-import { repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../../lib/cortejo'
+import { puedeSalirEnElCortejo, repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../../lib/cortejo'
 import {
   getCampana,
   saveCampana,
+  cargarCampanaDeLaBase,
   ventanaAbierta,
   diasHasta,
   renovacionDeHermano,
@@ -135,6 +136,16 @@ export default function Papeletas() {
     rowToPapeleta,
   )
   const [campana, setCampanaState] = useState<Campana>(() => getCampana())
+  /*
+   * La campaña de LA HERMANDAD, no la de este navegador.
+   *
+   * Vivía solo aquí, así que la secretaría abría la de 2026 en su ordenador y
+   * el hermano, desde el móvil, seguía viendo la de fábrica. Se trae al montar
+   * y se vuelve a leer, igual que se hace con el modelo de papeleta.
+   */
+  useEffect(() => {
+    void cargarCampanaDeLaBase().then(() => setCampanaState(getCampana()))
+  }, [])
   const [query, setQuery] = useState('')
   /* La letra se pinta antes que la tabla: ver el comentario en Hermanos.tsx. */
   const busqueda = useDeferredValue(query)
@@ -304,6 +315,7 @@ export default function Papeletas() {
    * vías cobraran distinto.
    */
   function renovar(hermanoId: string, tramoId: string) {
+    if (!saleEnElCortejo(hermanoId)) return
     setPapeletas((prev) =>
       conRenovacion(prev, {
         hermanoId,
@@ -346,7 +358,21 @@ export default function Papeletas() {
    * tenía una papeleta este año (una renuncia o una solicitud sin tramo), la
    * reutiliza; si no, crea una nueva.
    */
+  /**
+   * ¿Se le puede emitir papeleta a esta persona?
+   *
+   * Lo que esconde una pantalla no protege nada: entre que se pinta la fila y
+   * se pulsa el botón, una ficha puede haber pasado a baja desde otro
+   * ordenador. Y hay tres caminos que emiten —renovar, sacar en tramo y la
+   * simbólica—, así que la comprobación va donde se emite, no solo donde se
+   * pinta.
+   */
+  function saleEnElCortejo(hermanoId: string): boolean {
+    return puedeSalirEnElCortejo(hermanos.find((h) => h.id === hermanoId))
+  }
+
   function sacarEnTramo(hermanoId: string, tramoId: string) {
+    if (!saleEnElCortejo(hermanoId)) return
     const importe = precioDeTramo(tramos.find((t) => t.id === tramoId), precioBase)
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
@@ -386,6 +412,7 @@ export default function Papeletas() {
   const NOMBRE_SIMBOLICA = 'Papeleta simbólica'
 
   function sacarSimbolica(hermanoId: string) {
+    if (!saleEnElCortejo(hermanoId)) return
     const importe = hermandad.precioSimbolica
     setPapeletas((prev) => {
       const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
@@ -1001,7 +1028,19 @@ export default function Papeletas() {
             )
             const deuda = deudaDe(h.id)
             const bloqueadoPorDeuda = ajustes.bloquearPapeletaConDeuda && deuda > 0
-            const puedeSacar = (r.estado === 'Sin papeleta' || r.estado === 'No renovada') && !bloqueadoPorDeuda
+            /*
+             * Y QUIEN NO SALE EN EL CORTEJO, TAMPOCO SACA PAPELETA.
+             *
+             * La lista de esta pantalla es el CENSO ENTERO: salen también las
+             * bajas y los hermanos civiles, cada uno con su botón de «Sacar
+             * papeleta». Y el reparto descarta a esos dos grupos, así que la
+             * papeleta se emitía, se cobraba su importe, y el día del cortejo
+             * no aparecía en ningún tramo ni en el orden impreso. Ni un error
+             * ni un aviso: simplemente no estaba.
+             */
+            const fueraDelCortejo = !puedeSalirEnElCortejo(h)
+            const puedeSacar =
+              (r.estado === 'Sin papeleta' || r.estado === 'No renovada') && !bloqueadoPorDeuda && !fueraDelCortejo
             return (
               <div className="ficha">
                 <div className="ficha__row">
@@ -1022,7 +1061,16 @@ export default function Papeletas() {
                 )}
 
                 {/* Por renovar: renovar o renunciar */}
-                {r.estado === 'Por renovar' && !bloqueadoPorDeuda && r.sitioAnterior && tramoAnterior && (
+                {/* Quien está de baja o es civil no renueva sitio: ver `fueraDelCortejo`. */}
+                {fueraDelCortejo && (
+                  <div className="form-hint">
+                    {h.civil
+                      ? `${h.nombre.split(' ')[0]} está en el censo como hermano/a civil: no hace estación de penitencia, así que no se le emite papeleta de sitio.`
+                      : `${h.nombre.split(' ')[0]} está de baja en la hermandad: no se le emite papeleta de sitio.`}
+                  </div>
+                )}
+
+                {r.estado === 'Por renovar' && !bloqueadoPorDeuda && !fueraDelCortejo && r.sitioAnterior && tramoAnterior && (
                   <div className="assign-box">
                     <label>Renovación del sitio del año anterior</label>
                     <p className="form-hint">

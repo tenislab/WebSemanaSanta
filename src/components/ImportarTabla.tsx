@@ -1,13 +1,13 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Drawer from './Drawer'
 import { descargarArchivo } from '../lib/csv'
 import { nuevoId } from '../lib/supabaseSync'
 import { leerCsv, pareceBinario } from '../lib/leerTabla'
 import {
-  aplicarTabla, csvDeProblemas, ensayarTabla, faltanColumnas, proponerColumnas,
+  aplicarTabla, csvDeProblemas, ensayarTabla, faltanColumnas, hojaQueCuadra, proponerColumnas, sinPreambulo,
   type ContextoDeTabla, type Emparejado, type EnsayoDeTabla, type TablaImportable,
 } from '../lib/importarTabla'
-import { ExcelIlegible, leerXlsx, pareceXlsx } from '../lib/leerExcel'
+import { ExcelIlegible, leerLibro, pareceXlsx, type Hoja } from '../lib/leerExcel'
 
 /**
  * Traer una tabla que la hermandad ya tiene: el historial de cuotas, el libro
@@ -25,7 +25,7 @@ import { ExcelIlegible, leerXlsx, pareceXlsx } from '../lib/leerExcel'
 type Paso = 'archivo' | 'columnas' | 'ensayo' | 'hecho'
 
 export default function ImportarTabla<T extends { id: string; numero: number }>({
-  abierto, onCerrar, tabla, existentes, ctx, onImportar,
+  abierto, onCerrar, tabla, existentes, ctx, onImportar, libroInicial,
 }: {
   abierto: boolean
   onCerrar: () => void
@@ -34,6 +34,19 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
   ctx: ContextoDeTabla
   /** Recibe la lista resultante. Guardar es cosa de quien lo usa, con el mecanismo de siempre. */
   onImportar: (lista: T[]) => void
+  /**
+   * UN ARCHIVO YA LEÍDO, para no volver a pedirlo.
+   *
+   * Lo usa «Traer vuestros datos» (Ajustes): allí se sube el libro UNA vez y
+   * desde ahí se traen las cuatro tablas. Pedir el mismo archivo cuatro veces
+   * —una por pantalla, buscándolo cada vez en la carpeta de descargas— es el
+   * paso donde una hermandad se cansa y lo deja.
+   *
+   * Solo se salta el paso de elegir archivo. Los otros tres siguen enteros, y
+   * el tercero —«esto es lo que va a pasar»— es el que no se puede tocar: aquí
+   * se traen recibos y patrimonio.
+   */
+  libroInicial?: { nombre: string; hojas: Hoja[] } | null
 }) {
   const [paso, setPaso] = useState<Paso>('archivo')
   const [nombreArchivo, setNombreArchivo] = useState('')
@@ -49,12 +62,59 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
   const [listaAnterior, setListaAnterior] = useState<T[] | null>(null)
   const [deshecho, setDeshecho] = useState(false)
   const [errorArchivo, setErrorArchivo] = useState('')
+  /**
+   * Las pestañas del libro, cuando trae más de una. Se guardan para poder
+   * cambiar de hoja sin volver a subir el archivo: la elegida se acierta casi
+   * siempre, pero «casi» no vale cuando el libro trae las cuotas de 2025 y las
+   * de 2026 en dos pestañas con las mismas columnas.
+   */
+  const [hojas, setHojas] = useState<Hoja[]>([])
+  const [hojaElegida, setHojaElegida] = useState(0)
+  /*
+   * Cuántas filas de encabezado se han dejado arriba: el título de la hoja, la
+   * fecha del listado, la línea en blanco. Se guardan para poder seguir
+   * diciendo «la línea 47» refiriéndose a la 47 de SU archivo.
+   */
+  const [saltadas, setSaltadas] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  /*
+   * ARRANCAR CON UN ARCHIVO YA LEÍDO.
+   *
+   * Se salta el paso de elegir archivo y se entra directamente en el de
+   * columnas, con la pestaña que cuadra. El cuerpo va aquí dentro y no llama a
+   * `empezarCon` a propósito: esa función se crea nueva en cada pintado, y
+   * como dependencia del efecto lo dispararía en bucle.
+   */
+  useEffect(() => {
+    if (!abierto || !libroInicial) return
+    /*
+     * SOLO DESDE EL PRINCIPIO, y esto no es una precaución de más.
+     *
+     * Sin esta línea, el efecto devolvía al paso de columnas CADA VEZ que se
+     * repintaba el panel de quien lo abre. Y se repinta justo en el peor
+     * momento: al terminar de importar, porque la lista nueva entra en su
+     * estado. Se veía «ya está importado» un instante y aparecía otra vez el
+     * emparejador de columnas, como si no se hubiera guardado nada.
+     */
+    if (paso !== 'archivo') return
+    const cual = hojaQueCuadra(libroInicial.hojas, tabla.campos)
+    const hoja = libroInicial.hojas[cual]
+    if (!hoja || hoja.filas.length < 2) return
+    const corte = sinPreambulo(hoja.filas, tabla.campos)
+    setHojas(libroInicial.hojas)
+    setHojaElegida(cual)
+    setNombreArchivo(libroInicial.nombre)
+    setFilas(corte.filas)
+    setSaltadas(corte.saltadas)
+    setEmparejado(proponerColumnas(tabla.campos, corte.filas[0]))
+    setPaso('columnas')
+  }, [abierto, libroInicial, tabla, paso])
 
   const cabeceras = filas[0] ?? []
   const ensayo: EnsayoDeTabla<T> | null = useMemo(
-    () => (filas.length > 1 ? ensayarTabla(filas, emparejado, existentes, tabla, ctx) : null),
-    [filas, emparejado, existentes, tabla, ctx],
+    () => (filas.length > 1 ? ensayarTabla(filas, emparejado, existentes, tabla, ctx, saltadas) : null),
+    [filas, emparejado, existentes, tabla, ctx, saltadas],
   )
   const faltan = faltanColumnas(tabla.campos, emparejado)
   const otroMotivo = filas.length > 1 ? (tabla.faltaAlgo?.(emparejado) ?? null) : null
@@ -62,6 +122,7 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
   function reiniciar() {
     setPaso('archivo'); setFilas([]); setNombreArchivo(''); setResultado(null); setErrorArchivo('')
     setListaAnterior(null); setDeshecho(false); setEmparejado({})
+    setHojas([]); setHojaElegida(0); setSaltadas(0)
   }
 
   async function elegirArchivo(f: File | null) {
@@ -72,9 +133,9 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
     // ImportarCenso.tsx. Y se mira el CONTENIDO, no la extensión.
     const bytes = new Uint8Array(await f.arrayBuffer())
     if (pareceXlsx(bytes)) {
-      let delExcel: string[][]
+      let libro: Hoja[]
       try {
-        delExcel = await leerXlsx(bytes)
+        libro = await leerLibro(bytes)
       } catch (e) {
         setErrorArchivo(
           e instanceof ExcelIlegible
@@ -83,11 +144,27 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
         )
         return
       }
-      if (delExcel.length < 2) {
-        setErrorArchivo('La primera hoja del Excel no tiene filas de datos, solo la cabecera (o está vacía).')
+      /*
+       * LA PESTAÑA SE ELIGE POR LAS COLUMNAS, no por ser la primera.
+       *
+       * Una hermandad saca UN libro de su programa viejo —censo, cuotas y caja,
+       * cada cosa en su pestaña— y lo sube cuatro veces, una por pantalla.
+       * Leyendo siempre la primera hoja, importar cuotas desde ese libro decía
+       * «faltan columnas obligatorias» mientras miraba el censo, y no había
+       * manera de saber por qué: el archivo era el bueno.
+       */
+      const cual = hojaQueCuadra(libro, tabla.campos)
+      if (libro[cual].filas.length < 2) {
+        setErrorArchivo(
+          libro.length === 1
+            ? 'La hoja del Excel no tiene filas de datos, solo la cabecera (o está vacía).'
+            : 'Ninguna de las hojas del Excel tiene filas de datos, solo cabeceras.',
+        )
         return
       }
-      empezarCon(delExcel, f.name)
+      setHojas(libro)
+      setHojaElegida(cual)
+      empezarCon(libro[cual].filas, f.name)
       return
     }
 
@@ -107,11 +184,29 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
     empezarCon(leidas, f.name)
   }
 
-  /** Ya tenemos las filas, vengan del Excel o del CSV: el resto es igual. */
+  /** Cambiar de pestaña sin volver a subir el archivo. */
+  function cambiarDeHoja(i: number) {
+    const corte = sinPreambulo(hojas[i].filas, tabla.campos)
+    setHojaElegida(i)
+    setFilas(corte.filas)
+    setSaltadas(corte.saltadas)
+    setEmparejado(proponerColumnas(tabla.campos, corte.filas[0] ?? []))
+  }
+
+  /**
+   * Ya tenemos las filas, vengan del Excel o del CSV: el resto es igual.
+   *
+   * Aquí se corta el encabezado de la hoja. La cabecera casi nunca es la
+   * primera fila en un archivo de hermandad —encima suele haber un título y la
+   * fecha del listado— y suponerlo dejaba la pantalla diciendo «— no está en el
+   * archivo —» en todas las columnas, con el archivo bueno delante.
+   */
   function empezarCon(leidas: string[][], nombre: string) {
+    const corte = sinPreambulo(leidas, tabla.campos)
     setNombreArchivo(nombre)
-    setFilas(leidas)
-    setEmparejado(proponerColumnas(tabla.campos, leidas[0]))
+    setFilas(corte.filas)
+    setSaltadas(corte.saltadas)
+    setEmparejado(proponerColumnas(tabla.campos, corte.filas[0]))
     setPaso('columnas')
   }
 
@@ -220,6 +315,33 @@ export default function ImportarTabla<T extends { id: string; numero: number }>(
       {/* ---------------------------------------------------------------- */}
       {paso === 'columnas' && (
         <>
+          {/*
+            EL LIBRO TRAE VARIAS PESTAÑAS Y HEMOS ELEGIDO UNA. Se dice cuál, y
+            se deja cambiarla: acertar por las columnas falla justo cuando dos
+            pestañas tienen las mismas —las cuotas de 2025 y las de 2026—, y
+            ahí solo lo sabe quien hizo el archivo.
+          */}
+          {hojas.length > 1 && (
+            <div className="form-row">
+              <label htmlFor={`hoja-${tabla.id}`}>Pestaña del Excel</label>
+              <select
+                id={`hoja-${tabla.id}`}
+                value={hojaElegida}
+                onChange={(e) => cambiarDeHoja(Number(e.target.value))}
+              >
+                {hojas.map((h, i) => (
+                  <option key={h.nombre + i} value={i}>
+                    {h.nombre} · {Math.max(0, h.filas.length - 1)} fila
+                    {h.filas.length - 1 === 1 ? '' : 's'}
+                  </option>
+                ))}
+              </select>
+              <p className="form-hint">
+                El archivo trae {hojas.length} pestañas y hemos cogido «{hojas[hojaElegida]?.nombre}»
+                porque es la que tiene estas columnas. Si no es esa, cambiadla aquí.
+              </p>
+            </div>
+          )}
           <p className="form-hint">
             Hemos reconocido lo que hemos podido por el nombre de la columna. <b>Repasadlo</b>:
             aquí es donde se cuela un importe en la casilla del año.

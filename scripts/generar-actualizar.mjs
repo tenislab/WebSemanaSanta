@@ -38,11 +38,21 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..')
  */
 export const PIEZAS_ACTUALIZACION = [
   ['ajustes-de-la-hermandad.sql', 'Los ajustes de cuotas y las etiquetas, guardados en la hermandad'],
+  ['clave-de-catalogos.sql', 'Que cada hermandad tenga sus propios catálogos (la clave era global)'],
   ['imagenes.sql', 'El almacén de fotos: que la web no lleve las imágenes dentro'],
   ['visitas-web.sql', 'El contador de visitas de la web, sin cookies ni Google Analytics'],
   ['suscriptores-web.sql', 'Avisos por correo para quien sigue a la hermandad sin ser hermano'],
   ['copias.sql', 'Las copias de seguridad, guardadas solas cada semana'],
   ['permisos-eventos-y-web.sql', 'Los dos módulos que nunca se sembraron: «eventos» y «web»'],
+  ['lo-que-toca-el-hermano.sql', 'Que el hermano no se ponga la cuota como pagada desde la consola'],
+  ['sin-contrasenas-en-las-solicitudes.sql', 'Fuera la contraseña en claro que guardaba cada solicitud de alta'],
+  ['freno-de-los-formularios.sql', 'Un tope a lo que cualquiera puede meter desde la web pública'],
+  ['cuenta-por-hermandad.sql', 'Ser hermano de dos hermandades: una cuenta por hermandad + DNI'],
+  ['solicitudes-de-papeleta.sql', 'Que la solicitud de papeleta del hermano llegue a la hermandad'],
+  ['activar-la-suscripcion.sql', 'Que el botón de activar la suscripción llegue a la base'],
+  ['numero-de-recibo-unico.sql', 'Que no pueda haber dos recibos con el mismo número'],
+  ['borrar-una-hermandad.sql', 'Que una hermandad se pueda borrar (el registro lo impedía)'],
+  ['documentos-restringidos.sql', 'Que el documento restringido lo sea también en la base'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -127,14 +137,38 @@ select * from (values
   ('Catálogo de etiquetas',
    (select count(*) > 0 from information_schema.columns
      where table_name = 'hermandad_settings' and column_name = 'etiquetas')),
+  /*
+   * Los dos módulos que faltaban, mirando SOLO las hermandades que tienen
+   * permisos sembrados.
+   *
+   * Una hermandad sin NINGUNA fila en «permisos_cargo» es otra avería
+   * distinta —nadie con cargo puede hacer nada allí— y el relleno no la toca a
+   * propósito: no se le inventan cargos que nunca tuvo. Metiéndola en esta
+   * cuenta, el informe decía «no» después de haber hecho su trabajo bien, que
+   * es la peor manera de informar: parece que el fichero ha fallado. Va en su
+   * propia línea, abajo.
+   */
   ('Permiso de «eventos» al Hermano Mayor',
-   (select count(*) = 0 from hermandades h where not exists (
+   (select count(*) = 0 from hermandades h
+     where exists (select 1 from permisos_cargo pc where pc.hermandad_id = h.id)
+       and not exists (
       select 1 from permisos_cargo pc
        where pc.hermandad_id = h.id and pc.cargo = 'Hermano Mayor' and pc.modulo_id = 'eventos'))),
   ('Permiso de «web» al Hermano Mayor',
-   (select count(*) = 0 from hermandades h where not exists (
+   (select count(*) = 0 from hermandades h
+     where exists (select 1 from permisos_cargo pc where pc.hermandad_id = h.id)
+       and not exists (
       select 1 from permisos_cargo pc
        where pc.hermandad_id = h.id and pc.cargo = 'Hermano Mayor' and pc.modulo_id = 'web'))),
+  /*
+   * Y si alguna hermandad se quedó SIN PERMISOS DE NINGÚN TIPO, se dice. Pasa
+   * con las creadas antes de que existiera la siembra: la junta entra, no
+   * puede tocar nada y no hay forma de saber por qué. Se arregla ejecutando
+   * «permisos-por-hermandad.sql», que sí siembra desde cero.
+   */
+  ('Ninguna hermandad se ha quedado sin permisos',
+   (select count(*) = 0 from hermandades h
+     where not exists (select 1 from permisos_cargo pc where pc.hermandad_id = h.id))),
   ('Almacén de imágenes de la web',
    (select count(*) > 0 from storage.buckets where id = 'imagenes')),
   ('Contador de visitas',

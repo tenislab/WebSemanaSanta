@@ -335,12 +335,15 @@ configurado. No hay que borrar nada: están puestos detrás de «si no hay base 
 datos». Los botones de «datos de ejemplo», las hermandades de muestra del área
 del hermano y los accesos rápidos por cargo se ocultan todos.
 
-✅ **El interruptor del modo local de reserva.** Hoy, si Supabase está en pausa,
-la aplicación sigue funcionando con los datos del navegador. Eso está muy bien
-mientras se monta, y es un problema en producción: la secretaría entraría,
+✅ **El modo local de reserva, apagado de fábrica.** Si Supabase está en pausa,
+la aplicación se cae con su error en vez de seguir con los datos del navegador.
+Esto era antes un interruptor que había que acordarse de poner
+(`VITE_SIN_MODO_LOCAL=1`), y un seguro que hay que acordarse de activar no es
+un seguro: el día que de verdad hace falta es justo el día en que hay quince
+cosas que hacer. Ahora viene puesto y lo que se pide a mano es quitarlo
+(`VITE_MODO_LOCAL=1`), solo para desarrollar. Sin él, la secretaría entraría,
 vería un censo que no es el suyo y pasaría la tarde dando altas que no existen
-en ningún sitio. Con `VITE_SIN_MODO_LOCAL=1` se cae con su error, que es lo
-correcto cuando hay hermandades de verdad.
+en ningún sitio.
 
 ### Lo que tienes que hacer tú
 
@@ -357,7 +360,6 @@ correcto cuando hay hermandades de verdad.
    ```
    VITE_SUPABASE_URL=...
    VITE_SUPABASE_ANON_KEY=...
-   VITE_SIN_MODO_LOCAL=1
    SUPABASE_URL=...            (para el servidor: /w/:slug y el sitemap)
    SUPABASE_ANON_KEY=...
    ```

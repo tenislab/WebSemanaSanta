@@ -94,9 +94,24 @@ function construirInformes(
   const alDia = hermanosActuales.filter((h) => situacionesDeCuota.get(h.id) === 'alDia').length
   const sinIban = hermanosActuales.filter((h) => !h.iban).length
 
-  const cobrado = cuotasActuales.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
-  const pendiente = cuotasActuales.filter((c) => c.estado === 'Pendiente').reduce((s, c) => s + c.importe, 0)
-  const devuelto = cuotasActuales.filter((c) => c.estado === 'Devuelta').reduce((s, c) => s + c.importe, 0)
+  /*
+   * CON `sumaEuros`, Y NO CON UN `reduce` A PELO.
+   *
+   * Estas cuatro cifras son las que se imprimen y se llevan al cabildo, y eran
+   * las únicas del fichero que sumaban a pelo: las de papeletas y las del
+   * libro de cuentas ya iban por aquí.
+   *
+   * Lo que se lleva por delante un `reduce` a pelo es UN SOLO importe malo.
+   * Basta con que uno venga vacío para que la suma entera sea NaN y el informe
+   * diga «NaN €» en Cobrado; y si viene como TEXTO —que pasa: Postgres
+   * devuelve las columnas `numeric` como cadena, y una copia guardada en el
+   * navegador por una versión anterior puede traerla así— el `+` concatena y
+   * salen «12060,1060 €». Un dato malo entre seiscientos buenos no puede
+   * borrar los seiscientos.
+   */
+  const cobrado = sumaEuros(cuotasActuales.filter((c) => c.estado === 'Pagada').map((c) => c.importe))
+  const pendiente = sumaEuros(cuotasActuales.filter((c) => c.estado === 'Pendiente').map((c) => c.importe))
+  const devuelto = sumaEuros(cuotasActuales.filter((c) => c.estado === 'Devuelta').map((c) => c.importe))
   /**
    * «En mora» es dinero que se debe, y no salía en ninguna cifra.
    *
@@ -106,8 +121,8 @@ function construirInformes(
    * se lleva al cabildo salía más baja de lo que era, justo en los recibos que
    * más preocupan.
    */
-  const enMora = cuotasActuales.filter((c) => c.estado === 'En mora').reduce((s, c) => s + c.importe, 0)
-  const porCobrar = pendiente + enMora
+  const enMora = sumaEuros(cuotasActuales.filter((c) => c.estado === 'En mora').map((c) => c.importe))
+  const porCobrar = sumaEuros([pendiente, enMora])
   const domiciliadas = cuotasActuales.filter((c) => c.domiciliada).length
 
   const recaudadoPapeletas = sumaEuros(papeletasActuales.filter((p) => p.estado !== 'Anulada').map((p) => p.importe))
@@ -134,9 +149,10 @@ function construirInformes(
 
   const ingresos = sumaEuros(movimientosActuales.filter((m) => m.tipo === 'Ingreso').map((m) => m.importe))
   const gastos = sumaEuros(movimientosActuales.filter((m) => m.tipo === 'Gasto').map((m) => m.importe))
-  const balanceConciliado = movimientosActuales.filter((m) => m.estado === 'Conciliado').reduce(
-    (s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe),
-    0,
+  const balanceConciliado = sumaEuros(
+    movimientosActuales
+      .filter((m) => m.estado === 'Conciliado')
+      .map((m) => (m.tipo === 'Ingreso' ? Number(m.importe) : -Number(m.importe))),
   )
   const porConciliar = movimientosActuales.filter((m) => m.estado === 'Pendiente').length
 
@@ -297,9 +313,11 @@ export default function Informes() {
   const [anioEstado, setAnioEstado] = useState(() => aniosDisponibles[0] ?? new Date().getFullYear())
   const saldoInicialEstado = useMemo(
     () =>
-      movimientosEstado
+      sumaEuros(movimientosEstado
         .filter((m) => Number(m.fecha.trim().slice(-4)) < anioEstado)
-        .reduce((s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe), 0),
+        // Igual que el resto: por `sumaEuros`, para que un apunte con el
+        // importe vacío no deje el saldo de arrastre en «NaN €».
+        .map((m) => (m.tipo === 'Ingreso' ? Number(m.importe) : -Number(m.importe)))),
     [movimientosEstado, anioEstado],
   )
   // Solo un documento de impresión a la vez: pedir el Estado de Cuentas cierra
@@ -344,7 +362,7 @@ export default function Informes() {
     const papeletas = leerDatos(CLAVES_DATOS.papeletas, PAPELETAS_INICIALES).filter((p) => p.anio === anio)
     const movimientos = leerDatos(CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES)
     const totalHermanos = hermanos.length
-    const cobrado = cuotas.filter((c) => c.estado === 'Pagada').reduce((s, c) => s + c.importe, 0)
+    const cobrado = sumaEuros(cuotas.filter((c) => c.estado === 'Pagada').map((c) => c.importe))
     const papeletasEmitidas = papeletas.filter((p) => p.estado !== 'Anulada' && p.estado !== 'Renuncia').length
     const balance = movimientos.filter((m) => m.estado === 'Conciliado').reduce(
       (s, m) => s + (m.tipo === 'Ingreso' ? m.importe : -m.importe),

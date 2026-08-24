@@ -31,6 +31,7 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
      */
     clave_acceso: '',
     auth_user_id: h.authUserId,
+    correo_acceso: h.correoAcceso ?? null,
     etiquetas: h.etiquetas ?? [],
     fecha_nacimiento: h.fechaNacimiento ?? null,
     foto_data_url: h.fotoDataUrl ?? null,
@@ -93,6 +94,7 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     // y con Supabase la contraseña la guarda Auth, no nosotros.
     claveAcceso: '',
     authUserId: (r.auth_user_id as string | null) ?? null,
+    correoAcceso: (r.correo_acceso as string | null) ?? null,
     etiquetas: (r.etiquetas as string[] | null) ?? [],
     fechaNacimiento: (r.fecha_nacimiento as string | null) ?? undefined,
     fotoDataUrl: (r.foto_data_url as string | null) ?? null,

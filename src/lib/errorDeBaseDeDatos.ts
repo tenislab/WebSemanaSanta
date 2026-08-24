@@ -42,6 +42,7 @@ const EN_CRISTIANO: Record<string, string> = {
   documentos: 'el archivo documental',
   cuentas_sociales: 'las redes sociales',
   web_publica: 'la web pública',
+  mensajes_web: 'el buzón de la web',
 }
 
 function comoSeLlama(tabla: string): string {

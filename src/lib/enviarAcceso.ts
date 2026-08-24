@@ -48,6 +48,8 @@ export interface ResultadoUno {
   error?: string
   /** El id de la cuenta recién creada, para anotarlo en su ficha. */
   authUserId?: string | null
+  /** Y cómo se llama por dentro, que también va a la ficha. Ver `accesos.ts`. */
+  correoAcceso?: string | null
 }
 
 /** Quién puede recibir el acceso, y si no, por qué no. */
@@ -99,7 +101,7 @@ export async function enviarAcceso(
           + 'Dile que entre con «he olvidado mi contraseña».',
     }
   }
-  return { ok: true, authUserId: acceso.id }
+  return { ok: true, authUserId: acceso.id, correoAcceso: acceso.correoAcceso ?? null }
 }
 
 export interface ResumenTanda {
@@ -107,7 +109,7 @@ export interface ResumenTanda {
   saltados: Record<MotivoSaltado, number>
   fallos: { nombre: string; error: string }[]
   /** Los que han recibido cuenta, con su id de Supabase, para anotarlo en su ficha. */
-  cuentas: { id: string; authUserId: string | null }[]
+  cuentas: { id: string; authUserId: string | null; correoAcceso: string | null }[]
 }
 
 /**
@@ -134,7 +136,7 @@ export async function enviarAccesoEnTanda(
     const r = await enviarAcceso(h, nombreHermandad)
     if (r.ok) {
       resumen.enviados += 1
-      resumen.cuentas.push({ id: h.id, authUserId: r.authUserId ?? null })
+      resumen.cuentas.push({ id: h.id, authUserId: r.authUserId ?? null, correoAcceso: r.correoAcceso ?? null })
     } else if (r.saltado) {
       resumen.saltados[r.saltado] += 1
     } else {

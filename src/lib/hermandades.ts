@@ -66,7 +66,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '954 11 22 33',
     email: 'secretaria@esperanza-triana.example',
     bizum: '683 45 67 89',
-    iban: 'ES21 1465 0100 7220 3087 6545',
+    iban: 'ES34 1465 0100 7220 3087 6545',
     opcionesPapeleta: [
       { id: 'e-op1', nombre: 'Cirio', importe: 12 },
       { id: 'e-op2', nombre: 'Mantilla', importe: 15 },
@@ -82,7 +82,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '955 44 55 66',
     email: 'secretaria@soledad-ecija.example',
     bizum: '644 98 76 54',
-    iban: 'ES76 2100 0813 6101 2345 6789',
+    iban: 'ES79 2100 0813 6101 2345 6789',
     opcionesPapeleta: [
       { id: 's-op1', nombre: 'Nazareno con cirio', importe: 10 },
       { id: 's-op2', nombre: 'Penitente con cruz', importe: 10 },
@@ -98,7 +98,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '954 22 33 44',
     email: 'secretaria@borriquita-sevilla.example',
     bizum: '622 11 33 55',
-    iban: 'ES12 0049 1500 0512 3456 7891',
+    iban: 'ES87 0049 1500 0512 3456 7891',
     opcionesPapeleta: [
       { id: 'b-op1', nombre: 'Monaguillo', importe: 8 },
       { id: 'b-op2', nombre: 'Nazareno', importe: 12 },
@@ -114,7 +114,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '954 33 44 55',
     email: 'secretaria@macarena-sevilla.example',
     bizum: '633 22 44 66',
-    iban: 'ES55 0075 0100 0206 0567 8912',
+    iban: 'ES12 0075 0100 0206 0567 8912',
     opcionesPapeleta: [
       { id: 'm-op1', nombre: 'Cirio blanco', importe: 14 },
       { id: 'm-op2', nombre: 'Mantilla', importe: 16 },
@@ -130,7 +130,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '957 44 55 66',
     email: 'secretaria@veracruz-cordoba.example',
     bizum: '611 33 55 77',
-    iban: 'ES33 2038 1234 5678 9012 3456',
+    iban: 'ES50 2038 1234 5678 9012 3456',
     opcionesPapeleta: [
       { id: 'v-op1', nombre: 'Nazareno con cruz', importe: 11 },
       { id: 'v-op2', nombre: 'Acólito', importe: 9 },
@@ -146,7 +146,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '952 55 66 77',
     email: 'secretaria@nazareno-malaga.example',
     bizum: '600 44 66 88',
-    iban: 'ES44 0182 5678 9012 3456 7890',
+    iban: 'ES14 0182 5678 9012 3456 7890',
     opcionesPapeleta: [
       { id: 'n-op1', nombre: 'Nazareno con cirio', importe: 13 },
       { id: 'n-op2', nombre: 'Penitente descalzo', importe: 10 },
@@ -162,7 +162,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '976 66 77 88',
     email: 'secretaria@piedad-zaragoza.example',
     bizum: '699 55 77 99',
-    iban: 'ES66 2085 9012 3456 7890 1234',
+    iban: 'ES24 2085 9012 3456 7890 1234',
     opcionesPapeleta: [
       { id: 'p-op1', nombre: 'Cirio', importe: 10 },
       { id: 'p-op2', nombre: 'Manola', importe: 15 },
@@ -178,7 +178,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '983 77 88 99',
     email: 'secretaria@pasion-valladolid.example',
     bizum: '688 66 88 00',
-    iban: 'ES77 0128 3456 7890 1234 5678',
+    iban: 'ES02 0128 3456 7890 1234 5678',
     opcionesPapeleta: [
       { id: 'pa-op1', nombre: 'Nazareno', importe: 12 },
       { id: 'pa-op2', nombre: 'Portaestandarte', importe: 16 },
@@ -194,7 +194,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '958 88 99 00',
     email: 'secretaria@amargura-granada.example',
     bizum: '677 77 99 11',
-    iban: 'ES88 3456 7890 1234 5678 9012',
+    iban: 'ES81 3456 7890 1234 5678 9012',
     opcionesPapeleta: [
       { id: 'am-op1', nombre: 'Mantilla', importe: 15 },
       { id: 'am-op2', nombre: 'Cirio', importe: 11 },
@@ -210,7 +210,7 @@ export const HERMANDADES_MUESTRA: HermandadDirectorio[] = [
     telefono: '956 99 00 11',
     email: 'secretaria@trinidad-cadiz.example',
     bizum: '666 88 00 22',
-    iban: 'ES99 4567 8901 2345 6789 0123',
+    iban: 'ES84 4567 8901 2345 6789 0123',
     opcionesPapeleta: [
       { id: 't-op1', nombre: 'Nazareno con cirio', importe: 12 },
       { id: 't-op2', nombre: 'Penitente', importe: 9 },

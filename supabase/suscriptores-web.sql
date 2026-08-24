@@ -27,6 +27,20 @@
 -- Ejecútalo una vez en el SQL Editor, después de `multi-hermandad.sql`.
 -- =============================================================================
 
+/*
+ * LA LLAVE DE BAJA SALE DE `gen_random_bytes`, QUE NO ES DE POSTGRES A SECAS.
+ *
+ * Viene con la extensión `pgcrypto`. En Supabase está encendida de fábrica, así
+ * que aquí funcionaba y nadie lo miró; pero es una dependencia que este fichero
+ * no declaraba. En un Postgres sin ella, la instalación se para EN ESTA LÍNEA y
+ * todo lo que viene detrás —las políticas, las funciones de suscripción, las
+ * copias— no llega a crearse. Y como el error habla de una función y no de una
+ * extensión, no se entiende.
+ *
+ * Se declara. Si ya está, no hace nada.
+ */
+create extension if not exists pgcrypto;
+
 create table if not exists suscriptores_web (
   id uuid primary key default gen_random_uuid(),
   hermandad_id uuid not null references hermandades(id) on delete cascade,
@@ -57,6 +71,16 @@ create table if not exists suscriptores_web (
 
 -- Un correo, una vez por hermandad. Sin esto, quien pulsa dos veces el botón
 -- acaba recibiendo cada aviso por duplicado.
+/*
+ * CUÁNDO SE LE MANDÓ EL CORREO DE CONFIRMAR.
+ *
+ * No es informativo: es el freno. Sin él, pedir «mándame la confirmación» mil
+ * veces con el correo de otro le llena la bandeja a esa persona, firmado por la
+ * hermandad. Con él, del segundo intento en diez minutos no sale nada.
+ */
+alter table suscriptores_web
+  add column if not exists confirmacion_enviada_en timestamptz;
+
 create unique index if not exists suscriptores_web_email_uniq
   on suscriptores_web (hermandad_id, lower(email));
 create index if not exists suscriptores_web_hermandad_idx on suscriptores_web (hermandad_id);
@@ -86,31 +110,68 @@ create policy "la hermandad borra sus suscriptores"
   using (hermandad_id = hermandad_actual() and not auth_es_hermano());
 
 /**
- * Apuntarse. Devuelve la llave, que es lo que hay que meter en el enlace del
- * correo de confirmación.
+ * Apuntarse. DEVUELVE SÍ O NO, y nunca la llave.
  *
- * Si ese correo ya estaba, NO se crea otro ni se dice que ya estaba: se
- * devuelve su llave y punto. Contestar «ese correo ya está apuntado» es decirle
- * a cualquiera quién está en la lista, y eso es filtrar datos de otro.
+ * ANTES DEVOLVÍA LA LLAVE, y ese era el agujero. La llave es lo único que hace
+ * falta para confirmar un alta (`confirmar_suscripcion`) y para darla de baja
+ * (`baja_de_la_web`), y esta función la puede llamar cualquiera desde fuera sin
+ * identificarse. Pero es que además, por el `on conflict … returning`, cuando
+ * el correo YA ESTABA no devolvía una llave nueva: devolvía LA DE ESA PERSONA.
+ *
+ * O sea, que con la dirección de alguien de la lista —que no es ningún
+ * secreto— se podía:
+ *
+ *   · CONFIRMAR SU ALTA sin que llegara a ver el correo. Y entonces la
+ *     hermandad tiene apuntado «esta persona confirmó tal día», que es la
+ *     prueba del consentimiento, y es falsa. La hermandad se pone a escribirle
+ *     a alguien que nunca pidió nada, con un papel que dice que sí.
+ *   · O DARLE DE BAJA. Una dirección detrás de otra, y la lista se vacía sin
+ *     que nadie se entere: los suscriptores dejan de recibir los cultos y la
+ *     hermandad no ve más que una lista que mengua.
+ *
+ * La llave se queda dentro de la base. Sale por dos sitios y solo por dos: el
+ * correo que se le manda a esa persona, y el panel de la hermandad.
+ *
+ * SIGUE SIN DECIR SI EL CORREO YA ESTABA. Contestar «ese correo ya está
+ * apuntado» le diría a cualquiera quién está en la lista, y eso es filtrar los
+ * datos de otro. Devuelve `true` en los dos casos.
  */
+drop function if exists suscribirse_a_la_web(uuid, text, text, text);
 create or replace function suscribirse_a_la_web(
   p_hermandad_id uuid,
   p_email text,
   p_nombre text default '',
   p_texto text default ''
-) returns text
+) returns boolean
 language plpgsql security definer set search_path = public as $$
 declare
   v_email text;
-  v_llave text;
+  v_recientes int;
 begin
-  if p_hermandad_id is null then return null; end if;
-  if not exists (select 1 from hermandades where id = p_hermandad_id) then return null; end if;
+  if p_hermandad_id is null then return false; end if;
+  if not exists (select 1 from hermandades where id = p_hermandad_id) then return false; end if;
 
   v_email := lower(trim(coalesce(p_email, '')));
   -- Una comprobación mínima, del lado de acá. La de verdad la hace el correo de
   -- confirmación: si la dirección no existe, nunca se confirma.
-  if v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[a-z]{2,}$' then return null; end if;
+  if v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[a-z]{2,}$' then return false; end if;
+
+  /*
+   * EL FRENO. Esto lo llama cualquiera sin identificarse, así que sin un tope
+   * se le pueden meter cien mil correos a una hermandad en una tarde: la lista
+   * queda inservible y hay que borrarla entera a mano.
+   *
+   * Sesenta altas nuevas por hora es mucho más de lo que da de sí el
+   * formulario de una hermandad, incluso el día siguiente a la salida. Se
+   * cuentan solo las NUEVAS: quien vuelve a apuntarse con un correo que ya
+   * estaba no crea fila y no gasta cupo.
+   */
+  select count(*) into v_recientes from suscriptores_web
+   where hermandad_id = p_hermandad_id and alta_en > now() - interval '1 hour';
+  if v_recientes >= 60 then
+    raise exception 'Ahora mismo no se pueden recoger más altas. Inténtalo dentro de un rato.'
+      using errcode = 'P0001';
+  end if;
 
   insert into suscriptores_web (hermandad_id, email, nombre, texto_aceptado)
   values (p_hermandad_id, v_email, left(trim(coalesce(p_nombre, '')), 120), left(coalesce(p_texto, ''), 1000))
@@ -118,12 +179,59 @@ begin
   -- Sin cambiar nada de lo que ya había: ni el consentimiento, ni la fecha de
   -- alta, ni si estaba confirmado. Volver a apuntarse no puede borrar la prueba
   -- de cuándo aceptó.
-  do update set email = suscriptores_web.email
-  returning llave into v_llave;
+  do update set email = suscriptores_web.email;
 
-  return v_llave;
+  return true;
 end $$;
 grant execute on function suscribirse_a_la_web(uuid, text, text, text) to anon, authenticated;
+
+/**
+ * LA LLAVE PARA EL CORREO DE CONFIRMAR — y solo para el servidor.
+ *
+ * Esta es la única puerta por la que la llave sale de la base hacia quien
+ * manda el correo, y NO SE LE DA A `anon` NI A `authenticated`: solo a
+ * `service_role`, que es la clave que vive dentro de la función `enviar-correo`
+ * y nunca pisa un navegador. Si algún día alguien le da el permiso a `anon`,
+ * vuelve el agujero entero.
+ *
+ * Devuelve null —y no manda nada— en tres casos:
+ *
+ *   · Ese correo no está apuntado en esa hermandad. Sin esto, sería una forma
+ *     de preguntar «¿está fulano en vuestra lista?».
+ *   · Ya está confirmado. No hay nada que confirmar y mandarlo otra vez es
+ *     spam.
+ *   · Se le mandó hace menos de diez minutos. Es el freno de verdad: sin él,
+ *     pedir la confirmación mil veces con el correo de otra persona le llena la
+ *     bandeja, y firmado por la hermandad.
+ *
+ * Deja apuntado el envío en la misma consulta, así que dos peticiones a la vez
+ * no consiguen dos correos.
+ */
+create or replace function llave_para_confirmar(p_hermandad_id uuid, p_email text)
+returns jsonb
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  v_llave text;
+  v_nombre text;
+begin
+  if p_hermandad_id is null then return null; end if;
+  update suscriptores_web
+     set confirmacion_enviada_en = now()
+   where hermandad_id = p_hermandad_id
+     and lower(email) = lower(trim(coalesce(p_email, '')))
+     and not confirmado
+     and (confirmacion_enviada_en is null or confirmacion_enviada_en < now() - interval '10 minutes')
+  returning llave into v_llave;
+  if v_llave is null then return null; end if;
+
+  -- El nombre va en el mismo viaje. Quien manda el correo lo necesita para
+  -- firmarlo, y una segunda consulta para leer un nombre es una pieza más que
+  -- se puede caer justo entre las dos.
+  select nombre into v_nombre from hermandades where id = p_hermandad_id;
+  return jsonb_build_object('llave', v_llave, 'hermandad', coalesce(v_nombre, ''));
+end $$;
+revoke all on function llave_para_confirmar(uuid, text) from public, anon, authenticated;
+grant execute on function llave_para_confirmar(uuid, text) to service_role;
 
 /** Confirmar, con la llave del enlace. Decir si ha valido o no. */
 create or replace function confirmar_suscripcion(p_llave text) returns boolean

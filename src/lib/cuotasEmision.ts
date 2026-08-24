@@ -67,6 +67,74 @@ export function ejercicioDeCuotas(cuotas: Cuota[]): number {
 }
 
 /**
+ * EL DÍA EN QUE LA HERMANDAD RENUEVA LAS CUOTAS. Día y mes; el año lo pone el
+ * ejercicio.
+ *
+ * Casi todas renuevan el 1 de enero, pero no todas: las hay con el ejercicio
+ * arrancando en septiembre, después de verano, y las hay que lo atan al día de
+ * la titular. Por eso se guarda y no se da por hecho.
+ */
+export interface FechaRenovacion {
+  /** Día del mes (1-31). */
+  dia: number
+  /** Mes (1-12, enero = 1). No es el índice de `Date`. */
+  mes: number
+}
+
+export const RENOVACION_POR_DEFECTO: FechaRenovacion = { dia: 1, mes: 1 }
+
+/** Días que tiene ese mes de ese año (con los febreros bisiestos). */
+function diasDelMes(anio: number, mes: number): number {
+  return new Date(anio, mes, 0).getDate()
+}
+
+/**
+ * Deja una fecha de renovación en un día y un mes que existan.
+ *
+ * Se llama con lo que haya guardado en el navegador, que puede venir de una
+ * versión anterior sin este ajuste (`undefined`) o de un campo a medio
+ * teclear. Un mes 0 o un día 45 llegarían hasta `new Date`, que no protesta:
+ * se desborda al mes siguiente y el ejercicio entero se calcularía sobre una
+ * fecha que nadie ha pedido.
+ */
+export function renovacionValida(r: Partial<FechaRenovacion> | null | undefined): FechaRenovacion {
+  const mes = Math.min(12, Math.max(1, Math.round(Number(r?.mes)) || RENOVACION_POR_DEFECTO.mes))
+  const dia = Math.min(31, Math.max(1, Math.round(Number(r?.dia)) || RENOVACION_POR_DEFECTO.dia))
+  return { dia, mes }
+}
+
+/**
+ * El día concreto en que arranca un ejercicio.
+ *
+ * El día se recorta al último del mes: quien renueva «el 31» y cae en un mes
+ * de 30 renueva el 30, no el 1 del siguiente, que es a donde se iba `Date`.
+ */
+export function inicioDeEjercicio(ejercicio: number, renovacion: FechaRenovacion): Date {
+  const { dia, mes } = renovacionValida(renovacion)
+  return new Date(ejercicio, mes - 1, Math.min(dia, diasDelMes(ejercicio, mes)))
+}
+
+/**
+ * EL EJERCICIO QUE TOCA COBRAR HOY.
+ *
+ * Es el de la última renovación que ya ha pasado. Con renovación el 1 de
+ * enero coincide con el año natural; con renovación en septiembre, el 23 de
+ * agosto de 2026 todavía se está en el ejercicio 2025, que es lo correcto:
+ * ese ejercicio va de septiembre de 2025 a agosto de 2026.
+ *
+ * ESTO NO ES EL AÑO DE LA CAMPAÑA. La pantalla de Cuotas proponía emitir el
+ * año de `getCampana()`, que es la Semana Santa que viene: en agosto de 2026
+ * ofrecía emitir el ejercicio **2027**, un año que aún no ha empezado, a todo
+ * el censo. Un ejercicio emitido de más no se arregla borrando recibos: los
+ * domiciliados ya han salido en la remesa.
+ */
+export function ejercicioVigente(renovacion: FechaRenovacion, hoy: Date = new Date()): number {
+  const anio = hoy.getFullYear()
+  const dia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  return dia >= inicioDeEjercicio(anio, renovacion) ? anio : anio - 1
+}
+
+/**
  * Hermanos ACTIVOS (o nuevos) que aún no tienen una cuota de ese concepto en
  * ese ejercicio. Son los candidatos a la emisión anual.
  *

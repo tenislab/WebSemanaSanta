@@ -98,7 +98,16 @@ async function elImportadorLoUsa({ cargar, caso, xlsx }) {
   const comp = (await readFile('src/components/ImportarCenso.tsx', 'utf8'))
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 
-  caso('el importador lee el Excel', true, /leerXlsx\(/.test(comp))
+  /*
+   * Lee el LIBRO ENTERO, no la primera hoja.
+   *
+   * Una hermandad exporta su programa viejo en un solo libro con una pestaña
+   * por cosa. Con `leerXlsx` —que da la primera— el asistente del censo cogía
+   * la que hubiera delante (el inventario, o una portada sin datos) y decía
+   * «faltan columnas obligatorias» sobre un archivo que era el bueno.
+   */
+  caso('el importador lee el libro entero', true, /leerLibro\(/.test(comp))
+  caso('y elige la pestaña que es', true, /hojaDelCenso\(libro\)/.test(comp))
   caso('lo reconoce por el contenido', true, /pareceXlsx\(/.test(comp))
   /*
    * SIN filtro de tipos en el selector.

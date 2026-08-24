@@ -47,3 +47,4 @@ LEEME.txt
 .env.*
 !.env.example
 GOBERGO-costes.pdf
+dist-demo/

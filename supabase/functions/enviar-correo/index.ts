@@ -139,6 +139,278 @@ function firmarComo(nombreHermandad: string): string {
   return limpio ? `${limpio} <${direccion}>` : REMITENTE
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ *   EL CORREO DE CONFIRMAR UNA SUSCRIPCIÓN — el único que sale sin sesión
+ * ---------------------------------------------------------------------------
+ *
+ * POR QUÉ HACE FALTA. La lista de «avisadme de los cultos» es de doble
+ * confirmación: hasta que la persona no abre el enlace que se le manda, no se
+ * le escribe. Ese correo NO LO PODÍA MANDAR NADIE. Quien se apunta desde la web
+ * no tiene sesión, y todo lo demás de esta función la exige — así que el
+ * formulario decía «te hemos mandado un correo» y no salía ninguno. Nadie
+ * confirmaba jamás, la lista se llenaba de gente a la que no se podía escribir
+ * y los comunicados a suscriptores llegaban a cero personas.
+ *
+ * POR QUÉ NO ABRE UN BOQUETE. Esta rama no acepta ni destinatario, ni asunto,
+ * ni cuerpo: se los pone ella. Lo único que llega de fuera es a qué hermandad y
+ * qué correo, y el correo tiene que estar YA APUNTADO y sin confirmar para que
+ * salga algo. Y la llave —lo único con lo que se puede confirmar o dar de
+ * baja— se lee AQUÍ, con la clave de servicio, y no pasa nunca por el
+ * navegador de quien pide el envío.
+ *
+ * El freno de verdad está en la base: `llave_para_confirmar` no devuelve nada
+ * dos veces en diez minutos para el mismo correo. Así, pedir mil envíos con la
+ * dirección de otra persona no le llena la bandeja.
+ */
+
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+/**
+ * A dónde apunta el enlace de confirmar.
+ *
+ * NO SE ACEPTA DEL NAVEGADOR TAL CUAL. Si viniera de fuera sin mirarlo,
+ * cualquiera podría hacer que la hermandad mandara, con su nombre y desde su
+ * dominio verificado, un correo con un enlace a otro sitio. Eso es exactamente
+ * la materia prima de una suplantación.
+ *
+ * Se admite lo que diga el navegador solo si es el sitio de siempre o un
+ * subdominio suyo; si no, se usa el de siempre y punto.
+ */
+const WEB_BASE = (Deno.env.get('GOBERGO_WEB') ?? 'https://gobergo.com').replace(/\/+$/, '')
+
+function origenDeConfianza(propuesto: string | undefined): string {
+  if (!propuesto) return WEB_BASE
+  try {
+    const suyo = new URL(propuesto)
+    const base = new URL(WEB_BASE)
+    if (suyo.protocol !== 'https:') return WEB_BASE
+    if (suyo.hostname === base.hostname || suyo.hostname.endsWith(`.${base.hostname}`)) {
+      return suyo.origin
+    }
+  } catch { /* una dirección que no se puede leer se trata como si no viniera */ }
+  return WEB_BASE
+}
+
+/** Para meter texto de la base dentro del HTML sin que se lo coma el marcado. */
+function escapar(t: string): string {
+  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+async function mandarConfirmacion(
+  datos: { hermandadId?: string; email?: string; origen?: string },
+): Promise<Response> {
+  if (!SERVICE_KEY) {
+    // Se dice, y no se calla: sin este secreto la confirmación no sale y la
+    // lista se queda igual de muerta que antes, pero al menos se sabe por qué.
+    console.error('Falta SUPABASE_SERVICE_ROLE_KEY: no se puede mandar la confirmación.')
+    return respuesta({ error: 'El servidor no está configurado para confirmar suscripciones.' }, 503)
+  }
+  const email = (datos.email ?? '').trim()
+  if (!datos.hermandadId || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    return respuesta({ error: 'Faltan datos para mandar la confirmación.' }, 400)
+  }
+
+  // La llave y el nombre de la hermandad, con la clave de servicio. Devuelve
+  // null si ese correo no está apuntado, si ya está confirmado o si se le mandó
+  // hace menos de diez minutos.
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/llave_para_confirmar`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_hermandad_id: datos.hermandadId, p_email: email }),
+  })
+  if (!r.ok) {
+    console.error('llave_para_confirmar falló:', r.status, await r.text())
+    return respuesta({ error: 'No se ha podido preparar la confirmación.' }, 502)
+  }
+  const fila = await r.json()
+  /*
+   * SIN LLAVE SE CONTESTA QUE SÍ, y no «ese correo ya estaba» ni «ese correo no
+   * está». Distinguirlo desde fuera sería una forma de preguntar quién está en
+   * la lista de la hermandad, que es justo lo que no puede saberse.
+   */
+  if (!fila?.llave) return respuesta({ enviados: 0 })
+
+  const base = origenDeConfianza(datos.origen)
+  const enlace = `${base}/avisos?c=${encodeURIComponent(String(fila.llave))}`
+  const hermandad = String(fila.hermandad ?? '').trim()
+  const dequien = hermandad || 'la hermandad'
+  const asunto = `Confirma tu correo para recibir los avisos de ${dequien}`
+  const texto = [
+    `Alguien —esperamos que tú— ha pedido recibir los avisos de cultos de ${dequien} en esta dirección.`,
+    '',
+    'Para empezar a recibirlos, abre este enlace:',
+    enlace,
+    '',
+    'Si no has sido tú, no hagas nada: sin abrir el enlace no te escribimos.',
+  ].join('\n')
+  const html = `<p>Alguien —esperamos que tú— ha pedido recibir los avisos de cultos de
+    <b>${escapar(dequien)}</b> en esta dirección.</p>
+    <p><a href="${escapar(enlace)}">Confirmar mi correo</a></p>
+    <p style="color:#666">Si no has sido tú, no hagas nada: sin abrir el enlace no te escribimos.</p>`
+
+  const envio = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    // Aquí SÍ va en `to` y no en copia oculta: es un correo para una persona.
+    body: JSON.stringify({ from: firmarComo(hermandad), to: [email], subject: asunto, text: texto, html }),
+  })
+  if (!envio.ok) {
+    console.error('Resend devolvió un error al confirmar:', envio.status, await envio.text())
+    return respuesta({ error: 'No se ha podido mandar el correo de confirmación.' }, 502)
+  }
+  return respuesta({ enviados: 1 })
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ *   «HE OLVIDADO MI CONTRASEÑA» — la recuperación del hermano
+ * ---------------------------------------------------------------------------
+ *
+ * POR QUÉ NO LA HACE SUPABASE. La hacía: `resetPasswordForEmail` mandaba el
+ * correo a la dirección de la cuenta. Pero desde que la cuenta de un hermano se
+ * llama por dentro «DNI + hermandad» —para que quien es hermano de dos
+ * hermandades pueda entrar en las dos—, esa dirección NO RECIBE NADA. El correo
+ * de esa persona está en su ficha, que es otra cosa.
+ *
+ * Así que el enlace lo mandamos nosotros, al correo de su ficha. Y de paso deja
+ * de salir por el servidor de Supabase para salir por el de la hermandad, que
+ * es donde debería haber estado siempre.
+ *
+ * QUÉ NO PASA POR EL NAVEGADOR: ni el token ni el correo. El navegador solo
+ * dice «este DNI de esta hermandad quiere recuperar»; lo demás se lee aquí con
+ * la clave de servicio. Es lo mismo que se hace con el correo de confirmar una
+ * suscripción, y por el mismo motivo.
+ */
+
+/** Lo que se contesta SIEMPRE, salga correo o no. Ver abajo. */
+const RESPUESTA_DE_SIEMPRE = { enviados: 1 }
+
+async function pedirRecuperacion(
+  datos: { hermandadId?: string; dni?: string; origen?: string },
+): Promise<Response> {
+  if (!SERVICE_KEY) {
+    console.error('Falta SUPABASE_SERVICE_ROLE_KEY: no se puede recuperar ninguna contraseña.')
+    return respuesta({ error: 'El servidor no está configurado para recuperar contraseñas.' }, 503)
+  }
+  if (!datos.hermandadId || !(datos.dni ?? '').trim()) {
+    return respuesta({ error: 'Faltan datos.' }, 400)
+  }
+
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/pedir_recuperacion_hermano`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_hermandad_id: datos.hermandadId, p_dni: datos.dni }),
+  })
+  if (!r.ok) {
+    console.error('pedir_recuperacion_hermano falló:', r.status, await r.text())
+    return respuesta({ error: 'No se ha podido preparar la recuperación.' }, 502)
+  }
+  const fila = await r.json()
+  /*
+   * SIN TOKEN SE CONTESTA QUE SÍ, Y ESTO NO ES UN DESCUIDO.
+   *
+   * Si aquí se dijera «ese DNI no está», cualquiera podría ir probando
+   * documentos para averiguar quién es hermano de qué hermandad. Y eso revela
+   * convicciones religiosas, que es categoría especial del RGPD: una pantalla
+   * de contraseña olvidada no puede ser una forma de comprobar la fe de nadie.
+   *
+   * La pantalla ya dice «si ese DNI está en el censo, te hemos mandado…», que
+   * es verdad de las dos maneras.
+   */
+  if (!fila?.token) return respuesta(RESPUESTA_DE_SIEMPRE)
+
+  const base = origenDeConfianza(datos.origen)
+  const enlace = `${base}/hermano?recuperar=${encodeURIComponent(String(fila.token))}`
+  const nombre = String(fila.nombre ?? '').trim().split(' ')[0]
+  const asunto = 'Para poner una contraseña nueva'
+  const texto = [
+    `${nombre ? `Hola, ${nombre}.` : 'Hola.'}`,
+    '',
+    'Has pedido cambiar la contraseña de tu área de hermano. Abre este enlace:',
+    enlace,
+    '',
+    'Vale durante dos horas y una sola vez.',
+    'Si no has sido tú, no hagas nada: tu contraseña sigue siendo la de siempre.',
+  ].join('\n')
+  const html = `<p>${nombre ? `Hola, ${escapar(nombre)}.` : 'Hola.'}</p>
+    <p>Has pedido cambiar la contraseña de tu área de hermano.</p>
+    <p><a href="${escapar(enlace)}">Poner una contraseña nueva</a></p>
+    <p style="color:#666">Vale durante dos horas y una sola vez. Si no has sido tú, no hagas
+    nada: tu contraseña sigue siendo la de siempre.</p>`
+
+  const envio = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: firmarComo(''), to: [String(fila.email)], subject: asunto, text: texto, html,
+    }),
+  })
+  if (!envio.ok) {
+    console.error('Resend devolvió un error al recuperar:', envio.status, await envio.text())
+    return respuesta({ error: 'No se ha podido mandar el correo.' }, 502)
+  }
+  return respuesta(RESPUESTA_DE_SIEMPRE)
+}
+
+/**
+ * Y el segundo paso: llega con el token del enlace y la contraseña nueva.
+ *
+ * La contraseña se cambia con la clave de servicio porque no se puede hacer de
+ * otra manera: ni desde SQL ni desde el navegador. El token se canjea primero
+ * —de un solo uso y con caducidad— y solo si vale se toca la cuenta.
+ */
+async function canjearRecuperacion(datos: { token?: string; clave?: string }): Promise<Response> {
+  if (!SERVICE_KEY) return respuesta({ error: 'El servidor no está configurado.' }, 503)
+  const clave = String(datos.clave ?? '')
+  if (!datos.token || clave.length < 6) {
+    return respuesta({ error: 'La contraseña tiene que tener al menos 6 caracteres.' }, 400)
+  }
+
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/canjear_recuperacion_hermano`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_token: datos.token }),
+  })
+  if (!r.ok) {
+    console.error('canjear_recuperacion_hermano falló:', r.status, await r.text())
+    return respuesta({ error: 'No se ha podido cambiar la contraseña.' }, 502)
+  }
+  const uid = await r.json()
+  if (!uid) {
+    // Se dice qué pasa, porque aquí SÍ se puede: quien llega con un enlace ya
+    // no tiene nada que averiguar, y lo que necesita es saber que pida otro.
+    return respuesta({ error: 'Ese enlace ya no vale. Pide uno nuevo desde «¿Has olvidado tu contraseña?».' }, 400)
+  }
+
+  const cambio = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${uid}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ password: clave }),
+  })
+  if (!cambio.ok) {
+    console.error('No se ha podido cambiar la contraseña:', cambio.status, await cambio.text())
+    return respuesta({ error: 'No se ha podido cambiar la contraseña.' }, 502)
+  }
+  return respuesta({ ok: true })
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cabeceras })
   if (req.method !== 'POST') return respuesta({ error: 'Método no permitido' }, 405)
@@ -150,6 +422,36 @@ Deno.serve(async (req: Request) => {
     )
   }
 
+  /*
+   * LA CONFIRMACIÓN DE UNA SUSCRIPCIÓN VA ANTES DEL CONTROL DE SESIÓN, y es la
+   * única que va antes. Quien se apunta desde la web pública no tiene sesión ni
+   * la va a tener: es un vecino del barrio, no un hermano. Exigirle una es lo
+   * que hacía que ese correo no se mandara nunca.
+   *
+   * No abre nada: esta rama se pone ella el destinatario, el asunto y el
+   * cuerpo, y solo manda algo si ese correo YA ESTÁ apuntado y sin confirmar.
+   * Ver `mandarConfirmacion` arriba.
+   */
+  let cuerpoCrudo: Record<string, unknown>
+  try {
+    cuerpoCrudo = await req.json()
+  } catch {
+    return respuesta({ error: 'El cuerpo de la petición no es JSON.' }, 400)
+  }
+  const suscripcion = cuerpoCrudo.suscripcion as
+    { hermandadId?: string; email?: string; origen?: string } | undefined
+  if (suscripcion) return await mandarConfirmacion(suscripcion)
+
+  /*
+   * Y LA RECUPERACIÓN DE CONTRASEÑA DEL HERMANO, por lo mismo: quien la pide es
+   * justamente quien no puede iniciar sesión. Tampoco abre nada — se pone ella
+   * el destinatario (el correo de la ficha, que lee aquí) y el texto.
+   */
+  const recuperar = cuerpoCrudo.recuperar as
+    { hermandadId?: string; dni?: string; origen?: string; token?: string; clave?: string } | undefined
+  if (recuperar?.token) return await canjearRecuperacion(recuperar)
+  if (recuperar) return await pedirRecuperacion(recuperar)
+
   const permiso = await quienLlama(req)
   if (!permiso.ok) return respuesta({ error: permiso.motivo }, 401)
 
@@ -157,12 +459,9 @@ Deno.serve(async (req: Request) => {
   const firma = await comoFirmaSuHermandad(permiso.auth ?? '')
   const remitente = firmarComo(firma.nombre)
 
-  let cuerpo: { para?: string[]; asunto?: string; texto?: string; html?: string; responderA?: string }
-  try {
-    cuerpo = await req.json()
-  } catch {
-    return respuesta({ error: 'El cuerpo de la petición no es JSON.' }, 400)
-  }
+  // Ya está leído arriba: el cuerpo de una petición solo se puede leer una vez.
+  const cuerpo = cuerpoCrudo as
+    { para?: string[]; asunto?: string; texto?: string; html?: string; responderA?: string }
 
   const para = (cuerpo.para ?? []).map((d) => d.trim()).filter((d) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d))
   if (para.length === 0) return respuesta({ error: 'No hay ninguna dirección válida a la que enviar.' }, 400)

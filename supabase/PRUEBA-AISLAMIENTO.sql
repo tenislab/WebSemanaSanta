@@ -373,16 +373,42 @@ insert into auth.users (id, email) values ('66666666-6666-6666-6666-666666666666
   on conflict (id) do nothing;
 set role authenticated;
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+-- EL CARGO SE ESCRIBE COMO LO ESCRIBE LA APLICACIÓN: «Tesorero/a», con la
+-- barra. `permisos_cargo` empareja por ese texto exacto, así que un «Tesorero»
+-- a secas no casa con ninguna fila y la cuenta se queda SIN NINGÚN PERMISO.
+-- Aquí eso hacía fallar dos comprobaciones y parecía un fallo del producto.
 insert into personal (nombre, email, cargo, clave, activo, auth_user_id)
-  values ('Tesorero', 'tesorero@amargura.test', 'Tesorero', 'x', true, '66666666-6666-6666-6666-666666666666');
+  values ('Tesorero', 'tesorero@amargura.test', 'Tesorero/a', 'x', true, '66666666-6666-6666-6666-666666666666');
+
+-- La hermandad del tesorero se lee SIN hacerse pasar por él: sus propias
+-- políticas no le dejan ver la tabla `personal`, así que preguntándolo como él
+-- la respuesta era nula y la comparación de abajo salía falsa siempre.
+reset role;
+select hermandad_id as hdad_del_tesorero from personal where email = 'tesorero@amargura.test' \gset
+set role authenticated;
 
 select set_config('test.uid', '66666666-6666-6666-6666-666666666666', false);
-select case when crear_hermandad('Intento') = (select hermandad_id from personal where email = 'tesorero@amargura.test')
+select case when crear_hermandad('Intento')::text = :'hdad_del_tesorero'
   then 'OK  L1  el personal recibe SU hermandad, no una nueva'
   else 'FALLO L1  al personal se le ha creado una hermandad aparte' end;
+
+-- Y ve el censo de SU hermandad, no el de la otra ni ninguno.
 select case when (select count(*) from hermanos) = 2
   then 'OK  L2  el tesorero entra en la hermandad de siempre y ve su censo'
   else 'FALLO L2  el tesorero ve ' || (select count(*) from hermanos) || ' hermanos' end;
+
+/*
+ * Y LOS PERMISOS DE SU CARGO, que es lo que de verdad se quería comprobar:
+ * un tesorero entra en Cuotas y en Tesorería y no en el resto. Si el cargo
+ * estuviera mal escrito, esto saldría todo en falso — y esa es la avería que
+ * se vive como «he entrado y no puedo hacer nada».
+ */
+select case when modulo_permitido('cuotas') and modulo_permitido('tesoreria')
+  then 'OK  L2b el tesorero tiene los permisos de su cargo'
+  else 'FALLO L2b el tesorero no tiene permiso ni sobre cuotas: ¿está bien escrito el cargo?' end;
+select case when not modulo_permitido('configuracion')
+  then 'OK  L2c y no los que no son suyos'
+  else 'FALLO L2c el tesorero puede tocar la configuración' end;
 
 -- Lo mismo desde una cuenta de hermano.
 select set_config('test.uid', '33333333-3333-3333-3333-333333333333', false);

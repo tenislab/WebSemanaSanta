@@ -24,6 +24,7 @@ import {
 } from '../../lib/tramos'
 import { TIPOS_CAMPO, useCamposPropios, type CampoPropio } from '../../lib/camposPropios'
 import { useConceptosCuota, saveConceptosCuota, type ConceptoCuotaConfig } from '../../lib/conceptosCuota'
+import TraerDatos from '../../components/TraerDatos'
 import { CLAVES_CATALOGOS, useCatalogos, saveLista } from '../../lib/catalogos'
 import { CATEGORIAS_GASTO, CATEGORIAS_INGRESO, CUENTAS_POR_DEFECTO } from '../../data/movimientos'
 import { TIPOS_INCIDENCIA_POR_DEFECTO } from '../../data/incidencias'
@@ -73,7 +74,7 @@ const CATALOGOS_DEF = [
   { k: 'segmentos', clave: CLAVES_CATALOGOS.segmentosComunicado, titulo: 'Destinatarios de comunicados', porDefecto: SEGMENTOS },
 ] as const
 
-type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'datos' | 'puesta' | 'correo' | 'conexiones'
+type SeccionCfg = 'hermandad' | 'cortejo' | 'papeletas' | 'catalogos' | 'ficha' | 'traer' | 'datos' | 'puesta' | 'correo' | 'conexiones'
 
 /** Las secciones de los ajustes, agrupadas como el editor de la web. */
 const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; icono: ReactNode }[] }[] = [
@@ -99,6 +100,10 @@ const SECCIONES_CFG: { titulo: string; items: { id: SeccionCfg; label: string; i
          buscar a Ajustes, y hasta ahora no estaba en ninguna parte. */
       { id: 'conexiones', label: 'Conexiones', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M9 15 4.5 19.5a3.2 3.2 0 0 1-4.5-4.5" transform="translate(2 -1)" /><path d="M14.5 9.5 19 5a3.2 3.2 0 0 1 4.5 4.5L19 14" transform="translate(-1 1)" /><path d="M9.5 14.5 14.5 9.5" /></svg> },
       { id: 'correo', label: 'Correo', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> },
+      /* «Traer vuestros datos» va antes que «Puesta en marcha» y que «Copias»
+         a propósito: es lo primero que hace una hermandad el día que se da de
+         alta, y hasta ahora estaba repartido en cuatro pantallas distintas. */
+      { id: 'traer', label: 'Traer vuestros datos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3v11M8.5 10.5 12 14l3.5-3.5" /><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg> },
       { id: 'puesta', label: 'Puesta en marcha', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 2v6M12 16v6M2 12h6M16 12h6" /><circle cx="12" cy="12" r="3.2" /></svg> },
       { id: 'datos', label: 'Copias y datos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></svg> },
     ],
@@ -1262,6 +1267,8 @@ export default function Configuracion() {
       {seccion === 'correo' && <CorreoCard />}
 
       {seccion === 'puesta' && <PuestaEnMarchaCard />}
+
+      {seccion === 'traer' && <TraerDatos />}
 
       {seccion === 'datos' && (
         <>

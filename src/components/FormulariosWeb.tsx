@@ -136,7 +136,7 @@ export function FormularioAvisos({
   const [consiente, setConsiente] = useState(false)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
-  const [hecho, setHecho] = useState(false)
+  const [hecho, setHecho] = useState<'' | 'concorreo' | 'sincorreo'>('')
   const antiRobot = useAntiRobot()
 
   async function enviar(e: React.FormEvent) {
@@ -152,15 +152,33 @@ export function FormularioAvisos({
     setError('')
     // Al robot se le dice que sí y no se guarda nada: enseñándole el error,
     // reintenta hasta dar con la forma de colarse.
-    if (!interactivo || antiRobot.esRobot()) { setHecho(true); return }
+    if (!interactivo || antiRobot.esRobot()) { setHecho('concorreo'); return }
     setEnviando(true)
     const r = await suscribirse(email, nombre, nombreHermandad)
     setEnviando(false)
-    if (r.ok) setHecho(true)
+    if (r.ok) setHecho(r.correoEnviado ? 'concorreo' : 'sincorreo')
     else setError(r.error)
   }
 
   if (hecho) {
+    /*
+     * DOS ACUSES, y no uno.
+     *
+     * El de arriba manda a esa persona a mirar su bandeja. Si el correo NO ha
+     * salido —la función de envío no está desplegada, el proveedor ha fallado,
+     * o ya se le mandó uno hace un momento— decirle eso la deja esperando algo
+     * que no va a llegar. Y como sin confirmar no se le escribe nunca, se queda
+     * fuera para siempre creyendo que está dentro.
+     */
+    if (hecho === 'sincorreo') {
+      return (
+        <Acuse titulo="Te tenemos apuntado">
+          Hemos guardado <b>{email.trim()}</b>. Falta un último paso —confirmar que el correo es
+          tuyo— y ahora mismo no hemos podido mandarte el enlace. La hermandad lo verá y te lo
+          manda; si en un par de días no te llega, escríbeles y lo miran.
+        </Acuse>
+      )
+    }
     return (
       <Acuse titulo="Ya casi está">
         Te hemos mandado un correo a <b>{email.trim()}</b> con un enlace. Ábrelo y a partir de ahí
@@ -303,7 +321,23 @@ export function FormularioAlta({
   interactivo, textoProteccionDatos, onCerrar,
 }: { interactivo: boolean; textoProteccionDatos: string; onCerrar?: () => void }) {
   const base = useId()
-  const [datos, setDatos] = useState({ nombre: '', dni: '', email: '', telefono: '', clave: '' })
+  /*
+   * SIN CONTRASEÑA, Y ESO ES EL ARREGLO.
+   *
+   * Aquí se pedía una y se guardaba EN CLARO en `solicitudes_alta`, donde la
+   * lee cualquiera del personal con el módulo «hermanos» —el Hermano Mayor, la
+   * Secretaría, el Diputado Mayor— y donde se queda mientras la solicitud está
+   * pendiente, que pueden ser semanas.
+   *
+   * La gente repite contraseñas. La que veía la secretaria es, con mucha
+   * probabilidad, la del correo de esa persona.
+   *
+   * Y no hacía falta: el camino de «se genera una clave de un solo uso y se
+   * manda por correo al aprobar» YA EXISTÍA —se usaba en el alta de un menor,
+   * que viene sin contraseña— y ahora se usa siempre. Se pide un campo menos y
+   * nadie ve la contraseña de nadie.
+   */
+  const [datos, setDatos] = useState({ nombre: '', dni: '', email: '', telefono: '' })
   const [consiente, setConsiente] = useState(false)
   const [errores, setErrores] = useState<Errores>({})
   const [enviando, setEnviando] = useState(false)
@@ -319,7 +353,6 @@ export function FormularioAlta({
     // El DNI y la contraseña son de este formulario, no del genérico: con ellos
     // la persona podrá entrar en su área en cuanto secretaría la dé de alta.
     if (datos.dni.trim().length < 8) errs.dni = 'Escribe tu DNI o NIE completo.'
-    if (datos.clave.length < 6) errs.clave = 'Elige una contraseña de 6 caracteres o más.'
     setErrores(errs)
     if (Object.keys(errs).length > 0) return
     // Al robot se le dice que sí y no se guarda nada: si se le enseña el
@@ -335,7 +368,8 @@ export function FormularioAlta({
       dni: limpiarDni(datos.dni),
       email: datos.email.trim(),
       telefono: datos.telefono.trim(),
-      clavePropuesta: datos.clave,
+      // Vacía siempre: la clave se genera al aprobar y se manda por correo.
+      clavePropuesta: '',
       fecha: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }),
       estado: 'Pendiente',
     }
@@ -349,7 +383,8 @@ export function FormularioAlta({
     return (
       <Acuse titulo="Solicitud enviada">
         Gracias, {datos.nombre.split(' ')[0]}. La secretaría la revisa y te avisa a <b>{datos.email}</b>.
-        Cuando te den de alta, entrarás en tu área con tu DNI y la contraseña que acabas de elegir.
+        Cuando te den de alta, en ese mismo correo te llega una clave para entrar en tu área con tu
+        DNI. La cambias por la que quieras en cuanto entres.
       </Acuse>
     )
   }
@@ -375,12 +410,6 @@ export function FormularioAlta({
           {(p) => <input {...p} type="tel" value={datos.telefono} onChange={set('telefono')} autoComplete="tel" />}
         </Campo>
       </div>
-      <Campo
-        id={`${base}-clave`} etiqueta="Contraseña para tu área" error={errores.clave}
-        ayuda="La usarás para entrar en tu área de hermano cuando te den de alta."
-      >
-        {(p) => <input {...p} type="password" value={datos.clave} onChange={set('clave')} autoComplete="new-password" />}
-      </Campo>
       {antiRobot.campo}
       <Consentimiento
         id={`${base}-rgpd`} texto={textoProteccionDatos} valor={consiente}

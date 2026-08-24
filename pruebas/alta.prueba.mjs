@@ -44,9 +44,14 @@ export default async function ({ cargar, caso }) {
    */
   const accesos = await readFile('src/lib/accesos.ts', 'utf8')
 
-  // Ya no se traga el fallo: se devuelve.
+  /*
+   * Ya no se traga el fallo: se devuelve. Se mira que el tipo LO LLEVE, no cómo
+   * está escrito: comprobando el texto exacto, esta prueba se ponía roja el día
+   * que al tipo se le añadió un campo más —y lo que venía a proteger seguía
+   * estando—, que es ruido y no una red de seguridad.
+   */
   caso('crear el acceso devuelve también el fallo', true,
-    /ResultadoDeAcceso = \{ id: string \| null; error: string \| null \}/.test(accesos))
+    /ResultadoDeAcceso = \{[\s\S]{0,600}?error: string \| null/.test(accesos))
   caso('y la pantalla lo recoge', true, /if \(acceso\.error\) setAvisoAcceso\(acceso\.error\)/.test(hermanos))
   // En los DOS sitios que dan de alta: la solicitud aceptada y el alta a mano.
   caso('en los dos sitios que dan de alta', 2,

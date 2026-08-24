@@ -110,17 +110,38 @@ function hojaXml(filas) {
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${filasXml}</sheetData></worksheet>`
 }
 
-const ARCHIVOS = (filas) => ({
-  '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`,
-  '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+/**
+ * LOS ARCHIVOS DE DENTRO DEL .XLSX, para un libro de una o de varias pestañas.
+ *
+ * `numeroDeFichero` NO sigue el orden de las pestañas a propósito. En un libro
+ * de verdad tampoco: basta con borrar una hoja y crear otra para que la
+ * tercera del libro sea `sheet7.xml`. Quien lea el libro tiene que pasar por
+ * `workbook.xml` y por el `.rels`, y esto lo obliga a hacerlo — leer «la
+ * primera es sheet1» acierta con los libros recién hechos y falla con los de
+ * verdad, que es cuando no se puede probar.
+ */
+const ARCHIVOS = (hojas) => {
+  const numeroDeFichero = (i) => (i * 2) + 1
+  const parte = (i) => `worksheets/sheet${numeroDeFichero(i)}.xml`
+  const salida = {
+    '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${hojas
+      .map((_, i) => `<Override PartName="/xl/${parte(i)}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`)
+      .join('')}</Types>`,
+    '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-  'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Censo" sheetId="1" r:id="rId1"/></sheets></workbook>`,
-  'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
-  'xl/worksheets/sheet1.xml': hojaXml(filas),
-})
+    'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${hojas
+      .map((h, i) => `<sheet name="${escapar(h.nombre)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+      .join('')}</sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${hojas
+      .map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="${parte(i)}"/>`)
+      .join('')}</Relationships>`,
+  }
+  hojas.forEach((h, i) => { salida[`xl/${parte(i)}`] = hojaXml(h.filas) })
+  return salida
+}
 
 /** 1 de enero de 2026, en el formato de fecha del ZIP (heredado del MS-DOS). */
 const FECHA_DOS = ((46 << 9) | (1 << 5) | 1) << 16
@@ -141,9 +162,24 @@ function crc32(buf) {
   return (crc ^ -1) >>> 0
 }
 
-/** Monta el ZIP: cabecera por archivo, índice central y final. */
-export function construirXlsx(filas) {
-  const archivos = ARCHIVOS(filas)
+/**
+ * Monta el ZIP de un libro con varias pestañas.
+ *
+ *   construirLibro([{ nombre: 'Censo', filas }, { nombre: 'Cuotas', filas }])
+ */
+export function construirLibro(hojas) {
+  return empaquetar(ARCHIVOS(hojas))
+}
+
+/**
+ * El ZIP, que es lo único que un .xlsx tiene de formato binario.
+ *
+ * Está aparte porque lo usan los dos constructores: el de siempre —que mete
+ * todo como texto en línea— y `construirComoExcel`, que escribe los archivos
+ * como los escribe Excel. Lo que cambia entre los dos es el XML de dentro; el
+ * envoltorio es el mismo.
+ */
+function empaquetar(archivos) {
   const trozos = []
   const central = []
   let desplazamiento = 0
@@ -193,6 +229,86 @@ export function construirXlsx(filas) {
   fin.writeUInt32LE(indice.length, 12)
   fin.writeUInt32LE(desplazamiento, 16)
   return Buffer.concat([...trozos, indice, fin])
+}
+
+/**
+ * UN LIBRO ESCRITO COMO LO ESCRIBE EXCEL DE VERDAD.
+ *
+ * Los de arriba meten TODO como texto en línea (`inlineStr`), que va muy bien
+ * para no perder un DNI que empieza por cero — pero es justo lo que Excel NO
+ * hace nunca. Excel guarda:
+ *
+ *   · los textos en una lista aparte, y en la celda solo su número (`t="s"`);
+ *   · los números tal cual, sin ninguna marca de tipo;
+ *   · y las FECHAS como números, con un estilo de fecha puesto encima.
+ *
+ * Esa diferencia escondió un fallo durante mucho tiempo: el lector no abría
+ * `styles.xml`, así que la fecha de alta de cada hermano llegaba al importador
+ * como «36512». Con los libros de casa funcionaba; con los de la hermandad, no.
+ *
+ * Cada celda se declara con su tipo:
+ *
+ *     { texto: 'María José' }   un texto
+ *     { numero: 30 }            un número
+ *     { fecha: '1999-12-18' }   una fecha, como la guarda Excel
+ */
+export function construirComoExcel(hojas) {
+  const compartidos = []
+  const numeroDeTexto = (t) => {
+    const i = compartidos.indexOf(t)
+    return i >= 0 ? i : compartidos.push(t) - 1
+  }
+
+  /** Una fecha ISO, en el número de días de Excel (desde el 30-12-1899). */
+  const serieDeExcel = (iso) => {
+    const [a, m, d] = iso.split('-').map(Number)
+    return Math.round((Date.UTC(a, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000)
+  }
+
+  const hojasXml = hojas.map((h) => {
+    const filas = h.filas.map((fila, f) => {
+      const celdas = fila.map((celda, c) => {
+        const ref = `${letraColumna(c)}${f + 1}`
+        if (celda === '' || celda === null || celda === undefined) return ''
+        if (typeof celda === 'object' && celda.fecha !== undefined) {
+          // `s="1"` es el estilo de fecha que se declara abajo en styles.xml.
+          return `<c r="${ref}" s="1"><v>${serieDeExcel(celda.fecha)}</v></c>`
+        }
+        if (typeof celda === 'object' && celda.numero !== undefined) {
+          return `<c r="${ref}"><v>${celda.numero}</v></c>`
+        }
+        const t = typeof celda === 'object' ? celda.texto : String(celda)
+        return `<c r="${ref}" t="s"><v>${numeroDeTexto(t)}</v></c>`
+      }).join('')
+      return `<row r="${f + 1}">${celdas}</row>`
+    }).join('')
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${filas}</sheetData></worksheet>`
+  })
+
+  const archivos = {
+    '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${hojas.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`,
+    '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${hojas.map((h, i) => `<sheet name="${escapar(h.nombre)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${hojas.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}</Relationships>`,
+    /*
+     * `numFmtId="14"` es la fecha corta que pone Excel al teclear 18/12/1999.
+     * Y va DETRÁS de un `cellStyleXfs` con la misma etiqueta `<xf>` a propósito:
+     * el `s=` de las celdas apunta a `cellXfs` y no a esa otra lista, y contarlas
+     * juntas desplaza los estilos — que es un fallo fácil de cometer al leer.
+     */
+    'xl/styles.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>`,
+    'xl/sharedStrings.xml': '',
+  }
+  hojas.forEach((_, i) => { archivos[`xl/worksheets/sheet${i + 1}.xml`] = hojasXml[i] })
+  // Al final, que hasta aquí no se sabe qué textos han salido.
+  archivos['xl/sharedStrings.xml'] = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${compartidos.length}" uniqueCount="${compartidos.length}">${compartidos.map((t) => `<si><t xml:space="preserve">${escapar(t)}</t></si>`).join('')}</sst>`
+  return empaquetar(archivos)
+}
+
+/** Un libro de una sola pestaña, que es el caso de siempre. */
+export function construirXlsx(filas, nombre = 'Censo') {
+  return construirLibro([{ nombre, filas }])
 }
 
 /** El mismo censo en CSV, por si prefieren ese camino. Punto y coma, que es lo que suelta Excel en España. */

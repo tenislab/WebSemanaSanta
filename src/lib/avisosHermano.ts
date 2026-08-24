@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { traerTodasLasFilas } from './paginado'
 import { leerPersistido } from './persistencia'
 import { nuevoId } from './supabaseSync'
 import { supabase, isSupabaseConfigured } from './supabase'
@@ -125,7 +126,9 @@ export async function savePreferenciasAvisos(
  */
 export async function cargarPreferenciasDeLaBase(): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return
-  const { data, error } = await supabase.from('hermanos').select('id, avisos_preferencias')
+  // Por páginas, que son tantas filas como hermanos. Ver `lib/paginado.ts`.
+  const { data, error } = await traerTodasLasFilas<{ id: string; avisos_preferencias: unknown }>((desde, hasta) =>
+    supabase!.from('hermanos').select('id, avisos_preferencias').order('id').range(desde, hasta))
   if (error || !data) return
   const todas = leerPersistido<Record<string, PreferenciasAvisos>>(CLAVE_PREFS, {})
   for (const fila of data as { id: string; avisos_preferencias: PreferenciasAvisos | null }[]) {
@@ -159,10 +162,60 @@ function saveAvisos(lista: AvisoHermano[]) {
   localStorage.setItem(CLAVE, JSON.stringify(lista))
 }
 
+/**
+ * EL BUZÓN DEL HERMANO ESTABA EN EL ORDENADOR DE LA SECRETARÍA.
+ *
+ * La tabla `avisos_hermano` existe desde el principio, con sus políticas: el
+ * hermano lee los suyos y puede marcarlos leídos, y el personal de la
+ * hermandad los escribe. Lo que faltaba era que alguien la usara. Todos los
+ * avisos se guardaban en `localStorage` Y EN NINGÚN OTRO SITIO.
+ *
+ * Así que: la secretaria da un recibo por pagado desde su ordenador, se
+ * escribe «Tu recibo de Cuota anual queda pagado» en SU navegador, y el
+ * hermano abre su área en el móvil y no tiene nada. La campana con el punto
+ * rojo, el buzón, los avisos de papeleta, los de cuota, el de la baja: todo
+ * vacío para siempre, sin un error por medio.
+ *
+ * Se escribe en los DOS sitios a propósito:
+ *
+ *   · En la base, que es de donde lo lee el hermano.
+ *   · Y en la copia local, para que la pantalla de quien acaba de hacer la
+ *     acción lo enseñe ya, sin esperar a la red — y para que el modo
+ *     demostración, que no tiene base, siga funcionando igual.
+ *
+ * El envío a la base NO se espera (`void`): quien llama está en mitad de dar
+ * un recibo por pagado y el aviso es un acompañamiento, no la operación. Si
+ * falla, se deja dicho en la consola y se sigue: perder el aviso es malo,
+ * bloquear el cobro por él sería peor.
+ */
+function mandarALaBase(filas: { hermano_id: string; texto: string; tipo: TipoAviso; titulo?: string }[]) {
+  if (!isSupabaseConfigured || !supabase || filas.length === 0) return
+  /*
+   * `hermandad_id` no se manda: la columna lleva `default hermandad_actual()`,
+   * igual que en el resto de tablas. Y `fecha` tampoco, que su `default` es
+   * `now()` — la hora del servidor, que es la buena, y no la del ordenador de
+   * quien esté delante.
+   */
+  void supabase
+    .from('avisos_hermano')
+    .insert(filas.map((f) => ({
+      hermano_id: f.hermano_id,
+      texto: f.texto,
+      tipo: f.tipo,
+      titulo: f.titulo ?? null,
+    })))
+    .then(({ error }) => {
+      // `supabase-js` no lanza excepción cuando la base rechaza: devuelve
+      // `{ error }` y sigue. Sin mirarlo, esto volvería a fallar en silencio.
+      if (error) console.error('No se pudo guardar el aviso al hermano:', error.message)
+    })
+}
+
 /** Registra un aviso para un hermano (correo simulado). */
 export function agregarAvisoHermano(hermanoId: string, texto: string, tipo: TipoAviso = 'ficha', titulo?: string) {
   const nuevo: AvisoHermano = { id: nuevoId(), hermanoId, fecha: hoy(), texto, leido: false, tipo, titulo }
   saveAvisos([nuevo, ...getAvisosHermano()])
+  mandarALaBase([{ hermano_id: hermanoId, texto, tipo, titulo }])
 }
 
 /** El mismo aviso para muchos hermanos de una vez (un comunicado). */
@@ -173,6 +226,51 @@ export function agregarAvisoAVarios(hermanoIds: string[], texto: string, tipo: T
     id: nuevoId(), hermanoId, fecha, texto, leido: false, tipo, titulo,
   }))
   saveAvisos([...nuevos, ...getAvisosHermano()])
+  /*
+   * De doscientos en doscientos, como el resto de escrituras en bloque: un
+   * comunicado a ochocientos hermanos son ochocientas filas, y un cuerpo de
+   * varios megas se queda en el camino. Ver `supabaseSync.ts`.
+   */
+  for (let i = 0; i < hermanoIds.length; i += 200) {
+    mandarALaBase(hermanoIds.slice(i, i + 200).map((hermano_id) => ({ hermano_id, texto, tipo, titulo })))
+  }
+}
+
+/**
+ * Los avisos de ESTE hermano, traídos de la base.
+ *
+ * Se pide por su id y no «todos»: las políticas ya le acotan a los suyos, pero
+ * pedirlos explícitamente hace que el mismo hook valga en el panel —donde la
+ * secretaría sí ve los de todos— sin traerse el buzón de la hermandad entera.
+ */
+async function traerAvisosDeLaBase(hermanoId: string): Promise<AvisoHermano[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  const { data, error } = await traerTodasLasFilas<Record<string, unknown>>((desde, hasta) =>
+    supabase!.from('avisos_hermano').select('*').eq('hermano_id', hermanoId)
+      .order('fecha', { ascending: false }).range(desde, hasta))
+  if (error || !data) return null
+  return data.map((r) => ({
+    id: r.id as string,
+    hermanoId: r.hermano_id as string,
+    // La fecha viene como marca de tiempo y se enseña como en el resto de la
+    // aplicación: «03 feb 2026».
+    fecha: new Date(r.fecha as string).toLocaleDateString('es-ES', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    }),
+    texto: (r.texto as string) ?? '',
+    leido: Boolean(r.leido),
+    tipo: (r.tipo as TipoAviso | null) ?? 'ficha',
+    titulo: (r.titulo as string | null) ?? undefined,
+  }))
+}
+
+/** Marca uno o todos como leídos en la base. Es lo único que el hermano toca. */
+function marcarEnLaBase(hermanoId: string, ids: string[] | null, leido: boolean) {
+  if (!isSupabaseConfigured || !supabase) return
+  const q = supabase.from('avisos_hermano').update({ leido }).eq('hermano_id', hermanoId)
+  void (ids ? q.in('id', ids) : q).then(({ error }) => {
+    if (error) console.error('No se pudo marcar el aviso como leído:', error.message)
+  })
 }
 
 /** Etiquetas legibles de los campos que el hermano vería como "suyos". */
@@ -232,6 +330,35 @@ export function useAvisosHermano(hermanoId: string | null): {
     window.addEventListener('storage', sync)
     return () => window.removeEventListener('storage', sync)
   }, [hermanoId])
+
+  /*
+   * Y LOS DE LA BASE, que son los que le ha mandado la hermandad.
+   *
+   * Lo que hubiera en la copia de este navegador solo son los que se
+   * escribieron DESDE AQUÍ. En el móvil del hermano eso es siempre nada, que
+   * es por lo que su buzón salía vacío: la secretaria daba el recibo por
+   * pagado en su ordenador y el aviso se quedaba allí.
+   *
+   * Los de la base MANDAN sobre la copia local, y se conservan los locales que
+   * la base todavía no conoce —el que se acaba de escribir hace medio
+   * segundo—, para que la pantalla de quien hizo la acción no parpadee.
+   */
+  useEffect(() => {
+    if (!hermanoId) return
+    let cancelado = false
+    void traerAvisosDeLaBase(hermanoId).then((deLaBase) => {
+      if (cancelado || !deLaBase) return
+      setTodos((locales) => {
+        const suyosEnLaBase = new Set(deLaBase.map((a) => a.texto + '|' + a.fecha))
+        const deOtros = locales.filter((a) => a.hermanoId !== hermanoId)
+        const recienEscritos = locales.filter(
+          (a) => a.hermanoId === hermanoId && !suyosEnLaBase.has(a.texto + '|' + a.fecha),
+        )
+        return [...recienEscritos, ...deLaBase, ...deOtros]
+      })
+    })
+    return () => { cancelado = true }
+  }, [hermanoId])
   useEffect(() => {
     setPreferencias(hermanoId ? getPreferenciasAvisos(hermanoId) : {})
   }, [hermanoId])
@@ -248,17 +375,40 @@ export function useAvisosHermano(hermanoId: string | null): {
     setTodos(actualizados)
   }
 
+
+  /*
+   * Leer y borrar tocan LOS DOS sitios. Si solo se tocara el local, el punto
+   * rojo de la campana volvería a aparecer en cuanto el hermano recargara —o
+   * entrara desde otro teléfono—, que es la forma más molesta de que un aviso
+   * «no se pueda quitar de encima».
+   *
+   * `guardar` actualiza la lista de la pantalla; los de la base se cambian
+   * aparte, porque en la copia local hay avisos de otros hermanos (los que
+   * escribió esta misma secretaría) que no le tocan a nadie más.
+   */
   function marcarLeidos() {
     if (!hermanoId) return
-    guardar(getAvisosHermano().map((a) => (a.hermanoId === hermanoId ? { ...a, leido: true } : a)))
+    guardar(todos.map((a) => (a.hermanoId === hermanoId ? { ...a, leido: true } : a)))
+    marcarEnLaBase(hermanoId, null, true)
   }
 
   function marcarLeido(id: string, leido: boolean) {
-    guardar(getAvisosHermano().map((a) => (a.id === id ? { ...a, leido } : a)))
+    guardar(todos.map((a) => (a.id === id ? { ...a, leido } : a)))
+    if (hermanoId) marcarEnLaBase(hermanoId, [id], leido)
   }
 
+  /*
+   * BORRAR ES DARLO POR LEÍDO, no quitarlo de la base.
+   *
+   * El hermano no tiene permiso para borrar —su política solo le deja marcar
+   * `leido`— y es lo correcto: un aviso es la constancia de que se le comunicó
+   * algo. La baja, el cambio de cuenta bancaria y el recibo cobrado son cosas
+   * que a la hermandad le interesa poder demostrar que se dijeron. Se le quita
+   * de la vista y se queda registrado.
+   */
   function borrar(id: string) {
-    guardar(getAvisosHermano().filter((a) => a.id !== id))
+    guardar(todos.filter((a) => a.id !== id))
+    if (hermanoId) marcarEnLaBase(hermanoId, [id], true)
   }
 
   /**

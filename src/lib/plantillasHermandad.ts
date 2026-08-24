@@ -30,6 +30,23 @@ export type PlantillaGuardable =
   | 'asistencia'
   | 'ajustes_cuotas'
   | 'etiquetas'
+  /*
+   * Y DOS MÁS, del mismo tipo y por el mismo motivo.
+   *
+   * `campana` es el año de la estación de penitencia y las fechas del plazo.
+   * Es la que más daño hacía viviendo en un navegador, porque la lee también
+   * el ÁREA DEL HERMANO: la secretaría abría la campaña de 2026 desde su
+   * ordenador y el hermano, en el móvil, veía la de fábrica —otro año, otro
+   * plazo, otra fecha de salida— y pedía sitio para una Semana Santa que no
+   * tocaba, sin que ninguno de los dos viera nada raro.
+   *
+   * `campos_propios` son los campos a medida de la ficha. Aquí lo llamativo
+   * es que el VALOR sí viajaba —va dentro de la ficha del hermano, que se
+   * guarda en la base— y la definición no: desde otro ordenador, la talla de
+   * túnica estaba guardada y no se veía por ninguna parte.
+   */
+  | 'campana'
+  | 'campos_propios'
 
 /** Trae una de ellas, o null si no hay base de datos o no está guardada. */
 export async function traerPlantilla<T>(cual: PlantillaGuardable): Promise<T | null> {

@@ -1,12 +1,12 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Drawer from './Drawer'
 import { descargarArchivo } from '../lib/csv'
 import { nuevoId } from '../lib/supabaseSync'
 import {
-  CAMPOS_IMPORTABLES, aplicar, csvDeErrores, ensayar, leerCsv, pareceBinario,
+  CAMPOS_IMPORTABLES, aplicar, censoSinPreambulo, csvDeErrores, ensayar, hojaDelCenso, leerCsv, pareceBinario,
   proponerEmparejado, type CampoImportable, type Ensayo,
 } from '../lib/importar'
-import { ExcelIlegible, leerXlsx, pareceXlsx } from '../lib/leerExcel'
+import { ExcelIlegible, leerLibro, pareceXlsx, type Hoja } from '../lib/leerExcel'
 import type { Hermano } from '../data/hermanos'
 import { isSupabaseConfigured } from '../lib/supabase'
 
@@ -20,13 +20,15 @@ import { isSupabaseConfigured } from '../lib/supabase'
 type Paso = 'archivo' | 'columnas' | 'ensayo' | 'hecho'
 
 export default function ImportarCenso({
-  abierto, onCerrar, censo, onImportar,
+  abierto, onCerrar, censo, onImportar, libroInicial,
 }: {
   abierto: boolean
   onCerrar: () => void
   censo: Hermano[]
   /** Recibe el censo resultante. Guardar es cosa de quien lo usa, con el mecanismo de siempre. */
   onImportar: (censo: Hermano[]) => void
+  /** Un archivo ya leído, para no volver a pedirlo. Ver `ImportarTabla`. */
+  libroInicial?: { nombre: string; hojas: Hoja[] } | null
 }) {
   const [paso, setPaso] = useState<Paso>('archivo')
   const [nombreArchivo, setNombreArchivo] = useState('')
@@ -44,18 +46,58 @@ export default function ImportarCenso({
   const [censoAnterior, setCensoAnterior] = useState<Hermano[] | null>(null)
   const [deshecho, setDeshecho] = useState(false)
   const [errorArchivo, setErrorArchivo] = useState('')
+  /**
+   * Las pestañas del libro, cuando trae más de una. Igual que en
+   * `ImportarTabla`: una hermandad exporta su programa viejo en UN libro con
+   * el censo, las cuotas y la caja, y lo sube una vez por pantalla.
+   */
+  const [hojas, setHojas] = useState<Hoja[]>([])
+  const [hojaElegida, setHojaElegida] = useState(0)
+  /*
+   * Cuántas filas de encabezado se han dejado arriba: el título de la hoja, la
+   * fecha del listado, la línea en blanco. Se guardan para poder seguir
+   * diciendo «la línea 47» refiriéndose a la 47 de SU archivo.
+   */
+  const [saltadas, setSaltadas] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  /* Arrancar con un archivo ya leído. Ver el comentario en `ImportarTabla`. */
+  useEffect(() => {
+    if (!abierto || !libroInicial) return
+    /*
+     * SOLO DESDE EL PRINCIPIO, y esto no es una precaución de más.
+     *
+     * Sin esta línea, el efecto devolvía al paso de columnas CADA VEZ que se
+     * repintaba el panel de quien lo abre. Y se repinta justo en el peor
+     * momento: al terminar de importar, porque la lista nueva entra en su
+     * estado. Se veía «ya está importado» un instante y aparecía otra vez el
+     * emparejador de columnas, como si no se hubiera guardado nada.
+     */
+    if (paso !== 'archivo') return
+    const cual = hojaDelCenso(libroInicial.hojas)
+    const hoja = libroInicial.hojas[cual]
+    if (!hoja || hoja.filas.length < 2) return
+    setHojas(libroInicial.hojas)
+    setHojaElegida(cual)
+    setNombreArchivo(libroInicial.nombre)
+    const corte = censoSinPreambulo(hoja.filas)
+    setFilas(corte.filas)
+    setSaltadas(corte.saltadas)
+    setEmparejado(proponerEmparejado(corte.filas[0]))
+    setPaso('columnas')
+  }, [abierto, libroInicial, paso])
 
   const cabeceras = filas[0] ?? []
   const ensayo: Ensayo | null = useMemo(
-    () => (filas.length > 1 ? ensayar(filas, emparejado, censo) : null),
-    [filas, emparejado, censo],
+    () => (filas.length > 1 ? ensayar(filas, emparejado, censo, undefined, saltadas) : null),
+    [filas, emparejado, censo, saltadas],
   )
   const faltanObligatorios = CAMPOS_IMPORTABLES.filter((c) => c.obligatorio && emparejado[c.id] === null)
 
   function reiniciar() {
     setPaso('archivo'); setFilas([]); setNombreArchivo(''); setResultado(null); setErrorArchivo('')
     setCensoAnterior(null); setDeshecho(false)
+    setHojas([]); setHojaElegida(0); setSaltadas(0)
   }
 
   async function elegirArchivo(f: File | null) {
@@ -76,10 +118,10 @@ export default function ImportarCenso({
      * hay programas de gestión que sueltan un .xlsx llamándolo .csv.
      */
     const bytes = new Uint8Array(await f.arrayBuffer())
-    let filasDelExcel: string[][] | null = null
     if (pareceXlsx(bytes)) {
+      let libro: Hoja[]
       try {
-        filasDelExcel = await leerXlsx(bytes)
+        libro = await leerLibro(bytes)
       } catch (e) {
         setErrorArchivo(
           e instanceof ExcelIlegible
@@ -88,11 +130,20 @@ export default function ImportarCenso({
         )
         return
       }
-      if (filasDelExcel.length < 2) {
-        setErrorArchivo('La primera hoja del Excel no tiene filas de datos, solo la cabecera (o está vacía).')
+      // La pestaña se elige por las columnas: en un libro con el censo, las
+      // cuotas y la caja, la primera hoja casi nunca es el censo.
+      const cual = hojaDelCenso(libro)
+      if (libro[cual].filas.length < 2) {
+        setErrorArchivo(
+          libro.length === 1
+            ? 'La hoja del Excel no tiene filas de datos, solo la cabecera (o está vacía).'
+            : 'Ninguna de las hojas del Excel tiene filas de datos, solo cabeceras.',
+        )
         return
       }
-      empezarCon(filasDelExcel, f.name)
+      setHojas(libro)
+      setHojaElegida(cual)
+      empezarCon(libro[cual].filas, f.name)
       return
     }
 
@@ -113,10 +164,28 @@ export default function ImportarCenso({
   }
 
   /** Ya tenemos las filas, vengan del Excel o del CSV: el resto es igual. */
+  /** Cambiar de pestaña sin volver a subir el archivo. */
+  function cambiarDeHoja(i: number) {
+    setHojaElegida(i)
+    const corte = censoSinPreambulo(hojas[i].filas)
+    setFilas(corte.filas)
+    setSaltadas(corte.saltadas)
+    setEmparejado(proponerEmparejado(corte.filas[0] ?? []))
+  }
+
   function empezarCon(leidas: string[][], nombre: string) {
     setNombreArchivo(nombre)
-    setFilas(leidas)
-    setEmparejado(proponerEmparejado(leidas[0]))
+    /*
+     * Aquí se corta el encabezado de la hoja. La cabecera casi nunca es la
+     * primera fila en un archivo de hermandad —encima suele haber el nombre de
+     * la hermandad y la fecha del listado— y suponerlo dejaba la pantalla
+     * diciendo «— no está en el archivo —» en todas las columnas, con el
+     * archivo bueno delante.
+     */
+    const corte = censoSinPreambulo(leidas)
+    setFilas(corte.filas)
+    setSaltadas(corte.saltadas)
+    setEmparejado(proponerEmparejado(corte.filas[0]))
     setPaso('columnas')
   }
 
@@ -244,6 +313,29 @@ export default function ImportarCenso({
       {/* ---------------------------------------------------------------- */}
       {paso === 'columnas' && (
         <>
+          {/* El libro trae varias pestañas y hemos elegido una: se dice cuál y
+              se deja cambiarla. Ver el comentario en `ImportarTabla.tsx`. */}
+          {hojas.length > 1 && (
+            <div className="form-row">
+              <label htmlFor="hojaDelCenso">Pestaña del Excel</label>
+              <select
+                id="hojaDelCenso"
+                value={hojaElegida}
+                onChange={(e) => cambiarDeHoja(Number(e.target.value))}
+              >
+                {hojas.map((h, i) => (
+                  <option key={h.nombre + i} value={i}>
+                    {h.nombre} · {Math.max(0, h.filas.length - 1)} fila
+                    {h.filas.length - 1 === 1 ? '' : 's'}
+                  </option>
+                ))}
+              </select>
+              <p className="form-hint">
+                El archivo trae {hojas.length} pestañas y hemos cogido «{hojas[hojaElegida]?.nombre}»
+                porque es la que tiene columnas de censo. Si no es esa, cambiadla aquí.
+              </p>
+            </div>
+          )}
           <p className="form-hint">
             Hemos reconocido lo que hemos podido por el nombre de la columna. <b>Repasadlo</b>: si
             aquí se cuela el teléfono en la casilla del DNI, se importan mil fichas mal.

@@ -249,8 +249,19 @@ async function losPermisosDeFabricaCuadran({ cargar, caso }) {
    * permisos que una hermandad haya quitado a propósito, y es peor que el
    * fallo que se viene a arreglar.
    */
+  /*
+   * Vive en `permisos-eventos-y-web.sql` y no dentro de este, y no es un
+   * detalle de organización: `permisos-por-hermandad.sql` redefine
+   * `modulo_permitido()`, que `hermano-con-cargo.sql` vuelve a definir después
+   * con una vía más. Ejecutar el fichero viejo suelto sobre una base al día
+   * retira esa vía y deja sin acceso al hermano que lleva un cargo en su
+   * ficha. El relleno, en cambio, solo añade filas: por eso puede ir solo.
+   */
+  const relleno = await readFile('supabase/permisos-eventos-y-web.sql', 'utf8')
   caso('a las hermandades que ya existen se les añaden los que faltaban', true,
-    /insert into permisos_cargo[\s\S]{0,400}cross join \(values[\s\S]{0,400}'eventos'/.test(sql))
+    /insert into permisos_cargo[\s\S]{0,400}cross join \(values[\s\S]{0,400}'eventos'/.test(relleno))
   caso('y solo esos dos, sin resembrar lo demás', true,
-    /Nadie ha podido quitar a mano algo que nunca estuvo/.test(sql))
+    /Nadie ha podido quitar a mano algo que nunca estuvo/.test(relleno))
+  caso('y el fichero que sí redefine funciones remite a él', true,
+    /permisos-eventos-y-web\.sql/.test(sql))
 }

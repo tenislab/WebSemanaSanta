@@ -56,11 +56,24 @@ export const PIEZAS = [
   ['papeletas-simbolica-y-precio.sql', 'El precio de la papeleta y la simbólica: de la hermandad, no del navegador'],
   ['buscar-hermandad-con-su-escudo.sql', 'Que el hermano encuentre su hermandad por ciudad y la reconozca por su escudo'],
   ['redes-sociales.sql', 'Que cada hermandad tenga sus propias redes (la clave era global)'],
+  ['clave-de-catalogos.sql', 'Que cada hermandad tenga sus propios catálogos (la clave era global)'],
   ['motivo-del-rechazo.sql', 'Por qué se rechazó un alta, para poder decírselo a quien la pidió'],
   ['imagenes.sql', 'El almacén de fotos: que la web no lleve las imágenes dentro'],
   ['visitas-web.sql', 'El contador de visitas de la web, sin cookies ni Google Analytics'],
   ['suscriptores-web.sql', 'Avisos por correo para quien sigue a la hermandad sin ser hermano'],
   ['copias.sql', 'Las copias de seguridad, guardadas solas cada semana'],
+  // Va detrás de `hermano-con-cargo.sql` a propósito: siembra filas sobre los
+  // cargos que esa siembra ya ha dejado puestos.
+  ['permisos-eventos-y-web.sql', 'Los dos módulos que nunca se sembraron: «eventos» y «web»'],
+  ['lo-que-toca-el-hermano.sql', 'Que el hermano no se ponga la cuota como pagada desde la consola'],
+  ['sin-contrasenas-en-las-solicitudes.sql', 'Fuera la contraseña en claro que guardaba cada solicitud de alta'],
+  ['freno-de-los-formularios.sql', 'Un tope a lo que cualquiera puede meter desde la web pública'],
+  ['cuenta-por-hermandad.sql', 'Ser hermano de dos hermandades: una cuenta por hermandad + DNI'],
+  ['solicitudes-de-papeleta.sql', 'Que la solicitud de papeleta del hermano llegue a la hermandad'],
+  ['activar-la-suscripcion.sql', 'Que el botón de activar la suscripción llegue a la base'],
+  ['numero-de-recibo-unico.sql', 'Que no pueda haber dos recibos con el mismo número'],
+  ['borrar-una-hermandad.sql', 'Que una hermandad se pueda borrar (el registro lo impedía)'],
+  ['documentos-restringidos.sql', 'Que el documento restringido lo sea también en la base'],
 ]
 
 const CABECERA = `-- =============================================================================

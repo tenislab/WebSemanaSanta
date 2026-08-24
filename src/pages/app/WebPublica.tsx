@@ -1,4 +1,5 @@
 import { asegurarFuentesDeLaWeb } from '../../lib/fuentesDeLaWeb'
+import { useMoverConElFoco } from '../../lib/foco'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -85,7 +86,11 @@ import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
 import { comprimirImagen, leerArchivo } from '../../lib/imagen'
 import { guardarImagen, hayAlmacen, mudarImagenes, sustituirImagenes } from '../../lib/almacenImagenes'
 import { SIN_VISITAS, diaCorto, nombreDeRuta, resumenDeVisitas, variacion, type ResumenDeVisitas } from '../../lib/visitas'
-import { borrarSuscriptor, getSuscriptores, losQueSePuedenAvisar, type Suscriptor } from '../../lib/suscriptoresWeb'
+import {
+  borrarSuscriptor, getSuscriptores, losQueFaltanPorConfirmar, losQueSePuedenAvisar,
+  reenviarConfirmaciones, type Suscriptor,
+} from '../../lib/suscriptoresWeb'
+import { hermandadActualId } from '../../lib/multiHermandad'
 import {
   TIPOS_MENSAJE, actualizarMensajeWeb, borrarMensajeWeb, devolverMensajeWeb, getMensajesWeb,
   resumenMensaje, sinLeer, useMensajesWeb,
@@ -2272,12 +2277,15 @@ function EstacionTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
   function setParada(id: string, c: Partial<ParadaItinerario>) {
     set({ itinerario: e.itinerario.map((x) => (x.id === id ? { ...x, ...c } : x)) })
   }
+  // Que el botón no se vaya con la fila: ver `useMoverConElFoco`.
+  const conFoco = useMoverConElFoco('itinerario')
   function mover(i: number, dir: -1 | 1) {
     const j = i + dir
     if (j < 0 || j >= e.itinerario.length) return
     const lista = [...e.itinerario]
     ;[lista[i], lista[j]] = [lista[j], lista[i]]
     set({ itinerario: lista })
+    conFoco.movida(e.itinerario[i].id, dir)
   }
   return (
     <>
@@ -2368,8 +2376,8 @@ function EstacionTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
                 <span>Hito</span>
               </label>
               <span className="seccion-item__orden">
-                <button type="button" className="icon-btn" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">▲</button>
-                <button type="button" className="icon-btn" onClick={() => mover(i, 1)} disabled={i === e.itinerario.length - 1} aria-label="Bajar">▼</button>
+                <button type="button" className="icon-btn" {...conFoco.boton(par.id, -1)} onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">▲</button>
+                <button type="button" className="icon-btn" {...conFoco.boton(par.id, 1)} onClick={() => mover(i, 1)} disabled={i === e.itinerario.length - 1} aria-label="Bajar">▼</button>
               </span>
               <button
                 type="button" className="icon-btn" title="Quitar parada"
@@ -2396,12 +2404,14 @@ function JuntaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
   function set(id: string, c: Partial<MiembroJunta>) {
     editar('junta', (xs) => xs.map((m) => (m.id === id ? { ...m, ...c } : m)))
   }
+  const conFoco = useMoverConElFoco('junta')
   function mover(i: number, dir: -1 | 1) {
     const j = i + dir
     if (j < 0 || j >= web.junta.length) return
     const lista = [...web.junta]
     ;[lista[i], lista[j]] = [lista[j], lista[i]]
     editar('junta', lista)
+    conFoco.movida(web.junta[i].id, dir)
   }
   return (
     <section className="settings-card">
@@ -2431,8 +2441,8 @@ function JuntaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
               onChange={(e) => set(m.id, { nombre: e.target.value })}
             />
             <span className="seccion-item__orden">
-              <button type="button" className="icon-btn" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">▲</button>
-              <button type="button" className="icon-btn" onClick={() => mover(i, 1)} disabled={i === web.junta.length - 1} aria-label="Bajar">▼</button>
+              <button type="button" className="icon-btn" {...conFoco.boton(m.id, -1)} onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">▲</button>
+              <button type="button" className="icon-btn" {...conFoco.boton(m.id, 1)} onClick={() => mover(i, 1)} disabled={i === web.junta.length - 1} aria-label="Bajar">▼</button>
             </span>
             <button
               type="button" className="icon-btn" title="Quitar cargo"
@@ -2500,12 +2510,14 @@ function HistoriaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
 function TitularesTab({ web, editar, hermandad }: { web: WebPublica; editar: EditarFn; hermandad: HermandadSettings }) {
   const marca = marcaDeAgua(web, hermandad.nombreLegal ?? '')
   function editarTitular(id: string, c: Partial<Titular>) { editar('titulares', (xs) => xs.map((t) => (t.id === id ? { ...t, ...c } : t))) }
+  const conFoco = useMoverConElFoco('titulares')
   function mover(i: number, dir: -1 | 1) {
     const j = i + dir
     if (j < 0 || j >= web.titulares.length) return
     const arr = [...web.titulares]
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
     editar('titulares', arr)
+    conFoco.movida(web.titulares[i].id, dir)
   }
   // Dos titulares con el mismo nombre acaban con el mismo enlace, y entonces
   // uno de los dos no se puede abrir. Se avisa en vez de dejarlo pasar.
@@ -2534,8 +2546,8 @@ function TitularesTab({ web, editar, hermandad }: { web: WebPublica; editar: Edi
               <div className="assign-box__row">
                 {t.fotoDataUrl && <img src={t.fotoDataUrl} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }} />}
                 <label className="btn btn-outline btn-sm">{t.fotoDataUrl ? 'Cambiar foto' : 'Foto'}<input type="file" accept="image/*" hidden onChange={(e) => leerImagen(e, (d) => editarTitular(t.id, { fotoDataUrl: d }))} /></label>
-                <button type="button" className="icon-btn" title="Subir" disabled={i === 0} onClick={() => mover(i, -1)}>▲</button>
-                <button type="button" className="icon-btn" title="Bajar" disabled={i === web.titulares.length - 1} onClick={() => mover(i, 1)}>▼</button>
+                <button type="button" className="icon-btn" title="Subir" {...conFoco.boton(t.id, -1)} disabled={i === 0} onClick={() => mover(i, -1)}>▲</button>
+                <button type="button" className="icon-btn" title="Bajar" {...conFoco.boton(t.id, 1)} disabled={i === web.titulares.length - 1} onClick={() => mover(i, 1)}>▼</button>
                 <button
                   type="button"
                   className="btn btn-outline btn-sm"
@@ -2644,12 +2656,20 @@ function TitularesTab({ web, editar, hermandad }: { web: WebPublica; editar: Edi
 
 /* ------------------------------ Portada ------------------------------ */
 function PortadaTab({ web, editar, actualizar }: { web: WebPublica; editar: EditarFn; actualizar: ActualizarFn }) {
+  const conFoco = useMoverConElFoco('portada')
+  /*
+   * Una foto no tiene identificador: la lista son direcciones de imagen. Se usa
+   * el final de la dirección, que es lo único distinto entre dos fotos y cabe
+   * en un atributo — una foto escrita dentro del contenido mide megas.
+   */
+  const claveFoto = (foto: string) => foto.slice(-24)
   function mover(i: number, dir: -1 | 1) {
     const j = i + dir
     if (j < 0 || j >= web.heroFotos.length) return
     const arr = [...web.heroFotos]
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
     editar('heroFotos', arr)
+    conFoco.movida(claveFoto(web.heroFotos[i]), dir)
   }
   /** Sobre el estado más reciente: al subir varias, cada una llega cuando acaba de comprimirse. */
   function anadir(dataUrl: string) {
@@ -2675,8 +2695,8 @@ function PortadaTab({ web, editar, actualizar }: { web: WebPublica; editar: Edit
               <img src={f} alt="" />
               {i === 0 && <span className="galeria-editor__marca">Primera</span>}
               <div className="galeria-editor__acciones">
-                <button type="button" className="icon-btn" title="Antes" disabled={i === 0} onClick={() => mover(i, -1)}>◀</button>
-                <button type="button" className="icon-btn" title="Después" disabled={i === web.heroFotos.length - 1} onClick={() => mover(i, 1)}>▶</button>
+                <button type="button" className="icon-btn" title="Antes" {...conFoco.boton(claveFoto(f), -1)} disabled={i === 0} onClick={() => mover(i, -1)}>◀</button>
+                <button type="button" className="icon-btn" title="Después" {...conFoco.boton(claveFoto(f), 1)} disabled={i === web.heroFotos.length - 1} onClick={() => mover(i, 1)}>▶</button>
                 <label className="icon-btn" title="Cambiar esta foto">
                   ⟳
                   <input type="file" accept="image/*" hidden onChange={(e) => leerImagenGrande(e, (d) => editar('heroFotos', (xs) => xs.map((x, j) => (j === i ? d : x))))} />
@@ -3875,7 +3895,47 @@ function AvisosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
   useEffect(() => { void recargar() }, [])
 
   const confirmados = losQueSePuedenAvisar(lista)
-  const sinConfirmar = lista.length - confirmados.length
+  const pendientes = losQueFaltanPorConfirmar(lista)
+  const sinConfirmar = pendientes.length
+
+  /*
+   * REENVIARLES EL ENLACE DE CONFIRMAR.
+   *
+   * Aquí es donde se ve el problema —una lista entera en «Sin confirmar»— así
+   * que aquí tiene que estar la salida. Y durante mucho tiempo ese correo NO SE
+   * MANDABA: no había forma, porque quien se apunta desde la web no tiene
+   * sesión y el envío la exigía. O sea que los apuntados de entonces están
+   * todos esperando un enlace que nunca salió, y sin esto se quedarían ahí para
+   * siempre.
+   */
+  const [reenviando, setReenviando] = useState(false)
+  const [avisoReenvio, setAvisoReenvio] = useState('')
+
+  async function reenviarLasConfirmaciones() {
+    setReenviando(true)
+    setAvisoReenvio('')
+    const hermandadId = await hermandadActualId()
+    if (!hermandadId) {
+      setReenviando(false)
+      setAvisoReenvio('No se ha podido saber de qué hermandad son. Recarga la página e inténtalo otra vez.')
+      return
+    }
+    const { enviados, fallidos } = await reenviarConfirmaciones(hermandadId, pendientes)
+    setReenviando(false)
+    /*
+     * Se dicen LOS DOS NÚMEROS. «Enviado» a secas, con la mitad sin salir, deja
+     * a la hermandad creyendo que ya está. Y los que fallan no siempre son un
+     * fallo: la base no manda dos correos al mismo sitio en diez minutos, así
+     * que pulsar dos veces cuenta el segundo como no enviado.
+     */
+    setAvisoReenvio(
+      enviados === 0
+        ? `No ha salido ninguno de los ${pendientes.length}. Si acabas de pulsar, espera diez minutos; `
+          + 'si no, mira Configuración → Correo.'
+        : `Enlace enviado a ${enviados}${fallidos > 0 ? `, y ${fallidos} sin salir` : ''}.`,
+    )
+    await recargar()
+  }
 
   return (
     <section className="settings-card">
@@ -3940,6 +4000,26 @@ function AvisosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
               </span>
             </div>
           </section>
+
+          {pendientes.length > 0 && (
+            <div className="form-hint pendientes-confirmar">
+              <p>
+                {pendientes.length === 1
+                  ? 'A esa persona no se le escribe hasta que abra el enlace del correo. Si no le llegó, mándaselo otra vez.'
+                  : `A esas ${pendientes.length} personas no se les escribe hasta que abran el enlace del correo. `
+                    + 'Si no les llegó, mándaselo otra vez.'}
+              </p>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => { void reenviarLasConfirmaciones() }}
+                disabled={reenviando}
+              >
+                {reenviando ? 'Mandando…' : 'Mandar el enlace de confirmar'}
+              </button>
+              {avisoReenvio && <p role="status">{avisoReenvio}</p>}
+            </div>
+          )}
 
           {lista.length === 0 && (
             <p className="form-hint">

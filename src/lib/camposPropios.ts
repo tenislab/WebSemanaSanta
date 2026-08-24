@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
+import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 
 /**
  * Campos a medida de la ficha del hermano. Cada hermandad apunta cosas
@@ -75,8 +76,35 @@ function conDefectos(c: Partial<CampoPropio>): CampoPropio {
   }
 }
 
+const EVENTO = 'cabildo-campos-propios'
+
 export function saveCamposPropios(campos: CampoPropio[]) {
   localStorage.setItem(CLAVE_CAMPOS_PROPIOS, JSON.stringify(campos))
+  window.dispatchEvent(new Event(EVENTO))
+  /*
+   * Y A LA BASE, porque los campos los define LA HERMANDAD.
+   *
+   * Aquí pasaba algo peculiar: el VALOR sí viajaba y la DEFINICIÓN no. Lo que
+   * se escribe en «Talla de túnica» se guarda dentro de la ficha del hermano
+   * (`Hermano.campos`), y esa ficha va a Supabase como todo lo demás. Pero la
+   * lista de qué campos existen se quedaba en el navegador de quien los creó.
+   *
+   * O sea: la secretaria creaba el campo, rellenaba cuatrocientas tallas, y
+   * desde el ordenador del mayordomo la ficha no enseñaba ninguna — el dato
+   * estaba guardado y no había forma de verlo. Y al cerrar sesión se limpia
+   * todo lo que empieza por `cabildo-`, así que también desaparecía del suyo.
+   */
+  void guardarPlantilla('campos_propios', campos)
+}
+
+/** Trae los campos de la hermandad y los deja en la copia de este navegador. */
+export async function cargarCamposPropiosDeLaBase(): Promise<void> {
+  const c = await traerPlantilla<CampoPropio[]>('campos_propios')
+  // Una lista vacía es una respuesta válida —la hermandad borró todos sus
+  // campos— y por eso se comprueba que sea un array, no que tenga cosas.
+  if (!Array.isArray(c)) return
+  localStorage.setItem(CLAVE_CAMPOS_PROPIOS, JSON.stringify(c))
+  window.dispatchEvent(new Event(EVENTO))
 }
 
 /** Hook con los campos propios y un setter que persiste. */
@@ -88,7 +116,13 @@ export function useCamposPropios(): [CampoPropio[], (siguiente: CampoPropio[]) =
       setCamposState(getCamposPropios())
     }
     window.addEventListener('storage', sincronizar)
-    return () => window.removeEventListener('storage', sincronizar)
+    window.addEventListener(EVENTO, sincronizar)
+    // Al montar, lo que diga la base manda sobre lo que hubiera aquí.
+    void cargarCamposPropiosDeLaBase()
+    return () => {
+      window.removeEventListener('storage', sincronizar)
+      window.removeEventListener(EVENTO, sincronizar)
+    }
   }, [])
 
   function setCampos(siguiente: CampoPropio[]) {

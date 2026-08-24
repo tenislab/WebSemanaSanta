@@ -29,14 +29,28 @@ import { aCentimos } from './format'
  * obligar a la hermandad a saberlo.
  */
 export function detectarSeparador(texto: string): ';' | ',' | '\t' {
-  const primera = texto.split(/\r?\n/).find((l) => l.trim() !== '') ?? ''
-  // Se cuenta FUERA de las comillas: un nombre como «Pérez, Ana» tiene comas
-  // que no separan nada, y contándolas a pelo ganaba siempre la coma.
-  let dentro = false
+  /*
+   * NO SE MIRA LA PRIMERA LÍNEA, SE MIRAN LAS PRIMERAS.
+   *
+   * La hoja de una hermandad empieza muchas veces con un título —«HERMANDAD DE
+   * NUESTRO PADRE JESÚS», y debajo «Listado a 14/02/2026»— y solo después va la
+   * fila de las columnas. Esa primera línea no tiene NINGÚN separador, así que
+   * se elegía el punto y coma por descarte; y si el archivo venía con comas, el
+   * censo entero se leía como una sola columna. El fallo que se veía era «faltan
+   * columnas obligatorias», que no lleva a ninguna parte.
+   *
+   * Se suman las de las primeras líneas: la del título aporta cero y no estorba.
+   */
+  const lineas = texto.split(/\r?\n/).filter((l) => l.trim() !== '').slice(0, 12)
   const cuenta = { ';': 0, ',': 0, '\t': 0 }
-  for (const c of primera) {
-    if (c === '"') dentro = !dentro
-    else if (!dentro && (c === ';' || c === ',' || c === '\t')) cuenta[c] += 1
+  for (const linea of lineas) {
+    // Se cuenta FUERA de las comillas: un nombre como «Pérez, Ana» tiene comas
+    // que no separan nada, y contándolas a pelo ganaba siempre la coma.
+    let dentro = false
+    for (const c of linea) {
+      if (c === '"') dentro = !dentro
+      else if (!dentro && (c === ';' || c === ',' || c === '\t')) cuenta[c] += 1
+    }
   }
   if (cuenta['\t'] > cuenta[';'] && cuenta['\t'] > cuenta[',']) return '\t'
   return cuenta[','] > cuenta[';'] ? ',' : ';'
@@ -145,7 +159,20 @@ const MESES_LARGOS = [
  * guardar basura.
  */
 export function fechaIso(v: string): string | null {
-  const s = (v ?? '').trim()
+  /*
+   * LA HORA, FUERA. Y esto es lo que traía el extracto del banco.
+   *
+   * Un movimiento exportado de la banca electrónica no viene «14/03/1985»:
+   * viene «14/03/1985 12:30», o «01/01/2026 0:00», que es lo que pone Excel
+   * cuando la celda es de tipo fecha-hora aunque la hora sea las doce de la
+   * noche. Ninguno de los tres patrones de abajo lo reconocía, así que el
+   * libro de caja se importaba con «No se entiende la fecha» EN TODAS LAS
+   * FILAS — y la fecha es campo obligatorio, así que no entraba ni un apunte.
+   *
+   * El día es lo único que se guarda de una fecha en esta aplicación, así que
+   * la hora no se pierde: es que no se usaba para nada.
+   */
+  const s = (v ?? '').trim().replace(/[\sT]+\d{1,2}:\d{2}(:\d{2})?(\.\d+)?\s*(?:[AaPp]\.?[Mm]\.?)?\s*(?:Z|[+-]\d{2}:?\d{2})?$/, '')
   if (!s) return null
   // Ya viene en ISO.
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s)

@@ -137,6 +137,30 @@ conclusion as (
       from permisos_cargo pc
       where pc.cargo = e.cargo and pc.hermandad_id = e.hermandad_id
     ), false) as cargo_abre_hermanos,
+    /*
+     * ¿ESE CARGO EXISTE SIQUIERA EN ESTA HERMANDAD?
+     *
+     * `permisos_cargo` empareja por el TEXTO del cargo, letra por letra. La
+     * aplicación escribe «Tesorero/a», con la barra; si en la ficha pone
+     * «Tesorero» a secas —o «tesorero/a», o «Tesorero /a»— no casa con
+     * ninguna fila y esa cuenta se queda SIN UN SOLO PERMISO.
+     *
+     * Y por fuera se ve igual que un permiso que falta: la persona entra, ve
+     * el panel vacío y no puede hacer nada, sin ningún mensaje. Es de las
+     * averías que más tiempo se llevan, porque la ficha «está bien puesta».
+     *
+     * Sin esta comprobación, el diagnóstico mandaba a «dale a «Tesorero» el
+     * módulo hermanos», que es un consejo imposible: ese cargo no existe.
+     */
+    e.cargo is not null and not exists (
+      select 1 from permisos_cargo pc
+      where pc.cargo = e.cargo and pc.hermandad_id = e.hermandad_id
+    ) as cargo_desconocido,
+    -- Los cargos que SÍ existen en su hermandad, para poder decir cuál quería.
+    coalesce((
+      select string_agg(distinct pc.cargo, ', ' order by pc.cargo)
+      from permisos_cargo pc where pc.hermandad_id = e.hermandad_id
+    ), '(ninguno)') as cargos_de_la_hermandad,
     (select h.nombre from hermandades h where h.id = e.hermandad_id) as hermandad
   from enriquecidas e
 )
@@ -160,6 +184,10 @@ select
       then '✅ SÍ — el titular lo puede todo'
     when cargo_abre_hermanos
       then '✅ SÍ'
+    -- Antes de decir «su cargo no incluye ese módulo»: comprobar que el cargo
+    -- exista. Escrito de otra manera no abre NINGUNO, y eso es otra avería.
+    when cargo_desconocido
+      then '⛔ NO — el cargo «' || cargo || '» no existe en esta hermandad: escrito así no abre ningún módulo'
     when cargo is not null
       then '⛔ NO — su cargo no incluye el módulo «hermanos»'
     else '⛔ NO — esta cuenta no gestiona nada'
@@ -176,6 +204,11 @@ select
     when cargo is null
       then 'Esta cuenta no es titular, ni tiene cargo, ni ficha en el censo: no gestiona nada. '
          || 'Usa la cuenta con la que creaste la hermandad.'
+    when cargo_desconocido
+      then 'El cargo está escrito de una forma que la hermandad no reconoce. Los que hay son: '
+         || cargos_de_la_hermandad || '. Corrígelo en su ficha (Hermanos → su ficha → Cargo) '
+         || 'o en Personal, poniéndolo EXACTAMENTE como aparece en esa lista — con su barra y '
+         || 'sus mayúsculas.'
     else 'Ve a Personal y permisos y dale a «' || cargo || '» el módulo «hermanos». '
          || 'O entra con la cuenta titular, que lo puede todo.'
   end as "qué hacer",

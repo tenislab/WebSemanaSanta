@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import type { Papeleta } from '../data/papeletas'
+import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 
 /**
  * Una campaña de papeletas de sitio corresponde a la estación de penitencia
@@ -42,8 +44,68 @@ export function getCampana(): Campana {
   return CAMPANA_POR_DEFECTO
 }
 
+/**
+ * Avisa a las pantallas abiertas de que la campaña ha cambiado.
+ *
+ * Hace falta porque `getCampana()` es SÍNCRONA y la usan quince sitios: si la
+ * base contesta después de que la pantalla se haya pintado —y contesta
+ * después siempre, es una llamada de red— nadie se entera de que lo que se
+ * está enseñando es lo de fábrica.
+ */
+const EVENTO = 'cabildo-campana'
+
 export function saveCampana(campana: Campana) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(campana))
+  window.dispatchEvent(new Event(EVENTO))
+  /*
+   * Y A LA BASE, porque la campaña es de la hermandad y no del navegador.
+   *
+   * Esto es lo que estaba roto: la secretaría abría la campaña de 2026 desde
+   * Papeletas › Ajustes de campaña, y eso se guardaba en SU ordenador. El
+   * hermano, desde el móvil, leía la de fábrica: otro año, otro plazo y otra
+   * fecha de salida. Pedía sitio para una Semana Santa que no tocaba y la
+   * pantalla se lo daba por bueno.
+   *
+   * Y no se quedaba ahí: de `campana.anio` salen las papeletas «del año», que
+   * son las que ordenan el cortejo, reparten los roles y deciden a quién le
+   * llega cada comunicado por tramo.
+   */
+  void guardarPlantilla('campana', campana)
+}
+
+/**
+ * Trae la campaña de la hermandad y la deja en la copia de este navegador.
+ *
+ * Se llama al arrancar, tanto en el panel como en el área del hermano: los
+ * dos leen la campaña y los dos tienen que leer LA MISMA.
+ */
+export async function cargarCampanaDeLaBase(): Promise<void> {
+  const c = await traerPlantilla<Partial<Campana>>('campana')
+  if (!c || typeof c !== 'object' || c.anio === undefined) return
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...CAMPANA_POR_DEFECTO, ...c }))
+  window.dispatchEvent(new Event(EVENTO))
+}
+
+/**
+ * La campaña, refrescándose sola cuando llega la de la base o la cambia otra
+ * pestaña. Para las pantallas que la pintan; quien solo la consulta de paso
+ * puede seguir con `getCampana()`.
+ */
+export function useCampana(): Campana {
+  const [campana, setCampana] = useState<Campana>(() => getCampana())
+  useEffect(() => {
+    function sync() {
+      setCampana(getCampana())
+    }
+    window.addEventListener('storage', sync)
+    window.addEventListener(EVENTO, sync)
+    void cargarCampanaDeLaBase()
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener(EVENTO, sync)
+    }
+  }, [])
+  return campana
 }
 
 /** Días que faltan hasta una fecha ISO (negativo si ya pasó), normalizado a medianoche. */

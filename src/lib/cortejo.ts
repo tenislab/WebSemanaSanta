@@ -24,6 +24,24 @@ interface Candidato {
   hermano: Hermano
 }
 
+/**
+ * ¿PUEDE ESTA PERSONA SALIR EN EL CORTEJO?
+ *
+ * Es la regla del reparto, y está aquí arriba —exportada— porque la tiene que
+ * usar también la PANTALLA que asigna sitio. Teniéndola solo dentro del
+ * reparto, la pantalla ofrecía gente a la que el reparto luego descartaba, y
+ * eso no da error: da una papeleta cobrada que no aparece en ningún tramo ni
+ * en el orden impreso.
+ *
+ * Con los de baja ya se había caído en ello y se arregló. Con los CIVILES no:
+ * el administrativo contratado seguía saliendo en la lista de «asignar a un
+ * tramo», y no está en el censo para hacer estación de penitencia. Se le
+ * emitía su papeleta, se le cobraba, y el día del reparto no estaba.
+ */
+export function puedeSalirEnElCortejo(h: { estado: string; civil?: boolean } | undefined | null): boolean {
+  return Boolean(h) && h!.estado !== 'Baja' && !h!.civil
+}
+
 function candidatosDe(
   papeletas: Papeleta[],
   predicado: (p: Papeleta) => boolean,
@@ -37,7 +55,7 @@ function candidatosDe(
     // activos. Y los civiles tampoco: están en el censo para trabajar en la
     // hermandad, no para hacer la estación de penitencia, y llevan número 0
     // por lo mismo — se colarían en cabeza del reparto.
-    .filter((x): x is Candidato => Boolean(x.hermano) && x.hermano!.estado !== 'Baja' && !x.hermano!.civil)
+    .filter((x): x is Candidato => puedeSalirEnElCortejo(x.hermano))
   // Un hermano cuenta una sola vez aunque, por un error de datos o una
   // resincronización, tenga dos papeletas activas: si no, ocuparía dos
   // puestos y desplazaría al resto (o dispararía un falso "Excede aforo").

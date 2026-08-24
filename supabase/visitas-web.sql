@@ -88,50 +88,37 @@ revoke execute on function limpiar_visitas_viejas() from public, anon, authentic
 
 create or replace function contar_visita(p_hermandad_id uuid, p_ruta text)
 returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public as $$
 declare
   v_ruta text;
+  v_dia date;
+  v_distintas int;
 begin
-  -- Sin hermandad no se cuenta nada: una visita sin dueño no le sirve a nadie
-  -- y sería una fila que no se puede ni leer ni borrar.
   if p_hermandad_id is null then return; end if;
   if not exists (select 1 from hermandades where id = p_hermandad_id) then return; end if;
 
-  /*
-   * LA RUTA SE LIMPIA AQUÍ, no en el navegador. Lo que llega de fuera se
-   * comprueba de este lado siempre: en el navegador se puede cambiar.
-   *
-   *   · Solo lo que va antes de «?» o «#».
-   *   · Tiene que empezar por «/».
-   *   · Y como mucho 200 caracteres: una ruta de verdad no llega ni a 80, y
-   *     sin tope alguien puede guardar un texto de un mega por visita.
-   */
   v_ruta := split_part(split_part(coalesce(p_ruta, '/'), '?', 1), '#', 1);
   if v_ruta = '' or left(v_ruta, 1) <> '/' then v_ruta := '/'; end if;
   v_ruta := left(v_ruta, 200);
 
-  insert into visitas_web (hermandad_id, dia, ruta, visitas)
   -- La fecha, de este lado y en hora de España: con la del navegador, quien
   -- tenga el reloj mal —o quien quiera— escribe en el día que le apetezca.
-  values (p_hermandad_id, (now() at time zone 'Europe/Madrid')::date, v_ruta, 1)
+  v_dia := (now() at time zone 'Europe/Madrid')::date;
+
+  -- Si esta ruta ya se contó hoy no hay nada que mirar: la fila existe y solo
+  -- se le suma uno. El tope solo importa cuando iría a crear una fila nueva.
+  if not exists (select 1 from visitas_web
+                  where hermandad_id = p_hermandad_id and dia = v_dia and ruta = v_ruta) then
+    select count(*) into v_distintas from visitas_web
+     where hermandad_id = p_hermandad_id and dia = v_dia;
+    if v_distintas >= 300 then v_ruta := '/otras'; end if;
+  end if;
+
+  insert into visitas_web (hermandad_id, dia, ruta, visitas)
+  values (p_hermandad_id, v_dia, v_ruta, 1)
   on conflict (hermandad_id, dia, ruta)
   do update set visitas = visitas_web.visitas + 1;
-
-  /*
-   * AQUÍ HABÍA UNA LIMPIEZA «una de cada mil visitas», y se ha quitado.
-   *
-   * Era un truco para no depender de nada programado, y tenía el defecto de
-   * todos los trucos de ese tipo: funciona con tráfico y no funciona sin él. La
-   * web que menos visitas tiene —la que menos falta le hace limpiar, pero
-   * también la que más años acumula— era justo la que no limpiaba nunca.
-   *
-   * Ahora lo hace `pg_cron` los domingos de madrugada: ver
-   * `supabase/tareas-programadas.sql`. Si no lo has ejecutado, la tabla crece;
-   * no se rompe nada, pero conviene.
-   */
 end $$;
-
--- La puede llamar cualquiera que entre en la web, que es de lo que se trata.
 grant execute on function contar_visita(uuid, text) to anon, authenticated;
 
 comment on function contar_visita(uuid, text) is

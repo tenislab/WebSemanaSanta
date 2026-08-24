@@ -88,4 +88,29 @@ export default async function ({ cargar, caso }) {
   caso('una x es que sí', true, m.siNo('x'))
   caso('un no es que no', false, m.siNo('No'))
   caso('en blanco no dice nada', null, m.siNo(''))
+
+  /*
+   * LA FECHA CON HORA, QUE ES COMO VIENE DEL BANCO.
+   *
+   * Un movimiento exportado de la banca electrónica no viene «14/03/1985»:
+   * viene «14/03/1985 12:30». Y Excel escribe «01/01/2026 0:00» en cuanto la
+   * celda es de tipo fecha-hora, aunque la hora sean las doce de la noche.
+   *
+   * Ninguno de los tres patrones lo reconocía, así que el libro de caja se
+   * importaba con «No se entiende la fecha» EN TODAS LAS FILAS. Y la fecha es
+   * campo obligatorio: no entraba ni un apunte. Es justo el archivo que una
+   * hermandad trae el primer día.
+   */
+  caso('con hora detrás, se queda el día', '2026-01-01', m.fechaIso('1/1/2026 0:00'))
+  caso('y con hora y minutos', '1985-03-14', m.fechaIso('14/03/1985 12:30'))
+  caso('con segundos también', '2026-02-03', m.fechaIso('2026-02-03 09:15:30'))
+  caso('en formato ISO con T', '2026-02-03', m.fechaIso('2026-02-03T00:00:00'))
+  caso('con zona horaria', '2026-02-03', m.fechaIso('2026-02-03T10:00:00Z'))
+  caso('con AM/PM', '1985-03-14', m.fechaIso('14/03/1985 8:05 PM'))
+  // Y lo de siempre sigue igual.
+  caso('sin hora, como siempre', '1985-03-14', m.fechaIso('14/03/1985'))
+  caso('y con el mes en letra, como lo escribe la app', '2026-02-03', m.fechaIso('03 feb 2026'))
+  // Una hora suelta NO es una fecha: quitarle la hora dejaría la cadena vacía
+  // y no puede colarse como fecha de nada.
+  caso('una hora suelta no es una fecha', null, m.fechaIso('12:30'))
 }

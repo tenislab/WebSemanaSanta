@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 
 /** Lo que se puede enfocar con el tabulador dentro de un panel. */
 const ENFOCABLE = [
@@ -137,5 +137,70 @@ export function filaQueAbre(abrir: () => void) {
       abrir()
     },
     style: { cursor: 'pointer' },
+  }
+}
+
+
+/**
+ * SUBIR Y BAJAR FILAS DE UNA LISTA SIN QUE SE MUEVA EL BOTÓN.
+ *
+ * Llegó dicho así: «se mueve muy raro el menú de editar la web». Y es literal.
+ *
+ * Al intercambiar dos filas, el botón que acabas de pulsar SE VA con su fila a
+ * la posición nueva. El cursor se queda quieto, así que la segunda pulsación
+ * cae sobre el botón de OTRA fila y mueves la que no era. Con quince secciones,
+ * subir una desde el final son catorce pulsaciones: no hay manera de acertar.
+ *
+ * Y a teclado es peor: al llegar al extremo, ese botón se desactiva, y un botón
+ * desactivado PIERDE EL FOCO — te devuelve al principio de la página.
+ *
+ * Se arregla recordando QUÉ fila se ha movido, nunca en qué posición estaba: la
+ * posición cambia, la fila no. Después de repintar se le devuelve el foco a su
+ * botón, así que pulsar cinco veces sube cinco puestos la misma fila, como
+ * espera cualquiera.
+ *
+ * Se usa así, con una clave que identifique la fila (su id, su tipo… algo que
+ * NO sea el índice):
+ *
+ *     const mover = useMoverConElFoco('titulares')
+ *     …
+ *     <button {...mover.boton(t.id, -1)} onClick={() => { intercambiar(i, -1); mover.movida(t.id, -1) }}>▲</button>
+ */
+export function useMoverConElFoco(lista: string) {
+  const [movida, setMovida] = useState<{ clave: string; dir: -1 | 1 } | null>(null)
+
+  useEffect(() => {
+    if (!movida) return
+    /*
+     * La clave va DENTRO de unas comillas en el selector, así que solo hay que
+     * escapar la comilla y la barra invertida. `CSS.escape` no vale aquí: está
+     * pensado para identificadores sueltos y convierte un id que empieza por
+     * cifra —la mitad de los UUID— en algo como `\\33 f2a…`, que dentro de
+     * comillas ya no encuentra nada.
+     */
+    const entrecomillar = (t: string) => t.replace(/[\\"]/g, '\\$&')
+    const buscar = (dir: -1 | 1) => document.querySelector<HTMLButtonElement>(
+      `[data-mover="${lista}:${entrecomillar(movida.clave)}:${dir}"]`,
+    )
+    const suyo = buscar(movida.dir)
+    // Si ha llegado al extremo, su botón está desactivado y no puede recibir el
+    // foco: se le da al del sentido contrario, que sigue ahí.
+    const alterno = buscar(movida.dir === -1 ? 1 : -1)
+    if (suyo && !suyo.disabled) suyo.focus()
+    else if (alterno && !alterno.disabled) alterno.focus()
+    // Y se suelta la marca, que además sirve para señalar un momento la fila
+    // movida: en una lista de filas iguales, un intercambio no se distingue de
+    // que no haya pasado nada.
+    const t = setTimeout(() => setMovida(null), 900)
+    return () => clearTimeout(t)
+  }, [movida, lista])
+
+  return {
+    /** Lo que hay que poner en el botón para que se le pueda devolver el foco. */
+    boton: (clave: string, dir: -1 | 1) => ({ 'data-mover': `${lista}:${clave}:${dir}` }),
+    /** Se llama justo después de reordenar, con la clave de la fila movida. */
+    movida: (clave: string, dir: -1 | 1) => setMovida({ clave, dir }),
+    /** ¿Es esta la que se acaba de mover? Para marcarla un momento. */
+    esLaMovida: (clave: string) => movida?.clave === clave,
   }
 }

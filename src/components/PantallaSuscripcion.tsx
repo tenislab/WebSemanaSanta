@@ -12,6 +12,13 @@ import { iniciarSuscripcion, stripeConfigurado } from '../lib/pagoSuscripcion'
 interface Props {
   nombreHermandad?: string
   onActivar: (pack: PackId, periodo: Periodo) => void
+  /**
+   * Por qué la activación no ha llegado a la hermandad, si es que no ha
+   * llegado. Se enseña porque el caso importa: activada solo en este
+   * navegador, desde el ordenador de al lado vuelve a salir este mismo muro y
+   * no hay forma de saber por qué.
+   */
+  avisoGuardado?: string | null
   onSalir: () => void
 }
 
@@ -27,7 +34,7 @@ interface Props {
  * `stripeConfigurado()`: no hay que tocar este archivo para pasar de un modo
  * al otro.
  */
-export default function PantallaSuscripcion({ nombreHermandad, onActivar, onSalir }: Props) {
+export default function PantallaSuscripcion({ nombreHermandad, onActivar, onSalir, avisoGuardado }: Props) {
   const [packSel, setPackSel] = useState<PackId>('completo')
   const [periodo, setPeriodo] = useState<Periodo>('mensual')
   const [yendoAPagar, setYendoAPagar] = useState(false)
@@ -125,6 +132,11 @@ export default function PantallaSuscripcion({ nombreHermandad, onActivar, onSali
             </>
           )}
         </button>
+        {avisoGuardado && (
+          <p className="paywall__nota paywall__nota--error" role="alert">
+            {avisoGuardado}
+          </p>
+        )}
         {errorPago && (
           <p className="paywall__nota paywall__nota--error" role="alert">
             {errorPago}

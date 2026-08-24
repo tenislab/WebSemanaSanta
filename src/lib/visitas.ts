@@ -22,6 +22,7 @@
  * PARA ENCENDERLO: ejecuta `supabase/visitas-web.sql` una vez.
  */
 import { isSupabaseConfigured, supabase } from './supabase'
+import { traerTodasLasFilas } from './paginado'
 import { getHermandadDeLaPagina } from './multiHermandad'
 
 /**
@@ -129,11 +130,18 @@ export async function resumenDeVisitas(dias = 30): Promise<ResumenDeVisitas> {
   const desdeAnterior = diaISO(restarDias(hoy, dias * 2 - 1))
 
   try {
-    const { data, error } = await cliente
+    /*
+     * Por páginas: hay una fila por DÍA y RUTA, así que un año de una web con
+     * veinte páginas son siete mil largas. Con el corte de mil, el contador
+     * enseñaba un trozo del principio y daba el resto por cero.
+     */
+    const { data, error } = await traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => cliente
       .from('visitas_web')
       .select('dia, ruta, visitas')
       .gte('dia', desdeAnterior)
       .order('dia')
+      .order('ruta')
+      .range(desde, hasta))
     if (error || !data) return SIN_VISITAS
 
     const filas = data as { dia: string; ruta: string; visitas: number }[]

@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { traerTodasLasFilas } from '../paginado'
 
 /** Sustituye por completo el contenido de una tabla pequeña de catálogo (listas cortas, editadas en bloque desde Configuración). */
 /**
@@ -86,9 +87,16 @@ function avisarDelFallo(clave: string, fallo: string) {
 
 export async function leerCatalogoRemoto(clave: string): Promise<string[] | null> {
   if (!supabase) return null
-  const { data, error } = await supabase.from('catalogos').select('*').eq('clave', clave).order('orden')
+  /*
+   * También por páginas. Un catálogo de etiquetas no llega a mil valores casi
+   * nunca —pero «casi nunca» es la razón por la que el corte pasa
+   * desapercibido el día que ocurre—, y aquí sale gratis: si cabe en una
+   * página, es una sola petición, igual que antes.
+   */
+  const { data, error } = await traerTodasLasFilas<{ valor: string }>((desde, hasta) =>
+    supabase!.from('catalogos').select('*').eq('clave', clave).order('orden').range(desde, hasta))
   if (error || !data || data.length === 0) return null
-  return data.map((r: { valor: string }) => r.valor)
+  return data.map((r) => r.valor)
 }
 
 export async function leerTablaRemota<T>(
@@ -97,9 +105,20 @@ export async function leerTablaRemota<T>(
   orderBy?: string,
 ): Promise<T[] | null> {
   if (!supabase) return null
-  let query = supabase.from(tabla).select('*')
-  if (orderBy) query = query.order(orderBy)
-  const { data, error } = await query
+  /*
+   * Por páginas: `select('*')` trae mil filas y calla. Ver `lib/paginado.ts`.
+   *
+   * Y ordenado siempre, porque sin `order` dos páginas pueden traer filas
+   * repetidas y saltarse otras. Por `id` cuando no se pide otra cosa: las dos
+   * tablas que llegan aquí —`conceptos_cuota` y `opciones_papeleta`— lo
+   * tienen. Las que NO tienen `id` (`permisos_cargo`, `catalogos`) no pasan
+   * por aquí; en la copia de seguridad, que sí las trae, hay una lista con la
+   * columna de cada una.
+   */
+  const { data, error } = await traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => {
+    const q = supabase!.from(tabla).select('*')
+    return (orderBy ? q.order(orderBy) : q.order('id')).range(desde, hasta)
+  })
   if (error || !data || data.length === 0) return null
   return data.map(fromRow)
 }

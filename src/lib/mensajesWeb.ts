@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { traerTodasLasFilas } from './paginado'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { nuevoId } from './supabaseSync'
 import { hermandadDestino } from './multiHermandad'
+import { traducirErrorDeEscritura } from './errorDeBaseDeDatos'
 
 /**
  * Lo que la web pública RECIBE. Hasta ahora la web solo contaba cosas; con
@@ -95,11 +97,25 @@ export function useMensajesWeb(): [MensajeWeb[], (lista: MensajeWeb[]) => void] 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
     let cancelado = false
-    supabase
+    // Por páginas: el buzón se acumula, un mensaje por cada persona que
+    // escribe desde la web, y no se vacía solo. Ver `lib/paginado.ts`.
+    traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => supabase!
       .from('mensajes_web')
       .select('*')
+      .order('id')
+      .range(desde, hasta))
       .then(({ data, error }) => {
-        if (cancelado || error || !data) return
+        if (cancelado) return
+        /*
+         * Que no se pueda LEER el buzón es tan grave como no poder escribir:
+         * la pantalla se quedaba con lo que hubiera en el navegador —o vacía—
+         * y la hermandad daba por hecho que no había escrito nadie.
+         */
+        if (error) {
+          avisarDelBuzon('leer', error.message, error.code)
+          return
+        }
+        if (!data) return
         const traidos = data.map(rowToMensaje)
         setMensajes(traidos)
         localStorage.setItem(CLAVE_MENSAJES_WEB, JSON.stringify(traidos))
@@ -117,19 +133,55 @@ export function useMensajesWeb(): [MensajeWeb[], (lista: MensajeWeb[]) => void] 
   return [mensajes, guardar]
 }
 
+/**
+ * EL BUZÓN NO PUEDE TRAGARSE UN FALLO, y aquí se lo tragaba tres veces.
+ *
+ * `supabase-js` NO lanza cuando la base rechaza: devuelve `{ error }`. Estas
+ * tres funciones escribían en el navegador y mandaban la orden a la base sin
+ * mirar la respuesta, así que un rechazo —permisos, red, la sesión caducada—
+ * no se notaba en ninguna parte. Y detrás de cada fila hay una persona de
+ * fuera que ha escrito a la hermandad dejando su teléfono:
+ *
+ *   · Marcar «atendido» que no llega: en el ordenador de secretaría queda
+ *     atendido y en el de la casa de hermandad sigue pendiente. O se le
+ *     contesta dos veces, o —peor— cada uno da por hecho que contestó el otro.
+ *   · Borrar que no llega: desaparece de la pantalla y vuelve al recargar.
+ *   · Y el DESHACER que no llega, que es el peor de los tres: se recupera un
+ *     mensaje borrado sin querer, se ve otra vez en la lista, y a la siguiente
+ *     recarga ya no está. La segunda vez no hay deshacer.
+ *
+ * Se avisa por la misma señal que usa el resto (`cabildo-sync-error`), que el
+ * marco de la aplicación ya escucha y pinta.
+ */
+function avisarDelBuzon(operacion: 'crear' | 'guardar' | 'borrar' | 'leer', mensaje: string, codigo?: string) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('cabildo-sync-error', {
+    detail: {
+      tabla: 'mensajes_web',
+      fallos: [`${operacion}: ${mensaje}`],
+      traducidos: [traducirErrorDeEscritura('mensajes_web', operacion, mensaje, codigo)],
+    },
+  }))
+}
+
 /** Marca uno como leído / atendido, en el navegador y en Supabase si lo hay. */
 export async function actualizarMensajeWeb(id: string, cambios: Partial<MensajeWeb>) {
   const lista = getMensajesWeb().map((m) => (m.id === id ? { ...m, ...cambios } : m))
   localStorage.setItem(CLAVE_MENSAJES_WEB, JSON.stringify(lista))
   if (isSupabaseConfigured && supabase) {
     const m = lista.find((x) => x.id === id)
-    if (m) await supabase.from('mensajes_web').update(mensajeToRow(m)).eq('id', id)
+    if (!m) return
+    const { error } = await supabase.from('mensajes_web').update(mensajeToRow(m)).eq('id', id)
+    if (error) avisarDelBuzon('guardar', error.message, error.code)
   }
 }
 
 export async function borrarMensajeWeb(id: string) {
   localStorage.setItem(CLAVE_MENSAJES_WEB, JSON.stringify(getMensajesWeb().filter((m) => m.id !== id)))
-  if (isSupabaseConfigured && supabase) await supabase.from('mensajes_web').delete().eq('id', id)
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase.from('mensajes_web').delete().eq('id', id)
+    if (error) avisarDelBuzon('borrar', error.message, error.code)
+  }
 }
 
 /**
@@ -146,7 +198,11 @@ export async function devolverMensajeWeb(mensaje: MensajeWeb, posicion: number) 
   lista.splice(Math.min(Math.max(posicion, 0), lista.length), 0, mensaje)
   localStorage.setItem(CLAVE_MENSAJES_WEB, JSON.stringify(lista))
   if (isSupabaseConfigured && supabase) {
-    await supabase.from('mensajes_web').upsert(mensajeToRow(mensaje))
+    const { error } = await supabase.from('mensajes_web').upsert(mensajeToRow(mensaje))
+    // Si el deshacer no llega a la base, hay que decirlo AHORA: el mensaje se
+    // ve en la lista y desaparece en la siguiente recarga, y para entonces ya
+    // no queda a qué volver.
+    if (error) avisarDelBuzon('crear', error.message, error.code)
   }
 }
 

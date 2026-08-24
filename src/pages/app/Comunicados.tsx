@@ -61,8 +61,10 @@ import IconoRed from '../../components/IconoRed'
 import { getWebPublica } from '../../lib/webPublica'
 import { baseDeLaWeb } from '../../lib/seoWeb'
 import {
-  avisarASuscriptores, getSuscriptores, losQueSePuedenAvisar, type Suscriptor,
+  avisarASuscriptores, getSuscriptores, losQueFaltanPorConfirmar, losQueSePuedenAvisar,
+  reenviarConfirmaciones, type Suscriptor,
 } from '../../lib/suscriptoresWeb'
+import { hermandadActualId } from '../../lib/multiHermandad'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
@@ -139,6 +141,46 @@ export default function Comunicados() {
    */
   const [suscriptores, setSuscriptores] = useState<Suscriptor[]>([])
   useEffect(() => { void getSuscriptores().then(setSuscriptores) }, [])
+
+  /*
+   * LOS QUE SE APUNTARON Y NO HAN CONFIRMADO.
+   *
+   * No es un detalle: a esa gente NO SE LE ESCRIBE, así que si son la mitad de
+   * la lista, la mitad de los avisos de la hermandad no salen de aquí. Y hasta
+   * ahora era peor —ese correo de confirmar no se mandaba nunca, no había
+   * forma— así que están TODOS sin confirmar y esperando un enlace que no
+   * llegó. Con el botón de abajo se les manda de una vez.
+   */
+  const pendientes = losQueFaltanPorConfirmar(suscriptores)
+  const [reenviando, setReenviando] = useState(false)
+  const [avisoReenvio, setAvisoReenvio] = useState('')
+
+  async function reenviarLasConfirmaciones() {
+    setReenviando(true)
+    setAvisoReenvio('')
+    const hermandadId = await hermandadActualId()
+    if (!hermandadId) {
+      setReenviando(false)
+      setAvisoReenvio('No se ha podido saber de qué hermandad son. Recarga la página e inténtalo otra vez.')
+      return
+    }
+    const { enviados, fallidos } = await reenviarConfirmaciones(hermandadId, pendientes)
+    setReenviando(false)
+    /*
+     * SE DICEN LOS DOS NÚMEROS. «Enviado» a secas, con la mitad sin salir, deja
+     * a la hermandad creyendo que ya está y esa gente no vuelve a recibir nada.
+     * Y los que fallan no siempre son un fallo: la base no manda dos correos al
+     * mismo sitio en diez minutos, así que pulsar dos veces cuenta el segundo
+     * como no enviado, que es exactamente lo que ha pasado.
+     */
+    setAvisoReenvio(
+      enviados === 0
+        ? `No ha salido ninguno de los ${pendientes.length}. Si acabas de pulsar, espera diez minutos; `
+          + 'si no, mira Configuración → Correo.'
+        : `Enlace enviado a ${enviados}${fallidos > 0 ? `, y ${fallidos} sin salir` : ''}.`,
+    )
+    setSuscriptores(await getSuscriptores())
+  }
   const [etiquetas] = useEtiquetas()
   /**
    * `leerDatos` y no `leerPersistido`: con base de datos, lista vacía en vez
@@ -1260,6 +1302,33 @@ export default function Comunicados() {
                     segmentación avanzada de aquí abajo.
                   </p>
                 )
+              )}
+
+              {/*
+                LOS QUE FALTAN POR CONFIRMAR, y aquí es donde hay que decirlo:
+                justo cuando se elige mandarle algo a los suscriptores y el
+                número de arriba sale más bajo de lo que se esperaba. A quien no
+                confirmó no se le escribe, así que sin este aviso la cuenta no
+                cuadra y no hay forma de saber por qué.
+              */}
+              {destinatarioNuevo === SEGMENTO_SUSCRIPTORES && pendientes.length > 0 && (
+                <div className="form-hint pendientes-confirmar">
+                  <p>
+                    Hay {pendientes.length} apuntado{pendientes.length === 1 ? '' : 's'} que
+                    todavía no ha{pendientes.length === 1 ? '' : 'n'} confirmado su correo, y hasta
+                    entonces no se le{pendientes.length === 1 ? '' : 's'} escribe. Mándale
+                    {pendientes.length === 1 ? '' : 's'} el enlace.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => { void reenviarLasConfirmaciones() }}
+                    disabled={reenviando}
+                  >
+                    {reenviando ? 'Mandando…' : 'Mandar el enlace de confirmar'}
+                  </button>
+                  {avisoReenvio && <p role="status">{avisoReenvio}</p>}
+                </div>
               )}
             </div>
           </div>

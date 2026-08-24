@@ -23,7 +23,7 @@ import {
   cuerposPresentes,
 } from '../lib/tramos'
 import { repartoCompleto, repartoPorTramo, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
-import { getCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
+import { useCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
 import {
   useSolicitudesPapeleta,
   MODALIDADES,
@@ -37,6 +37,7 @@ import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
 import { conRenovacion } from '../lib/renovarPapeleta'
 import { contactoDelHermanoToRow } from '../lib/db/hermanos'
 import { hayRecuperacionEnMarcha, olvidarRecuperacion } from '../lib/recuperacionClave'
+import { pedirRecuperacion, ponerClaveConToken } from '../lib/recuperarHermano'
 import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
 import CalendarioMes from '../components/CalendarioMes'
 import { claseTipo, fechaLarga } from '../lib/calendario'
@@ -237,7 +238,10 @@ export default function HermanoPortal() {
 
   const [ajustesCuotas] = useAjustesCuotas()
   const tramos = useTramos()
-  const campana = useMemo(() => getCampana(), [])
+  /* `useCampana` y no `getCampana()`: la campaña viene de la base y tarda lo
+     que tarde la red. Con la lectura de una vez, el hermano veía la de fábrica
+     —otro año y otro plazo— y ahí se quedaba toda la sesión. */
+  const campana = useCampana()
   // El precio de la hermandad, no el de este navegador (ver hermandadSettings).
   const precioBase = hermandadPrincipal.precioPapeleta
   // El modelo con el que la hermandad imprime sus papeletas. Se trae de la
@@ -272,7 +276,20 @@ export default function HermanoPortal() {
    * atenderlo aquí: si no, el hermano pulsa el enlace, aterriza en la pantalla
    * de entrar como si nada, y no entiende para qué le hemos mandado el correo.
    */
-  const [poniendoClaveNueva, setPoniendoClaveNueva] = useState(() => hayRecuperacionEnMarcha())
+  /*
+   * EL TOKEN DEL ENLACE QUE MANDAMOS NOSOTROS.
+   *
+   * `hayRecuperacionEnMarcha()` mira lo que deja Supabase tras la almohadilla,
+   * y sigue valiendo para los hermanos que ya tenían cuenta antes de que las
+   * cuentas pasaran a llamarse por hermandad + DNI. Los de ahora llegan con
+   * `?recuperar=…`, que es el nuestro. Se atienden los dos: si no, la mitad de
+   * la gente pulsa el enlace y aterriza en la pantalla de entrar sin entender
+   * para qué le hemos mandado el correo.
+   */
+  const tokenDelEnlace = new URLSearchParams(window.location.search).get('recuperar') ?? ''
+  const [poniendoClaveNueva, setPoniendoClaveNueva] = useState(
+    () => hayRecuperacionEnMarcha() || tokenDelEnlace !== '',
+  )
   const [claveNuevaError, setClaveNuevaError] = useState<string | null>(null)
   const [claveNuevaHecha, setClaveNuevaHecha] = useState(false)
   const [solicitudEnviada, setSolicitudEnviada] = useState(false)
@@ -293,7 +310,7 @@ export default function HermanoPortal() {
   const [claveGuardada, setClaveGuardada] = useState(false)
 
   // Solicitud de papeleta de sitio (el hermano la pide; la secretaría la acepta o rechaza).
-  const [solicitudesPapeleta, setSolicitudesPapeleta] = useSolicitudesPapeleta()
+  const [solicitudesPapeleta, setSolicitudesPapeleta] = useSolicitudesPapeleta(sinEspejo)
   const [reporteAbierto, setReporteAbierto] = useState(false)
   const [solModalidad, setSolModalidad] = useState<ModalidadPapeleta>('Nazareno')
   const [solTramo, setSolTramo] = useState('')
@@ -478,14 +495,29 @@ export default function HermanoPortal() {
       setClaveNuevaError('No hay conexión con la base de datos.')
       return
     }
-    const { error } = await supabase.auth.updateUser({ password: nueva })
-    if (error) {
-      // El enlace del correo caduca. Decirlo es más útil que «error»: lo que
-      // hay que hacer es pedir otro, no volver a intentarlo.
-      setClaveNuevaError(
-        'No se ha podido cambiar. El enlace del correo puede haber caducado: pide uno nuevo desde «¿Has olvidado tu contraseña?».',
-      )
-      return
+    /*
+     * DOS CAMINOS, y hacen falta los dos.
+     *
+     * Con `?recuperar=…` es un enlace de los nuestros: el cambio lo hace la
+     * función `enviar-correo` con la clave de servicio, porque una contraseña
+     * no se puede cambiar desde el navegador sin una sesión.
+     *
+     * Sin él, es un enlace de Supabase de los de antes —los hermanos que ya
+     * tenían cuenta siguen usándolos— y ahí sí hay sesión abierta.
+     */
+    if (tokenDelEnlace) {
+      const r = await ponerClaveConToken(tokenDelEnlace, nueva)
+      if (!r.ok) { setClaveNuevaError(r.error); return }
+    } else {
+      const { error } = await supabase.auth.updateUser({ password: nueva })
+      if (error) {
+        // El enlace del correo caduca. Decirlo es más útil que «error»: lo que
+        // hay que hacer es pedir otro, no volver a intentarlo.
+        setClaveNuevaError(
+          'No se ha podido cambiar. El enlace del correo puede haber caducado: pide uno nuevo desde «¿Has olvidado tu contraseña?».',
+        )
+        return
+      }
     }
     setClaveNuevaError(null)
     setClaveNuevaHecha(true)
@@ -539,20 +571,14 @@ export default function HermanoPortal() {
     }
 
     setRecuperando(true)
-    try {
-      const { data: email } = await supabase.rpc('resolver_email_hermano', {
-        p_hermandad_id: hermandadElegida.id,
-        p_dni: dni,
-      })
-      if (email) {
-        await supabase.auth.resetPasswordForEmail(email as string, {
-          redirectTo: `${window.location.origin}/hermano`,
-        })
-      }
-      // Se responde igual haya salido correo o no. Ver el comentario de arriba.
-    } catch {
-      // Un fallo de red tampoco puede delatar nada: mismo mensaje.
-    }
+    /*
+     * LO MANDA EL SERVIDOR. Antes se le pedía a Supabase que escribiera a la
+     * dirección de la cuenta; desde que la cuenta se llama por hermandad + DNI,
+     * esa dirección no recibe nada. Ahora la función `enviar-correo` busca el
+     * correo DE VERDAD en la ficha y manda ahí el enlace, y ni el token ni la
+     * dirección pasan por este navegador. Ver `lib/recuperarHermano.ts`.
+     */
+    await pedirRecuperacion(hermandadElegida.id, dni)
     setRecuperando(false)
     setRecuperacion({
       tipo: 'hecho',
@@ -659,9 +685,15 @@ export default function HermanoPortal() {
     const dni = limpiarDni(String(data.get('dni') ?? ''))
     const email = String(data.get('email') ?? '').trim()
     const telefono = String(data.get('telefono') ?? '').trim()
-    const clavePropuesta = String(data.get('clavePropuesta') ?? '')
-    if (!nombre || !dni || !email || clavePropuesta.length < 6) {
-      setErrorSolicitud('Rellena tu nombre, DNI, correo y una contraseña de al menos 6 caracteres.')
+    /*
+     * NO SE PIDE CONTRASEÑA, Y ESO ES EL ARREGLO. Se guardaba EN CLARO en
+     * `solicitudes_alta`, donde la lee cualquiera del personal con el módulo
+     * «hermanos» y donde se quedaba mientras la solicitud estuviera pendiente.
+     * La gente repite contraseñas: la que veía la secretaria es probablemente
+     * la de su correo. La clave se genera al aprobar y se manda por correo.
+     */
+    if (!nombre || !dni || !email) {
+      setErrorSolicitud('Rellena tu nombre, DNI y correo.')
       return
     }
 
@@ -686,7 +718,7 @@ export default function HermanoPortal() {
       dni,
       email,
       telefono,
-      clavePropuesta,
+      clavePropuesta: '',
       fecha: hoy(),
       estado: 'Pendiente',
     }
@@ -1505,10 +1537,10 @@ export default function HermanoPortal() {
                           <label htmlFor="solTelefono">Teléfono</label>
                           <input id="solTelefono" name="telefono" type="tel" placeholder="600 000 000" />
                         </div>
-                        <div className="form-row">
-                          <label htmlFor="solClave">Elige una contraseña</label>
-                          <input id="solClave" name="clavePropuesta" type="password" placeholder="Mínimo 6 caracteres" required minLength={6} />
-                        </div>
+                        <p className="form-hint">
+                          Si la hermandad te da de alta, te llega una clave a ese correo para entrar
+                          en tu área. La cambias por la que quieras en cuanto entres.
+                        </p>
                         {errorSolicitud && <p className="form-hint form-hint--error">{errorSolicitud}</p>}
                         <button type="submit" className="btn btn-primary btn-block">
                           Enviar solicitud

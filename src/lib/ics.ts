@@ -26,6 +26,9 @@
  *   · LAS COMAS Y LOS PUNTOS Y COMA. Dentro de un texto hay que escaparlos: un
  *     lugar como «Parroquia de San Juan, plaza Mayor» parte el campo en dos y
  *     el calendario se queda con media dirección.
+ *
+ *   · EL LARGO DE CADA LÍNEA. El formato manda partirlas a los 75 BYTES, y una
+ *     descripción de un culto se pasa de largo casi siempre. Ver `plegar`.
  */
 
 /** Escapa el texto que va dentro de un campo: comas, puntos y comas, barras y saltos. */
@@ -35,6 +38,52 @@ function escapar(texto: string): string {
     .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
     .replace(/\r?\n/g, '\\n')
+}
+
+/**
+ * PARTIR UNA LÍNEA LARGA COMO MANDA EL FORMATO.
+ *
+ * El estándar (RFC 5545) dice que una línea no pase de 75 OCTETOS, y que las
+ * largas se partan poniendo la continuación en la línea siguiente empezada por
+ * un espacio. Una descripción de un culto —«Solemne Quinario en honor de
+ * Nuestro Padre Jesús…, predicado por el Rvdo. …»— se pasa siempre.
+ *
+ * Los calendarios de móvil suelen tragar la línea larga, pero no todos: los
+ * hay que se quedan con los primeros 75 caracteres y cortan la frase a medias
+ * en la agenda de quien lo guardó, sin dar ningún error.
+ *
+ * OCTETOS, NO LETRAS, y aquí está lo que tiene trampa. En UTF-8 una «ó» ocupa
+ * dos bytes y una «€» tres. Contando letras, una descripción con tildes —o
+ * sea, cualquiera en español— se pasa igualmente del límite. Y hay que partir
+ * ENTRE caracteres, nunca por la mitad de uno: la mitad de una «ñ» no es
+ * ninguna letra, y ahí sí que el calendario rechaza el archivo.
+ */
+function plegar(linea: string): string {
+  const bytes = new TextEncoder()
+  if (bytes.encode(linea).length <= 75) return linea
+
+  const trozos: string[] = []
+  let actual = ''
+  let cuantos = 0
+  // El primer trozo admite 75; los siguientes, 74, porque llevan delante el
+  // espacio que los marca como continuación.
+  let tope = 75
+  // `[...linea]` recorre por CARACTERES (con los pares suplentes de los
+  // emoji enteros), no por unidades de UTF-16: partir por la mitad de uno
+  // dejaría medio carácter en cada línea.
+  for (const c of [...linea]) {
+    const mide = bytes.encode(c).length
+    if (cuantos + mide > tope) {
+      trozos.push(actual)
+      actual = ''
+      cuantos = 0
+      tope = 74
+    }
+    actual += c
+    cuantos += mide
+  }
+  if (actual) trozos.push(actual)
+  return trozos.join('\r\n ')
 }
 
 /**
@@ -109,8 +158,8 @@ export function icsDeUnActo(acto: ActoDelCalendario, dominio = 'gobergo.com'): s
     'END:VCALENDAR',
   ]
   // CRLF, no `\n`: con saltos de línea normales Outlook no importa nada y no
-  // dice por qué.
-  return `${lineas.join('\r\n')}\r\n`
+  // dice por qué. Y cada línea, partida a los 75 bytes (ver `plegar`).
+  return `${lineas.map(plegar).join('\r\n')}\r\n`
 }
 
 /** `20270315T203000` + 90 minutos. Se hace con Date para no equivocarse en el cambio de día. */

@@ -12,7 +12,7 @@
  * un cargo a sí mismo, que quitarlo no deje la hermandad sin nadie que pueda
  * repartirlos, y que el hermano civil no acabe siendo un moroso permanente.
  */
-export default async function ({ caso }) {
+export default async function ({ caso, cargar }) {
   const { readFile } = await import('node:fs/promises')
 
   // ---------------------------------------------------------------------
@@ -103,9 +103,19 @@ export default async function ({ caso }) {
   caso('el archivo documental también', true,
     /create policy "documentos_staff_select"[\s\S]{0,200}modulo_permitido\('archivo'\)/.test(sql))
 
-  // El civil no sale en el cortejo ni recibe la convocatoria de papeletas.
-  const cortejo = await readFile('src/lib/cortejo.ts', 'utf8')
-  caso('el civil no sale en el cortejo', true, /!x\.hermano!\.civil/.test(cortejo))
+  /*
+   * El civil no sale en el cortejo ni recibe la convocatoria de papeletas.
+   *
+   * Lo del cortejo se comprueba EJECUTÁNDOLO, no buscando un trozo de texto
+   * en el fichero. Antes esto era `/!x\.hermano!\.civil/.test(cortejo)`, y esa
+   * prueba se pone roja el día que la regla se saca a una función con nombre
+   * —que es una mejora— y se pondría verde con la regla escrita y nunca
+   * llamada. Ninguna de las dos cosas es lo que se quiere saber.
+   */
+  const { puedeSalirEnElCortejo } = await cargar('src/lib/cortejo.ts')
+  caso('el civil no sale en el cortejo', false,
+    puedeSalirEnElCortejo({ estado: 'Activo', civil: true }))
+  caso('y el hermano de siempre sí', true, puedeSalirEnElCortejo({ estado: 'Activo' }))
   const conv = await readFile('src/lib/convocatoria.ts', 'utf8')
   caso('ni recibe la convocatoria', true, /h\.estado !== 'Baja' && !h\.civil/.test(conv))
 

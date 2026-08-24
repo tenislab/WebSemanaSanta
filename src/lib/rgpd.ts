@@ -1,4 +1,5 @@
 import { CLAVES_DATOS, leerDatos } from './persistencia'
+import { traerTodasLasFilas } from './paginado'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { rowToHermano } from './db/hermanos'
 import { rowToCuota } from './db/cuotas'
@@ -132,8 +133,9 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
      *
      * Borrar la fila de `hermanos` no era una supresión: dejaba atrás la
      * SOLICITUD DE ALTA con la que entró, y esa fila lleva su nombre, su DNI,
-     * su correo, su teléfono y —esto es lo grave— la contraseña que propuso,
-     * escrita en claro.
+     * su correo y su teléfono. (Y la contraseña que propuso, escrita en claro,
+     * hasta que se dejó de pedir ninguna: ver
+     * `supabase/sin-contrasenas-en-las-solicitudes.sql`.)
      *
      * O sea que después de ejercer su derecho de supresión del artículo 17,
      * sus datos seguían en la base. Y no unos cualquiera: los de un censo de
@@ -166,8 +168,8 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
      *
      * Si estas dos fallan NO se aborta —la ficha, que es lo gordo, ya no
      * está—, pero se deja escrito en la consola: esas filas llevan el DNI y la
-     * contraseña que propuso al pedir el alta, así que quedarían huérfanas y
-     * hay que poder rastrearlo.
+     * el correo que dio al pedir el alta, así que quedarían huérfanas y hay
+     * que poder rastrearlo.
      */
     if (suDni) {
       const { error } = await supabase.from('solicitudes_alta').delete().eq('dni', suDni)
@@ -178,7 +180,11 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
       if (error) console.error('Quedó su solicitud de alta (por correo):', error.message)
     }
 
-    const { data, error } = await supabase.from('hermanos').select('*').order('numero')
+    // Por páginas: `select('*')` trae mil filas y calla (ver `lib/paginado.ts`).
+    // Aquí eso sería releer un censo de mil doscientos como si tuviera mil, y
+    // justo después de haber borrado los datos de alguien.
+    const { data, error } = await traerTodasLasFilas<Record<string, unknown>>((desde, hasta) =>
+      supabase!.from('hermanos').select('*').order('numero').order('id').range(desde, hasta))
     if (error) {
       // OJO: null = «no se pudo releer», NO «el censo está vacío». Devolver []
       // hacía que un fallo puntual de red borrase el censo entero de la vista.
@@ -201,7 +207,7 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
   localStorage.setItem(CLAVES_DATOS.papeletas, JSON.stringify(papeletasRest))
   localStorage.setItem(CLAVES_DATOS.incidencias, JSON.stringify(incidenciasRest))
 
-  // Y su solicitud de alta, que lleva el DNI y la contraseña en claro.
+  // Y su solicitud de alta, que lleva su DNI, su correo y su teléfono.
   try {
     const elBorrado = hermanos.find((h) => h.id === hermanoId)
     if (elBorrado) {

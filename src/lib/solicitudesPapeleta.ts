@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
 import { leerPersistido } from './persistencia'
+import { useSupabaseTable } from './supabaseSync'
+import { rowToSolicitudPapeleta, solicitudPapeletaToRow } from './db/solicitudesPapeleta'
 
 /**
  * Solicitud de papeleta de sitio que el hermano envía desde su área. La
@@ -7,8 +8,23 @@ import { leerPersistido } from './persistencia'
  * en el tramo/modalidad pedidos; al rechazarla queda constancia. Es el paso
  * online que evita que el hermano tenga que pasar por secretaría.
  *
- * Por ahora se guarda en el navegador (modo local); con Supabase pasará a una
- * tabla propia (como solicitudes_alta).
+ * ESTO SE GUARDABA EN EL MÓVIL DEL HERMANO, Y EN NINGÚN OTRO SITIO.
+ *
+ * En `localStorage`, con la clave de abajo. El hermano rellenaba el
+ * formulario, le daba a enviar y la pantalla le decía que su solicitud quedaba
+ * registrada — y quedaba, en su teléfono. La secretaría abría Papeletas ›
+ * Solicitudes desde el ordenador de la casa de hermandad y leía SU
+ * `localStorage`, que estaba vacío.
+ *
+ * Los dos lados de la misma función leyendo cajones distintos: el hermano veía
+ * la suya y creía que ya estaba pedida; la hermandad no veía ninguna y creía
+ * que nadie había pedido. Sin un error, sin una banda roja, sin una fila a
+ * medias. Y al cerrar el plazo, las que no se atendieron no es que se
+ * perdieran: es que nunca salieron del teléfono.
+ *
+ * Ahora va a la tabla `solicitudes_papeleta`, con sus políticas: el hermano
+ * solo crea la suya y solo lee las suyas, el estado lo pone el servidor, y la
+ * hermandad las ve y las resuelve. Ver `supabase/solicitudes-de-papeleta.sql`.
  */
 
 export type ModalidadPapeleta = 'Nazareno' | 'Penitente' | 'Acólito' | 'Otro'
@@ -32,39 +48,49 @@ export interface SolicitudPapeleta {
   estado: EstadoSolicitudPapeleta
 }
 
-const CLAVE = 'cabildo-solicitudes-papeleta'
+export const CLAVE_SOLICITUDES_PAPELETA = 'cabildo-solicitudes-papeleta'
 
+/**
+ * Sin nada de fábrica.
+ *
+ * Aquí no puede haber solicitudes de muestra: una solicitud inventada en la
+ * lista de la secretaría es alguien a quien se le emite una papeleta que nadie
+ * ha pedido.
+ */
+const NINGUNA: SolicitudPapeleta[] = []
+
+/**
+ * Las solicitudes, de la base.
+ *
+ * `sinEspejo` para el área del hermano, por lo mismo que en el resto de sus
+ * tablas: él solo ve las suyas, y si dejara su lista en la copia de este
+ * navegador, el panel abierto en otra pestaña vería desaparecer las de todos
+ * los demás.
+ */
+export function useSolicitudesPapeleta(opciones?: { sinEspejo?: boolean }) {
+  return useSupabaseTable<SolicitudPapeleta>(
+    'solicitudes_papeleta',
+    CLAVE_SOLICITUDES_PAPELETA,
+    NINGUNA,
+    solicitudPapeletaToRow,
+    rowToSolicitudPapeleta,
+    'fecha',
+    opciones,
+  )
+}
+
+/**
+ * Lectura suelta, para quien solo quiere consultar de paso y no monta el hook.
+ * Lee la copia de este navegador, así que solo sabe de lo último que se cargó:
+ * quien necesite la lista de verdad, que use el hook.
+ */
 export function getSolicitudesPapeleta(): SolicitudPapeleta[] {
-  return leerPersistido<SolicitudPapeleta[]>(CLAVE, [])
-}
-
-export function saveSolicitudesPapeleta(lista: SolicitudPapeleta[]) {
-  localStorage.setItem(CLAVE, JSON.stringify(lista))
-}
-
-/** Añade una solicitud (desde el área del hermano). */
-export function crearSolicitudPapeleta(nueva: SolicitudPapeleta) {
-  saveSolicitudesPapeleta([nueva, ...getSolicitudesPapeleta()])
-}
-
-/** Hook reactivo con las solicitudes de papeleta (se refresca entre pestañas). */
-export function useSolicitudesPapeleta(): [SolicitudPapeleta[], (lista: SolicitudPapeleta[]) => void] {
-  const [lista, setListaState] = useState<SolicitudPapeleta[]>(() => getSolicitudesPapeleta())
-  useEffect(() => {
-    function sync() {
-      setListaState(getSolicitudesPapeleta())
-    }
-    window.addEventListener('storage', sync)
-    return () => window.removeEventListener('storage', sync)
-  }, [])
-  function setLista(next: SolicitudPapeleta[]) {
-    setListaState(next)
-    saveSolicitudesPapeleta(next)
-  }
-  return [lista, setLista]
+  return leerPersistido<SolicitudPapeleta[]>(CLAVE_SOLICITUDES_PAPELETA, NINGUNA)
 }
 
 /** ¿Tiene este hermano una solicitud de papeleta pendiente para el año dado? */
 export function tieneSolicitudPendiente(hermanoId: string, anio: number): boolean {
-  return getSolicitudesPapeleta().some((s) => s.hermanoId === hermanoId && s.anio === anio && s.estado === 'Pendiente')
+  return getSolicitudesPapeleta().some(
+    (s) => s.hermanoId === hermanoId && s.anio === anio && s.estado === 'Pendiente',
+  )
 }

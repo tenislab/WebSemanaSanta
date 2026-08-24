@@ -6,7 +6,7 @@ import PapeletaTicket from './PapeletaTicket'
 import { getModeloRecibo } from '../lib/modeloRecibo'
 import { ejercicioDe } from '../lib/cuotasEmision'
 import { etiquetaTramo, type Tramo } from '../lib/tramos'
-import { formatCurrency } from '../lib/format'
+import { formatCurrency, sumaEuros } from '../lib/format'
 import { estaSinCobrar } from '../data/cuotas'
 import { aniosDeHermandad, porAnio, salidasDe } from '../lib/hermanoFicha'
 import type { Cuota } from '../data/cuotas'
@@ -85,10 +85,10 @@ export default function HistorialHermano({
   const ejercicios = useMemo(() => porAnio(cuotas, ejercicioDe), [cuotas])
   const anios = useMemo(() => porAnio(papeletas, (p) => p.anio), [papeletas])
 
-  const pagado = cuotas.filter((c) => c.estado === 'Pagada').reduce((n, c) => n + c.importe, 0)
-  const debe = cuotas
-    .filter(estaSinCobrar)
-    .reduce((n, c) => n + c.importe, 0)
+  // Con `sumaEuros`: un solo importe vacío dejaría toda la ficha del hermano
+  // diciendo «NaN €», y uno que venga como texto la concatenaría.
+  const pagado = sumaEuros(cuotas.filter((c) => c.estado === 'Pagada').map((c) => c.importe))
+  const debe = sumaEuros(cuotas.filter(estaSinCobrar).map((c) => c.importe))
   const salidas = salidasDe(papeletas)
   const aniosEnLaHermandad = aniosDeHermandad(hermano.antiguedad)
   // El ejercicio en curso ya se ve arriba: aquí se abre lo demás, no lo de hoy.
@@ -168,7 +168,7 @@ export default function HistorialHermano({
       ) : (
         ejercicios.map(([anio, lista]) => {
           const abierto = abiertos.has(anio)
-          const suma = lista.reduce((n, c) => n + c.importe, 0)
+          const suma = sumaEuros(lista.map((c) => c.importe))
           const sinPagar = lista.filter((c) => c.estado !== 'Pagada').length
           return (
             <div className="vida-anio" key={anio}>

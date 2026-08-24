@@ -319,4 +319,48 @@ async function numeroEnLaVistaPrevia({ cargar, caso }) {
   const ens4 = m.ensayar(filas4, m.proponerEmparejado(filas4[0]), censo, 2026)
   caso('dos filas no se llevan el mismo número', false,
     ens4.filas[0].datos.numero === ens4.filas[1].datos.numero)
+
+  /*
+   * UNA FILA EN BLANCO NO ES UN ERROR: NO ES NADA.
+   *
+   * El listado de una hermandad casi nunca es una tabla limpia. Trae líneas en
+   * blanco separando bloques —«HERMANOS ACTIVOS», hueco, «BAJAS»— y huecos que
+   * dejó quien la montó.
+   *
+   * En un CSV se filtran al leerlo (`leerCsv`), pero un `.xlsx` las conserva:
+   * el MISMO listado guardado de una forma o de otra daba resultados
+   * distintos. Y cada hueco salía en la vista previa como una fila roja
+   * —«Falta el nombre; Falta el DNI»— que no hay forma de corregir, porque no
+   * hay nada que corregir, delante de una secretaría que está importando su
+   * censo por primera vez y lee que algo va mal.
+   */
+  const conHuecos = [
+    ['Nombre', 'DNI'],
+    ['Juan Pérez', '12345678Z'],
+    ['', ''],
+    ['   ', '  '],
+    ['Ana López', '87654321X'],
+  ]
+  const empHuecos = m.proponerEmparejado(conHuecos[0])
+  const ensHuecos = m.ensayar(conHuecos, empHuecos, [], 2026)
+  caso('las filas en blanco no cuentan como errores', 0, ensHuecos.errores)
+  caso('y no salen en la lista', 2, ensHuecos.filas.length)
+  caso('los dos de verdad entran', 2, ensHuecos.nuevos)
+  /*
+   * Y LA NUMERACIÓN DE LÍNEA SIGUE SIENDO LA DEL ARCHIVO. Es lo que se le dice
+   * a quien tiene que ir a corregir: «la línea 5». Si al saltarse los huecos se
+   * corrieran los números, se le mandaría a la línea equivocada.
+   */
+  caso('y la línea sigue siendo la del archivo', [2, 5], ensHuecos.filas.map((f) => f.linea))
+
+  // Un subtítulo suelto SÍ sigue saliendo: es una línea que alguien tiene que
+  // mirar, no un hueco.
+  const conSubtitulo = [
+    ['Nombre', 'DNI'],
+    ['Juan Pérez', '12345678Z'],
+    ['BAJAS', ''],
+    ['Ana López', '87654321X'],
+  ]
+  const ensSub = m.ensayar(conSubtitulo, m.proponerEmparejado(conSubtitulo[0]), [], 2026)
+  caso('un subtítulo suelto sí se señala', 1, ensSub.errores)
 }

@@ -168,6 +168,108 @@ export function proponerColumnas(campos: CampoDeTabla[], cabeceras: string[]): E
   return salida
 }
 
+/**
+ * DE QUÉ PESTAÑA DEL LIBRO SALEN ESTOS DATOS.
+ *
+ * Una hermandad no exporta cuatro archivos: saca UN libro de su programa
+ * viejo, con el censo en una pestaña, las cuotas en otra y la caja en la
+ * tercera. Y luego lo sube cuatro veces, una por pantalla.
+ *
+ * Antes se leía siempre la primera hoja, así que al importar cuotas desde ese
+ * libro salía «faltan columnas obligatorias» —estaba mirando el censo— y no
+ * había forma de saber por qué: el archivo era el bueno.
+ *
+ * Se elige por las columnas y no por el nombre de la pestaña, que cada
+ * programa escribe como quiere («Hoja1», «CUOTAS_2026», «Recibos»). Gana la
+ * que empareja más campos OBLIGATORIOS, y a igualdad, la que empareja más en
+ * total. Devuelve 0 si no hay nada mejor: la primera hoja, como siempre.
+ */
+export function hojaQueCuadra(
+  hojas: { filas: string[][] }[],
+  campos: CampoDeTabla[],
+): number {
+  let mejor = 0
+  let mejorNota = [-1, -1]
+  hojas.forEach((hoja, i) => {
+    // Una pestaña con solo la cabecera —o vacía— no es la que se busca aunque
+    // sus columnas cuadren: no hay nada que importar en ella.
+    if (hoja.filas.length < 2) return
+    /*
+     * SE PUNTÚA LA CABECERA DE VERDAD, no la primera fila.
+     *
+     * Una pestaña con un título encima («LISTADO DE HERMANOS» en A1) sacaba
+     * cero, así que perdía contra cualquier otra — y se acababa importando el
+     * censo desde la pestaña de las cuotas, que es de las peores maneras de
+     * fallar: hay datos, entran, y están mal.
+     */
+    const empareja = proponerColumnas(campos, hoja.filas[filaDeCabecera(hoja.filas, campos)])
+    const obligatorios = campos.filter((c) => c.obligatorio && empareja[c.id] !== null).length
+    const total = campos.filter((c) => empareja[c.id] !== null).length
+    if (obligatorios > mejorNota[0] || (obligatorios === mejorNota[0] && total > mejorNota[1])) {
+      mejor = i
+      mejorNota = [obligatorios, total]
+    }
+  })
+  return mejor
+}
+
+/**
+ * DÓNDE EMPIEZA LA TABLA DE VERDAD.
+ *
+ * Se daba por hecho que la cabecera es la primera fila. Y en la hoja de una
+ * hermandad casi nunca lo es:
+ *
+ *     A1:  HERMANDAD DE NUESTRO PADRE JESÚS
+ *     A2:  Listado de hermanos — 14/02/2026
+ *     A3:  (vacía)
+ *     A4:  Nº | Apellidos y nombre | DNI | Teléfono | ...
+ *
+ * Ese encabezado lo pone el programa viejo del que lo exportan, o lo escribe
+ * quien lleva la hoja para saber de qué es. Con él, la cabecera que se leía era
+ * «HERMANDAD DE NUESTRO PADRE JESÚS» y no emparejaba con nada: la pantalla
+ * decía «— no está en el archivo —» EN TODAS LAS COLUMNAS, con el archivo bueno
+ * delante y sin ninguna forma de entender qué pasaba. Lo mismo con un CSV, y
+ * ahí encima el separador se detecta de la primera línea —que no tiene ninguno—
+ * así que además se partía mal.
+ *
+ * Se busca la cabecera en vez de suponerla: de las primeras filas, la que
+ * empareja más campos. A igualdad gana la de más arriba, que es la de verdad
+ * cuando la tabla repite sus títulos.
+ *
+ * Solo se miran las primeras filas. Más abajo ya no hay encabezado, hay datos,
+ * y una fila de datos que por casualidad empareje algo no puede robarle el
+ * puesto a la cabecera y tirar a la basura todo lo que tiene encima.
+ */
+const FILAS_DE_ENCABEZADO = 12
+
+export function filaDeCabecera(filas: string[][], campos: CampoDeTabla[]): number {
+  let mejor = 0
+  let mejorNota = -1
+  const hasta = Math.min(filas.length - 1, FILAS_DE_ENCABEZADO)
+  for (let i = 0; i < hasta; i++) {
+    const empareja = proponerColumnas(campos, filas[i])
+    const nota = campos.filter((c) => empareja[c.id] !== null).length
+    if (nota > mejorNota) { mejor = i; mejorNota = nota }
+  }
+  return mejor
+}
+
+/** Lo que hay de la cabecera para abajo, y cuántas filas se han dejado arriba. */
+export interface SinPreambulo {
+  filas: string[][]
+  /**
+   * Cuántas se han saltado. Hace falta para seguir diciendo «la línea 47» y que
+   * sea la 47 de SU archivo: decirle a alguien que mire una línea que no es la
+   * que él ve en Excel es peor que no decirle nada.
+   */
+  saltadas: number
+}
+
+export function sinPreambulo(filas: string[][], campos: CampoDeTabla[]): SinPreambulo {
+  const desde = filaDeCabecera(filas, campos)
+  return { filas: desde === 0 ? filas : filas.slice(desde), saltadas: desde }
+}
+
 /** Qué campos obligatorios se han quedado sin columna. */
 export function faltanColumnas(campos: CampoDeTabla[], emparejado: Emparejado): CampoDeTabla[] {
   return campos.filter((c) => c.obligatorio && (emparejado[c.id] ?? null) === null)
@@ -215,6 +317,12 @@ export function ensayarTabla<T extends { id: string; numero: number }>(
   existentes: T[],
   tabla: TablaImportable<T>,
   ctx: ContextoDeTabla,
+  /**
+   * Cuántas filas de encabezado se han dejado arriba. Se suma a la línea para
+   * que «la línea 47» sea la 47 DE SU ARCHIVO: mandar a alguien a mirar una
+   * línea que no es la que ve en Excel es peor que no decirle nada.
+   */
+  saltadas = 0,
 ): EnsayoDeTabla<T> {
   const salida: FilaDeTabla<T>[] = []
   const avisos: string[] = []
@@ -231,7 +339,28 @@ export function ensayarTabla<T extends { id: string; numero: number }>(
 
   // La primera fila es la cabecera, así que los datos empiezan en la 2.
   filas.slice(1).forEach((fila, idx) => {
-    const linea = idx + 2
+    const linea = idx + 2 + saltadas
+    /*
+     * UNA FILA EN BLANCO NO ES UN ERROR: NO ES NADA.
+     *
+     * El listado de una hermandad casi nunca es una tabla limpia. Trae líneas
+     * en blanco separando bloques —«HERMANOS ACTIVOS», hueco, «BAJAS»— y
+     * huecos que dejó quien la montó. En un CSV esas filas se filtran al
+     * leerlo (`leerCsv`), pero un `.xlsx` las conserva, así que el MISMO
+     * listado guardado de una forma o de otra daba resultados distintos.
+     *
+     * Y cada hueco salía en la vista previa como una fila roja, «Falta el
+     * nombre; Falta el DNI». Con quince bloques son quince errores que no hay
+     * forma de corregir —no hay nada que corregir— delante de una secretaría
+     * que está importando su censo por primera vez y lee que algo va mal.
+     *
+     * Se saltan y no cuentan. Las filas que traen ALGO escrito sí siguen
+     * revisándose: un subtítulo suelto en mitad de la hoja sigue saliendo como
+     * error, y ahí está bien que salga, porque es una línea que alguien tiene
+     * que mirar.
+     */
+    if (fila.every((c) => !(c ?? '').trim())) return
+
     const leer = (campo: string): string => {
       const i = emparejado[campo]
       return i === null || i === undefined ? '' : (fila[i] ?? '').trim()

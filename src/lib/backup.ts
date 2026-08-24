@@ -1,5 +1,6 @@
 import { borrarTodosLosArchivos, guardarArchivo, todosLosArchivos } from './filestore'
 import { supabase, isSupabaseConfigured } from './supabase'
+import { traerTodasLasFilas } from './paginado'
 
 /**
  * Copia de seguridad completa de una hermandad: mientras no hay base de datos
@@ -49,6 +50,28 @@ export const TABLAS_COPIA = [
   'solicitudes_alta', 'conceptos_cuota', 'opciones_papeleta', 'catalogos',
   'eventos', 'personal', 'hermandad_settings', 'web_publica', 'mensajes_web',
 ] as const
+
+/**
+ * POR QUÉ COLUMNA SE ORDENA CADA TABLA AL TRAERLA POR PÁGINAS.
+ *
+ * Hace falta ordenar: sin `order`, dos páginas de la misma consulta pueden
+ * traer filas repetidas y saltarse otras, porque Postgres no promete ningún
+ * orden si no se le pide. Y una copia con filas repetidas y filas ausentes es
+ * peor que una copia corta, porque parece completa.
+ *
+ * Casi todas las tablas tienen `id`, pero DOS NO LO TIENEN: `permisos_cargo`
+ * va por `(hermandad_id, cargo, modulo_id)` y `catalogos` por `(clave, valor)`.
+ * Pedirles `order('id')` da error, y en la copia un error se apunta como fallo
+ * — y la copia automática se niega a subir una copia con fallos. O sea que
+ * ordenar por `id` a ciegas dejaría a la hermandad SIN NINGUNA COPIA, cada
+ * semana y en silencio, por arreglar lo de las mil filas.
+ */
+const ORDEN_DE_LA_TABLA: Record<string, string> = {
+  permisos_cargo: 'cargo',
+  catalogos: 'clave',
+  // La clave primaria es la red («Facebook», «Instagram»…), no un id.
+  cuentas_sociales: 'red',
+}
 
 export interface ArchivoCopia {
   id: string
@@ -130,7 +153,16 @@ async function traerTablas(): Promise<{ tablas: Record<string, unknown[]>; fallo
   if (!supabase) return { tablas, fallos }
   for (const nombre of TABLAS_COPIA) {
     try {
-      const { data, error } = await supabase.from(nombre).select('*')
+      /*
+       * POR PÁGINAS, y aquí es donde más importa. `select('*')` trae mil filas
+       * y no da error, así que una copia con el censo cortado a mil salía sin
+       * un solo fallo apuntado — y `copiaAutomatica` solo se niega a subir las
+       * que traen fallos. O sea: se subía cada semana una copia incompleta con
+       * la marca de estar completa. Ver `lib/paginado.ts`.
+       */
+      const columna = ORDEN_DE_LA_TABLA[nombre] ?? 'id'
+      const { data, error } = await traerTodasLasFilas<Record<string, unknown>>((desde, hasta) =>
+        supabase!.from(nombre).select('*').order(columna).range(desde, hasta))
       if (error) fallos.push(`${nombre}: ${error.message}`)
       else tablas[nombre] = data ?? []
     } catch (e) {

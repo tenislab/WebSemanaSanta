@@ -17,6 +17,14 @@
 # EL BUILD ESTÁ AL FINAL Y NO SOBRA. Las pruebas cargan cada módulo por su
 # cuenta con esbuild; el build los junta todos. Un import circular, o un fichero
 # que solo existe en un sitio, se ve aquí y no antes.
+#
+# Y HAY UN POSTGRES AL LADO. `pruebas/basedatos.prueba.mjs` es la única que
+# ejecuta el SQL de verdad: instala `TODO-EN-UNO.sql` entero, lo vuelve a
+# instalar encima, guarda filas de cada tabla y comprueba las políticas de
+# seguridad con una sesión que se hace pasar por una hermana. Sin un Postgres
+# delante se salta sola —lo dice, pero se salta— y son casi treinta
+# comprobaciones que no miraba nadie. Las demás pruebas leen el SQL como texto;
+# esta es la que se entera de que una columna no existe.
 # =============================================================================
 name: Pruebas
 
@@ -28,6 +36,21 @@ on:
 jobs:
   comprobar:
     runs-on: ubuntu-latest
+
+    # El Postgres contra el que se ejecuta el SQL. En el puerto 5433, que es
+    # donde lo busca la prueba, y con `trust` porque no sale de esta máquina.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +66,25 @@ jobs:
       # nueva puede poner rojo el repositorio sin que nadie haya tocado nada.
       - run: npm ci
 
+      # `psql` para la prueba del SQL. El runner trae el cliente de Postgres,
+      # pero conviene asegurarlo: sin él la prueba se salta y no se nota.
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - run: npm run typecheck
       - run: npm run lint
+
+      # `PGHOST=127.0.0.1` porque el servicio se ve por TCP, no por el socket
+      # de la máquina. Sin esto, `psql` busca un socket que no existe, la
+      # prueba cree que no hay Postgres y se salta en verde.
+      #
+      # Y `GOBERGO_PG_OBLIGATORIO` para que, si no lo encuentra, FALLE en vez
+      # de saltarse. Es la trampa de esta prueba: sin Postgres lo dice y sigue
+      # en verde, así que un puerto mal puesto aquí se leería como «todo bien»
+      # mientras el SQL se queda sin comprobar.
       - run: npm test
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          GOBERGO_PG_OBLIGATORIO: '1'
+
       - run: npm run build

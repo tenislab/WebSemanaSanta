@@ -118,4 +118,56 @@ export default async function ({ cargar, caso }) {
     caso(`${pantalla.split('/').pop()} ya no deja fuera a los nuevos`, false,
       /const activos = [a-zA-Z]*\.filter\(\(h\) => h\.estado === 'Activo'\)/.test(t))
   }
+
+  /*
+   * EL CIVIL QUE SE VA NO PUEDE ARRASTRAR AL CENSO ENTERO.
+   *
+   * Un hermano civil —un administrativo contratado, un asesor— lleva número 0
+   * a propósito: no ocupa puesto en el escalafón. Al tramitarle la baja,
+   * `darDeBajaEnCenso` recolocaba «a todos los de número mayor que el suyo», y
+   * su número es CERO: o sea, a todo el mundo. El nº 1 se iba al 0 —fuera de la
+   * numeración, como si estuviera de baja— y los demás bajaban un puesto.
+   *
+   * En una hermandad eso no se ve el día que pasa: se ve el día de la salida,
+   * cuando el escalafón entero está corrido un puesto y el hermano más antiguo
+   * ha desaparecido de la lista.
+   */
+  const conCivil = () => [
+    { id: 'a', numero: 1, estado: 'Activo', antiguedad: 1980 },
+    { id: 'b', numero: 2, estado: 'Activo', antiguedad: 1990 },
+    { id: 'c', numero: 3, estado: 'Activo', antiguedad: 2000 },
+    { id: 'z', numero: 0, estado: 'Activo', antiguedad: 2024, civil: true },
+  ]
+  const trasCivil = m.darDeBajaEnCenso(conCivil(), 'z')
+  caso('el civil que se va queda de baja', 'Baja', trasCivil.find((h) => h.id === 'z').estado)
+  caso('y NO se lleva por delante el escalafón', 'a1 b2 c3 z0', nums(trasCivil))
+  caso('la numeración sigue sana tras la baja del civil', true, m.numeracionSana(trasCivil))
+
+  // Lo mismo con una ficha que llega con número 0 sin ser civil ni baja: puede
+  // salir de una importación a medias, y tampoco puede correr a los demás.
+  const conCero = [
+    { id: 'a', numero: 1, estado: 'Activo', antiguedad: 1980 },
+    { id: 'b', numero: 2, estado: 'Activo', antiguedad: 1990 },
+    { id: 'x', numero: 0, estado: 'Activo', antiguedad: 2024 },
+  ]
+  caso('una ficha con número 0 tampoco corre a nadie', 'a1 b2 x0',
+    nums(m.darDeBajaEnCenso(conCero, 'x')))
+
+  /*
+   * Y AL VOLVER, TAMPOCO. El administrativo que se fue y vuelve sigue sin
+   * ocupar puesto: reactivarlo «recuperando antigüedad» le daba un número del
+   * escalafón y empujaba un puesto a todos los hermanos de detrás.
+   */
+  const civilDeBaja = [
+    { id: 'a', numero: 1, estado: 'Activo', antiguedad: 1980 },
+    { id: 'b', numero: 2, estado: 'Activo', antiguedad: 1990 },
+    { id: 'c', numero: 3, estado: 'Activo', antiguedad: 2000 },
+    { id: 'z', numero: 0, estado: 'Baja', antiguedad: 1995, civil: true },
+  ]
+  const civilVuelve = m.reactivarEnCenso(civilDeBaja, 'z', true)
+  caso('el civil vuelve activo', 'Activo', civilVuelve.find((h) => h.id === 'z').estado)
+  caso('sigue sin número', 0, civilVuelve.find((h) => h.id === 'z').numero)
+  caso('y no empuja a nadie', 'a1 b2 c3 z0', nums(civilVuelve))
+  const civilAlFinal = m.reactivarEnCenso(civilDeBaja, 'z', false)
+  caso('mandarlo «al final» tampoco le da número', 'a1 b2 c3 z0', nums(civilAlFinal))
 }

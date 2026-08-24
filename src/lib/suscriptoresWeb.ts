@@ -13,6 +13,7 @@
  * PARA ENCENDERLO: ejecuta `supabase/suscriptores-web.sql` una vez.
  */
 import { isSupabaseConfigured, supabase } from './supabase'
+import { traerTodasLasFilas } from './paginado'
 import { hermandadDestino } from './multiHermandad'
 
 /**
@@ -46,7 +47,14 @@ export interface Suscriptor {
 }
 
 export type ResultadoAlta =
-  | { ok: true; llave: string }
+  /**
+   * `correoEnviado` dice si el de confirmar ha SALIDO de verdad, y hay que
+   * enseñarlo distinto: mientras no lo abra, a esa persona no se le escribe
+   * nunca. Decirle «mira tu bandeja» cuando no ha salido ningún correo la deja
+   * esperando algo que no va a llegar, y la hermandad con un suscriptor que
+   * nunca podrá avisar.
+   */
+  | { ok: true; correoEnviado: boolean }
   | { ok: false; error: string }
 
 /**
@@ -89,13 +97,72 @@ export async function suscribirse(
       p_nombre: nombre.trim(),
       p_texto: textoDelConsentimiento(nombreHermandad),
     })
-    if (error) return { ok: false, error: 'No se ha podido apuntar el correo. Inténtalo otra vez.' }
-    // La función devuelve null cuando el correo no le vale. No debería llegar
-    // aquí —se comprueba antes— pero si llega, se dice y no se calla.
-    if (!data) return { ok: false, error: 'Ese correo no parece correcto. Míralo y vuelve a intentarlo.' }
-    return { ok: true, llave: String(data) }
+    if (error) {
+      /*
+       * El freno de la base habla en cristiano a propósito («inténtalo dentro
+       * de un rato»), así que ese mensaje se enseña tal cual: es lo único que
+       * quien está delante puede entender y hacer algo con ello.
+       */
+      const suyo = (error as { message?: string }).message ?? ''
+      return {
+        ok: false,
+        error: /más altas/i.test(suyo) ? suyo : 'No se ha podido apuntar el correo. Inténtalo otra vez.',
+      }
+    }
+    // Devuelve `false` cuando el correo no le vale. No debería llegar aquí —se
+    // comprueba antes— pero si llega, se dice y no se calla.
+    if (data !== true) return { ok: false, error: 'Ese correo no parece correcto. Míralo y vuelve a intentarlo.' }
+    /*
+     * Y AHORA EL CORREO DE CONFIRMAR, que es un paso aparte y no una floritura.
+     *
+     * LA LLAVE NO VUELVE AQUÍ. Es lo único con lo que se confirma un alta o se
+     * da de baja, y esta llamada la puede hacer cualquiera desde fuera sin
+     * identificarse: si la devolviera, bastaría con poner el correo de otra
+     * persona para confirmar por ella —falsificando la prueba del
+     * consentimiento— o para darla de baja. La llave se queda en la base y solo
+     * la lee el servidor, que la mete en el enlace del correo.
+     *
+     * Si el envío falla, EL ALTA YA ESTÁ HECHA: la fila está guardada y la
+     * hermandad puede reenviar la confirmación desde Comunicados. Por eso esto
+     * no deshace nada, solo cuenta lo que ha pasado.
+     */
+    return { ok: true, correoEnviado: await pedirConfirmacion(hermandadId, email.trim()) }
   } catch {
     return { ok: false, error: 'No se ha podido apuntar el correo. Revisa la conexión.' }
+  }
+}
+
+/**
+ * Pedirle al servidor que mande el correo de confirmar.
+ *
+ * LO MANDA EL SERVIDOR Y NO EL NAVEGADOR, y no por gusto: el enlace lleva la
+ * llave, y la llave no puede pasar por aquí. La función `enviar-correo` la lee
+ * con la clave de servicio, se pone ella el destinatario y el texto, y solo
+ * manda algo si ese correo está apuntado y sin confirmar.
+ *
+ * Devuelve si ha salido. Nunca lanza: el alta ya está hecha y un fallo de
+ * correo no puede tumbarla.
+ */
+export async function pedirConfirmacion(hermandadId: string, email: string): Promise<boolean> {
+  const cliente = supabase
+  if (!isSupabaseConfigured || !cliente) return false
+  try {
+    const { data, error } = await cliente.functions.invoke('enviar-correo', {
+      body: {
+        suscripcion: {
+          hermandadId,
+          email,
+          // De dónde salió la petición, para que el enlace vuelva al mismo
+          // sitio. El servidor NO se fía de esto a ciegas: solo lo admite si es
+          // su propio dominio o un subdominio suyo.
+          origen: typeof window === 'undefined' ? undefined : window.location.origin,
+        },
+      },
+    })
+    if (error) return false
+    return (data?.enviados ?? 0) > 0
+  } catch {
+    return false
   }
 }
 
@@ -133,10 +200,20 @@ export async function getSuscriptores(): Promise<Suscriptor[]> {
   const cliente = supabase
   if (!isSupabaseConfigured || !cliente) return []
   try {
-    const { data, error } = await cliente
+    /*
+     * Por páginas. De esta lista sale el boletín: con el corte de mil, quien
+     * se apuntó el mil uno no recibía nada y nadie llegaba a saberlo.
+     *
+     * Se ordena también por `id` detrás de la fecha: dos altas del mismo
+     * instante empatan, y un empate hace que dos páginas traigan la misma fila
+     * y se salten otra.
+     */
+    const { data, error } = await traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => cliente
       .from('suscriptores_web')
       .select('id, email, nombre, confirmado, alta_en, origen, llave')
       .order('alta_en', { ascending: false })
+      .order('id')
+      .range(desde, hasta))
     if (error || !data) return []
     return (data as Record<string, unknown>[]).map((r) => ({
       id: String(r.id),
@@ -224,9 +301,44 @@ export function losQueSePuedenAvisar(lista: Suscriptor[]): Suscriptor[] {
   return lista.filter((s) => s.confirmado)
 }
 
-/** El enlace que se le manda para confirmar. */
-export function enlaceDeConfirmacion(origen: string, llave: string): string {
-  return `${origen}/avisos?c=${encodeURIComponent(llave)}`
+/**
+ * REENVIAR EL CORREO DE CONFIRMAR A QUIEN LO ESTÉ ESPERANDO.
+ *
+ * POR QUÉ HACE FALTA UN BOTÓN PARA ESTO. Durante mucho tiempo ese correo NO SE
+ * MANDABA: no había ninguna forma de mandarlo, porque quien se apunta desde la
+ * web no tiene sesión y el envío la exigía. Así que toda la gente que se apuntó
+ * está guardada, sin confirmar y sin haber recibido nunca el enlace — y como a
+ * los sin confirmar no se les escribe, se quedaría ahí para siempre.
+ *
+ * Con esto la hermandad les manda el enlace de una vez y los recupera. Y sirve
+ * igual el día que el proveedor de correo tenga un mal rato.
+ *
+ * DE CINCO EN CINCO, como el resto de los envíos de aquí: doscientas peticiones
+ * a la vez las corta el servidor de correo y lo lee como un ataque.
+ *
+ * La base no manda dos correos al mismo sitio en diez minutos, así que darle
+ * dos veces al botón no le llena la bandeja a nadie: el segundo no sale y se
+ * cuenta como no enviado.
+ */
+export async function reenviarConfirmaciones(
+  hermandadId: string,
+  pendientes: Suscriptor[],
+): Promise<{ enviados: number; fallidos: number }> {
+  let enviados = 0
+  let fallidos = 0
+  const DE_UNA_VEZ = 5
+  for (let i = 0; i < pendientes.length; i += DE_UNA_VEZ) {
+    const idas = await Promise.all(
+      pendientes.slice(i, i + DE_UNA_VEZ).map((s) => pedirConfirmacion(hermandadId, s.email)),
+    )
+    for (const ok of idas) { if (ok) enviados += 1; else fallidos += 1 }
+  }
+  return { enviados, fallidos }
+}
+
+/** Los que se apuntaron y todavía no han abierto el enlace. */
+export function losQueFaltanPorConfirmar(lista: Suscriptor[]): Suscriptor[] {
+  return lista.filter((s) => !s.confirmado)
 }
 
 /** El de darse de baja, que va al pie de CADA aviso. Es obligatorio. */

@@ -111,9 +111,38 @@ export default async function ({ caso }) {
     /alter table hermandad_settings add column if not exists ajustes_cuotas jsonb;/.test(enDisco))
   caso('lleva el almacén de imágenes', true, /insert into storage\.buckets[\s\S]{0,200}'imagenes'/.test(enDisco))
 
-  // Mucho más corto que el instalador: si no lo fuera, no habría razón para
-  // que existiera.
+  /*
+   * QUE NO SE HAYA CONVERTIDO EN EL INSTALADOR.
+   *
+   * `ACTUALIZAR.sql` existe para traer SOLO lo que le falta a una base que ya
+   * funciona. El día que se le cuele el esquema entero deja de tener sentido:
+   * son 5.800 líneas que nadie lee, y lo que no se lee no se revisa.
+   *
+   * Se comprueba por lo que LLEVA DENTRO y no solo por lo que ocupa. El
+   * tamaño es un indicio flojo —cada arreglo nuevo lo alarga un poco, y una
+   * línea arbitraria acaba moviéndose para que pase la prueba, que es
+   * justamente cómo una prueba deja de servir—. Lo que no puede aparecer
+   * nunca es la creación de las tablas base: eso es el instalador.
+   */
+  for (const delInstalador of [
+    'create table if not exists hermanos',
+    'create table if not exists cuotas',
+    'create table if not exists papeletas',
+    'create table if not exists movimientos',
+  ]) {
+    caso(`no trae «${delInstalador}»: eso es el instalador`, false, enDisco.includes(delInstalador))
+  }
+
+  /*
+   * Y aun así, más corto que el instalador. El listón está en la mitad y no en
+   * un tercio porque lo cruzó de verdad: la noche antes de que entrara la
+   * primera hermandad se le añadieron tres piezas —la campaña de papeletas, la
+   * tabla de solicitudes de papeleta y la activación de la suscripción— y pasó
+   * de 1.665 a 1.948 líneas. Sigue siendo un tercio de lo que ocupa el
+   * instalador; la mitad es el sitio donde este aviso empieza a significar
+   * algo otra vez.
+   */
   const todoEnUno = await readFile('supabase/TODO-EN-UNO.sql', 'utf8')
-  caso('es bastante más corto que el instalador', true,
-    enDisco.split('\n').length < todoEnUno.split('\n').length / 3)
+  caso('y sigue siendo más corto que el instalador', true,
+    enDisco.split('\n').length < todoEnUno.split('\n').length / 2)
 }

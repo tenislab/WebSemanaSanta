@@ -22,21 +22,35 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const isSupabaseConfigured = Boolean(url && anonKey)
 
 /**
- * Si está a `1`, la aplicación NO se cae al modo local cuando Supabase está
- * configurado pero no responde: enseña un error y punto.
+ * ¿Se cae la aplicación al modo local cuando Supabase está configurado pero no
+ * responde? **No, salvo que se pida a mano.**
  *
- * Por qué hace falta un interruptor. El modo local de reserva es muy útil
- * mientras se monta todo: si el proyecto de Supabase está en pausa, la
- * aplicación sigue funcionando con los datos del navegador y se puede
- * enseñar. En producción, con hermandades de verdad, eso mismo es un problema:
- * la secretaría entraría, vería un censo que no es el suyo y pasaría la tarde
- * dando altas que no existen en ningún sitio. Es mejor decir «esto está caído,
- * vuelve en un rato» que dejar trabajar en falso.
+ * QUÉ ES EL MODO LOCAL DE RESERVA. Si el proyecto de Supabase está en pausa o
+ * caído, la aplicación seguía funcionando con los datos del navegador. Mientras
+ * se monta todo es cómodo: se puede enseñar sin depender de nada.
  *
- * Se pone `VITE_SIN_MODO_LOCAL=1` en las variables del despliegue el día que
- * se abra al público. Mientras tanto, sin definirla, todo sigue como está.
+ * POR QUÉ AHORA VA AL REVÉS. Con una hermandad de verdad detrás, eso mismo es
+ * un desastre callado: la secretaria entra, ve un censo QUE NO ES EL SUYO —los
+ * doce hermanos de ejemplo, con nombres inventados— y pasa la tarde dando
+ * altas y cobrando recibos que no existen en ningún sitio. Nada avisa, porque
+ * desde dentro se ve una aplicación que funciona. Es mucho mejor decir «esto
+ * está caído, vuelve en un rato».
+ *
+ * Y ESTABA AL REVÉS, esperando que alguien se acordara de poner
+ * `VITE_SIN_MODO_LOCAL=1` en el despliegue el día de abrir al público. Un
+ * seguro que hay que acordarse de activar no es un seguro: el día que de
+ * verdad hace falta es justo el día en que hay quince cosas que hacer.
+ *
+ * Así que ahora la protección viene puesta y lo que se pide a mano es
+ * QUITARLA: `VITE_MODO_LOCAL=1`, solo para desarrollo. Se sigue leyendo la
+ * variable de antes por si algún despliegue ya la tenía puesta — decía lo
+ * mismo que ahora es el comportamiento normal, así que no cambia nada.
+ *
+ * OJO: esto solo entra en juego con Supabase CONFIGURADO. Sin credenciales,
+ * `isSupabaseConfigured` es falso y la demostración funciona igual que
+ * siempre; esto no la toca.
  */
-export const sinModoLocal = import.meta.env.VITE_SIN_MODO_LOCAL === '1'
+export const sinModoLocal = import.meta.env.VITE_MODO_LOCAL !== '1'
 
 /**
  * Cliente principal de Supabase. Es `null` en modo local (sin credenciales).

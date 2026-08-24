@@ -85,6 +85,10 @@ export default async function ({ caso }) {
         solicitudToRow: 'solicitudes_alta',
         mensajeToRow: 'mensajes_web',
         settingsToRow: 'hermandad_settings',
+        // El fichero se llama `solicitudesPapeleta.ts` y la tabla
+        // `solicitudes_papeleta`: se adivinan igual leyéndolos, pero no
+        // coinciden carácter a carácter.
+        solicitudPapeletaToRow: 'solicitudes_papeleta',
       }
       const tabla = ALIAS[m[1]] ?? [...tablas.keys()]
         .filter((t) => t === base || t === `${base}s` || base.startsWith(t))
@@ -138,6 +142,8 @@ export default async function ({ caso }) {
 
   await guardadoDeLaHermandad({ caso })
   await guardadosQueSeVen({ caso })
+  await elModoLocalVieneApagado({ caso })
+  await nadieSeQuedaSinUsar({ caso })
 }
 
 /**
@@ -158,7 +164,7 @@ async function guardadoDeLaHermandad({ caso }) {
   const sql = await readFile('supabase/TODO-EN-UNO.sql', 'utf8')
 
   // Cada ajuste de la hermandad tiene su columna.
-  for (const col of ['modelo_papeleta', 'modelo_recibo', 'asistencia', 'ajustes_cuotas', 'etiquetas']) {
+  for (const col of ['modelo_papeleta', 'modelo_recibo', 'asistencia', 'ajustes_cuotas', 'etiquetas', 'campana', 'campos_propios']) {
     caso(`hermandad_settings.${col} existe`, true,
       new RegExp(`alter table hermandad_settings add column if not exists ${col} jsonb`).test(sql))
   }
@@ -172,10 +178,54 @@ async function guardadoDeLaHermandad({ caso }) {
   caso('las etiquetas van a la base', true, /guardarPlantilla\('etiquetas'/.test(etiq))
   caso('y se traen al abrir', true, /traerPlantilla<string\[\]>\('etiquetas'\)/.test(etiq))
 
+  /*
+   * LA CAMPAÑA DE PAPELETAS, que es la peor de todas las que vivían en un
+   * navegador — porque la lee también EL ÁREA DEL HERMANO.
+   *
+   * La secretaría abría la campaña de 2026 desde Papeletas › Ajustes de
+   * campaña y eso se guardaba en su ordenador. El hermano, desde el móvil,
+   * leía la de fábrica: otro año, otro plazo y otra fecha de salida. Pedía
+   * sitio para una Semana Santa que no tocaba y la pantalla se lo daba por
+   * bueno. Y de `campana.anio` salen las papeletas «del año», que son las que
+   * ordenan el cortejo, reparten los roles y deciden a quién le llega cada
+   * comunicado por tramo.
+   */
+  const camp = await readFile('src/lib/campana.ts', 'utf8')
+  caso('la campaña va a la base', true, /guardarPlantilla\('campana'/.test(camp))
+  caso('y se trae al abrir', true, /traerPlantilla<Partial<Campana>>\('campana'\)/.test(camp))
+
+  /*
+   * Y LOS CAMPOS PROPIOS DE LA FICHA, donde el valor SÍ viajaba y la
+   * definición no: la talla de túnica quedaba guardada dentro de la ficha del
+   * hermano —que va a la base— pero desde otro ordenador el campo «talla» no
+   * existía, así que el dato estaba escrito y no se veía por ninguna parte.
+   */
+  const cp = await readFile('src/lib/camposPropios.ts', 'utf8')
+  caso('los campos propios van a la base', true, /guardarPlantilla\('campos_propios'/.test(cp))
+  caso('y se traen al abrir', true, /traerPlantilla<CampoPropio\[\]>\('campos_propios'\)/.test(cp))
+
+  /*
+   * Y LAS PANTALLAS QUE LA PINTAN LA ESCUCHAN.
+   *
+   * No basta con traerla: `getCampana()` es síncrona y la base tarda lo que
+   * tarde la red. Leyéndola una sola vez al montar, la pantalla se queda con
+   * la de fábrica para toda la sesión aunque la buena llegue medio segundo
+   * después. El área del hermano y el cortejo tienen que usar el hook.
+   */
+  for (const [pantalla, ruta] of [
+    ['el área del hermano', 'src/pages/HermanoPortal.tsx'],
+    ['el cortejo', 'src/pages/app/Cortejo.tsx'],
+  ]) {
+    const texto = await readFile(ruta, 'utf8')
+    caso(`${pantalla} escucha la campaña de la base`, true, /useCampana\(\)/.test(texto))
+    caso(`${pantalla} ya no la lee una sola vez`, false,
+      /const campana = useMemo\(\(\) => getCampana\(\), \[\]\)/.test(texto))
+  }
+
   // El tipo que las gobierna las conoce a todas: si alguien añade una columna
   // y se olvida de aquí, no compila.
   const plant = await readFile('src/lib/plantillasHermandad.ts', 'utf8')
-  for (const col of ['modelo_papeleta', 'modelo_recibo', 'asistencia', 'ajustes_cuotas', 'etiquetas']) {
+  for (const col of ['modelo_papeleta', 'modelo_recibo', 'asistencia', 'ajustes_cuotas', 'etiquetas', 'campana', 'campos_propios']) {
     caso(`PlantillaGuardable incluye ${col}`, true, plant.includes(`'${col}'`))
   }
 }
@@ -270,4 +320,101 @@ async function guardadosQueSeVen({ caso }) {
    */
   caso('no vuelve la lista de papeletas personalizadas', false, /saveOpcionesPapeleta/.test(conf))
   caso('y la simbólica tiene su precio', true, /precioSimbolica/.test(conf))
+}
+
+/**
+ * EL MODO LOCAL DE RESERVA VIENE APAGADO.
+ *
+ * Cuando Supabase está configurado pero no responde —proyecto en pausa, corte
+ * de red—, la aplicación PUEDE seguir con los datos del navegador. Con una
+ * hermandad de verdad detrás eso es un desastre callado: la secretaria entra,
+ * ve el censo de ejemplo —doce nombres inventados— y pasa la tarde dando altas
+ * y cobrando recibos que no existen en ningún sitio. Desde dentro se ve una
+ * aplicación que funciona.
+ *
+ * Y estaba al revés: era un interruptor que había que ACORDARSE de poner en el
+ * despliegue el día de abrir al público. Un seguro que hay que acordarse de
+ * activar no es un seguro. Ahora viene puesto y lo que se pide a mano es
+ * quitarlo, solo para desarrollar.
+ */
+async function elModoLocalVieneApagado({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile('src/lib/supabase.ts', 'utf8')
+  caso('sin poner nada, la protección está puesta', true,
+    /sinModoLocal = import\.meta\.env\.VITE_MODO_LOCAL !== '1'/.test(src))
+  caso('y ya no se cuelga de acordarse de una variable', false,
+    /sinModoLocal = import\.meta\.env\.VITE_SIN_MODO_LOCAL === '1'/.test(src))
+
+  // Y que el ejemplo de configuración no siga mandando poner la vieja: quien
+  // copie ese fichero se llevaría una variable que ya no lee nadie.
+  const ejemplo = await readFile('.env.example', 'utf8')
+  caso('el .env.example ya no pide la variable vieja', false, /VITE_SIN_MODO_LOCAL=1/.test(ejemplo))
+}
+
+/**
+ * TODA TABLA QUE SE CREA, ALGUIEN LA USA.
+ *
+ * De todos los fallos de esta aplicación, el más callado es este: el SQL crea
+ * la tabla, le pone sus políticas, y la aplicación no la toca. No hay error,
+ * no hay columna que falte, no hay permiso denegado. Simplemente la función no
+ * existe, y nadie lo sabe hasta que alguien pregunta por qué está vacío.
+ *
+ * Ha pasado tres veces, y las tres se descubrieron a la vez barriendo esto:
+ *
+ *   · `avisos_hermano` — el buzón del hermano. Todos los avisos se escribían
+ *     en el localStorage de la secretaría, así que la campana del hermano
+ *     estaba vacía para siempre: cuotas, papeletas, la baja, los comunicados.
+ *   · `solicitudes_papeleta` — no existía siquiera. Lo que el hermano pedía
+ *     desde su área se quedaba en su móvil y la secretaría no lo recibía.
+ *   · `suscripciones` — se leía, pero no se escribía. El botón de activar
+ *     dejaba el panel bloqueado desde cualquier otro ordenador.
+ *
+ * Una tabla puede vivir legítimamente sin que la aplicación la nombre: las que
+ * solo tocan las funciones del servidor. Esas van en la lista de abajo, CON EL
+ * MOTIVO. Escribir el motivo es la parte que importa: obliga a mirar si de
+ * verdad es del servidor, que es justo lo que no se miró las tres veces.
+ */
+async function nadieSeQuedaSinUsar({ caso }) {
+  const { readFile, readdir } = await import('node:fs/promises')
+  const sql = await readFile('supabase/TODO-EN-UNO.sql', 'utf8')
+  const tablas = [...sql.matchAll(/create table if not exists (?:public\.)?([a-z_]+)\s*\(/g)]
+    .map((m) => m[1])
+
+  const SOLO_DEL_SERVIDOR = {
+    hermandades: 'se llega por RPC (crear_hermandad, hermandades_publicas), no por su nombre',
+    intentos_acceso: 'el freno de fuerza bruta: lo escribe resolver_email_hermano, nunca el navegador',
+    recuperaciones_hermano: 'las contraseñas olvidadas: solo la Edge Function con la clave de servicio',
+    titulares: 'quién lleva la hermandad: se pregunta por es_titular(), no leyendo la tabla',
+    suscripciones: 'por RPC (mi_suscripcion, activar_suscripcion_propia): el pack no lo elige el navegador',
+  }
+
+  // Todo lo que la aplicación nombra: el panel, el área del hermano y la
+  // función de correo del servidor.
+  const fuentes = []
+  for (const dir of ['src/lib', 'src/lib/db', 'src/pages', 'src/pages/app', 'src/components', 'src/context']) {
+    for (const f of await readdir(dir)) {
+      if (/\.tsx?$/.test(f)) fuentes.push(`${dir}/${f}`)
+    }
+  }
+  fuentes.push('supabase/functions/enviar-correo/index.ts')
+  let todo = ''
+  for (const f of fuentes) todo += await readFile(f, 'utf8')
+
+  caso('hay tablas que comprobar', true, tablas.length >= 20)
+  const huerfanas = tablas.filter((t) => !SOLO_DEL_SERVIDOR[t] && !todo.includes(`'${t}'`))
+  caso('ninguna tabla se queda sin usar', '', huerfanas.join(', '))
+
+  /*
+   * Y al revés: que la lista de excepciones no se llene de tablas que sí se
+   * usan, porque entonces deja de proteger nada.
+   *
+   * Aquí se mira `.from('tabla')`, que es como se nombra una tabla de verdad,
+   * y no el nombre suelto. La primera versión miraba el nombre suelto y
+   * señalaba `titulares` como excepción sobrante: en `src` aparece
+   * `'titulares'` docenas de veces, pero es la SECCIÓN de la web —las imágenes
+   * del Señor y la Virgen— y no la tabla de quién lleva la hermandad. La misma
+   * palabra para dos cosas distintas.
+   */
+  const sobran = Object.keys(SOLO_DEL_SERVIDOR).filter((t) => todo.includes(`.from('${t}')`))
+  caso('la lista de excepciones no tiene de más', '', sobran.join(', '))
 }

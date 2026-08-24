@@ -69,7 +69,7 @@ export default async function ({ cargar, caso }) {
   // y esconderla descuadraría la caja.
   caso('un importe negativo sí cuenta', 40, m.deudaDe([c('Pendiente', -20), c('Pendiente', 60)]))
 
-  await nadieLaVuelveACopiar({ caso })
+  await nadieLaVuelveACopiar({ caso, cargar })
 }
 
 /**
@@ -78,7 +78,7 @@ export default async function ({ cargar, caso }) {
  * Esto es lo que de verdad guarda la prueba: no que la función esté bien —eso
  * es fácil—, sino que los siete sitios sigan preguntándole a ella.
  */
-async function nadieLaVuelveACopiar({ caso }) {
+async function nadieLaVuelveACopiar({ caso, cargar }) {
   const { readFile } = await import('node:fs/promises')
   const ARCHIVOS = [
     'src/components/MiFamilia.tsx',
@@ -111,4 +111,54 @@ async function nadieLaVuelveACopiar({ caso }) {
   // añadir uno, TypeScript no compila hasta que se diga si está cobrado.
   const fuente = await readFile('src/data/cuotas.ts', 'utf8')
   caso('el interruptor es exhaustivo', true, /Record<EstadoCuota, boolean>/.test(fuente))
+
+  /*
+   * NINGUNA CIFRA DE DINERO SE SUMA A PELO, EN NINGUNA PANTALLA.
+   *
+   * `sumaEuros` existe porque un `reduce((s, c) => s + c.importe, 0)` se lo
+   * lleva por delante UN SOLO importe malo:
+   *
+   *   · vacío  → la suma entera es NaN y el informe dice «NaN €»;
+   *   · texto  → el `+` concatena y salen cosas como «12060,1060 €».
+   *
+   * Y lo de que llegue como texto no es hipotético: Postgres devuelve las
+   * columnas `numeric` como cadena, y una copia guardada en el navegador por
+   * una versión anterior puede traerla así.
+   *
+   * Estaba protegido en `deudaDe` y en las cifras de papeletas, y NO en las
+   * cuatro del informe que se lleva al cabildo, ni en el historial de la ficha
+   * del hermano, ni en los dos saldos del estado de cuentas. Un dato malo
+   * entre seiscientos buenos no puede borrar los seiscientos.
+   *
+   * Se barre el repositorio entero en vez de repasar una lista escrita a mano:
+   * una lista se queda vieja el día que alguien añade una pantalla.
+   */
+  const { readFile: leer, readdir: listar } = await import('node:fs/promises')
+  const dirs = ['src/pages/app', 'src/pages', 'src/components', 'src/lib']
+  const sospechosas = []
+  for (const dir of dirs) {
+    for (const f of await listar(dir)) {
+      if (!/\.tsx?$/.test(f)) continue
+      const ruta = `${dir}/${f}`
+      const src = await leer(ruta, 'utf8')
+      src.split('\n').forEach((linea, i) => {
+        // Un `reduce` cuyo acumulador suma un `.importe` a pelo. Se deja pasar
+        // el que ya redondea a céntimos por su cuenta (`Math.round(... * 100)`),
+        // que es lo mismo que hace `sumaEuros`.
+        if (/reduce\(\s*\([^)]*\)\s*=>[^\n]*\+[^\n]*\.importe/.test(linea)
+            && !/Math\.round/.test(linea)) {
+          sospechosas.push(`${ruta}:${i + 1}`)
+        }
+      })
+    }
+  }
+  caso('nadie suma dinero a pelo: se usa sumaEuros', '', sospechosas.join(', '))
+
+  // Y que la función de verdad aguante lo que se le eche.
+  const fmt = await cargar('src/lib/format.ts')
+  caso('un importe vacío no borra la suma', 180, fmt.sumaEuros([60, 60, undefined, 60]))
+  caso('ni uno nulo', 180, fmt.sumaEuros([60, 60, null, 60]))
+  caso('ni uno que llega como texto de la base', 180, fmt.sumaEuros(['60.00', 60, 60]))
+  caso('ni una palabra donde iba un número', 180, fmt.sumaEuros([60, 'sesenta', 60, 60]))
+  caso('y los céntimos no se deshilachan', 54.3, fmt.sumaEuros([18.1, 18.1, 18.1]))
 }

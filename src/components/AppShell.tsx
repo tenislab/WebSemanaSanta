@@ -1,6 +1,7 @@
 import type { ErrorTraducido } from '../lib/errorDeBaseDeDatos'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { copiaSemanalSiTocaba } from '../lib/copiaAutomatica'
+import { cargarCampanaDeLaBase } from '../lib/campana'
 import { NavLink, Outlet, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import BarraDeshacer from './BarraDeshacer'
 import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
@@ -214,6 +215,17 @@ export default function AppShell() {
   useEffect(() => {
     void copiaSemanalSiTocaba()
   }, [])
+  /*
+   * LA CAMPAÑA DE PAPELETAS, DE LA BASE, AL ARRANCAR.
+   *
+   * `getCampana()` es síncrona y la leen quince pantallas —el cortejo, los
+   * informes, los comunicados por tramo, el censo—. Traerla aquí una vez deja
+   * la copia de este navegador al día para todas ellas antes de que ninguna se
+   * pinte, en vez de que cada una tire de lo que hubiera guardado.
+   */
+  useEffect(() => {
+    void cargarCampanaDeLaBase()
+  }, [])
   const navigate = useNavigate()
   const location = useLocation()
   const { settings: ajustesHermandad, resuelto: ajustesResueltos } = useHermandadSettingsConEstado()
@@ -243,7 +255,7 @@ export default function AppShell() {
     if (altaPendiente(ajustesHermandad)) setMostrarAlta(true)
   }, [ajustesResueltos, ajustesHermandad])
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { suscripcion, activar } = useSuscripcion()
+  const { suscripcion, activar, error: errorSuscripcion } = useSuscripcion()
 
   const hermandad = (user?.user_metadata?.hermandad as string | undefined) ?? 'Tu hermandad'
   const nombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Hermano/a'
@@ -317,10 +329,14 @@ export default function AppShell() {
   // Muro de suscripción: sin suscripción activa, el panel queda bloqueado.
   if (!suscripcion.activa) {
     return (
+      /* `avisoGuardado`: si la activación no llegó a la base, se dice. Si no,
+         la hermandad se queda creyendo que está dada de alta y desde el
+         ordenador de al lado le vuelve a salir este mismo muro. */
       <PantallaSuscripcion
         nombreHermandad={hermandad}
-        onActivar={(pack, periodo) => activar(pack, periodo, fechaHoyLocal())}
+        onActivar={(pack, periodo) => { void activar(pack, periodo, fechaHoyLocal()) }}
         onSalir={handleSignOut}
+        avisoGuardado={errorSuscripcion}
       />
     )
   }

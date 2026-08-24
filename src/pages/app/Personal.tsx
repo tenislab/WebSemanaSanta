@@ -270,6 +270,7 @@ export default function Personal() {
 
     /* Si ya tiene cuenta no se crea otra: se le pone el cargo y ya está. */
     let aviso: string | null = null
+    let correoAcceso: string | null = null
     if (!authUserId && isSupabaseConfigured) {
       const r = await crearAccesoHermano(email, quien.claveAcceso, quien.dni, quien.nombre)
       /* O las dos cosas o ninguna: guardar el cargo de alguien que no puede
@@ -279,6 +280,7 @@ export default function Personal() {
         return
       }
       authUserId = r.id
+      correoAcceso = r.correoAcceso ?? null
       aviso = r.error
     }
 
@@ -292,7 +294,11 @@ export default function Personal() {
     }
 
     setHermanos((prev) =>
-      prev.map((h) => (h.id === hermanoId ? { ...h, cargo, email, authUserId } : h)),
+      prev.map((h) => (h.id === hermanoId
+        // `correoAcceso` solo si se le acaba de crear la cuenta: si ya la
+        // tenía, la suya es la de antes y pisarla la dejaría sin poder entrar.
+        ? { ...h, cargo, email, authUserId, ...(correoAcceso ? { correoAcceso } : {}) }
+        : h)),
     )
     setCargoOpen(false)
     setError(null)
@@ -459,6 +465,7 @@ export default function Personal() {
       dni,
       claveAcceso: clave,
       authUserId: r.id,
+      correoAcceso: r.correoAcceso ?? null,
       civil: true,
       cargo: cargo || null,
     }
@@ -483,7 +490,8 @@ export default function Personal() {
       setAvisoAcceso(r.error)
       return
     }
-    setHermanos((prev) => prev.map((x) => (x.id === h.id ? { ...x, authUserId: r.id } : x)))
+    setHermanos((prev) => prev.map((x) => (
+      x.id === h.id ? { ...x, authUserId: r.id, correoAcceso: r.correoAcceso ?? null } : x)))
     setAvisoAcceso(null)
   }
 

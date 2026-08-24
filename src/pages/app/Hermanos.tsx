@@ -8,7 +8,7 @@ import MenuAcciones from '../../components/MenuAcciones'
 import CamposPropiosForm from '../../components/CamposPropios'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
-import { formatCurrency, isPlausibleIban, maskIban } from '../../lib/format'
+import { formatCurrency, isPlausibleIban, maskIban, porQueNoValeElIban } from '../../lib/format'
 import { useTramos, etiquetaTramo } from '../../lib/tramos'
 import { repartoCompleto } from '../../lib/cortejo'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
@@ -299,6 +299,12 @@ export default function Hermanos() {
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [dniError, setDniError] = useState<string | null>(null)
   /**
+   * El del FORMULARIO DE ALTA, aparte del de la ficha (`ibanError`): son dos
+   * paneles distintos y el de la ficha ni siquiera está abierto mientras se da
+   * de alta a alguien, así que el aviso no se vería.
+   */
+  const [ibanAltaError, setIbanAltaError] = useState<string | null>(null)
+  /**
    * «La ficha se ha guardado, pero NO se ha creado su acceso».
    *
    * Va aquí arriba y no dentro del panel del alta porque el panel se cierra al
@@ -329,7 +335,8 @@ export default function Hermanos() {
     )
     setEnviandoAcceso(null)
     if (r.ok) {
-      setHermanos((prev) => prev.map((x) => (x.id === h.id ? { ...x, authUserId: r.authUserId ?? null } : x)))
+      setHermanos((prev) => prev.map((x) => (x.id === h.id
+        ? { ...x, authUserId: r.authUserId ?? null, correoAcceso: r.correoAcceso ?? null } : x)))
       setAvisoAcceso(`Acceso enviado a ${h.nombre}. Le llega una clave de un solo uso a ${h.email}.`)
       return
     }
@@ -350,8 +357,11 @@ export default function Hermanos() {
     )
     setTandaAcceso(null)
     if (r.cuentas.length > 0) {
-      const porId = new Map(r.cuentas.map((c) => [c.id, c.authUserId]))
-      setHermanos((prev) => prev.map((x) => (porId.has(x.id) ? { ...x, authUserId: porId.get(x.id) ?? null } : x)))
+      const porId = new Map(r.cuentas.map((c) => [c.id, c]))
+      setHermanos((prev) => prev.map((x) => {
+        const c = porId.get(x.id)
+        return c ? { ...x, authUserId: c.authUserId, correoAcceso: c.correoAcceso } : x
+      }))
     }
     // Los fallos van con nombre: en una tanda de 800, «3 han fallado» sin decir
     // cuáles no sirve para nada.
@@ -482,14 +492,28 @@ export default function Hermanos() {
      * que no significa nada aquí, porque ese menor no necesita ninguna cuenta,
      * y que hacía pensar que el alta no había funcionado.
      */
-    const esMenorACargo = Boolean(sol.tutorId) || !sol.clavePropuesta.trim()
-    /* La que eligió al pedir el alta, si eligió una; si no, una de un solo uso.
-       En los dos casos deja de guardarse en la ficha. */
-    const claveProvisional = sol.clavePropuesta.trim() || claveDeUnSoloUso()
+    /*
+     * MENOR ES QUIEN TIENE TUTOR, Y SOLO ESO.
+     *
+     * Aquí ponía `Boolean(sol.tutorId) || !sol.clavePropuesta.trim()`. El
+     * segundo trozo era un cinturón de más mientras el formulario pedía una
+     * contraseña; desde que NO la pide —se guardaba en claro, ver
+     * `FormulariosWeb.tsx`— todas las solicitudes llegan sin ella, y con esa
+     * condición TODO EL MUNDO pasaría por menor: se aprobaría el alta y no se
+     * le crearía cuenta a nadie, sin un solo aviso. Quien tiene tutor es menor;
+     * lo demás no lo dice la contraseña.
+     */
+    const esMenorACargo = Boolean(sol.tutorId)
+    /* Una clave de un solo uso, que se le manda por correo al darle la
+       bienvenida. No se guarda en la ficha. */
+    const claveProvisional = claveDeUnSoloUso()
     const acceso = esMenorACargo
       ? { id: null, error: null }
       : await crearAccesoHermano(sol.email, claveProvisional, sol.dni, sol.nombre)
     nuevo.authUserId = acceso.id
+    // Cómo se llama su cuenta por dentro. Sin apuntarlo, la pantalla de entrar
+    // no la encuentra a partir de su DNI y esa persona no entra nunca.
+    nuevo.correoAcceso = acceso.correoAcceso ?? null
     // Si no se ha podido crear su acceso, se DICE. Ver crearAccesoHermano().
     if (acceso.error) setAvisoAcceso(acceso.error)
     // La comprobación de DNI se repite AQUÍ, ya con la lista más reciente: entre
@@ -539,9 +563,9 @@ export default function Hermanos() {
         void darLaBienvenida({
           id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
           numero: suNumero,
-          // Solo si la eligió ELLA al pedir el alta ya se la sabe: entonces no
-          // se le repite por correo. Si se la hemos puesto nosotros, sí.
-          claveProvisional: sol.clavePropuesta.trim() ? null : (acceso.id ? claveProvisional : null),
+          // Siempre se la mandamos: nunca la ha elegido ella. Y solo si su
+          // cuenta se ha llegado a crear, claro.
+          claveProvisional: acceso.id ? claveProvisional : null,
           hermandad: hermandad.nombreLegal,
         })
       }
@@ -836,8 +860,22 @@ export default function Hermanos() {
     }
     setDniError(null)
 
+    /*
+     * EL IBAN MAL ESCRITO SE DECÍA, NO SE TIRABA.
+     *
+     * Antes: `ibanRaw && isPlausibleIban(ibanRaw) ? ibanRaw : null`. O sea, se
+     * borraba en silencio. La secretaria daba de alta al hermano con su cuenta
+     * delante, se comía una cifra, y la ficha se guardaba SIN IBAN sin decir
+     * nada. Después nadie entendía por qué a ese hermano no se le cobraba: en
+     * su ficha no había ninguna cuenta, y ella recordaba haberla escrito.
+     */
     const ibanRaw = String(data.get('iban') ?? '').trim()
-    const iban = ibanRaw && isPlausibleIban(ibanRaw) ? ibanRaw : null
+    if (ibanRaw && !isPlausibleIban(ibanRaw)) {
+      setIbanAltaError(`Ese IBAN no vale: ${porQueNoValeElIban(ibanRaw)}.`)
+      return
+    }
+    setIbanAltaError(null)
+    const iban = ibanRaw || null
     const fechaNacimiento = String(data.get('fechaNacimiento') ?? '').trim() || undefined
 
     const nuevo: Hermano = {
@@ -873,6 +911,9 @@ export default function Hermanos() {
     const claveProvisional = claveDeUnSoloUso()
     const acceso = await crearAccesoHermano(email, claveProvisional, dni, nombre)
     nuevo.authUserId = acceso.id
+    // Cómo se llama su cuenta por dentro. Sin apuntarlo, la pantalla de entrar
+    // no la encuentra a partir de su DNI y esa persona no entra nunca.
+    nuevo.correoAcceso = acceso.correoAcceso ?? null
     if (acceso.error) setAvisoAcceso(acceso.error)
     // El duplicado se vuelve a mirar DENTRO del updater: entre el clic y la
     // respuesta de Supabase pasan segundos, y pulsando dos veces se daban de
@@ -920,7 +961,10 @@ export default function Hermanos() {
     if (!selected) return
     const trimmed = ibanDraft.trim()
     if (trimmed && !isPlausibleIban(trimmed)) {
-      setIbanError('Ese IBAN no parece válido. Revísalo (ej. ES91 2100 0418 4502 0005 1332).')
+      // Se dice QUÉ le pasa. «No parece válido» delante de un IBAN de veinte
+      // cifras no ayuda a nadie: al que le faltan cifras y al que tiene una
+      // cambiada se les arregla de maneras distintas.
+      setIbanError(`Ese IBAN no vale: ${porQueNoValeElIban(trimmed)}. Ejemplo: ES91 2100 0418 4502 0005 1332.`)
       return
     }
     const nuevoIban = trimmed || null
@@ -2037,7 +2081,11 @@ export default function Hermanos() {
           </div>
           <div className="form-row">
             <label htmlFor="iban">Cuenta bancaria (opcional)</label>
-            <input id="iban" name="iban" type="text" placeholder="ES00 0000 0000 0000 0000 0000" />
+            <input
+              id="iban" name="iban" type="text" placeholder="ES00 0000 0000 0000 0000 0000"
+              aria-invalid={ibanAltaError ? true : undefined}
+            />
+            {ibanAltaError && <p className="form-hint form-hint--error">{ibanAltaError}</p>}
           </div>
           <CamposPropiosForm
             campos={camposDeAlta}

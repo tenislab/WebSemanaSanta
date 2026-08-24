@@ -106,6 +106,61 @@ for (const [nombre, tabla, ruta] of CASOS) {
   if (ensayo.avisos?.length) console.log(`   avisos: ${ensayo.avisos.join(' | ')}`)
 }
 
+/* ---------------------------------------------------------------------------
+   EL LIBRO AL LÍMITE: una sola exportación con todo dentro.
+   --------------------------------------------------------------------------- */
+
+console.log('\n\n════ UN SOLO LIBRO CON TODO ════')
+console.log('   Es lo que sale de un programa de gestión viejo: una pestaña por')
+console.log('   cosa, y se sube cuatro veces, una por pantalla.\n')
+
+const RUTA_LIBRO = 'docs/libro-al-limite/hermandad-al-limite.xlsx'
+const t0 = process.hrtime.bigint()
+const libro = await excel.leerLibro(new Uint8Array(readFileSync(RUTA_LIBRO)))
+const msLeer = Number(process.hrtime.bigint() - t0) / 1e6
+
+console.log(`── El libro (${RUTA_LIBRO.split('/').pop()}) — leído en ${msLeer.toFixed(0)} ms`)
+console.log(`   pestañas: ${libro.map((h) => `«${h.nombre}» ${Math.max(0, h.filas.length - 1)}`).join(' · ')}`)
+
+// El censo del libro, que NO es la primera hoja: si el lector se quedara con
+// la primera cogería el inventario y diría que faltan columnas.
+const cualCenso = censoMod.hojaDelCenso(libro)
+console.log(`\n── Censo del libro → pestaña elegida: «${libro[cualCenso].nombre}»`)
+const filasG = libro[cualCenso].filas
+const ensayoG = censoMod.ensayar(filasG, censoMod.proponerEmparejado(filasG[0]), [])
+const malG = ensayoG.filas.filter((f) => f.problemas.length > 0)
+let nG = 0
+const CENSO_GRANDE = censoMod.aplicar(ensayoG, [], { conLosQueYaEstan: 'anadir' }, () => `g-${nG += 1}`).censo
+console.log(`   filas leídas: ${ensayoG.filas.length} · con error: ${malG.length}`)
+console.log(`   errores: ${[...new Set(malG.flatMap((f) => f.problemas.map((p) => p.replace(/\d+/g, 'N'))))].join(' | ')}`)
+console.log(`   IMPORTADOS de verdad: ${CENSO_GRANDE.length}`)
+
+// Y las tres tablas, cada una eligiendo su pestaña por las columnas.
+const CTX_GRANDE = { ...CTX, hermanos: CENSO_GRANDE }
+for (const [nombre, tabla] of [
+  ['Historial de cuotas', tablas.TABLA_CUOTAS],
+  ['Libro de caja', tablas.TABLA_MOVIMIENTOS],
+  ['Inventario', tablas.TABLA_ENSERES],
+]) {
+  const cual = motor.hojaQueCuadra(libro, tabla.campos)
+  const filas = libro[cual].filas
+  const emparejado = motor.proponerColumnas(tabla.campos, filas[0])
+  const faltan = motor.faltanColumnas(tabla.campos, emparejado).map((c) => c.etiqueta ?? c.id).join(', ')
+  const t = process.hrtime.bigint()
+  const ensayo = motor.ensayarTabla(filas, emparejado, [], tabla, CTX_GRANDE)
+  const aplicado = motor.aplicarTabla(ensayo, [], tabla, { conLosQueYaEstan: 'anadir' }, () => `id-${nG += 1}`)
+  const ms = Number(process.hrtime.bigint() - t) / 1e6
+  const mal = ensayo.filas.filter((f) => f.problemas.length > 0)
+  console.log(`\n── ${nombre} del libro → pestaña elegida: «${libro[cual].nombre}»`)
+  console.log(`   faltan columnas obligatorias: ${faltan || 'ninguna'}`)
+  console.log(`   filas leídas: ${ensayo.filas.length} · con error: ${mal.length} · en ${ms.toFixed(0)} ms`)
+  if (mal.length) console.log(`   errores: ${[...new Set(mal.flatMap((f) => f.problemas.map((p) => p.replace(/\d+/g, 'N'))))].join(' | ')}`)
+  console.log(`   IMPORTADAS de verdad: ${aplicado.lista.length}`)
+  if (ensayo.avisos?.length) console.log(`   avisos: ${ensayo.avisos.join(' | ')}`)
+}
+
+console.log('\n════ FIN DEL LIBRO ════\n')
+
 // --- Y el censo, que va por su propio importador ---
 for (const rutaCenso of ['docs/censo-de-prueba/censo-de-prueba.csv', 'docs/censo-de-prueba/censo-de-prueba.xlsx']) {
 const filasCenso = await filasDe(rutaCenso)

@@ -178,6 +178,50 @@ export async function cargarSuscripcionDeLaBase(): Promise<Suscripcion | null> {
   }
 }
 
+/**
+ * Deja la suscripción activada EN LA HERMANDAD.
+ *
+ * Contra `activar_suscripcion_propia`, que solo puede llamar el titular y solo
+ * para la suya. La otra —`activar_suscripcion`— está revocada para
+ * `authenticated` a propósito: es la que llamará el webhook de Stripe con la
+ * clave de servicio, y desde el navegador no se puede tocar.
+ */
+export async function guardarSuscripcionEnLaBase(
+  pack: PackId,
+  periodo: Periodo,
+): Promise<{ ok: boolean; error?: string }> {
+  // Sin base de datos —modo demostración— no hay nada que guardar y la copia
+  // local es la buena: no es un fallo, es que no hay a dónde mandarlo.
+  if (!isSupabaseConfigured || !supabase) return { ok: true }
+  try {
+    const { error } = await supabase.rpc('activar_suscripcion_propia', {
+      p_pack: pack ?? 'todo',
+      p_periodo: periodo ?? 'mensual',
+    })
+    if (!error) return { ok: true }
+    console.error('No se pudo activar la suscripción:', error.message)
+    return {
+      ok: false,
+      error: 'Se ha activado en este ordenador, pero no se ha podido guardar en la hermandad: '
+        + 'desde otro equipo seguirá saliendo la pantalla de suscripción. Vuelve a intentarlo '
+        + 'en un momento; si sigue igual, hay que ejecutar «activar-la-suscripcion.sql» en Supabase.',
+    }
+  } catch {
+    return { ok: false, error: 'No se ha podido conectar para guardar la suscripción.' }
+  }
+}
+
+/** La da de baja en la hermandad. La fila se queda: cuándo entró y cuándo salió. */
+export async function cancelarSuscripcionEnLaBase(): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return
+  try {
+    const { error } = await supabase.rpc('cancelar_suscripcion_propia')
+    if (error) console.error('No se pudo cancelar la suscripción:', error.message)
+  } catch {
+    // Sin conexión: queda cancelada aquí y se volverá a leer de la base.
+  }
+}
+
 export function getSuscripcion(): Suscripcion {
   const raw = leerPersistido<Record<string, unknown>>(CLAVE_SUSCRIPCION, SUSCRIPCION_INICIAL as unknown as Record<string, unknown>)
   const activa = Boolean(raw.activa)
@@ -260,16 +304,36 @@ export function useSuscripcion() {
     return () => window.removeEventListener('storage', sincronizar)
   }, [])
 
-  function activar(pack: PackId, periodo: Periodo, fechaISO: string) {
+  /*
+   * ACTIVAR ESCRIBE EN LA BASE, no en este navegador.
+   *
+   * Escribía solo en `localStorage`, y eso no aguantaba ni una recarga: el
+   * efecto de arriba pregunta a la base al montar, la base contestaba «no hay
+   * suscripción» y esa respuesta pisaba la copia local. Así que el Hermano
+   * Mayor activaba, entraba, recargaba… y le volvía a salir el muro de pago.
+   * Y desde el ordenador de la secretaria no había entrado nunca.
+   *
+   * Se guarda primero en local para que la pantalla pase YA —es un botón, y
+   * quien lo pulsa quiere entrar— y se manda a la base detrás. Si la base lo
+   * rechaza se dice, en vez de dejar a la hermandad creyendo que está dada de
+   * alta hasta la siguiente recarga.
+   */
+  const [error, setError] = useState<string | null>(null)
+
+  async function activar(pack: PackId, periodo: Periodo, fechaISO: string) {
     const s: Suscripcion = { activa: true, pack, periodo, desde: fechaISO }
     setSuscripcion(s)
     saveSuscripcion(s)
+    setError(null)
+    const r = await guardarSuscripcionEnLaBase(pack, periodo)
+    if (!r.ok) setError(r.error ?? 'No se ha podido guardar la suscripción.')
   }
 
-  function cancelar() {
+  async function cancelar() {
     setSuscripcion(SUSCRIPCION_INICIAL)
     saveSuscripcion(SUSCRIPCION_INICIAL)
+    await cancelarSuscripcionEnLaBase()
   }
 
-  return { suscripcion, activar, cancelar }
+  return { suscripcion, activar, cancelar, error }
 }

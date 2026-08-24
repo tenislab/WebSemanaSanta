@@ -461,6 +461,8 @@ export default async function ({ cargar, caso }) {
   }
 
   await partidaDeOtros({ cargar, caso })
+
+  await laCabeceraNoEsLaPrimeraFila({ cargar, caso })
 }
 
 /**
@@ -499,4 +501,117 @@ async function partidaDeOtros({ cargar, caso }) {
   caso('sin ninguna de otros, la última', 'Cera', m.categoriaDeOtros(['Cultos', 'Cera']))
   // Y con el catálogo vacío no se cae.
   caso('con el catálogo vacío no revienta', 'Otros ingresos', m.categoriaDeOtros([]))
+}
+
+/**
+ * LA CABECERA CASI NUNCA ES LA PRIMERA FILA.
+ *
+ * La hoja que trae una hermandad empieza así, y no es raro: es lo normal.
+ *
+ *     A1:  HERMANDAD DE NUESTRO PADRE JESÚS NAZARENO
+ *     A2:  Listado de hermanos — 14 de febrero de 2026
+ *     A3:  (vacía)
+ *     A4:  Nº | Apellidos y nombre | D.N.I. | Teléfono | ...
+ *
+ * Ese encabezado lo pone el programa viejo del que lo exportan, o lo escribe
+ * quien lleva la hoja para saber de qué es.
+ *
+ * SE DABA POR HECHO QUE LA CABECERA ERA LA FILA 1. Así que la cabecera que se
+ * leía era «HERMANDAD DE NUESTRO PADRE JESÚS NAZARENO» y no emparejaba con
+ * nada: la pantalla decía «— no está en el archivo —» EN TODAS LAS COLUMNAS,
+ * con el archivo bueno delante y sin ninguna forma de entender qué pasaba.
+ *
+ * Y arrastraba otras dos:
+ *
+ *   · En un CSV, el separador se detectaba de la PRIMERA línea. La del título
+ *     no tiene ninguno, así que ganaba el punto y coma por descarte y un
+ *     archivo con comas se leía como una sola columna.
+ *   · Con varias pestañas, la que tuviera título encima sacaba cero al
+ *     puntuarla y perdía contra cualquier otra: se acababa importando el censo
+ *     desde la pestaña de las cuotas, que es de las peores formas de fallar —
+ *     hay datos, entran, y están mal.
+ */
+async function laCabeceraNoEsLaPrimeraFila({ cargar, caso }) {
+  const m = await cargar('src/lib/importarTabla.ts')
+  const tablas = await cargar('src/lib/tablasImportables.ts')
+  const leer = await cargar('src/lib/leerTabla.ts')
+  const censo = await cargar('src/lib/importar.ts')
+
+  const CAMPOS = tablas.TABLA_CUOTAS.campos
+
+  const conTitulo = [
+    ['HERMANDAD DE NUESTRO PADRE JESÚS NAZARENO'],
+    ['Listado de recibos — 14 de febrero de 2026'],
+    [''],
+    ['D.N.I.', 'Ejercicio', 'Concepto', 'Importe', 'Estado'],
+    ['12345678Z', '2026', 'Cuota anual', '30', 'Pagado'],
+    ['87654321X', '2026', 'Cuota anual', '30', 'Pendiente'],
+  ]
+
+  caso('la cabecera se encuentra donde está', 3, m.filaDeCabecera(conTitulo, CAMPOS))
+  const corte = m.sinPreambulo(conTitulo, CAMPOS)
+  caso('y se corta lo de encima', 'D.N.I.', corte.filas[0][0])
+  caso('quedando la cabecera y sus dos filas', 3, corte.filas.length)
+  caso('y se recuerda cuántas se han saltado', 3, corte.saltadas)
+
+  // Lo que importa: que las columnas dejen de salir como «no está».
+  const antes = m.proponerColumnas(CAMPOS, conTitulo[0])
+  const despues = m.proponerColumnas(CAMPOS, corte.filas[0])
+  caso('antes no emparejaba ninguna', 0, Object.values(antes).filter((v) => v !== null).length)
+  caso('y ahora sí', true, Object.values(despues).filter((v) => v !== null).length >= 4)
+
+  /*
+   * Y LA LÍNEA QUE SE LE DICE A LA HERMANDAD SIGUE SIENDO LA SUYA. Mandar a
+   * alguien a mirar «la línea 2» cuando en su Excel es la 5 es peor que no
+   * decirle nada: la busca, ve otra cosa y deja de fiarse de la pantalla.
+   */
+  const ensayo = m.ensayarTabla(corte.filas, despues, [], tablas.TABLA_CUOTAS,
+    { hermanos: [], conceptos: [] }, corte.saltadas)
+  caso('la primera fila de datos es la 5 del archivo', 5, ensayo.filas[0].linea)
+  caso('y la segunda, la 6', 6, ensayo.filas[1].linea)
+
+  // Sin encabezado, todo sigue exactamente igual que antes.
+  const sinTitulo = conTitulo.slice(3)
+  caso('sin título, la cabecera es la primera', 0, m.filaDeCabecera(sinTitulo, CAMPOS))
+  caso('y no se corta nada', 0, m.sinPreambulo(sinTitulo, CAMPOS).saltadas)
+
+  /*
+   * UNA FILA DE DATOS NO PUEDE ROBARLE EL PUESTO A LA CABECERA. Si pudiera,
+   * bastaría con que una fila de abajo emparejara algo por casualidad para
+   * tirar a la basura todo lo que tiene encima — perder filas en silencio es
+   * mucho peor que no encontrar las columnas, porque nadie lo nota.
+   */
+  const largo = [['Nº', 'DNI', 'Ejercicio', 'Concepto', 'Importe']]
+  for (let i = 0; i < 40; i++) largo.push([String(i), '12345678Z', '2026', 'Cuota', '30'])
+  caso('con la cabecera arriba, no se busca más abajo', 0, m.filaDeCabecera(largo, CAMPOS))
+
+  // --- El separador del CSV, que se detectaba de la línea del título.
+  const csv = [
+    'HERMANDAD DE NUESTRO PADRE JESÚS NAZARENO',
+    'Listado de hermanos - 14 de febrero de 2026',
+    '',
+    'Numero,Nombre,DNI,Telefono',
+    '1,"Pérez Ruiz, María José",12345678Z,600111222',
+  ].join('\n')
+  caso('el separador se saca de todo el archivo, no de la primera línea', ',', leer.detectarSeparador(csv))
+  const filasCsv = leer.leerCsv(csv)
+  // `leerCsv` ya se come las líneas del todo vacías, así que la del medio no
+  // llega: quedan cuatro filas, no cinco.
+  caso('y la coma dentro de comillas sigue sin partir nada', 'Pérez Ruiz, María José', filasCsv[3][1])
+  const corteCsv = censo.censoSinPreambulo(filasCsv)
+  caso('el censo también encuentra su cabecera', 'Numero', corteCsv.filas[0][0])
+  caso('saltándose las dos de encima', 2, corteCsv.saltadas)
+
+  /*
+   * --- Y LA PESTAÑA QUE SE ELIGE ---
+   *
+   * Dos hojas: la de las cuotas trae título encima y la del censo no. Antes
+   * ganaba el censo, porque la de cuotas sacaba cero al puntuarle la fila 1.
+   */
+  const hojas = [
+    { nombre: 'Socios', filas: [['Numero', 'Nombre', 'DNI'], ['1', 'Ana', '12345678Z']] },
+    { nombre: 'Recibos', filas: conTitulo },
+  ]
+  caso('gana la pestaña de las cuotas aunque lleve título', 1, m.hojaQueCuadra(hojas, CAMPOS))
+  caso('y el censo sigue eligiendo la suya', 0, censo.hojaDelCenso(hojas))
 }

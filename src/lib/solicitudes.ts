@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { traerTodasLasFilas } from './paginado'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { hermandadDestino } from './multiHermandad'
@@ -109,9 +110,12 @@ export function useSolicitudes(): SolicitudAlta[] {
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return
     let cancelado = false
-    supabase
+    // Por páginas, que se acumulan con los años. Ver `lib/paginado.ts`.
+    traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => supabase!
       .from('solicitudes_alta')
       .select('*')
+      .order('id')
+      .range(desde, hasta))
       .then(({ data, error }) => {
         if (cancelado) return
         if (error) {
@@ -161,7 +165,14 @@ export async function saveSolicitudes(solicitudes: SolicitudAlta[]) {
        * Comparar contra una lista que nunca vino de la base es la misma
        * trampa que ya se arregló en `supabaseSync`, y allí llegaba a BORRAR.
        */
-      const { data, error: errorLeer } = await supabase.from('solicitudes_alta').select('id')
+      /*
+       * También por páginas, y aquí importa el doble: de esta lista sale qué
+       * hay que BORRAR. Con el corte de mil, las solicitudes de la mil uno en
+       * adelante nunca aparecían como existentes, así que no se borraban nunca
+       * y volvían a salir en la siguiente carga.
+       */
+      const { data, error: errorLeer } = await traerTodasLasFilas<{ id: string }>((desde, hasta) =>
+        supabase!.from('solicitudes_alta').select('id').order('id').range(desde, hasta))
       if (errorLeer) {
         console.error('No se pudieron leer las solicitudes antes de guardar:', errorLeer.message)
         window.dispatchEvent(new CustomEvent('cabildo-sync-error', {

@@ -1,4 +1,5 @@
 import { supabaseAlta, isSupabaseConfigured } from './supabase'
+import { hermandadActualId } from './multiHermandad'
 
 /**
  * Crear la cuenta con la que una persona entra, y CONTAR si no se ha podido.
@@ -19,14 +20,47 @@ import { supabaseAlta, isSupabaseConfigured } from './supabase'
  * que da de alta a su hijo con su propio correo, el matrimonio que comparte
  * dirección. Eso hay que decirlo en el momento y en cristiano.
  */
-export type ResultadoDeAcceso = { id: string | null; error: string | null }
+export type ResultadoDeAcceso = {
+  id: string | null
+  error: string | null
+  /**
+   * Cómo se ha llamado la cuenta por dentro. Hay que GUARDARLO en la ficha
+   * (`correo_acceso`): es lo que la pantalla de entrar busca a partir del DNI.
+   * Si se crea la cuenta y no se apunta, esa persona no entra nunca.
+   */
+  correoAcceso?: string | null
+}
+
+/**
+ * CÓMO SE LLAMA POR DENTRO LA CUENTA DE UN HERMANO: hermandad + DNI.
+ *
+ * NO ES SU CORREO, y ahí está la gracia. Su correo vive en su ficha, sirve para
+ * los avisos, es el MISMO en todas las hermandades donde sea hermano, y no se
+ * toca. Esto es solo el nombre de la cuenta, que nadie ve ni teclea nunca:
+ * quien entra elige hermandad, escribe su DNI y su contraseña.
+ *
+ * Se separan porque las cuentas de Supabase se identifican por correo, y el
+ * correo es único en todo el sistema. Con la cuenta llamándose por su correo,
+ * la SEGUNDA hermandad de una persona no podía crearle acceso —«ese correo ya
+ * lo usa otra cuenta»— y esa persona se quedaba en el censo sin poder entrar.
+ * En Andalucía ser hermano de dos o tres hermandades es lo normal.
+ *
+ * Tiene que dar exactamente lo mismo que `correo_de_acceso()` en el SQL: una
+ * lo escribe al crear la cuenta y la otra lo lee al iniciar sesión, y si no
+ * coincidieran esa persona no entraría nunca.
+ */
+export function correoDeAcceso(hermandadId: string, dni: string): string {
+  const limpio = (dni ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  const corto = hermandadId.replace(/-/g, '').slice(0, 12)
+  return `${limpio}.${corto}@acceso.gobergo.com`
+}
 
 /**
  * La cuenta de un hermano: entra a su área con su DNI y su clave.
  *
  * El `dni` va en los datos de la cuenta porque el acceso del hermano se hace
- * por DNI, no por correo: la pantalla busca el correo a partir del DNI y luego
- * inicia sesión con él.
+ * por DNI, no por correo: la pantalla busca cómo se llama la cuenta a partir
+ * del DNI y luego inicia sesión con ella.
  */
 export async function crearAccesoHermano(
   email: string,
@@ -34,7 +68,20 @@ export async function crearAccesoHermano(
   dni: string,
   nombre: string,
 ): Promise<ResultadoDeAcceso> {
-  return crear(email, password, { tipo: 'hermano', dni, nombre }, '/hermano')
+  /*
+   * EL PRIMER PARÁMETRO SIGUE SIENDO SU CORREO, pero ya no es el nombre de la
+   * cuenta: es el respaldo. La cuenta se llama por hermandad + DNI, y solo si
+   * no se sabe de qué hermandad —cosa que no debería pasar— se cae al correo,
+   * que es como se hacía antes.
+   *
+   * Se deja así, y no quitando el parámetro, porque los seis sitios que llaman
+   * a esto ya tienen el correo a mano y ninguno tiene el id de la hermandad:
+   * pedírselo obligaría a tocar los seis para no ganar nada.
+   */
+  const hermandadId = await hermandadActualId()
+  const usuario = hermandadId ? correoDeAcceso(hermandadId, dni) : email
+  const r = await crear(usuario, password, { tipo: 'hermano', dni, nombre }, '/hermano')
+  return { ...r, correoAcceso: r.id && hermandadId ? usuario : null }
 }
 
 /**

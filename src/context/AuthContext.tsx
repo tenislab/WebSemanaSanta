@@ -223,10 +223,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // caído, se entra en modo local (degradado) para que la app siga
       // funcionando: mismos accesos de demostración y datos en el navegador.
       //
-      // Salvo en producción (`VITE_SIN_MODO_LOCAL=1`), donde eso es peor que
-      // no funcionar: la secretaría entraría, vería un censo que no es el suyo
-      // y pasaría la tarde dando altas que no existen en ningún sitio. Ahí se
-      // deja caer con su error y se vuelve en un rato.
+      // Salvo que esté la protección puesta, que ES LO NORMAL: con una
+      // hermandad de verdad, entrar en local es peor que no entrar. La
+      // secretaria vería un censo que no es el suyo —los doce de ejemplo— y
+      // pasaría la tarde dando altas que no existen en ningún sitio, sin que
+      // nada avise. Se deja caer con su error y se vuelve en un rato. Solo
+      // `VITE_MODO_LOCAL=1` (desarrollo) reabre esta puerta.
       const disponible = await supabaseDisponible()
       if (cancelado || !supabase) return
       if (!disponible && !sinModoLocal) {

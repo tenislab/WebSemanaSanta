@@ -90,7 +90,45 @@ select cron.schedule(
 );
 
 -- ---------------------------------------------------------------------------
--- 3. QUÉ TAREAS HAY, PARA PODER MIRARLO
+-- 3. EL REGISTRO DE ACTIVIDAD, QUE NO PUEDE CRECER PARA SIEMPRE
+-- ---------------------------------------------------------------------------
+--
+-- `registro_actividad` apunta UNA FILA POR CAMBIO, y lo escribe la propia base
+-- con un disparador. Eso está bien —es lo que exige el artículo 32 del RGPD y
+-- es la razón de que exista— pero nadie lo borraba nunca.
+--
+-- Y no es un detalle: importar un censo de mil doscientos escribe mil
+-- doscientas filas. Volver a importarlo para actualizarlo, otras mil
+-- doscientas. Emitir la cuota del ejercicio, otras tantas. En un año son
+-- decenas de miles de filas en un plan que da 500 MB.
+--
+-- Pero lo que de verdad obliga a esto es el OTRO artículo, el 5.1.e: los datos
+-- personales no se guardan más de lo necesario. Y aquí hay nombres, y quién
+-- tocó la ficha de quién. Un registro de auditoría eterno no es prudencia: es
+-- justo lo contrario.
+--
+-- DOS AÑOS, que es lo mismo que se guarda de las visitas y lo que hace falta
+-- para revisar un ejercicio cerrado y el anterior. Pasado eso, ese apunte ya no
+-- responde ninguna pregunta que alguien vaya a hacer.
+create or replace function limpiar_registro_viejo() returns void
+language sql security definer set search_path = public as $$
+  delete from registro_actividad where cuando < now() - interval '2 years'
+$$;
+revoke execute on function limpiar_registro_viejo() from public, anon, authenticated;
+
+select cron.unschedule('gobergo-limpiar-registro')
+  where exists (select 1 from cron.job where jobname = 'gobergo-limpiar-registro');
+
+select cron.schedule(
+  'gobergo-limpiar-registro',
+  -- Domingos a las 4:40, detrás de las visitas. Borrar de madrugada y una vez
+  -- por semana basta: lo que sobra hoy seguirá sobrando el domingo.
+  '40 4 * * 0',
+  $$ select limpiar_registro_viejo() $$
+);
+
+-- ---------------------------------------------------------------------------
+-- 4. QUÉ TAREAS HAY, PARA PODER MIRARLO
 -- ---------------------------------------------------------------------------
 --
 -- Una tarea programada que falla lo hace en silencio y de madrugada. Con esto

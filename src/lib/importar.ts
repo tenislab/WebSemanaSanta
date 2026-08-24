@@ -2,7 +2,7 @@ import { limpiarDni } from './dni'
 import {
   anioDe, detectarSeparador, fechaIso, leerCsv, normalizarCabecera, pareceBinario,
 } from './leerTabla'
-import { proponerColumnas } from './importarTabla'
+import { hojaQueCuadra, proponerColumnas, sinPreambulo, type SinPreambulo } from './importarTabla'
 import type { EstadoHermano, Hermano } from '../data/hermanos'
 
 /**
@@ -120,6 +120,34 @@ export function proponerEmparejado(cabeceras: string[]): Record<CampoImportable,
   ) as Record<CampoImportable, number | null>
 }
 
+/**
+ * De qué pestaña del libro sale el CENSO. Ver `hojaQueCuadra` en
+ * `importarTabla.ts`: es el mismo problema y la misma respuesta, con los
+ * campos del censo en vez de los de una tabla.
+ */
+export function hojaDelCenso(hojas: { filas: string[][] }[]): number {
+  return hojaQueCuadra(hojas, camposDelCenso())
+}
+
+/**
+ * Dónde empieza la tabla del censo, que casi nunca es la primera fila.
+ *
+ * La hoja de una hermandad suele traer encima el nombre de la hermandad, la
+ * fecha del listado y alguna línea en blanco. Suponiendo que la cabecera es la
+ * primera fila, la pantalla decía «— no está en el archivo —» EN TODAS LAS
+ * COLUMNAS con el archivo bueno delante. Ver `sinPreambulo`.
+ */
+export function censoSinPreambulo(filas: string[][]): SinPreambulo {
+  return sinPreambulo(filas, camposDelCenso())
+}
+
+/** Los campos del censo con la forma que espera el emparejador común. */
+function camposDelCenso() {
+  return CAMPOS_IMPORTABLES.map((c) => ({
+    ...c, sinonimos: SINONIMOS[c.id], obligatorio: c.obligatorio ?? false,
+  }))
+}
+
 /* ---------------------------------------------------------------------------
    3. El ensayo: qué pasaría si se importa
    --------------------------------------------------------------------------- */
@@ -227,6 +255,12 @@ export function ensayar(
   emparejado: Record<CampoImportable, number | null>,
   censoActual: Pick<Hermano, 'id' | 'dni' | 'nombre' | 'numero'>[],
   anioEnCurso = new Date().getFullYear(),
+  /**
+   * Cuántas filas de encabezado se han dejado arriba —el título de la hoja, la
+   * fecha del listado, la línea en blanco—. Se suma a la línea para que «la
+   * línea 47» sea la 47 DE SU ARCHIVO.
+   */
+  saltadas = 0,
 ): Ensayo {
   const porDni = new Map(censoActual.map((h) => [limpiarDni(h.dni), h]))
   const vistosEnArchivo = new Map<string, number>()
@@ -269,7 +303,28 @@ export function ensayar(
 
   // La primera fila es la cabecera, así que los datos empiezan en la 2.
   filas.slice(1).forEach((fila, idx) => {
-    const linea = idx + 2
+    const linea = idx + 2 + saltadas
+    /*
+     * UNA FILA EN BLANCO NO ES UN ERROR: NO ES NADA.
+     *
+     * El listado de una hermandad casi nunca es una tabla limpia. Trae líneas
+     * en blanco separando bloques —«HERMANOS ACTIVOS», hueco, «BAJAS»— y
+     * huecos que dejó quien la montó. En un CSV esas filas se filtran al
+     * leerlo (`leerCsv`), pero un `.xlsx` las conserva, así que el MISMO
+     * listado guardado de una forma o de otra daba resultados distintos.
+     *
+     * Y cada hueco salía en la vista previa como una fila roja, «Falta el
+     * nombre; Falta el DNI». Con quince bloques son quince errores que no hay
+     * forma de corregir —no hay nada que corregir— delante de una secretaría
+     * que está importando su censo por primera vez y lee que algo va mal.
+     *
+     * Se saltan y no cuentan. Las filas que traen ALGO escrito sí siguen
+     * revisándose: un subtítulo suelto en mitad de la hoja sigue saliendo como
+     * error, y ahí está bien que salga, porque es una línea que alguien tiene
+     * que mirar.
+     */
+    if (fila.every((c) => !(c ?? '').trim())) return
+
     const problemas: string[] = []
     const nombre = dato(fila, 'nombre')
     const dniCrudo = dato(fila, 'dni')

@@ -1,4 +1,5 @@
 import { traducirErrorDeEscritura, type ErrorTraducido } from './errorDeBaseDeDatos'
+import { traerTodasLasFilas } from './paginado'
 import { useEffect, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
@@ -121,9 +122,20 @@ export function useSupabaseTable<T extends { id: string }>(
 
     function cargar() {
       if (!supabase) return
-      let query = supabase.from(tabla).select('*')
-      if (orderBy) query = query.order(orderBy)
-      query.then(({ data, error }) => {
+      /*
+       * POR PÁGINAS, que `select('*')` trae mil filas y calla. Ver
+       * `lib/paginado.ts`: el censo de mil doscientos se enseñaba con mil, sin
+       * ningún aviso y sin nada que lo delatara en pantalla.
+       *
+       * Se ordena SIEMPRE, aunque quien llama no haya pedido orden: sin
+       * `order`, dos páginas de la misma consulta pueden traer filas repetidas
+       * y saltarse otras, porque Postgres no promete ningún orden si no se le
+       * pide. Por `id` cuando no hay otro criterio, que es único y estable.
+       */
+      traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => {
+        const q = supabase!.from(tabla).select('*')
+        return (orderBy ? q.order(orderBy) : q.order('id')).range(desde, hasta)
+      }).then(({ data, error }) => {
         if (cancelado) return
         if (error) {
           // Supabase no responde (proyecto en pausa, token caducado): se tira de
@@ -253,13 +265,24 @@ async function sincronizar<T extends { id: string }>(
    * necesita saber quien está mirando.
    */
   const DE_UNA_VEZ = 200
-  const trozos = <X,>(xs: X[]): X[][] => {
+  /*
+   * EL BORRADO VA DE CIEN, no de doscientos, y no es una manía.
+   *
+   * `.in('id', […])` lo escribe PostgREST en la DIRECCIÓN, y un identificador
+   * es un UUID de 36 caracteres: doscientos son unos ocho mil de URL, que es
+   * justo el tope que traen de fábrica casi todos los servidores y proxys. Un
+   * trozo de doscientos pasa hoy y deja de pasar el día que alguien pone un
+   * proxy delante, con un «414» que no dice nada. Con cien van cuatro mil, que
+   * cabe con holgura en cualquier sitio.
+   */
+  const DE_UNA_VEZ_BORRAR = 100
+  const trozos = <X,>(xs: X[], cuantos = DE_UNA_VEZ): X[][] => {
     const partes: X[][] = []
-    for (let i = 0; i < xs.length; i += DE_UNA_VEZ) partes.push(xs.slice(i, i + DE_UNA_VEZ))
+    for (let i = 0; i < xs.length; i += cuantos) partes.push(xs.slice(i, i + cuantos))
     return partes
   }
   try {
-    for (const parte of trozos(eliminados)) {
+    for (const parte of trozos(eliminados, DE_UNA_VEZ_BORRAR)) {
       const { error } = await supabase.from(tabla).delete().in('id', parte.map((e) => e.id))
       if (error) anotar('borrar', `borrar ${parte.length}`, error)
     }
@@ -267,9 +290,35 @@ async function sincronizar<T extends { id: string }>(
       const { error } = await supabase.from(tabla).insert(parte.map(toRow))
       if (error) anotar('crear', `crear ${parte.length}`, error)
     }
-    for (const item of posiblesCambios) {
-      const { error } = await supabase.from(tabla).update(toRow(item)).eq('id', item.id)
-      if (error) anotar('guardar', `guardar ${item.id}`, error)
+    /*
+     * LAS MODIFICACIONES: SIGUEN SIENDO UNA POR FILA, PERO EN PARALELO.
+     *
+     * El problema de partida es real: aquí iba una petición por fila, una
+     * detrás de otra. El día que una hermandad vuelve a importar su censo de
+     * mil doscientos para actualizarlo —que es un botón, y está en Ajustes—
+     * son mil doscientas esperas seguidas: minuto y medio largo con la
+     * pantalla diciendo que ya está guardado, y quien cambie de sección a la
+     * mitad deja la mitad de las fichas sin actualizar y sin aviso.
+     *
+     * LO QUE NO SE PUEDE HACER ES `upsert`, aunque sea lo obvio y aunque haga
+     * lo mismo que `update` cuando la fila ya existe. PostgREST lo manda como
+     * `insert … on conflict do update`, y Postgres comprueba la política de
+     * INSERCIÓN aunque acabe actualizando. El hermano tiene permiso para
+     * cambiar SU ficha (`hermanos_propio_update`) y no tiene ninguno para
+     * crear hermanos —ni debe tenerlo—, así que con `upsert` dejaría de poder
+     * cambiar su propio correo o su contraseña, con un «no tienes permiso»
+     * que no viene a cuento.
+     *
+     * Así que se quedan de una en una y se lanzan de seis en seis. Mil
+     * doscientas esperas pasan a doscientas, y cada fallo sigue diciendo QUÉ
+     * fila ha sido, que es más de lo que diría un envío en bloque.
+     */
+    const A_LA_VEZ = 6
+    for (let i = 0; i < posiblesCambios.length; i += A_LA_VEZ) {
+      await Promise.all(posiblesCambios.slice(i, i + A_LA_VEZ).map(async (item) => {
+        const { error } = await supabase!.from(tabla).update(toRow(item)).eq('id', item.id)
+        if (error) anotar('guardar', `guardar ${item.id}`, error)
+      }))
     }
   } catch (err) {
     fallos.push(String(err))

@@ -21,14 +21,14 @@ import {
   type Cuerpo,
   type Tramo,
 } from '../../lib/tramos'
-import { repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
+import { puedeSalirEnElCortejo, repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { incidenciaToRow, rowToIncidencia } from '../../lib/db/incidencias'
-import { getCampana } from '../../lib/campana'
+import { getCampana, useCampana } from '../../lib/campana'
 import { useFocoDeDialogo } from '../../lib/foco'
 
 
@@ -76,7 +76,7 @@ export default function Cortejo() {
   const registrador = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Secretaría'
   const hermandad = useHermandadSettings(fallbackNombre)
   const tramos = useTramos()
-  const campana = useMemo(() => getCampana(), [])
+  const campana = useCampana()
   const edicionActual = campana.anio
 
   const [papeletasTodas, setPapeletas] = useSupabaseTable<Papeleta>(
@@ -337,6 +337,21 @@ export default function Cortejo() {
     }
     if (!tramo) {
       setAsignarError('Elige un tramo.')
+      return
+    }
+    /*
+     * Y SE VUELVE A MIRAR AQUÍ, no solo al pintar la lista.
+     *
+     * Lo que esconde una pantalla no protege nada: el formulario se manda con
+     * el identificador que sea, y una ficha puede haber pasado a civil o a
+     * baja entre que se abrió el cajón y se pulsó «Asignar».
+     */
+    if (!puedeSalirEnElCortejo(hermano)) {
+      setAsignarError(
+        hermano.civil
+          ? `${hermano.nombre.split(' ')[0]} está en el censo como hermano/a civil: no hace estación de penitencia, así que no ocupa sitio en el cortejo.`
+          : `${hermano.nombre.split(' ')[0]} está de baja en la hermandad y no puede salir en el cortejo.`,
+      )
       return
     }
     if (hermano.antiguedad === edicionActual) {
@@ -706,7 +721,17 @@ export default function Cortejo() {
           {asignarError && <div className="form-hint form-hint--error">{asignarError}</div>}
           <div className="form-row">
             <label htmlFor="hermanoId">Hermano</label>
-            <HermanoPicker hermanos={hermanosAsignables(hermanos)} name="hermanoId" id="hermanoId" />
+            {/* Solo quien puede salir de verdad. La lista ofrecía también a los
+                hermanos CIVILES —el administrativo contratado, el asesor—, y
+                el reparto los descarta: se les emitía la papeleta, se les
+                cobraba, y el día del cortejo no aparecían en ningún tramo ni
+                en el orden impreso. Sin un error por medio. Es el mismo fallo
+                que ya se arregló con los de baja. */}
+            <HermanoPicker
+              hermanos={hermanosAsignables(hermanos.filter(puedeSalirEnElCortejo))}
+              name="hermanoId"
+              id="hermanoId"
+            />
           </div>
           <div className="form-grid-2">
             <div className="form-row">

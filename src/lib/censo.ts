@@ -41,7 +41,25 @@ export function darDeBajaEnCenso<
 ): T[] {
   const actual = censo.find((h) => h.id === hermanoId)
   if (!actual || actual.estado === 'Baja') return censo
+  /*
+   * SU NÚMERO, Y SI ESE NÚMERO OCUPABA SITIO DE VERDAD.
+   *
+   * No todo el mundo en el censo tiene puesto en el escalafón. El hermano
+   * CIVIL —un administrativo contratado, un asesor— lleva número 0 a
+   * propósito, y una ficha recién importada puede llegar con 0 mientras se
+   * termina de numerar.
+   *
+   * Aquí abajo se recolocaba «a todos los de número mayor que el suyo». Con
+   * número 0, eso es TODO EL CENSO: al tramitarle la baja al administrativo,
+   * el hermano nº 1 se iba al 0 —o sea, fuera de la numeración, como si
+   * estuviera de baja él también— y los demás bajaban un puesto cada uno.
+   *
+   * Y no se nota el día que pasa. Se nota el día de la salida, con el
+   * escalafón entero corrido y el hermano más antiguo desaparecido de la
+   * lista. Quien no ocupaba sitio no deja hueco al irse.
+   */
   const numBaja = actual.numero
+  const ocupabaSitio = numBaja > 0
   return censo.map((h) => {
     /*
      * La baja QUITA EL CARGO, y no es un detalle de limpieza.
@@ -59,7 +77,7 @@ export function darDeBajaEnCenso<
     }
     // Solo descienden los que están DENTRO de la numeración activa: los de
     // baja ya están fuera (número 0) y no se tocan.
-    if (enElEscalafon(h) && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
+    if (ocupabaSitio && enElEscalafon(h) && h.numero > numBaja) return { ...h, numero: h.numero - 1 }
     return h
   })
 }
@@ -85,6 +103,20 @@ export function reactivarEnCenso<
 ): T[] {
   const actual = censo.find((h) => h.id === hermanoId)
   if (!actual || actual.estado !== 'Baja') return censo
+
+  /*
+   * EL CIVIL QUE VUELVE NO ENTRA EN EL ESCALAFÓN, igual que no entró la
+   * primera vez. Vuelve a estar activo y se queda con su número 0.
+   *
+   * Sin esta línea, reactivar al administrativo «recuperando su antigüedad»
+   * le buscaba sitio por su año de entrada y empujaba un puesto a TODOS los
+   * hermanos de detrás; y mandándolo «al final» se le daba el último número,
+   * dejando un hueco que rompe la numeración. Ninguna de las dos cosas la ha
+   * pedido nadie: lo único que se está diciendo es que el contratado vuelve.
+   */
+  if (actual.civil) {
+    return censo.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo' as const, numero: 0 } : h))
+  }
 
   if (!recuperarAntiguedad) {
     const siguiente = Math.max(0, ...censo.map((h) => h.numero)) + 1

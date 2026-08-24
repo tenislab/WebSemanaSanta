@@ -66,4 +66,55 @@ export default async function ({ cargar, caso }) {
     [conOpcion('x2', 'b', null, 'Papeleta simbólica')], hDe, new Set(),
   )
   caso('la simbólica se queda fuera', 0, sinPuesto.length)
+
+  /*
+   * EL CIVIL TAMPOCO SALE, Y LA PANTALLA TIENE QUE SABERLO.
+   *
+   * El hermano civil —un administrativo contratado, un asesor— está en el
+   * censo para trabajar en la hermandad, no para hacer estación de
+   * penitencia. El reparto ya lo descartaba; lo que no lo sabía era la
+   * pantalla de Cortejo, que lo ofrecía en «asignar a un tramo». Se le emitía
+   * la papeleta, se le cobraba, y el día del reparto no aparecía en ningún
+   * tramo ni en el orden impreso. Ningún error, ninguna pista.
+   *
+   * Es el mismo fallo que ya se arregló con los de baja, en el que no se cayó
+   * con los civiles. Ahora la regla es UNA y la usan los dos.
+   */
+  const { puedeSalirEnElCortejo } = await cargar('src/lib/cortejo.ts')
+  caso('un activo sale', true, puedeSalirEnElCortejo({ estado: 'Activo' }))
+  caso('uno nuevo también', true, puedeSalirEnElCortejo({ estado: 'Nuevo' }))
+  caso('el de baja no', false, puedeSalirEnElCortejo({ estado: 'Baja' }))
+  caso('el civil tampoco', false, puedeSalirEnElCortejo({ estado: 'Activo', civil: true }))
+  caso('y una ficha que no está, menos', false, puedeSalirEnElCortejo(undefined))
+
+  const conCivil = new Map(hermanos)
+  conCivil.set('e', { ...H('e', 50), civil: true })
+  const rCivil = repartoDeCuerpo('Cristo', tramos, paps, (id) => conCivil.get(id), new Set())
+  caso('el civil no entra en el reparto', false, rCivil.some((x) => x.hermano.id === 'e'))
+
+  // Y las DOS pantallas que emiten papeleta usan la MISMA regla, no una lista
+  // suya. Son dos y las dos emiten: Cortejo asigna tramo, y Papeletas saca en
+  // tramo, renueva y emite la simbólica.
+  const { readFile } = await import('node:fs/promises')
+  const pantalla = await readFile('src/pages/app/Cortejo.tsx', 'utf8')
+  caso('Cortejo solo ofrece a quien puede salir', true,
+    /hermanosAsignables\(hermanos\.filter\(puedeSalirEnElCortejo\)\)/.test(pantalla))
+  caso('y lo vuelve a comprobar al asignar', true,
+    /puedeSalirEnElCortejo\(hermano\)/.test(pantalla))
+
+  /*
+   * Papeletas es la peor de las dos, porque su lista es el CENSO ENTERO: las
+   * bajas y los civiles salen ahí con su botón de «Sacar papeleta» al lado.
+   * Son TRES caminos que emiten —renovar, sacar en tramo y la simbólica— y los
+   * tres tienen que preguntar, no solo el botón que se ve.
+   */
+  const pantallaPaps = await readFile('src/pages/app/Papeletas.tsx', 'utf8')
+  caso('Papeletas no ofrece sacar a quien no sale', true,
+    /const fueraDelCortejo = !puedeSalirEnElCortejo\(h\)/.test(pantallaPaps))
+  caso('y el botón lo respeta', true, /&& !fueraDelCortejo/.test(pantallaPaps))
+  for (const via of ['sacarEnTramo', 'sacarSimbolica', 'renovar']) {
+    const cuerpo = pantallaPaps.slice(pantallaPaps.indexOf(`function ${via}(hermanoId`))
+    caso(`${via} lo vuelve a comprobar`, true,
+      /^[\s\S]{0,220}if \(!saleEnElCortejo\(hermanoId\)\) return/.test(cuerpo))
+  }
 }
