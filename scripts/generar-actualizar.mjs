@@ -56,6 +56,7 @@ export const PIEZAS_ACTUALIZACION = [
   ['webhook-stripe.sql', 'Que la suscripción se active cuando Stripe confirma el cobro, no antes'],
   ['mandatos-sepa.sql', 'El mandato SEPA firmado de verdad, por el propio hermano'],
   ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
+  ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -187,7 +188,11 @@ select * from (values
   ('Mandatos SEPA firmados por el hermano',
    (select to_regclass('public.mandatos_sepa') is not null)),
   ('Encargos de redes repartidos a la junta',
-   (select to_regclass('public.tareas_redes') is not null))
+   (select to_regclass('public.tareas_redes') is not null)),
+  ('La tienda (productos, ventas y stock)',
+   (select to_regclass('public.ventas') is not null)),
+  ('La venta registra sola sus asientos',
+   (select count(*) > 0 from pg_proc where proname = 'registrar_venta'))
 ) as t(que, esta)
 order by esta, que;
 `

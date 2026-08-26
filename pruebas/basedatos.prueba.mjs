@@ -270,6 +270,7 @@ export default async function ({ caso }) {
   await elWebhookDeStripeActivaLaSuscripcion({ sql, caso })
   await elMandatoSepaLoFirmaElPropioHermano({ sql, caso })
   await elEncargoDeRedesSeReparte({ sql, caso })
+  await laTiendaVendeYCuadra({ sql, caso })
 }
 
 /**
@@ -485,7 +486,8 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
   // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
   caso('los dos módulos ya no salen pendientes', false,
     enFalso.some((x) => /eventos|«web»/.test(x)))
-  caso('y comprueba trece cosas', 13, filas.length)
+  caso('y comprueba quince cosas', 15, filas.length)
+  caso('la tienda sale en el inventario', true, filas.some((f) => /La tienda/.test(f)))
   // Lo último que se ha añadido, por su nombre: el recuento de arriba avisa
   // si el inventario pierde una línea, pero no de CUÁL, y quien ejecuta esto
   // en Supabase se guía por lo que lee.
@@ -2316,4 +2318,166 @@ async function elEncargoDeRedesSeReparte({ sql, caso }) {
   await como(UJEFE.slice(1, -1), `delete from tareas_redes where titulo = 'El post del que se va';`)
   caso('y un encargo suelto sigue sin borrarse', '1',
     numero(await sql(`select count(*) from tareas_redes where titulo = 'El post del que se va'`)))
+}
+
+
+/**
+ * LA TIENDA: VENDER, DESCONTAR Y CUADRAR.
+ *
+ * Lo que se prueba aquí es exactamente lo que NO se puede probar sin una base
+ * de datos de verdad, porque solo falla cuando hay dos personas cobrando a la
+ * vez o cuando alguien tiene la consola del navegador abierta:
+ *
+ *   · que el número de factura sea correlativo y sin huecos,
+ *   · que no se pueda vender lo que no hay,
+ *   · que un descuento de costaleros no se lo aplique quien no lo es,
+ *   · que una venta deje SIEMPRE sus dos asientos en el libro,
+ *   · que el aviso de «queda poco» salte al cruzar el mínimo y no en cada venta,
+ *   · y que anular devuelva el género sin borrar la factura.
+ */
+async function laTiendaVendeYCuadra({ sql, caso }) {
+  const H = "'c0000000-0000-0000-0000-0000000000c9'"
+  const UJEFE = "'c1000000-0000-0000-0000-0000000000c9'"
+  const JEFE = "'c2000000-0000-0000-0000-0000000000c9'"
+  const UCOST = "'c4000000-0000-0000-0000-0000000000c9'"
+  const COST = "'c5000000-0000-0000-0000-0000000000c9'"
+  const PROD = "'c3000000-0000-0000-0000-0000000000c9'"
+  const DESC = "'c6000000-0000-0000-0000-0000000000c9'"
+
+  /*
+   * El fixture se comprueba, no se da por hecho. Ya me pasó una vez: el
+   * hermano no llegaba a insertarse por un choque de DNI, la cuenta era
+   * TITULAR —que lo puede todo— y las comprobaciones pasaban por el motivo
+   * equivocado. Una prueba que pasa por el motivo equivocado es peor que una
+   * que falla.
+   */
+  await sql(`
+    delete from hermandades where id = ${H};
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. de la Tienda');
+    insert into auth.users (id, email) values
+      (${UJEFE}, 'tienda-jefe@c9.es'), (${UCOST}, 'tienda-cost@c9.es') on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, cargo) values
+      (${JEFE}, ${H}, 'El mayordomo', '75000001A', 1, 'Activo', ${UJEFE}, 'tienda-jefe@c9.es', 'Mayordomo/Prioste');
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, etiquetas) values
+      (${COST}, ${H}, 'Un costalero', '75000002B', 2, 'Activo', ${UCOST}, 'tienda-cost@c9.es', array['Costalero']);
+    select sembrar_permisos_de_fabrica(${H});
+  `)
+  const solo = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean).pop() ?? ''
+  const como = async (uid, sentencia) => {
+    try {
+      await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = '${uid}'; ${sentencia} commit;`)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) { return { deja: 'no', motivo: String(e?.stderr ?? e) } }
+  }
+  const numero = (t) => t.split('\n').map((x) => x.trim()).filter((x) => /^-?\d+$/.test(x)).pop() ?? ''
+
+  // `psql` cuela sus BEGIN/SET/ROLLBACK en la salida: se coge solo el sí o el no.
+  const siNo = (t) => t.split('\n').map((x) => x.trim()).filter((x) => x === 'true' || x === 'false').pop() ?? ''
+  caso('el mayordomo lleva inventario por su cargo', 'true', siNo(await sql(`
+    begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UJEFE};
+      select modulo_permitido('inventario')::text; rollback;`)))
+  // Y NO es titular, que es lo que invalidaría toda la prueba.
+  caso('y no es titular (si no, esto no probaría nada)', '0',
+    numero(await sql(`select count(*) from titulares where auth_user_id = ${UJEFE}`)))
+
+  await como(UJEFE.slice(1, -1), `
+    insert into productos (id, codigo, nombre, precio, coste, iva, stock, stock_minimo)
+      values (${PROD}, 'CAM-01', 'Camiseta', 15.00, 6.00, 21, 10, 3);
+    insert into descuentos (id, nombre, porcentaje, etiqueta)
+      values (${DESC}, 'Costaleros', 50, 'Costalero');`)
+
+  // 1. Una venta normal: importes, stock y los dos asientos.
+  const venta1 = await como(UJEFE.slice(1, -1),
+    `select registrar_venta('[{"producto_id":${PROD.slice(1, -1)},"cantidad":2}]'::jsonb);`
+      .replace(`${PROD.slice(1, -1)}`, `"${PROD.slice(1, -1)}"`))
+  caso('quien lleva inventario puede vender', 'sí', venta1.deja)
+  caso('el stock baja', '8', numero(await sql(`select stock from productos where id = ${PROD}`)))
+  caso('deja un ingreso por lo cobrado', '30.00', solo(await sql(
+    `select importe::text from movimientos where origen like 'venta:%' and tipo = 'Ingreso'`)))
+  caso('y un gasto por lo que costó', '12.00', solo(await sql(
+    `select importe::text from movimientos where origen like 'coste-venta:%' and tipo = 'Gasto'`)))
+
+  /*
+   * 2. UN HERMANO DE A PIE NO VENDE. No es que no le salga el botón: es que la
+   * base no le deja, que es lo único que cuenta.
+   */
+  const colado = await como(UCOST.slice(1, -1),
+    `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":1}]'::jsonb);`)
+  caso('un hermano de a pie no puede registrar ventas', 'no', colado.deja)
+
+  // 3. No se vende lo que no hay.
+  const sinGenero = await como(UJEFE.slice(1, -1),
+    `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":999}]'::jsonb);`)
+  caso('no se puede vender lo que no hay', 'no', sinGenero.deja)
+  caso('y el stock no se ha tocado', '8', numero(await sql(`select stock from productos where id = ${PROD}`)))
+
+  /*
+   * 4. EL DESCUENTO SE COMPRUEBA EN LA BASE, no se acepta el que mande el
+   * navegador. Si no, cualquiera con la consola abierta se aplica el 50 % de
+   * costaleros sin serlo.
+   */
+  const falso = await como(UJEFE.slice(1, -1),
+    `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":1}]'::jsonb,
+       'fisica','Efectivo',${JEFE},${DESC});`)
+  caso('el descuento de costaleros no vale para quien no lo es', 'no', falso.deja)
+
+  const bueno = await como(UJEFE.slice(1, -1),
+    `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":2}]'::jsonb,
+       'fisica','Efectivo',${COST},${DESC});`)
+  caso('y sí para el costalero', 'sí', bueno.deja)
+  caso('que paga la mitad', '15.00', solo(await sql(
+    `select total::text from ventas where hermandad_id = ${H} and descuento_pct = 50`)))
+
+  // 5. La numeración, correlativa y sin huecos.
+  caso('las facturas van correlativas', '1,2', solo(await sql(
+    `select string_agg(numero::text, ',' order by numero) from ventas where hermandad_id = ${H}`)))
+
+  /*
+   * 6. EL AVISO DE «QUEDA POCO», al CRUZAR el mínimo y una sola vez. Con
+   * treinta ventas en un besamanos, avisar en cada una son treinta avisos
+   * iguales y a partir del tercero nadie los lee.
+   */
+  const avisos = async () => numero(await sql(
+    `select count(*) from avisos_hermano where hermandad_id = ${H} and tipo = 'existencias'`))
+  caso('por encima del mínimo no avisa', '0', await avisos())
+  await como(UJEFE.slice(1, -1),
+    `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":4}]'::jsonb);`)
+  caso('al cruzar el mínimo, avisa una vez', '1', await avisos())
+  caso('y le llega a quien lleva el inventario', '1', numero(await sql(
+    `select count(*) from avisos_hermano where hermandad_id = ${H} and tipo = 'existencias' and hermano_id = ${JEFE}`)))
+  await como(UJEFE.slice(1, -1),
+    `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":1}]'::jsonb);`)
+  caso('otra venta por debajo no repite el aviso', '1', await avisos())
+
+  // 7. Romper género resta, y el stock nunca queda en negativo.
+  const rota = await como(UJEFE.slice(1, -1), `select mover_stock(${PROD}, 'rotura', 1, 'Se cayó la caja');`)
+  caso('se puede dar de baja lo que se rompe', 'sí', rota.deja)
+  const imposible = await como(UJEFE.slice(1, -1), `select mover_stock(${PROD}, 'rotura', 99, 'imposible');`)
+  caso('pero el stock no puede quedar en negativo', 'no', imposible.deja)
+
+  /*
+   * 8. ANULAR: el género vuelve, la factura NO se borra.
+   *
+   * Una factura emitida no se hace desaparecer: se anula y su número se queda
+   * ocupado. Borrarla dejaría un hueco en la numeración, que es justo lo que
+   * no puede pasar.
+   */
+  const antes = numero(await sql(`select stock from productos where id = ${PROD}`))
+  const cuantas = numero(await sql(`select count(*) from ventas where hermandad_id = ${H}`))
+  await como(UJEFE.slice(1, -1),
+    `select anular_venta((select id from ventas where hermandad_id = ${H} order by numero desc limit 1), 'prueba');`)
+  caso('al anular vuelve el género', String(Number(antes) + 1),
+    numero(await sql(`select stock from productos where id = ${PROD}`)))
+  caso('la factura sigue existiendo', cuantas,
+    numero(await sql(`select count(*) from ventas where hermandad_id = ${H}`)))
+  caso('marcada como anulada', 'Anulada', solo(await sql(
+    `select estado from ventas where hermandad_id = ${H} order by numero desc limit 1`)))
+  caso('y con sus asientos contrarios', '1', numero(await sql(
+    `select count(*) from movimientos where hermandad_id = ${H} and origen like 'anula-venta:%'`)))
+  // Anular dos veces no devuelve el género dos veces.
+  const yaEstaba = numero(await sql(`select stock from productos where id = ${PROD}`))
+  await como(UJEFE.slice(1, -1),
+    `select anular_venta((select id from ventas where hermandad_id = ${H} order by numero desc limit 1), 'otra vez');`)
+  caso('anular dos veces no lo devuelve dos veces', yaEstaba,
+    numero(await sql(`select stock from productos where id = ${PROD}`)))
 }

@@ -34,10 +34,64 @@ const CAMPANA_POR_DEFECTO: Campana = {
   fechaSalida: '2027-03-28',
 }
 
+/**
+ * ¿Es una fecha de verdad? `2027-02-28` sí; `''`, `2027-0` y `31/02/2027` no.
+ *
+ * Se comprueba el formato Y que el día exista: `new Date('2027-02-31')` no
+ * falla, se va al 3 de marzo, y una fecha que se corre sola tres días es peor
+ * que una que se rechaza.
+ */
+function esFecha(v: unknown): v is string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
+  const [a, mes, dia] = v.split('-').map(Number)
+  /*
+   * Se compara por partes y en HORA LOCAL, no con `toISOString()`.
+   *
+   * Ese atajo estaba escrito aquí y lo cazó `pruebas/fechas.prueba.mjs`:
+   * `new Date('2027-02-28T00:00:00')` es medianoche LOCAL, y pasarlo a UTC en
+   * España lo deja en el día 27 a las 23:00. O sea que la comprobación habría
+   * rechazado TODAS las fechas buenas, y de paso habría vuelto a poner las de
+   * fábrica encima de las que la hermandad tenía puestas. El arreglo habría
+   * sido peor que el fallo.
+   */
+  const f = new Date(a, mes - 1, dia)
+  return f.getFullYear() === a && f.getMonth() === mes - 1 && f.getDate() === dia
+}
+
+/**
+ * LO GUARDADO MANDA, PERO SOLO SI ES UNA FECHA.
+ *
+ * Las fechas de la campaña se guardan AL VUELO: cada cambio del
+ * `<input type="date">` llama a `guardarCampana` sin pasar por ningún botón y
+ * sin validar nada. Y un campo de fecha vaciado —la equis del navegador, o
+ * seleccionar y borrar para reescribirlo— devuelve cadena vacía.
+ *
+ * Antes esa cadena vacía machacaba el valor de fábrica, y a partir de ahí
+ * `diasHasta('')` da NaN; `NaN <= 0` es falso; y `ventanaAbiertaPara` dice que
+ * NO para todo el mundo. O sea: ningún hermano podía pedir su papeleta.
+ *
+ * Sin error, sin aviso y sin nada en pantalla que lo explicara —simplemente
+ * dejaba de salir el botón—. Quien abrió los ajustes para cambiar una fecha
+ * había cerrado la campaña entera sin enterarse, y quince pantallas leen esto.
+ *
+ * Se arregla aquí y no en cada una: es el único sitio por el que pasan todas.
+ */
 export function getCampana(): Campana {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return { ...CAMPANA_POR_DEFECTO, ...(JSON.parse(raw) as Partial<Campana>) }
+    if (raw) {
+      const g = JSON.parse(raw) as Partial<Campana>
+      return {
+        anio: typeof g.anio === 'number' && Number.isFinite(g.anio) ? g.anio : CAMPANA_POR_DEFECTO.anio,
+        fechaInicioParticiparon: esFecha(g.fechaInicioParticiparon)
+          ? g.fechaInicioParticiparon : CAMPANA_POR_DEFECTO.fechaInicioParticiparon,
+        fechaInicioNoParticiparon: esFecha(g.fechaInicioNoParticiparon)
+          ? g.fechaInicioNoParticiparon : CAMPANA_POR_DEFECTO.fechaInicioNoParticiparon,
+        fechaLimiteRenovacion: esFecha(g.fechaLimiteRenovacion)
+          ? g.fechaLimiteRenovacion : CAMPANA_POR_DEFECTO.fechaLimiteRenovacion,
+        fechaSalida: esFecha(g.fechaSalida) ? g.fechaSalida : CAMPANA_POR_DEFECTO.fechaSalida,
+      }
+    }
   } catch {
     // localStorage no disponible o datos corruptos: usamos los valores por defecto
   }

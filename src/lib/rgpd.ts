@@ -153,6 +153,43 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
     const suDni = (ficha as { dni?: string } | null)?.dni?.trim()
     const suEmail = (ficha as { email?: string } | null)?.email?.trim()
 
+    /*
+     * CUÁLES DE ESAS SOLICITUDES SON SUYAS DE VERDAD — Y SE MIRA ANTES DE
+     * BORRARLE LA FICHA.
+     *
+     * Buscar por correo tenía un agujero grande: el alta de un menor lleva EL
+     * CORREO DE SU TUTOR, y está escrito así a propósito («del menor no se
+     * pide correo ni contraseña: entra su tutor por él», HermanoPortal). Así
+     * que ejercer el derecho de supresión el padre le borraba de paso las
+     * solicitudes de alta PENDIENTES de todos sus hijos: desaparecían del
+     * panel, secretaría no las veía, y nadie se enteraba de nada. Se
+     * descubriría preguntando por qué el niño no sale en el cortejo.
+     *
+     * El DNI sí identifica a una persona y es obligatorio en la tabla, así que
+     * por DNI se borra sin más. Por correo solo se borra lo que no es de otro:
+     * una solicitud CON tutor es del menor, no del que se va.
+     *
+     * Y hay que mirarlo AHORA, antes del borrado: `solicitudes_alta.tutor_id`
+     * es `on delete set null`, así que en cuanto desaparezca la ficha del
+     * padre las de sus hijos se quedan sin tutor y ya no habría forma de
+     * distinguirlas de las suyas.
+     */
+    const suyas: string[] = []
+    {
+      const o = [suDni ? `dni.eq.${suDni}` : null, suEmail ? `email.eq.${suEmail}` : null]
+        .filter(Boolean).join(',')
+      if (o) {
+        const { data: candidatas, error } = await supabase
+          .from('solicitudes_alta').select('id, dni, tutor_id').or(o)
+        if (error) console.error('No se pudieron mirar sus solicitudes de alta:', error.message)
+        for (const c of candidatas ?? []) {
+          const esSuyaPorDni = Boolean(suDni) && (c as { dni?: string }).dni === suDni
+          const deUnMenor = (c as { tutor_id?: string | null }).tutor_id != null
+          if (esSuyaPorDni || !deUnMenor) suyas.push((c as { id: string }).id)
+        }
+      }
+    }
+
     const { error: fallo } = await supabase.from('hermanos').delete().eq('id', hermanoId)
     if (fallo) {
       // Se DICE, y se dice en cristiano. Callarlo sería certificar una
@@ -171,13 +208,9 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
      * el correo que dio al pedir el alta, así que quedarían huérfanas y hay
      * que poder rastrearlo.
      */
-    if (suDni) {
-      const { error } = await supabase.from('solicitudes_alta').delete().eq('dni', suDni)
-      if (error) console.error('Quedó su solicitud de alta (por DNI):', error.message)
-    }
-    if (suEmail) {
-      const { error } = await supabase.from('solicitudes_alta').delete().eq('email', suEmail)
-      if (error) console.error('Quedó su solicitud de alta (por correo):', error.message)
+    if (suyas.length > 0) {
+      const { error } = await supabase.from('solicitudes_alta').delete().in('id', suyas)
+      if (error) console.error('Quedó alguna solicitud de alta suya:', error.message)
     }
 
     // Por páginas: `select('*')` trae mil filas y calla (ver `lib/paginado.ts`).
@@ -213,13 +246,27 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
     if (elBorrado) {
       const crudo = localStorage.getItem('cabildo-solicitudes-alta')
       if (crudo) {
-        const solicitudes = JSON.parse(crudo) as { dni?: string; email?: string }[]
+        const solicitudes = JSON.parse(crudo) as { dni?: string; email?: string; tutorId?: string }[]
         const limpio = (v?: string) => (v ?? '').replace(/[\s.-]/g, '').toUpperCase()
-        const quedan = solicitudes.filter(
-          (s) =>
-            limpio(s.dni) !== limpio(elBorrado.dni) &&
-            (s.email ?? '').trim().toLowerCase() !== (elBorrado.email ?? '').trim().toLowerCase(),
-        )
+        const correo = (v?: string) => (v ?? '').trim().toLowerCase()
+        const suDni = limpio(elBorrado.dni)
+        const suCorreo = correo(elBorrado.email)
+        const quedan = solicitudes.filter((s) => {
+          /*
+           * DOS VACÍOS NO SON LA MISMA PERSONA.
+           *
+           * Un censo importado de una hoja sin columna de DNI deja a todo el
+           * mundo con `dni: ''` (ver `importar.ts`), y lo mismo con el correo.
+           * Comparando a secas, `'' === ''`, así que borrar a uno de esos se
+           * llevaba por delante TODAS las solicitudes que tampoco tuvieran
+           * DNI. Solo cuenta lo que de verdad hay escrito.
+           */
+          const porDni = suDni !== '' && limpio(s.dni) === suDni
+          // Y por correo, solo lo que no sea de otro: la solicitud de un menor
+          // lleva el correo de su tutor. Igual que en el camino de la base.
+          const porCorreo = suCorreo !== '' && correo(s.email) === suCorreo && !s.tutorId
+          return !porDni && !porCorreo
+        })
         localStorage.setItem('cabildo-solicitudes-alta', JSON.stringify(quedan))
       }
     }

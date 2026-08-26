@@ -130,7 +130,14 @@ export default async function ({ caso }) {
     'create table if not exists papeletas',
     'create table if not exists movimientos',
   ]) {
-    caso(`no trae «${delInstalador}»: eso es el instalador`, false, enDisco.includes(delInstalador))
+    /*
+     * Con el nombre ENTERO, no como prefijo. `movimientos_stock` —la tabla de
+     * la tienda que dice por qué subió o bajó el género— empieza por
+     * «movimientos», y con `includes` a secas hacía saltar esta prueba por una
+     * tabla que sí tiene que estar aquí.
+     */
+    const suyo = new RegExp(`${delInstalador}\\s*\\(`)
+    caso(`no trae «${delInstalador}»: eso es el instalador`, false, suyo.test(enDisco))
   }
 
   /*

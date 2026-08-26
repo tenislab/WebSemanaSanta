@@ -77,6 +77,7 @@ export const PIEZAS = [
   ['webhook-stripe.sql', 'Que la suscripción se active cuando Stripe confirma el cobro, no antes'],
   ['mandatos-sepa.sql', 'El mandato SEPA firmado de verdad, por el propio hermano'],
   ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
+  ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
 ]
 
 const CABECERA = `-- =============================================================================

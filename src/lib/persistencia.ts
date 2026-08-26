@@ -22,6 +22,11 @@ export const CLAVES_DATOS = {
   eventos: 'cabildo-eventos',
   mandatosSepa: 'cabildo-mandatos-sepa',
   tareasRedes: 'cabildo-tareas-redes',
+  // La tienda. Las VENTAS no están aquí a propósito: no se editan desde la
+  // pantalla —se registran con una función de la base— así que una copia
+  // local solo serviría para enseñar un total que ya no es el de la base.
+  productos: 'cabildo-productos',
+  descuentos: 'cabildo-descuentos',
 } as const
 
 /** Lee una colección guardada, o devuelve los datos de ejemplo si aún no hay nada. */

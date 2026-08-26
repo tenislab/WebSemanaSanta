@@ -93,6 +93,14 @@ export default async function ({ caso }) {
         // mismo caso que `solicitudPapeletaToRow`.
         mandatoSepaToRow: 'mandatos_sepa',
         tareaRedToRow: 'tareas_redes',
+        /*
+         * La tienda lleva VARIAS tablas en un solo fichero (`db/tienda.ts`),
+         * así que el nombre del fichero no dice a cuál va cada traductor. Es
+         * deliberado: son cinco tablas de un mismo módulo y separarlas en
+         * cinco ficheros de veinte líneas no ayudaría a nadie.
+         */
+        productoToRow: 'productos',
+        descuentoToRow: 'descuentos',
       }
       const tabla = ALIAS[m[1]] ?? [...tablas.keys()]
         .filter((t) => t === base || t === `${base}s` || base.startsWith(t))

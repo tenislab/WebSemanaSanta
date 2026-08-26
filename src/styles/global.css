@@ -4323,6 +4323,61 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .aviso--info { background: var(--info-bg, #eef4fb); color: var(--info-fg, #1e5a99); }
 .aviso--neutral { background: var(--surface-2, rgba(0,0,0,0.04)); color: var(--text-muted); }
 
+/* ============ La caja de la tienda ============ */
+/*
+ * Los artículos mandan sobre la cesta y por eso se llevan más sitio: en el
+ * mostrador se pasa el rato buscando qué añadir, no mirando lo añadido. Con
+ * las dos columnas al 50 % cabía UN artículo por fila y había que bajar la
+ * página con la cola esperando, que es justo lo que esta pantalla no puede
+ * pedir.
+ */
+.caja__mesa { display: grid; grid-template-columns: 1.35fr 1fr; gap: 1.2rem; align-items: start; }
+/*
+ * `min-width: 0` NO SOBRA. Una celda de `grid` no baja de su ancho mínimo por
+ * defecto, y la tabla de la cesta tiene uno grande —cuatro columnas con sus
+ * textos—, así que se quedaba con el sitio y aplastaba la de artículos hasta
+ * dejar UNO por fila. Que es justo lo que este reparto quería evitar.
+ */
+.caja__mesa > * { min-width: 0; }
+/*
+ * Y la cesta no hereda el ancho mínimo de las tablas grandes del panel
+ * (`min-width: 720px`). Ese mínimo está para las tablas de doce columnas del
+ * censo, donde tiene sentido hacer scroll lateral; aquí son cuatro columnas
+ * cortas en media pantalla, y lo único que conseguía era cortar la del precio
+ * sin que se viera que había más a la derecha.
+ */
+/*
+ * LA CESTA ES UNA LISTA, NO UNA TABLA. En media pantalla, cuatro columnas
+ * —artículo, unidades, precio y total— no caben: se cortaba la del importe sin
+ * que se viera que había más a la derecha, justo la que hay que leerle en voz
+ * alta a quien está pagando. En dos renglones cabe todo y se lee de un golpe.
+ */
+.caja__lineas { list-style: none; margin: 0.9rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.caja__linea {
+  border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem 0.85rem;
+  background: var(--bg-raised); display: flex; flex-direction: column; gap: 0.45rem;
+}
+.caja__linea-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+/* El importe de la línea, a la derecha y con cifras de ancho fijo: es lo que
+   se va leyendo en voz alta mientras se marca. */
+.caja__linea-cabeza > b:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.caja__linea-mandos { display: flex; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+.caja__linea-mandos label { display: flex; flex-direction: column; gap: 0.15rem; }
+.caja__linea-mandos input { width: 5.5rem; }
+.caja__linea-mandos .icon-btn { margin-left: auto; }
+.caja__articulos {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.7rem; margin-top: 0.9rem;
+}
+/* Compactas: en una tarjeta de mostrador lo que importa es el nombre y si
+   queda. El código va pequeño porque se busca escribiéndolo, no leyéndolo. */
+.caja__articulos .portal__card-mini { padding: 0.7rem 0.8rem; }
+.caja__articulos .portal__card-mini__value { font-size: 1rem; }
+.caja__articulos .portal__card-mini[disabled] { opacity: 0.55; cursor: not-allowed; }
+@media (max-width: 900px) {
+  .caja__mesa { grid-template-columns: 1fr; }
+}
+
 /* Tarjetas de resumen del área del hermano (dashboard) */
 .portal__cards {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.9rem; margin-bottom: 1.4rem;

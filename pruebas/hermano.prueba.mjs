@@ -41,7 +41,10 @@ export default async function ({ cargar, caso }) {
   // Cinco desde que la junta se reparte los posts: el encargo tiene su
   // propio interruptor porque no es lo mismo que un comunicado —lo recibe
   // quien lleva un cargo, y es trabajo, no información.
-  caso('hay cinco tipos de aviso', 5, av.TIPOS_AVISO.length)
+  // Seis desde que la tienda avisa a quien lleva el inventario cuando queda
+  // poco de un artículo.
+  caso('hay seis tipos de aviso', 6, av.TIPOS_AVISO.length)
+  caso('y uno es el de que queda poco género', true, av.TIPOS_AVISO.some((t) => t.id === 'existencias'))
   caso('y uno es el encargo de la junta', true, av.TIPOS_AVISO.some((t) => t.id === 'encargo'))
   caso('cada uno con su icono', true, av.TIPOS_AVISO.every((t) => t.icono && t.nombre && t.explica))
 

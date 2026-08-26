@@ -34,7 +34,7 @@ import type { Hermano } from '../data/hermanos'
  * porque los cambios de ficha son muchos y menores. Resultado: una hermandad
  * recién configurada no mandaba ninguno de los dos y no había forma de saberlo.
  */
-export type TipoAviso = 'ficha' | 'comunicado' | 'cuota' | 'papeleta' | 'importante' | 'encargo'
+export type TipoAviso = 'ficha' | 'comunicado' | 'cuota' | 'papeleta' | 'importante' | 'encargo' | 'existencias'
 
 export interface AvisoHermano {
   id: string
@@ -61,6 +61,14 @@ export const TIPOS_AVISO: { id: TipoAviso; nombre: string; icono: string; explic
    * encargo esté sin hacer se ve igualmente en el panel de quien lo repartió.
    */
   { id: 'encargo', nombre: 'Lo que me encarga la junta', icono: '📋', explica: 'Cuando te reparten un post o una tarea de redes.' },
+  /*
+   * ESTE SOLO LE LLEGA A QUIEN LLEVA EL INVENTARIO, y por eso está descrito
+   * desde su lado. A los demás hermanos les sale el interruptor igual —la
+   * lista es la misma para todos— pero nunca recibirán ninguno, que es mejor
+   * que esconderlo: esconderlo obligaría a que esta pantalla supiera qué
+   * cargo lleva cada uno, y no lo sabe ni tiene por qué.
+   */
+  { id: 'existencias', nombre: 'Cuando queda poco género', icono: '📦', explica: 'Si llevas el inventario, cuando un artículo de la tienda baja del mínimo.' },
 ]
 
 const CLAVE = 'cabildo-avisos-hermano'

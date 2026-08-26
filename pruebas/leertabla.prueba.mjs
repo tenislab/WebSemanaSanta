@@ -86,6 +86,35 @@ export default async function ({ cargar, caso }) {
   caso('lo que empieza igual', 'Mantenimiento', m.elegirDeLista('Mantenimiento casa hermandad', CATEGORIAS))
   caso('lo que no está no se inventa', null, m.elegirDeLista('Flores', CATEGORIAS))
 
+  /*
+   * Y LO QUE ENCAJA EN DOS SITIOS NO SE ADIVINA.
+   *
+   * El parecido por principio es útil —«Cultos» encuentra «Cultos Internos»—
+   * pero solo mientras haya UNA candidata. Una hermandad que separe «Cultos
+   * Internos» de «Cultos Externos» —que es lo normal— y traiga una hoja donde
+   * ponga «Cultos» a secas tenía las dos encajando, y se cogía LA PRIMERA DE
+   * LA LISTA. No la más parecida: la primera.
+   *
+   * Y de las partidas cuelga el Estado de Cuentas que se lee en el cabildo. Un
+   * gasto de tres mil euros en la columna de al lado no da error, cuadra igual
+   * de bien, y no lo ve nadie.
+   *
+   * Devolviendo null se cae en el camino que ya existía para lo desconocido:
+   * va a «otros» y SE AVISA en la vista previa, que es donde la tesorería
+   * puede decidir. Adivinar mal en silencio es lo único que no vale.
+   */
+  const DOS_CULTOS = ['Cultos Externos', 'Cultos Internos', 'Mantenimiento']
+  caso('con dos que encajan, no se elige a dedo', null, m.elegirDeLista('Cultos', DOS_CULTOS))
+  // Y si solo hay una, se sigue encontrando: esto no rompe lo que ya iba.
+  caso('con una sola que encaja, se encuentra igual', 'Cultos Internos',
+    m.elegirDeLista('Cultos', ['Cultos Internos', 'Mantenimiento']))
+  caso('y lo exacto manda sobre el parecido', 'Cultos Externos',
+    m.elegirDeLista('Cultos Externos', DOS_CULTOS))
+  // El otro sentido del parecido —lo escrito es más largo que la partida—
+  // también tiene que seguir funcionando.
+  caso('lo más largo sigue encontrando su partida', 'Mantenimiento',
+    m.elegirDeLista('Mantenimiento casa hermandad', DOS_CULTOS))
+
   // --- Sí y no, distinguiendo «ha dicho que no» de «no ha dicho nada» ---
   caso('una x es que sí', true, m.siNo('x'))
   caso('un no es que no', false, m.siNo('No'))

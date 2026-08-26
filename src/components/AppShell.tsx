@@ -38,6 +38,10 @@ function moduloIdDeRuta(pathname: string): string | null {
     { prefix: '/app/papeletas', modulo: 'papeletas' },
     { prefix: '/app/tesoreria', modulo: 'tesoreria' },
     { prefix: '/app/inventario', modulo: 'inventario' },
+    // La tienda va con el módulo de inventario: quien lleva el almacén de
+    // la hermandad lleva también el género. Sin abrir un módulo nuevo, que
+    // obligaría a cada hermandad a repartir permisos otra vez.
+    { prefix: '/app/tienda', modulo: 'inventario' },
     { prefix: '/app/archivo', modulo: 'archivo' },
     { prefix: '/app/eventos', modulo: 'eventos' },
     { prefix: '/app/comunicados', modulo: 'comunicados' },
@@ -70,6 +74,11 @@ const ic = {
   ),
   inventario: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M21 8 12 3 3 8l9 5 9-5Z" /><path d="M3 8v8l9 5 9-5V8M12 13v8" /></svg>
+  ),
+  // La tienda: una bolsa. Se distingue de la caja del inventario de un
+  // vistazo, que es lo que hace falta en un menú con trece entradas.
+  tienda: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 8h12l-1 12H7L6 8Z" /><path d="M9 8V6a3 3 0 0 1 6 0v2" /></svg>
   ),
   archivo: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 4h10l6 6v10H4Z" /><path d="M14 4v6h6" /></svg>
@@ -116,6 +125,8 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/app/tesoreria', label: 'Tesorería', icon: ic.tesoreria, modulo: 'tesoreria' },
       { to: '/app/inventario', label: 'Inventario', icon: ic.inventario, modulo: 'inventario' },
+      { to: '/app/tienda', label: 'Tienda', icon: ic.tienda, modulo: 'inventario' },
+      { to: '/app/tienda/almacen', label: 'Almacén y artículos', icon: ic.inventario, modulo: 'inventario' },
     ],
   },
   {

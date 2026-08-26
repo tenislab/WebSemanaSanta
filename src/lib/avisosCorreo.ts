@@ -60,6 +60,13 @@ const INTERRUPTOR: Record<Exclude<TipoAviso, 'importante'>, 'comunicados' | 'cuo
    * ahí lo apaga quien lo recibe, no quien lo manda.
    */
   encargo: 'comunicados',
+  /*
+   * Y lo de que queda poco género, por el mismo interruptor. No es un aviso a
+   * «los hermanos»: le llega a la media docena que lleva el inventario, y
+   * abrirle a la hermandad un interruptor propio para eso sería una decisión
+   * más que tomar sobre algo que no afecta a nadie más.
+   */
+  existencias: 'comunicados',
 }
 
 /**

@@ -116,6 +116,8 @@ const cargarPapeletas = conReintento(() => import('./pages/app/Papeletas'))
 const cargarCortejo = conReintento(() => import('./pages/app/Cortejo'))
 const cargarTesoreria = conReintento(() => import('./pages/app/Tesoreria'))
 const cargarInventario = conReintento(() => import('./pages/app/Inventario'))
+const cargarTiendaCaja = conReintento(() => import('./pages/app/TiendaCaja'))
+const cargarTiendaInventario = conReintento(() => import('./pages/app/TiendaInventario'))
 const cargarArchivo = conReintento(() => import('./pages/app/Archivo'))
 const cargarEventos = conReintento(() => import('./pages/app/Eventos'))
 const cargarComunicados = conReintento(() => import('./pages/app/Comunicados'))
@@ -134,6 +136,8 @@ const Papeletas = lazy(cargarPapeletas)
 const Cortejo = lazy(cargarCortejo)
 const Tesoreria = lazy(cargarTesoreria)
 const Inventario = lazy(cargarInventario)
+const TiendaCaja = lazy(cargarTiendaCaja)
+const TiendaInventario = lazy(cargarTiendaInventario)
 const Archivo = lazy(cargarArchivo)
 const Eventos = lazy(cargarEventos)
 const Comunicados = lazy(cargarComunicados)
@@ -163,6 +167,8 @@ const PRECARGA = [
   cargarEventos,
   cargarInformes,
   cargarInventario,
+  cargarTiendaCaja,
+  cargarTiendaInventario,
   cargarArchivo,
   cargarPersonal,
   cargarConfiguracion,
@@ -311,6 +317,8 @@ export default function App() {
         <Route path="papeletas" element={<Papeletas />} />
         <Route path="tesoreria" element={<Tesoreria />} />
         <Route path="inventario" element={<Inventario />} />
+        <Route path="tienda" element={<TiendaCaja />} />
+        <Route path="tienda/almacen" element={<TiendaInventario />} />
         <Route path="archivo" element={<Archivo />} />
         <Route path="eventos" element={<Eventos />} />
         <Route path="comunicados" element={<Comunicados />} />

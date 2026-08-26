@@ -415,11 +415,27 @@ export function elegirDeLista(valor: string, lista: readonly string[]): string |
   if (!t) return null
   const exacto = lista.find((x) => normalizarCabecera(x) === t)
   if (exacto) return exacto
-  // Que una contenga a la otra: «Cultos» encuentra «Cultos Internos», y
-  // «Mantenimiento casa hermandad» encuentra «Mantenimiento».
-  const parecido = lista.find((x) => {
+  /*
+   * Que una empiece por la otra: «Cultos» encuentra «Cultos Internos», y
+   * «Mantenimiento casa hermandad» encuentra «Mantenimiento».
+   *
+   * PERO SOLO SI HAY UNA. Antes se cogía la primera de la lista que encajara,
+   * y con dos que encajan eso no es elegir: es quedarse con la que estuviera
+   * antes en el catálogo. Una hermandad que separe «Cultos Internos» de
+   * «Cultos Externos» —que es lo normal— y traiga una hoja donde ponga
+   * «Cultos» a secas tenía las dos encajando.
+   *
+   * Y de las partidas cuelga el Estado de Cuentas que se lee en el cabildo. Un
+   * gasto de tres mil euros en la columna de al lado no da error, cuadra igual
+   * de bien, y no lo ve nadie.
+   *
+   * Con null se cae en el camino que ya existe para lo desconocido: va a
+   * «otros» y SE AVISA en la vista previa, que es donde la tesorería puede
+   * decidir. Adivinar mal en silencio es lo único que no vale.
+   */
+  const parecidas = lista.filter((x) => {
     const n = normalizarCabecera(x)
     return n.length >= 4 && (n.startsWith(t) || t.startsWith(n))
   })
-  return parecido ?? null
+  return parecidas.length === 1 ? parecidas[0] : null
 }
