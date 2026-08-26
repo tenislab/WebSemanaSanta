@@ -127,6 +127,9 @@ const NAV: NavGroup[] = [
       { to: '/app/inventario', label: 'Inventario', icon: ic.inventario, modulo: 'inventario' },
       { to: '/app/tienda', label: 'Tienda', icon: ic.tienda, modulo: 'inventario' },
       { to: '/app/tienda/almacen', label: 'Almacén y artículos', icon: ic.inventario, modulo: 'inventario' },
+      { to: '/app/tienda/reservas', label: 'Reservas de la web', icon: ic.tienda, modulo: 'inventario' },
+      { to: '/app/tienda/facturas', label: 'Facturas de la tienda', icon: ic.tesoreria, modulo: 'inventario' },
+      { to: '/app/tienda/datos', label: 'Datos de la tienda', icon: ic.informes, modulo: 'inventario' },
     ],
   },
   {

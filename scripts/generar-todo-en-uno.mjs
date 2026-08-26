@@ -78,6 +78,7 @@ export const PIEZAS = [
   ['mandatos-sepa.sql', 'El mandato SEPA firmado de verdad, por el propio hermano'],
   ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
   ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
+  ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
 ]
 
 const CABECERA = `-- =============================================================================

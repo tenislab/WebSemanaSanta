@@ -51,6 +51,7 @@ export default async function ({ cargar, caso }) {
 
   await correoAuditoria({ cargar, caso })
   await losDescartadosSeCuentan({ caso })
+  await elResguardoDeLaReservaLoMandaElServidor({ caso })
 }
 
 /**
@@ -274,4 +275,63 @@ export async function losDescartadosSeCuentan({ caso }) {
   caso('y dice qué hacer', true, /en Hermanos/.test(com) && /rev[ií]salos?/.test(com))
   // No se pinta en verde: 40 hermanos incomunicados no es un envío correcto.
   caso('no se da por bueno si falta alguien', true, /fuera > 0 \? 'error' : 'hecho'/.test(com))
+}
+
+
+/**
+ * EL RESGUARDO DE UNA RESERVA LO MANDA EL SERVIDOR, Y NO EL NAVEGADOR.
+ *
+ * Quien aparta algo en la tienda de la web no tiene sesión: es un vecino del
+ * barrio. Así que esa rama de `enviar-correo` va, como la de confirmar una
+ * suscripción, ANTES del control de sesión — y eso la convierte en la parte
+ * más expuesta de toda la función.
+ *
+ * Lo que aquí se comprueba no es que mande el correo, sino que NO SE FÍE del
+ * navegador para saber a quién: si la dirección viniera en el cuerpo de la
+ * petición, cualquiera podría mandarle a quien quisiera un correo firmado con
+ * el nombre de la hermandad.
+ */
+export async function elResguardoDeLaReservaLoMandaElServidor({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const fn = await readFile('supabase/functions/enviar-correo/index.ts', 'utf8')
+
+  caso('la función atiende los resguardos de reserva', true,
+    /if \(reserva\) return await mandarResguardoDeReserva\(reserva\)/.test(fn))
+  // Del navegador solo llegan la hermandad y la referencia. NO el correo.
+  const firma = fn.match(/async function mandarResguardoDeReserva\(\s*datos: \{([^}]*)\}/)
+  caso('solo acepta hermandad y referencia', true, Boolean(firma))
+  caso('y NO acepta un destinatario de fuera', false, /email/.test(firma?.[1] ?? 'email'))
+  // El correo se lee de la propia reserva, con la clave de servicio.
+  caso('el destinatario lo lee de la base', true, /rpc\/resguardo_de_reserva/.test(fn))
+  caso('con la clave de servicio', true,
+    /resguardo_de_reserva[\s\S]{0,400}Bearer \$\{SERVICE_KEY\}/.test(fn))
+  caso('y se manda a lo que ella devuelve', true, /to: \[String\(res\.email\)\]/.test(fn))
+  // Sin fila se contesta que sí: decir «esa reserva no existe» sería una forma
+  // de ir probando referencias hasta dar con una.
+  caso('una referencia que no vale no se distingue', true,
+    /if \(!res\?\.email\) return respuesta\(\{ enviados: 0 \}\)/.test(fn))
+
+  // Y del lado del navegador: que no mande ninguna dirección.
+  const lib = await readFile('src/lib/tienda.ts', 'utf8')
+  caso('el navegador solo dice qué reserva', true,
+    /body: \{ reserva: \{ hermandadId: hermandad, referencia \} \}/.test(lib))
+  // Sin esperarlo: la reserva ya está hecha y un correo que no sale no puede
+  // tumbarla ni asustar a quien acaba de apartar algo.
+  caso('y no espera al correo para dar la reserva por buena', true,
+    /void supabase\.functions[\s\S]{0,200}\.catch\(\(\) => \{\}\)/.test(lib))
+
+  /*
+   * LOS TRES CIERRES DE LA FUNCIÓN DE LA BASE. Se leen del fichero suelto, que
+   * es donde se tocan; que además funcionen se prueba contra un Postgres de
+   * verdad en `basedatos.prueba.mjs`.
+   */
+  const sql = await readFile('supabase/tienda-web.sql', 'utf8')
+  const trozo = sql.match(/create or replace function resguardo_de_reserva[\s\S]*?\$\$;/)?.[0] ?? ''
+  caso('solo contesta por una reserva pendiente', true, /estado = 'pendiente'/.test(trozo))
+  caso('solo si no se mandó ya', true, /resguardo_enviado_en is null/.test(trozo))
+  caso('y solo en la media hora siguiente', true, /creado_en > now\(\) - interval '30 minutes'/.test(trozo))
+  caso('la marca al devolverla', true, /update reservas_tienda set resguardo_enviado_en = now\(\)/.test(trozo))
+  // Y no la puede llamar el navegador: devuelve un correo y un nombre.
+  caso('no la puede llamar nadie desde el navegador', true,
+    /revoke all on function resguardo_de_reserva\(uuid, text\) from public, anon, authenticated;/.test(sql))
 }

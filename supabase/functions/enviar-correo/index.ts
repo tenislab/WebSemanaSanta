@@ -268,6 +268,98 @@ async function mandarConfirmacion(
 
 /*
  * ---------------------------------------------------------------------------
+ *   EL RESGUARDO DE UNA RESERVA DE LA TIENDA
+ * ---------------------------------------------------------------------------
+ *
+ * Quien aparta algo en la tienda de la web no tiene cuenta: lo único que se
+ * lleva es la referencia que sale en pantalla, y si cierra la pestaña sin
+ * apuntarla se planta en la casa de hermandad sin saber qué dijo.
+ *
+ * Se manda desde aquí y no desde el navegador por lo mismo que la confirmación
+ * de la lista de avisos: si el destinatario viniera de fuera, esto sería una
+ * forma de mandarle a cualquiera un correo con el membrete de la hermandad. El
+ * navegador solo dice QUÉ RESERVA; el correo lo lee `resguardo_de_reserva` con
+ * la clave de servicio, y esa función solo contesta si está pendiente, se creó
+ * hace menos de media hora y no se había mandado ya.
+ */
+async function mandarResguardoDeReserva(
+  datos: { hermandadId?: string; referencia?: string },
+): Promise<Response> {
+  if (!SERVICE_KEY) {
+    console.error('Falta SUPABASE_SERVICE_ROLE_KEY: no se puede mandar el resguardo.')
+    return respuesta({ error: 'El servidor no está configurado para mandar resguardos.' }, 503)
+  }
+  if (!datos.hermandadId || !(datos.referencia ?? '').trim()) {
+    return respuesta({ error: 'Faltan datos para mandar el resguardo.' }, 400)
+  }
+
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/resguardo_de_reserva`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_hermandad_id: datos.hermandadId, p_referencia: datos.referencia }),
+  })
+  if (!r.ok) {
+    console.error('resguardo_de_reserva falló:', r.status, await r.text())
+    return respuesta({ error: 'No se ha podido preparar el resguardo.' }, 502)
+  }
+  const res = await r.json()
+  // Igual que con la confirmación: sin fila se contesta que sí y ya está.
+  // Decir «esa reserva no existe» sería una forma de ir probando referencias.
+  if (!res?.email) return respuesta({ enviados: 0 })
+
+  const hermandad = String(res.hermandad ?? '').trim()
+  const dequien = hermandad || 'la hermandad'
+  const euros = (n: unknown) => `${Number(n ?? 0).toFixed(2).replace('.', ',')} €`
+  const lineas = (Array.isArray(res.lineas) ? res.lineas : []) as
+    { nombre?: string; cantidad?: number; importe?: number }[]
+  const nombre = String(res.nombre ?? '').trim()
+  const saluda = nombre ? `Hola, ${nombre.split(' ')[0]}:` : 'Hola:'
+  const plazo = res.recoger_antes_de
+    ? `Puedes pasar a recogerlo hasta el ${String(res.recoger_antes_de)}.`
+    : 'Pásate cuando puedas por la casa de hermandad.'
+
+  const asunto = `Tu reserva ${res.referencia} en ${dequien}`
+  const texto = [
+    saluda,
+    '',
+    `Te hemos apartado esto en ${dequien}:`,
+    ...lineas.map((l) => `  · ${l.cantidad} × ${l.nombre} — ${euros(l.importe)}`),
+    '',
+    `Total a pagar al recogerlo: ${euros(res.total)}`,
+    `Referencia: ${res.referencia}`,
+    '',
+    'No has pagado nada por internet: se paga al recogerlo en la casa de hermandad.',
+    plazo,
+  ].join('\n')
+  const html = `<p>${escapar(saluda)}</p>
+    <p>Te hemos apartado esto en <b>${escapar(dequien)}</b>:</p>
+    <ul>${lineas.map((l) =>
+      `<li>${Number(l.cantidad ?? 0)} × ${escapar(String(l.nombre ?? ''))} — ${euros(l.importe)}</li>`).join('')}</ul>
+    <p><b>Total a pagar al recogerlo: ${euros(res.total)}</b><br>
+    Referencia: <b>${escapar(String(res.referencia))}</b></p>
+    <p>No has pagado nada por internet: se paga al recogerlo en la casa de hermandad.<br>
+    ${escapar(plazo)}</p>`
+
+  const envio = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: firmarComo(hermandad), to: [String(res.email)], subject: asunto, text: texto, html,
+    }),
+  })
+  if (!envio.ok) {
+    console.error('Resend devolvió un error al mandar el resguardo:', envio.status, await envio.text())
+    return respuesta({ error: 'No se ha podido mandar el resguardo.' }, 502)
+  }
+  return respuesta({ enviados: 1 })
+}
+
+/*
+ * ---------------------------------------------------------------------------
  *   «HE OLVIDADO MI CONTRASEÑA» — la recuperación del hermano
  * ---------------------------------------------------------------------------
  *
@@ -441,6 +533,15 @@ Deno.serve(async (req: Request) => {
   const suscripcion = cuerpoCrudo.suscripcion as
     { hermandadId?: string; email?: string; origen?: string } | undefined
   if (suscripcion) return await mandarConfirmacion(suscripcion)
+
+  /*
+   * Y EL RESGUARDO DE UNA RESERVA DE LA TIENDA, por lo mismo: quien aparta
+   * algo desde la web no tiene sesión ni la va a tener. Tampoco abre nada — se
+   * pone ella el destinatario, que lo lee de la propia reserva. Ver
+   * `mandarResguardoDeReserva` arriba.
+   */
+  const reserva = cuerpoCrudo.reserva as { hermandadId?: string; referencia?: string } | undefined
+  if (reserva) return await mandarResguardoDeReserva(reserva)
 
   /*
    * Y LA RECUPERACIÓN DE CONTRASEÑA DEL HERMANO, por lo mismo: quien la pide es

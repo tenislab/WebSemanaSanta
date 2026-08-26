@@ -25,14 +25,19 @@ import { formatCurrency } from '../../lib/format'
 import { llano } from '../../lib/buscar'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
-import { useDescuentos, useProductos, registrarVenta, type VentaRegistrada } from '../../lib/tienda'
+import {
+  useDescuentos, useProductos, registrarVenta, lineasDeVenta, traerVenta,
+  type VentaRegistrada,
+} from '../../lib/tienda'
+import FacturaTienda from '../../components/FacturaTienda'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
 import {
   FORMAS_PAGO, agotado, descuentosPara, precioDeLinea, referenciaFactura, totalesDeCesta,
-  type CanalVenta, type LineaCesta, type Producto,
+  type CanalVenta, type LineaCesta, type LineaVenta, type Producto, type Venta,
 } from '../../data/tienda'
 
 export default function TiendaCaja() {
-  const [productos, setProductos] = useProductos()
+  const [productosDeLaBase] = useProductos()
   const [descuentos] = useDescuentos()
   const hermanos = useMemo(() => leerDatos<Hermano>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
 
@@ -48,6 +53,48 @@ export default function TiendaCaja() {
   const [datosOpen, setDatosOpen] = useState(false)
   const [comprador, setComprador] = useState({ nombre: '', nif: '', direccion: '' })
   const buscador = useRef<HTMLInputElement>(null)
+  const cobrandoRef = useRef(false)
+
+  /*
+   * EL STOCK QUE ESTA PANTALLA HA IDO BAJANDO AL COBRAR, aparte de la copia
+   * que se sincroniza con la base. Ver el comentario largo en `cobrar`.
+   *
+   * Se guarda junto con el stock que la base decía EN ESE MOMENTO (`base`), y
+   * el descuento solo se aplica mientras ese número siga siendo el mismo. Sin
+   * eso, una recarga que trajera existencias nuevas —porque otro ha vendido, o
+   * ha entrado género— quedaría tapada por un descuento ya contado, y la
+   * pantalla enseñaría menos de lo que hay para siempre.
+   */
+  const [vendidoAqui, setVendidoAqui] = useState<Record<string, { valor: number; base: number }>>({})
+  const productos = useMemo(
+    () => productosDeLaBase.map((p) => {
+      const v = vendidoAqui[p.id]
+      return v && v.base === p.stock ? { ...p, stock: Math.max(0, v.valor) } : p
+    }),
+    [productosDeLaBase, vendidoAqui],
+  )
+
+  /*
+   * LA FACTURA DE LO QUE SE ACABA DE COBRAR, para poder dársela a quien está
+   * delante. Se trae de la base —no se arma con lo que esta pantalla tenía en
+   * la cesta— porque los importes de una factura tienen que ser los que
+   * quedaron guardados. Si algún día no coincidieran, quiero que se vea.
+   */
+  const hermandad = useHermandadSettings()
+  const [facturaOpen, setFacturaOpen] = useState(false)
+  const [factura, setFactura] = useState<{ venta: Venta; lineas: LineaVenta[] | null } | null>(null)
+  const [traendo, setTraendo] = useState(false)
+
+  async function verFactura(ventaId: string) {
+    setTraendo(true)
+    setFacturaOpen(true)
+    const [venta, lineas] = await Promise.all([traerVenta(ventaId), lineasDeVenta(ventaId)])
+    setTraendo(false)
+    // Sin venta no se abre una factura vacía: se dice que no se ha podido
+    // traer y se manda al listado, donde sigue estando.
+    if (!venta) { setFactura(null); return }
+    setFactura({ venta, lineas })
+  }
 
   const reqBase = requisito('supabase')
 
@@ -98,12 +145,55 @@ export default function TiendaCaja() {
     buscador.current?.focus()
   }
 
+  /**
+   * Cambiar las unidades de una línea. Poner cero o menos la quita.
+   *
+   * SE LLAMA DESDE EL BOTÓN ✕, y desde el campo solo con un número escrito.
+   * Al principio el campo llamaba aquí con `Math.round(Number(e.target.value))`
+   * directamente, y en un `input type="number"` borrar el contenido da `''`,
+   * que `Number` convierte en 0: la línea desaparecía. En el mostrador, con
+   * cola, seleccionar el campo para cambiar 1 por 12 hacía desaparecer el
+   * artículo antes de teclear el 1 —y con él el precio rebajado a mano, porque
+   * ese `input` es no controlado y se desmonta con la línea—. Quitar es el
+   * botón ✕, que para eso está.
+   */
   function cambiarCantidad(id: string, cantidad: number) {
     setCesta((prev) =>
       cantidad <= 0
         ? prev.filter((l) => l.producto.id !== id)
         : prev.map((l) => (l.producto.id === id ? { ...l, cantidad } : l)),
     )
+  }
+
+  /**
+   * LO QUE SE ESTÁ TECLEANDO EN EL CAMPO DE UNIDADES, mientras no sea un
+   * número válido.
+   *
+   * Hace falta porque el campo es controlado: si al borrar el dígito el
+   * componente vuelve a pintar la cantidad de antes, no hay forma de dejarlo
+   * vacío para escribir otra cosa —el número reaparece bajo el cursor—. Aquí
+   * se guarda el texto en crudo, se pinta ese, y en cuanto llega a ser un
+   * número se manda a la cesta. Al salir del campo se olvida y vuelve a
+   * mandar la cantidad de verdad, así que un campo dejado a medias no puede
+   * quedarse enseñando algo que no es.
+   */
+  const [tecleando, setTecleando] = useState<Record<string, string>>({})
+
+  function tecleanUnidades(id: string, texto: string) {
+    setTecleando((t) => ({ ...t, [id]: texto }))
+    const t = texto.trim()
+    // Vacío, o un «-» a medio escribir: todavía no ha dicho nada.
+    if (t === '' || t === '-') return
+    const n = Math.round(Number(t))
+    if (!Number.isFinite(n) || n < 1) return
+    cambiarCantidad(id, n)
+  }
+
+  function sueltanElCampo(id: string) {
+    setTecleando((t) => {
+      const { [id]: _, ...resto } = t
+      return resto
+    })
   }
 
   function rebajar(id: string, texto: string) {
@@ -131,11 +221,21 @@ export default function TiendaCaja() {
       setError('No has puesto nada en la cesta.')
       return
     }
-    // Guarda de verdad contra el doble clic: `cobrando` en el estado no basta,
-    // porque no se ve hasta el siguiente pintado y un segundo clic dentro del
-    // mismo instante leería el mismo `false`. Dos clics = dos facturas y dos
-    // cargos de género.
-    if (cobrando) return
+    /*
+     * LA GUARDA VA EN UN `useRef`, y esto es un arreglo de algo que estaba mal.
+     *
+     * El comentario que había aquí explicaba —correctamente— que mirar
+     * `cobrando` del estado no basta, porque no cambia hasta el siguiente
+     * pintado y un segundo clic dentro del mismo instante leería el mismo
+     * `false`. Y a continuación el código hacía exactamente eso: `if
+     * (cobrando) return`. Lo único que protegía de verdad era el `disabled`
+     * del botón.
+     *
+     * Un `ref` cambia en el acto, sin esperar a ningún pintado. Y aquí importa
+     * porque detrás hay dos facturas emitidas y dos descuentos de género.
+     */
+    if (cobrandoRef.current) return
+    cobrandoRef.current = true
     setCobrando(true)
     setError('')
     const r = await registrarVenta({
@@ -148,6 +248,7 @@ export default function TiendaCaja() {
       compradorNif: comprador.nif || hermano?.dni || '',
       compradorDireccion: comprador.direccion || hermano?.direccion || '',
     })
+    cobrandoRef.current = false
     setCobrando(false)
     if (!r.ok) {
       setError(r.error)
@@ -157,13 +258,32 @@ export default function TiendaCaja() {
      * El almacén de la pantalla se baja también, para que la siguiente venta
      * de la cola vea lo que queda de verdad. Sin esto, con dos camisetas se
      * podrían meter tres en la cesta siguiente y el error saltaría al cobrar.
+     *
+     * PERO NO TOCANDO `productos`, y esto costó encontrarlo. `setProductos` no
+     * es un `setState` normal: es el de `useSupabaseTable`, que sincroniza, y
+     * manda a Supabase un `update` por cada fila cuyo JSON haya cambiado. O
+     * sea que bajar el stock aquí disparaba, DESPUÉS DE CADA COBRO, un update
+     * de la ficha entera —código, nombre, precio, coste, IVA…— de cada
+     * artículo de la cesta, con los valores que este navegador tuviera en
+     * memoria. Y eso es un último-que-escribe-gana con datos viejos: si desde
+     * el móvil se sube el precio de la camiseta a 15 € mientras esta pestaña
+     * lleva abierta desde la mañana con 12 €, la primera camiseta que se cobre
+     * aquí devuelve el precio a 12 € en la base.
+     *
+     * Así que el descuento vive aparte, solo para pintar. `stock` no viaja
+     * nunca desde el navegador (ver `productoToRow`): quien lo mueve es la
+     * base.
      */
-    setProductos((prev) =>
-      prev.map((p) => {
-        const l = cesta.find((x) => x.producto.id === p.id)
-        return l ? { ...p, stock: Math.max(0, p.stock - l.cantidad) } : p
-      }),
-    )
+    setVendidoAqui((prev) => {
+      const n = { ...prev }
+      for (const l of cesta) {
+        const deLaBase = productosDeLaBase.find((p) => p.id === l.producto.id)
+        if (!deLaBase) continue
+        const ahora = n[l.producto.id]?.base === deLaBase.stock ? n[l.producto.id].valor : deLaBase.stock
+        n[l.producto.id] = { valor: Math.max(0, ahora - l.cantidad), base: deLaBase.stock }
+      }
+      return n
+    })
     setUltima(r.venta)
     vaciar()
   }
@@ -199,6 +319,10 @@ export default function TiendaCaja() {
           <b>Cobrado {formatCurrency(ultima.total)}.</b>{' '}
           Factura {referenciaFactura(ultima)} · base {formatCurrency(ultima.base)} + IVA {formatCurrency(ultima.iva)}
           {ultima.descuentoPct > 0 ? ` · descuento del ${ultima.descuentoPct} %` : ''}
+          {' '}
+          <button className="btn btn-outline btn-sm" onClick={() => void verFactura(ultima.id)}>
+            Ver la factura
+          </button>
         </div>
       )}
       {error && <div className="banner banner--error" role="alert">{error}</div>}
@@ -284,11 +408,12 @@ export default function TiendaCaja() {
                         <span className="portal__card-mini__label">Uds.</span>
                         <input
                           type="number"
-                          min="0"
+                          min="1"
                           step="1"
-                          value={l.cantidad}
+                          value={tecleando[l.producto.id] ?? String(l.cantidad)}
                           aria-label={`Unidades de ${l.producto.nombre}`}
-                          onChange={(e) => cambiarCantidad(l.producto.id, Math.round(Number(e.target.value)))}
+                          onChange={(e) => tecleanUnidades(l.producto.id, e.target.value)}
+                          onBlur={() => sueltanElCampo(l.producto.id)}
                         />
                       </label>
                       <label>
@@ -443,6 +568,43 @@ export default function TiendaCaja() {
             />
           </div>
         </div>
+      </Drawer>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* La factura de lo que se acaba de cobrar                          */}
+      {/* ---------------------------------------------------------------- */}
+      <Drawer
+        open={facturaOpen}
+        onClose={() => setFacturaOpen(false)}
+        title={factura ? `Factura ${referenciaFactura(factura.venta)}` : 'Factura'}
+        ancho="ancho"
+        footer={
+          <>
+            <button className="btn btn-ghost" onClick={() => setFacturaOpen(false)}>Cerrar</button>
+            {factura && (
+              <button
+                className="btn btn-primary"
+                onClick={() => window.print()}
+                /* Sin artículos saldría un A4 con membrete, número y total y
+                   sin una sola línea ni desglose de IVA. */
+                disabled={!factura.lineas || factura.lineas.length === 0}
+              >
+                Imprimir / Descargar
+              </button>
+            )}
+          </>
+        }
+      >
+        {traendo && <p className="form-hint">Trayendo la factura…</p>}
+        {!traendo && !factura && (
+          <p className="form-hint">
+            No se ha podido traer la factura ahora mismo. La venta está registrada: la tienes en
+            Tienda → Facturas de la tienda.
+          </p>
+        )}
+        {!traendo && factura && (
+          <FacturaTienda venta={factura.venta} lineas={factura.lineas} hermandad={hermandad} />
+        )}
       </Drawer>
     </div>
   )

@@ -271,6 +271,10 @@ export default async function ({ caso }) {
   await elMandatoSepaLoFirmaElPropioHermano({ sql, caso })
   await elEncargoDeRedesSeReparte({ sql, caso })
   await laTiendaVendeYCuadra({ sql, caso })
+  await laTiendaDeLaWebApartaYNoCobra({ sql, caso })
+  await laFacturaCuadraConLaBase({ sql, caso })
+  await elPrecioRebajadoEsElMismoEnLosDosSitios({ sql, caso })
+  await losDatosDeLaTiendaCuadran({ sql, caso })
 }
 
 /**
@@ -486,7 +490,7 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
   // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
   caso('los dos módulos ya no salen pendientes', false,
     enFalso.some((x) => /eventos|«web»/.test(x)))
-  caso('y comprueba quince cosas', 15, filas.length)
+  caso('y comprueba diecisiete cosas', 17, filas.length)
   caso('la tienda sale en el inventario', true, filas.some((f) => /La tienda/.test(f)))
   // Lo último que se ha añadido, por su nombre: el recuento de arriba avisa
   // si el inventario pierde una línea, pero no de CUÁL, y quien ejecuta esto
@@ -2474,10 +2478,581 @@ async function laTiendaVendeYCuadra({ sql, caso }) {
     `select estado from ventas where hermandad_id = ${H} order by numero desc limit 1`)))
   caso('y con sus asientos contrarios', '1', numero(await sql(
     `select count(*) from movimientos where hermandad_id = ${H} and origen like 'anula-venta:%'`)))
-  // Anular dos veces no devuelve el género dos veces.
+  // Anular dos veces no devuelve el género dos veces. Y LO DICE: contesta
+  // `false`, para que la pantalla no anuncie que ha vuelto el género cuando no
+  // ha vuelto nada.
   const yaEstaba = numero(await sql(`select stock from productos where id = ${PROD}`))
+  const segundaVez = await sql(`begin; set local role authenticated;
+    set local "request.jwt.claim.sub" = ${UJEFE};
+      select anular_venta((select id from ventas where hermandad_id = ${H}
+        order by numero desc limit 1), 'otra vez')::text; rollback;`)
+  caso('anular dos veces contesta que no ha hecho nada', 'false', siNo(segundaVez))
   await como(UJEFE.slice(1, -1),
     `select anular_venta((select id from ventas where hermandad_id = ${H} order by numero desc limit 1), 'otra vez');`)
   caso('anular dos veces no lo devuelve dos veces', yaEstaba,
     numero(await sql(`select stock from productos where id = ${PROD}`)))
+}
+
+/**
+ * LA TIENDA EN LA WEB: SE APARTA, Y SE PAGA AL RECOGER.
+ *
+ * Esta es la parte de la tienda que toca gente de fuera: alguien que entra en
+ * la web de la hermandad, sin cuenta ninguna, y aparta una camiseta. Todo lo
+ * que puede hacer pasa por `crear_reserva_web`, y por eso esa función es la
+ * superficie más expuesta de todo el módulo: la llama cualquiera con la llave
+ * pública que viaja en el JavaScript de la página.
+ *
+ * De las siete comprobaciones de aquí, cinco son de las que no se ven mirando
+ * la pantalla —el precio lo pone la base, el género de otra hermandad no se
+ * toca, un artículo despublicado tampoco, quien reserva no puede leer las
+ * reservas de nadie— y dos son de contabilidad: que reservar NO baja el stock
+ * y NO deja asiento, y que los dos nacen al recoger.
+ */
+async function laTiendaDeLaWebApartaYNoCobra({ sql, caso }) {
+  const H = "'ca000000-0000-0000-0000-0000000000ca'"
+  const OTRA = "'cb000000-0000-0000-0000-0000000000cb'"
+  const UJEFE = "'cc000000-0000-0000-0000-0000000000cc'"
+  const JEFE = "'cd000000-0000-0000-0000-0000000000cd'"
+  const PROD = "'ce000000-0000-0000-0000-0000000000ce'"
+
+  /*
+   * El fixture se comprueba, como en la prueba de la caja. Un `insert` que no
+   * llega a entrar deja una prueba que pasa por el motivo equivocado, y eso es
+   * peor que una que falla.
+   */
+  await sql(`
+    delete from hermandades where id in (${H}, ${OTRA});
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. de la Web'), (${OTRA}, 'La de al lado');
+    insert into auth.users (id, email) values (${UJEFE}, 'tienda-web@ca.es') on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, cargo) values
+      (${JEFE}, ${H}, 'La mayordoma', '76000001A', 1, 'Activo', ${UJEFE}, 'tienda-web@ca.es', 'Mayordomo/Prioste');
+    insert into web_publica (hermandad_id, slug, publicada) values (${H}, 'hdad-de-la-web', true);
+    insert into productos (id, hermandad_id, codigo, nombre, precio, coste, iva, stock, stock_minimo, activo, visible_en_web)
+      values (${PROD}, ${H}, 'MED-01', 'Medalla', 40.00, 12.00, 21, 10, 2, true, true);
+    select sembrar_permisos_de_fabrica(${H});
+  `)
+  const numero = (t) => t.split('\n').map((x) => x.trim()).filter((x) => /^-?\d+$/.test(x)).pop() ?? ''
+  const solo = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean).pop() ?? ''
+
+  caso('el fixture existe (si no, esto no probaría nada)', '1',
+    numero(await sql(`select count(*) from productos where id = ${PROD}`)))
+
+  /** Lo mismo que hace el navegador de un visitante: sin sesión de ninguna clase. */
+  const comoVisitante = async (sentencia) => {
+    try {
+      return { deja: 'sí', salida: await sql(`begin; set local role anon; ${sentencia} rollback;`) }
+    } catch (e) { return { deja: 'no', salida: String(e?.stderr ?? e) } }
+  }
+  const comoJefa = async (sentencia) => {
+    try {
+      await sql(`begin; set local role authenticated;
+        set local "request.jwt.claim.sub" = ${UJEFE}; ${sentencia} commit;`)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) { return { deja: 'no', motivo: String(e?.stderr ?? e) } }
+  }
+  const linea = (l) => `'[{"producto_id":"${PROD.slice(1, -1)}","cantidad":${l}}]'::jsonb`
+
+  /*
+   * 1. EL CATÁLOGO SE VE SIN ENTRAR EN NINGÚN SITIO. Es la mitad de la
+   * función: una tienda que solo ven los que ya tienen cuenta no es una tienda
+   * en la web. Y se ve SIN EL COSTE — que la hermandad compre la medalla a 12
+   * y la venda a 40 no es asunto de quien pasa por la página.
+   */
+  const cat = await comoVisitante(`select nombre || '|' || precio::text || '|' || disponible::text
+    from catalogo_web('hdad-de-la-web');`)
+  caso('un visitante ve el catálogo sin cuenta', 'Medalla|40.00|10',
+    cat.salida.split('\n').map((x) => x.trim()).find((x) => x.startsWith('Medalla')) ?? cat.salida)
+  const conCoste = await comoVisitante(`select coste from catalogo_web('hdad-de-la-web');`)
+  caso('y no ve lo que le cuesta a la hermandad', 'no', conCoste.deja)
+
+  // Y solo si la web está publicada: la que se está preparando no enseña nada.
+  await sql(`update web_publica set publicada = false where hermandad_id = ${H}`)
+  const enBorrador = await comoVisitante(`select count(*) from catalogo_web('hdad-de-la-web');`)
+  caso('una web sin publicar no enseña su género', '0', numero(enBorrador.salida))
+  /*
+   * …pero la gente de esa hermandad SÍ, que es lo que hace que la vista previa
+   * del panel sirva para algo antes de publicar. Y no se lo cree por decirlo:
+   * no hay ningún parámetro de «soy de la casa», se mira la sesión.
+   */
+  const enPrevia = await sql(`begin; set local role authenticated;
+    set local "request.jwt.claim.sub" = ${UJEFE};
+      select count(*) from catalogo_web('hdad-de-la-web'); rollback;`)
+  caso('pero la propia hermandad sí, para la vista previa', '1', numero(enPrevia))
+  await sql(`update web_publica set publicada = true where hermandad_id = ${H}`)
+
+  // 2. Y APARTA. Sin sesión, como cualquiera que entre desde el móvil.
+  await sql(`begin; set local role anon;
+    select crear_reserva_web(${H}, ${linea(3)}, 'María del Carmen', 'mc@ejemplo.es', '600111222');
+    commit;`)
+  caso('el visitante aparta tres', '3', numero(await sql(
+    `select sum(cantidad) from lineas_reserva where hermandad_id = ${H}`)))
+  caso('a su precio de tarifa', '40.00', solo(await sql(
+    `select precio_unitario::text from lineas_reserva where hermandad_id = ${H}`)))
+  caso('con su referencia del año', 'R-' + new Date().getFullYear() + '-1', solo(await sql(
+    `select referencia from reservas_tienda where hermandad_id = ${H}`)))
+
+  /*
+   * 3. RESERVAR NO ES VENDER. El stock no se toca —la medalla sigue en el
+   * cajón— y lo que baja es lo DISPONIBLE. Descontar del stock al reservar
+   * haría que el recuento del almacén no cuadrara nunca con la estantería.
+   */
+  caso('el almacén no se ha tocado', '10', numero(await sql(`select stock from productos where id = ${PROD}`)))
+  caso('pero ya solo se pueden prometer siete', '7',
+    numero((await comoVisitante(`select disponible from catalogo_web('hdad-de-la-web');`)).salida))
+  caso('y no hay ni factura ni asiento', '0', numero(await sql(
+    `select count(*) from ventas where hermandad_id = ${H}`)))
+
+  /*
+   * 4. EL PRECIO LO PONE LA BASE. Si viniera del navegador, cualquiera con la
+   * consola abierta aparta la medalla de cuarenta euros por cero.
+   */
+  await sql(`begin; set local role anon;
+    select crear_reserva_web(${H},
+      '[{"producto_id":"${PROD.slice(1, -1)}","cantidad":1,"precio_unitario":0}]'::jsonb, 'El listo');
+    commit;`)
+  caso('el precio que manda el navegador se ignora', '40.00', solo(await sql(
+    `select l.precio_unitario::text from lineas_reserva l
+       join reservas_tienda r on r.id = l.reserva_id where r.nombre = 'El listo'`)))
+
+  // 5. No se aparta más de lo que se puede prometer, ni género ajeno, ni retirado.
+  const ansioso = await comoVisitante(`select crear_reserva_web(${H}, ${linea(99)}, 'El ansioso');`)
+  caso('no se aparta más de lo disponible', 'no', ansioso.deja)
+  const ajeno = await comoVisitante(`select crear_reserva_web(${OTRA}, ${linea(1)}, 'El confundido');`)
+  caso('ni el género de otra hermandad', 'no', ajeno.deja)
+  await sql(`update productos set visible_en_web = false where id = ${PROD}`)
+  const retirado = await comoVisitante(`select crear_reserva_web(${H}, ${linea(1)}, 'El tardón');`)
+  caso('ni lo que se ha quitado de la web', 'no', retirado.deja)
+  await sql(`update productos set visible_en_web = true where id = ${PROD}`)
+
+  /*
+   * 6. QUIEN RESERVA NO LEE LAS RESERVAS. Ni las suyas. Con una lectura
+   * abierta, cualquiera se baja los nombres, correos y teléfonos de todo el
+   * que ha apartado algo — que es justo el dato que más duele perder.
+   */
+  /*
+   * Y OJO CON CÓMO SE COMPRUEBA. Postgres NO da error cuando una política le
+   * cierra la puerta a un `select`: devuelve cero filas y dice que todo ha
+   * ido bien. Escrita como «esto tiene que fallar», esta comprobación pasaría
+   * en verde aunque las reservas se vieran enteras, porque `psql` tampoco se
+   * quejaría. Así que se cuentan FILAS, que es lo único que distingue una
+   * política que cierra de una que no está.
+   */
+  const fisgon = await comoVisitante(`select count(*) from reservas_tienda;`)
+  caso('quien reserva no ve ni una reserva', '0', numero(fisgon.salida))
+  const fisgonLineas = await comoVisitante(`select count(*) from lineas_reserva;`)
+  caso('ni una sola línea de reserva', '0', numero(fisgonLineas.salida))
+  // Y hay filas de verdad que ver: si no, esto pasaría por estar vacío.
+  caso('y eso que hay reservas puestas', '2',
+    numero(await sql(`select count(*) from reservas_tienda where hermandad_id = ${H}`)))
+  // Escribir tampoco: ahí la política sí levanta la voz.
+  const colado = await comoVisitante(
+    `insert into reservas_tienda (hermandad_id, referencia, nombre) values (${H}, 'R-0-0', 'A mano');`)
+  caso('ni se inventa una reserva a mano', 'no', colado.deja)
+
+  // Y le llega el aviso a quien lleva el inventario: una reserva que nadie
+  // mira es alguien plantado en la casa hermandad a por algo que no le han
+  // apartado.
+  caso('avisa a quien lleva el inventario', '2', numero(await sql(
+    `select count(*) from avisos_hermano where hermandad_id = ${H} and hermano_id = ${JEFE}
+      and tipo = 'existencias'`)))
+
+  /*
+   * 7. Y AL RECOGER: ahí sí nace la factura, ahí sí bajan las tres medallas
+   * del almacén y ahí sí entran los dos asientos.
+   */
+  const entrega = await comoJefa(
+    `select entregar_reserva((select id from reservas_tienda where nombre = 'María del Carmen'), 'Efectivo');`)
+  caso('quien lleva inventario entrega la reserva', 'sí', entrega.deja)
+  caso('ahora sí baja el almacén', '7', numero(await sql(`select stock from productos where id = ${PROD}`)))
+  caso('y nace la factura, con el canal de internet', 'online', solo(await sql(
+    `select canal from ventas where hermandad_id = ${H}`)))
+  caso('por los ciento veinte euros', '120.00', solo(await sql(
+    `select total::text from ventas where hermandad_id = ${H}`)))
+  caso('con su ingreso en tesorería', '120.00', solo(await sql(
+    `select importe::text from movimientos where hermandad_id = ${H} and origen like 'venta:%'`)))
+  caso('y el gasto de lo que costó', '36.00', solo(await sql(
+    `select importe::text from movimientos where hermandad_id = ${H} and origen like 'coste-venta:%'`)))
+  caso('la reserva queda entregada', 'entregada', solo(await sql(
+    `select r.estado from reservas_tienda r where r.nombre = 'María del Carmen'`)))
+
+  // Entregarla dos veces no vende dos veces.
+  const otraVez = await comoJefa(
+    `select entregar_reserva((select id from reservas_tienda where nombre = 'María del Carmen'), 'Efectivo');`)
+  caso('entregar dos veces no vende dos veces', 'no', otraVez.deja)
+
+  /*
+   * 8. SOLTAR UNA RESERVA no la borra: la marca. Una reserva borrada es una
+   * llamada de teléfono que nadie puede explicar. Y el género vuelve a estar
+   * disponible en cuanto deja de estar pendiente.
+   */
+  const antes = numero((await comoVisitante(`select disponible from catalogo_web('hdad-de-la-web');`)).salida)
+  await comoJefa(`select soltar_reserva((select id from reservas_tienda where nombre = 'El listo'),
+    'No vino a por ella', 'caducada');`)
+  caso('al soltarla, el género vuelve a estar disponible', String(Number(antes) + 1),
+    numero((await comoVisitante(`select disponible from catalogo_web('hdad-de-la-web');`)).salida))
+  caso('y la reserva sigue ahí, marcada', 'caducada', solo(await sql(
+    `select r.estado from reservas_tienda r where r.nombre = 'El listo'`)))
+
+  /*
+   * Y SOLTAR ALGO QUE YA NO ESTÁ PENDIENTE DICE QUE NO HA HECHO NADA.
+   *
+   * Un `update` que no encuentra fila no es un error en Postgres: afecta a
+   * cero filas y contesta que todo ha ido bien. Con la función devolviendo
+   * `void`, la pantalla anunciaba «anulada, el género vuelve a estar
+   * disponible» sobre una reserva que otro acababa de entregar desde el
+   * ordenador de al lado.
+   */
+  const yaSoltada = await sql(`begin; set local role authenticated;
+    set local "request.jwt.claim.sub" = ${UJEFE};
+      select soltar_reserva((select id from reservas_tienda where nombre = 'El listo'),
+        'otra vez', 'anulada')::text; rollback;`)
+  caso('soltar una que ya no está pendiente contesta que no', 'false',
+    yaSoltada.split('\n').map((x) => x.trim()).filter((x) => x === 'true' || x === 'false').pop() ?? '')
+  const laDeVerdad = await sql(`begin; set local role anon;
+      select crear_reserva_web(${H}, ${linea(1)}, 'La que se suelta');
+    commit;
+    begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UJEFE};
+      select soltar_reserva((select id from reservas_tienda where nombre = 'La que se suelta'),
+        'no vino', 'caducada')::text; commit;`)
+  caso('y una que sí lo estaba contesta que sí', 'true',
+    laDeVerdad.split('\n').map((x) => x.trim()).filter((x) => x === 'true' || x === 'false').pop() ?? '')
+
+  /*
+   * 9. EL RESGUARDO POR CORREO, con sus tres cierres.
+   *
+   * `resguardo_de_reserva` es lo que lee `enviar-correo` con la clave de
+   * servicio para mandarle a quien apartó algo lo que apartó. Es la única
+   * pieza de todo esto que devuelve un correo y un nombre, así que lo que
+   * importa aquí no es que funcione sino QUÉ SE NIEGA A CONTESTAR.
+   */
+  await sql(`begin; set local role anon;
+    select crear_reserva_web(${H}, ${linea(1)}, 'La del resguardo', 'resguardo@ejemplo.es');
+    commit;`)
+  const pedirResguardo = async (ref) => solo(await sql(
+    `select coalesce(resguardo_de_reserva(${H}, '${ref}') ->> 'email', 'nada')`))
+  const suRef = solo(await sql(
+    `select referencia from reservas_tienda where nombre = 'La del resguardo'`))
+
+  caso('la primera vez sale el correo de quien reservó', 'resguardo@ejemplo.es', await pedirResguardo(suRef))
+  // Y SOLO UNA VEZ: si no, probando referencias se le llena el buzón a la gente.
+  caso('la segunda vez ya no', 'nada', await pedirResguardo(suRef))
+  caso('una referencia inventada no dice ni que no existe', 'nada', await pedirResguardo('R-1999-99'))
+  // Ni una vieja: pasada la media hora, ir probando referencias no sirve.
+  await sql(`update reservas_tienda set resguardo_enviado_en = null,
+    creado_en = now() - interval '2 hours' where nombre = 'La del resguardo'`)
+  caso('ni una de hace dos horas', 'nada', await pedirResguardo(suRef))
+
+  /*
+   * Y NO LA PUEDE LLAMAR EL NAVEGADOR. Es la comprobación que de verdad
+   * importa: devuelve el correo y el nombre de quien reservó, así que si `anon`
+   * pudiera ejecutarla, todo el cuidado de arriba —no dar una política de
+   * lectura sobre `reservas_tienda`— no habría servido de nada.
+   */
+  const porLaPuertaDeAtras = await comoVisitante(`select resguardo_de_reserva(${H}, '${suRef}');`)
+  caso('y no la puede llamar quien entra en la web', 'no', porLaPuertaDeAtras.deja)
+  const porLaOtraPuerta = await comoJefa(`select resguardo_de_reserva(${H}, '${suRef}');`)
+  caso('ni siquiera quien lleva el inventario: eso lo lee el servidor', 'no', porLaOtraPuerta.deja)
+}
+
+
+/**
+ * LA FACTURA CUADRA CON LO QUE CALCULÓ LA BASE DE DATOS.
+ *
+ * Esta prueba existe porque la misma cuenta está escrita DOS VECES, en dos
+ * lenguajes: `registrar_venta()` calcula la base y la cuota al vender y las
+ * guarda en la fila; `desgloseIvaPorTipo()` las vuelve a calcular desde las
+ * líneas para imprimir la factura, y además las separa por tipo de IVA.
+ *
+ * Las dos tienen que dar EXACTAMENTE lo mismo, hasta el céntimo. Y no es
+ * evidente que lo hagan: la base se saca dividiendo por (1 + iva/100) y
+ * redondeando, y el redondeo depende de dónde se agrupe. Basta con que una de
+ * las dos agrupe antes de dividir para que una factura de tres artículos
+ * baratos diga un céntimo menos que la venta que la originó.
+ *
+ * Las pruebas de `tienda.prueba.mjs` comprueban esa aritmética en JavaScript
+ * contra una imitación de lo que hace el SQL. Esta la comprueba contra el SQL
+ * DE VERDAD, ejecutado por Postgres, que es lo único que cierra el círculo.
+ *
+ * Los precios están elegidos para que el redondeo caiga mal a propósito: 0,07
+ * al 21 % da 0,0578…, y tres de ellos separan las dos formas de calcularlo.
+ */
+async function laFacturaCuadraConLaBase({ sql, caso }) {
+  const H = "'cf000000-0000-0000-0000-0000000000cf'"
+  const U = "'d0000000-0000-0000-0000-0000000000d0'"
+  const JEFE = "'d1000000-0000-0000-0000-0000000000d1'"
+
+  await sql(`
+    delete from hermandades where id = ${H};
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. de la Factura');
+    insert into auth.users (id, email) values (${U}, 'factura@cf.es') on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, cargo) values
+      (${JEFE}, ${H}, 'El mayordomo', '77000001A', 1, 'Activo', ${U}, 'factura@cf.es', 'Mayordomo/Prioste');
+    select sembrar_permisos_de_fabrica(${H});
+    -- Cuatro artículos con TRES tipos de IVA distintos y precios que redondean mal.
+    insert into productos (id, hermandad_id, codigo, nombre, precio, coste, iva, stock, stock_minimo) values
+      ('d2000000-0000-0000-0000-0000000000d2', ${H}, 'A', 'Chapa',   0.07, 0.02, 21, 100, 0),
+      ('d3000000-0000-0000-0000-0000000000d3', ${H}, 'B', 'Estampa', 1.13, 0.40, 21, 100, 0),
+      ('d4000000-0000-0000-0000-0000000000d4', ${H}, 'C', 'Vela',    9.99, 4.00, 10, 100, 0),
+      ('d5000000-0000-0000-0000-0000000000d5', ${H}, 'D', 'Libro',   2.35, 1.00,  4, 100, 0);
+  `)
+  const numero = (t) => t.split('\n').map((x) => x.trim()).filter((x) => /^-?\d+$/.test(x)).pop() ?? ''
+  const solo = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean).pop() ?? ''
+  caso('el fixture existe (si no, esto no probaría nada)', '4',
+    numero(await sql(`select count(*) from productos where hermandad_id = ${H}`)))
+
+  await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${U};
+    select registrar_venta('[
+      {"producto_id":"d2000000-0000-0000-0000-0000000000d2","cantidad":3},
+      {"producto_id":"d3000000-0000-0000-0000-0000000000d3","cantidad":7},
+      {"producto_id":"d4000000-0000-0000-0000-0000000000d4","cantidad":1},
+      {"producto_id":"d5000000-0000-0000-0000-0000000000d5","cantidad":5}
+    ]'::jsonb);
+    commit;`)
+
+  // Lo que guardó la base, y las líneas tal como las leería la factura.
+  const cabecera = solo(await sql(
+    `select base::text || '|' || iva_total::text || '|' || total::text from ventas where hermandad_id = ${H}`))
+  const filas = (await sql(
+    `select cantidad || '|' || precio_unitario || '|' || iva from lineas_venta where hermandad_id = ${H}`))
+    .split('\n').map((x) => x.trim()).filter((x) => x.includes('|'))
+  caso('la venta tiene sus cuatro líneas', 4, filas.length)
+
+  // Y ahora la MISMA cuenta que hace la factura, con la función de verdad.
+  // Se importa el módulo DE VERDAD, el mismo que usa la factura en pantalla.
+  // Sin red de seguridad a propósito: si un día no se pudiera cargar, esta
+  // prueba tiene que romperse en vez de comprobar otra cosa.
+  const { desgloseIvaPorTipo, sumaDelDesglose } = await import('../src/data/tienda.ts')
+  const lineas = filas.map((f, i) => {
+    const [cantidad, precioUnitario, iva] = f.split('|').map(Number)
+    return {
+      id: String(i), ventaId: 'v', codigo: '', nombre: '',
+      cantidad, precioUnitario, precioTarifa: precioUnitario, costeUnitario: 0, iva,
+    }
+  })
+  const s = sumaDelDesglose(desgloseIvaPorTipo(lineas))
+  const [base, iva, total] = cabecera.split('|').map(Number)
+
+  caso('la base de la factura es la que guardó la venta', base, s.base)
+  caso('y la cuota de IVA también', iva, s.cuota)
+  caso('y el total', total, s.total)
+
+  // Y hay de verdad tres tipos distintos: si no, esto probaría un solo tramo.
+  caso('con tres tipos de IVA en la misma factura', 3, desgloseIvaPorTipo(lineas).length)
+}
+
+
+/**
+ * EL PRECIO CON DESCUENTO, IDÉNTICO EN LA PANTALLA Y EN LA BASE.
+ *
+ * La caja enseña «Cobrar 4,81 €» y la base cobra lo que ella calcula. Son dos
+ * cuentas distintas escritas en dos lenguajes, y tienen que dar exactamente lo
+ * mismo o se le dice un precio a alguien y se le cobra otro.
+ *
+ * NO ES TEÓRICO: la primera versión hacía en JavaScript
+ * `Math.round(precio * (1 - pct/100) * 100) / 100`, que redondea un número
+ * binario de coma flotante, mientras Postgres hace `round(numeric, 2)` sobre
+ * un decimal exacto. En los empates a medio céntimo se iban a lados distintos:
+ * 1,15 € al 50 % daba 0,57 € en pantalla y 0,58 € en la base.
+ *
+ * Aquí se comparan MILES de combinaciones, no dos o tres elegidas a mano —que
+ * es justo lo que dejó pasar el fallo: la prueba que había usaba 15 € al 50 %,
+ * un caso que no puede fallar—. Los precios van de 1,00 € a 60,00 € y los
+ * descuentos son los que de verdad se ponen.
+ */
+async function elPrecioRebajadoEsElMismoEnLosDosSitios({ sql, caso }) {
+  const { precioDeLineaCent } = await import('../src/data/tienda.ts')
+
+  const PCTS = [5, 10, 15, 20, 25, 50, 12.5, 33.33]
+  const filas = []
+  for (let c = 100; c <= 6000; c += 1) {
+    for (const pct of PCTS) filas.push(`(${c / 100},${pct})`)
+  }
+
+  /*
+   * Se calcula EN POSTGRES con la misma expresión que usa `registrar_venta`,
+   * copiada tal cual de `supabase/tienda.sql`. Si allí se cambia la fórmula,
+   * esta prueba deja de reflejarla y hay que venir a tocarla: es el precio de
+   * comparar dos cuentas que viven en sitios distintos.
+   */
+  const salida = await sql(`
+    create temp table _precios(precio numeric(10,2), pct numeric(5,2));
+    insert into _precios values ${filas.join(',')};
+    select precio::text || '|' || pct::text || '|' || round(precio * (1 - pct / 100), 2)::text
+      from _precios;
+  `)
+  const lineas = salida.split('\n').map((x) => x.trim()).filter((x) => x.split('|').length === 3)
+  caso('hay miles de combinaciones que comparar', true, lineas.length > 40000)
+
+  const malas = []
+  for (const l of lineas) {
+    const [precio, pct, dePostgres] = l.split('|').map(Number)
+    const deLaPantalla = precioDeLineaCent({ precio }, pct)
+    if (deLaPantalla !== Math.round(dePostgres * 100)) {
+      malas.push(`${precio} € al ${pct} %: pantalla ${deLaPantalla / 100} · base ${dePostgres}`)
+    }
+  }
+  caso('ni un solo precio discrepa entre la caja y la base', [], malas.slice(0, 5))
+
+  /*
+   * Y la comprobación que evita que esto pase por el motivo equivocado: la
+   * cuenta INGENUA —la que estaba escrita— tiene que fallar de verdad sobre
+   * estos mismos datos. Si no fallara, esta prueba no estaría probando nada.
+   */
+  const ingenuas = lineas.filter((l) => {
+    const [precio, pct, dePostgres] = l.split('|').map(Number)
+    return Math.round(precio * (1 - pct / 100) * 100) !== Math.round(dePostgres * 100)
+  })
+  caso('y la cuenta ingenua sí falla (si no, esto no probaría nada)', true, ingenuas.length > 100)
+}
+
+
+/**
+ * LOS DATOS DE LA TIENDA, SUMADOS EN LA BASE.
+ *
+ * `datos_tienda()` es lo que alimenta las gráficas. Se prueba aquí y no
+ * leyendo el SQL porque lo que puede fallar son cosas que solo se ven
+ * ejecutándolo: que una venta anulada no cuente, que los dos canales se
+ * separen bien, que el año se corte donde tiene que cortarse, y que quien no
+ * lleva ni el inventario ni la tesorería no pueda mirarlo.
+ *
+ * EL CORTE DE AÑO ES EL CASO QUE MÁS IMPORTA. La venta de Nochevieja a las
+ * 23:30 en España está guardada como las 22:30 UTC del 31 de diciembre; la de
+ * las 00:30 del 1 de enero, como las 23:30 UTC del 31. Cortando el año en UTC
+ * —que es lo que haría `extract(year from fecha)` en Supabase— la segunda
+ * caería en el ejercicio que ya está cerrado.
+ */
+async function losDatosDeLaTiendaCuadran({ sql, caso }) {
+  const H = "'e0000000-0000-0000-0000-0000000000e0'"
+  const U = "'e1000000-0000-0000-0000-0000000000e1'"
+  const JEFE = "'e2000000-0000-0000-0000-0000000000e2'"
+  const UPEON = "'e3000000-0000-0000-0000-0000000000e3'"
+  const PEON = "'e4000000-0000-0000-0000-0000000000e4'"
+  const CAM = "'e5000000-0000-0000-0000-0000000000e5'"
+  const LIB = "'e6000000-0000-0000-0000-0000000000e6'"
+
+  await sql(`
+    delete from hermandades where id = ${H};
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. de los Datos');
+    insert into auth.users (id, email) values
+      (${U}, 'datos-jefe@e0.es'), (${UPEON}, 'datos-peon@e0.es') on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, cargo) values
+      (${JEFE}, ${H}, 'El mayordomo', '78000001A', 1, 'Activo', ${U}, 'datos-jefe@e0.es', 'Mayordomo/Prioste');
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email) values
+      (${PEON}, ${H}, 'Un hermano', '78000002B', 2, 'Activo', ${UPEON}, 'datos-peon@e0.es');
+    select sembrar_permisos_de_fabrica(${H});
+    insert into productos (id, hermandad_id, codigo, nombre, precio, coste, iva, stock, stock_minimo) values
+      (${CAM}, ${H}, 'CAM', 'Camiseta', 15.00, 6.00, 21, 500, 0),
+      (${LIB}, ${H}, 'LIB', 'Libro',    28.00, 14.00, 4, 500, 0);
+  `)
+  const numero = (t) => t.split('\n').map((x) => x.trim()).filter((x) => /^-?\d+$/.test(x)).pop() ?? ''
+  const solo = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean).pop() ?? ''
+  caso('el fixture existe (si no, esto no probaría nada)', '2',
+    numero(await sql(`select count(*) from productos where hermandad_id = ${H}`)))
+
+  const vender = async (lineas, canal, forma) => sql(`begin; set local role authenticated;
+    set local "request.jwt.claim.sub" = ${U};
+      select registrar_venta('${lineas}'::jsonb, '${canal}', '${forma}');
+    commit;`)
+  const L = (id, n) => `{"producto_id":"${id.slice(1, -1)}","cantidad":${n}}`
+
+  //  Mostrador: 2 camisetas (30 €) + 1 libro (28 €). Internet: 3 camisetas (45 €).
+  await vender(`[${L(CAM, 2)},${L(LIB, 1)}]`, 'fisica', 'Efectivo')
+  await vender(`[${L(CAM, 3)}]`, 'online', 'Bizum')
+  //  Y una que se anula: no puede contar en ningún sitio.
+  await vender(`[${L(CAM, 10)}]`, 'fisica', 'Tarjeta')
+  await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${U};
+    select anular_venta((select id from ventas where hermandad_id = ${H}
+      order by numero desc limit 1), 'prueba'); commit;`)
+
+  /*
+   * Las tres se han registrado HOY. Para poder comprobar el corte de año se
+   * mueven a mano a los dos lados de la medianoche del 31 de diciembre, que es
+   * el único sitio donde el huso se nota.
+   */
+  const ANIO = 2031
+  await sql(`
+    update ventas set fecha = timestamptz '${ANIO}-06-15 12:00:00+02'
+     where hermandad_id = ${H} and estado <> 'Anulada';
+    -- Y dos más, una a cada lado de la medianoche de fin de año EN ESPAÑA.
+    insert into ventas (hermandad_id, serie, numero, canal, forma_pago, base, iva_total, total,
+                        coste_total, estado, fecha)
+    values
+      (${H}, 'A', 900, 'fisica', 'Efectivo', 10, 2.1, 12.10, 5, 'Cobrada',
+       timestamptz '${ANIO}-12-31 23:30:00+01'),
+      (${H}, 'A', 901, 'fisica', 'Efectivo', 20, 4.2, 24.20, 9, 'Cobrada',
+       timestamptz '${ANIO + 1}-01-01 00:30:00+01');
+  `)
+
+  /*
+   * `psql` imprime también sus BEGIN, SET y ROLLBACK, así que de toda la
+   * salida se busca LA LÍNEA que es el objeto. Coger la última no vale: es
+   * «ROLLBACK», y `JSON.parse` se cae con un mensaje que no dice nada del
+   * fallo de verdad.
+   */
+  const datos = async (uid, anio) => {
+    const salida = await sql(`begin; set local role authenticated;
+      set local "request.jwt.claim.sub" = ${uid};
+        select datos_tienda(${anio})::text; rollback;`)
+    const linea = salida.split('\n').map((x) => x.trim()).find((x) => x.startsWith('{'))
+    if (!linea) throw new Error(`datos_tienda no devolvió nada: ${salida.slice(0, 200)}`)
+    return linea
+  }
+
+  const d = JSON.parse(await datos(U, ANIO))
+
+  // 1. Los dos canales, separados y con sus importes.
+  const mes6 = d.meses.filter((m) => m.mes === 6)
+  caso('junio tiene los dos canales', ['fisica', 'online'], mes6.map((m) => m.canal).sort())
+  /*
+   * Se comparan NÚMEROS y no textos. `jsonb` serializa los `numeric` sin los
+   * ceros de cola —58.00 sale como `58`—, así que comparar cadenas fallaba por
+   * el formato y no por el importe. El navegador los pasa por `Number()` igual.
+   */
+  caso('lo del mostrador son 58 €', 58, Number(mes6.find((m) => m.canal === 'fisica').total))
+  caso('y lo de internet, 45 €', 45, Number(mes6.find((m) => m.canal === 'online').total))
+
+  /*
+   * 2. LA ANULADA NO CUENTA EN NINGÚN SITIO. Eran 10 camisetas: si se colara,
+   * el mostrador diría 208 € y la camiseta sería el artículo del año por
+   * goleada.
+   */
+  caso('la anulada no suma en el mes', 58, Number(mes6.find((m) => m.canal === 'fisica').total))
+  const cam = d.articulos.filter((a) => a.codigo === 'CAM')
+  caso('ni en los artículos', 5, cam.reduce((n, a) => n + a.unidades, 0))
+  caso('ni en las formas de pago', 0, d.formas.filter((f) => f.forma === 'Tarjeta').length)
+
+  // 3. Los artículos, separados por canal y ordenados por lo que dejan.
+  caso('la camiseta sale en los dos canales', ['fisica', 'online'], cam.map((a) => a.canal).sort())
+  caso('el libro solo en el mostrador', 1, d.articulos.filter((a) => a.codigo === 'LIB').length)
+  caso('y el artículo que más deja va primero', 'CAM', d.articulos[0].codigo)
+
+  /*
+   * 4. EL CORTE DE AÑO, EN HORA DE AQUÍ. La de las 23:30 del 31 de diciembre
+   * es de este ejercicio; la de las 00:30 del 1 de enero, del siguiente.
+   * Cortando en UTC —lo que haría `extract(year from fecha)` en Supabase—, la
+   * segunda se habría caído dentro del año que ya está cerrado.
+   */
+  const dic = d.meses.find((m) => m.mes === 12)
+  caso('la venta de Nochevieja entra en su año', 12.1, Number(dic.total))
+  const siguiente = JSON.parse(await datos(U, ANIO + 1))
+  const enero = siguiente.meses.find((m) => m.mes === 1)
+  caso('y la de Año Nuevo, en el siguiente', 24.2, Number(enero.total))
+  caso('sin colarse en el anterior', 1, d.meses.filter((m) => m.mes === 12).length)
+
+  // 5. Los años que ofrecer en el selector salen de lo que hay.
+  caso('el selector ofrece los dos años', [ANIO + 1, ANIO], d.anios)
+
+  /*
+   * 6. Y NO LO VE CUALQUIERA. Aquí está lo que gana la hermandad con cada
+   * artículo: eso es cosa de la junta, no del censo.
+   */
+  let deja = 'sí'
+  try {
+    await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UPEON};
+      select datos_tienda(${ANIO}); rollback;`)
+  } catch { deja = 'no' }
+  caso('un hermano de a pie no ve los datos de la tienda', 'no', deja)
+  // Y que el mayordomo no lo vea por ser titular, que invalidaría lo anterior.
+  caso('y el mayordomo no es titular', '0',
+    numero(await sql(`select count(*) from titulares where auth_user_id = ${U}`)))
 }

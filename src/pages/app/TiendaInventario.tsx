@@ -8,7 +8,7 @@
  * NO ES «Enseres y patrimonio». Aquel es la cruz de guía y los faldones: cosas
  * que se inventarían, se aseguran y no se venden nunca. Esto es género.
  */
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import AvisoFalta from '../../components/AvisoFalta'
 import { requisito } from '../../lib/requisitos'
@@ -33,7 +33,7 @@ const MOTIVO: Record<string, string> = {
 type Filtro = 'todos' | 'reponer' | 'agotados' | 'web'
 
 export default function TiendaInventario() {
-  const [productos, setProductos] = useProductos()
+  const [productosDeLaBase, setProductos] = useProductos()
   const [query, setQuery] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [fichaOpen, setFichaOpen] = useState(false)
@@ -43,9 +43,27 @@ export default function TiendaInventario() {
 
   // El artículo abierto en el panel de movimientos, con su historial.
   const [moviendo, setMoviendo] = useState<Producto | null>(null)
-  const [historial, setHistorial] = useState<MovimientoStock[]>([])
+  // `null` = todavía no se ha traído (o no se ha podido). Enseñar el del
+  // artículo anterior bajo el título de otro es peor que no enseñar nada.
+  const [historial, setHistorial] = useState<MovimientoStock[] | null>(null)
 
   const reqBase = requisito('supabase')
+
+  /*
+   * El stock que la base ha devuelto al mover algo, encima de lo que trajo la
+   * consulta. Vive aparte de `productos` a propósito: ver el comentario en
+   * `mover()`.
+   */
+  const [stockMovido, setStockMovido] = useState<Record<string, { valor: number; base: number }>>({})
+  const productos = useMemo(
+    () => productosDeLaBase.map((p) => {
+      const m = stockMovido[p.id]
+      // Solo mientras la base siga diciendo lo mismo que decía cuando se movió:
+      // si trae existencias nuevas, mandan las suyas y esto se aparta.
+      return m && m.base === p.stock ? { ...p, stock: m.valor } : p
+    }),
+    [productosDeLaBase, stockMovido],
+  )
 
   const visibles = useMemo(() => {
     const q = llano(query.trim())
@@ -126,16 +144,49 @@ export default function TiendaInventario() {
     setTimeout(() => setHecho(''), 4000)
   }
 
+  /*
+   * EL HISTORIAL SE VACÍA AL ABRIR, y la petición lleva su número de vez.
+   *
+   * Sin lo primero, abrir «Movimientos» de la Medalla después de haber mirado
+   * los de la Camiseta enseñaba, bajo el título «Almacén de Medalla», los
+   * movimientos de la camiseta hasta que llegara la respuesta. Con la conexión
+   * lenta se leen tranquilamente y se dan por buenos.
+   *
+   * Y sin lo segundo hay una carrera: si la consulta de la camiseta va lenta y
+   * la de la medalla llega antes, la de la camiseta resuelve después y pisa el
+   * estado — dejando el panel de la medalla con el historial de la camiseta
+   * para siempre. El contador dice cuál es la petición vigente; las que
+   * lleguen tarde se descartan.
+   */
+  const vezHistorial = useRef(0)
+
   async function abrirMovimientos(p: Producto) {
+    const mia = ++vezHistorial.current
     setMoviendo(p)
     setError('')
-    setHistorial(await historialDeStock(p.id))
+    setHistorial(null)
+    const h = await historialDeStock(p.id)
+    if (vezHistorial.current === mia) setHistorial(h)
   }
+
+  /*
+   * LA GUARDA CONTRA EL DOBLE CLIC va en un `useRef` y no en el estado.
+   *
+   * El estado no cambia hasta el siguiente pintado, así que dos clics dentro
+   * del mismo instante —o dos Enter en el campo de unidades, que envía el
+   * formulario— leerían los dos el mismo `false` y entrarían los dos. Y aquí
+   * eso no es un botón que parpadea: son DOS MOVIMIENTOS REALES de almacén.
+   * Cincuenta camisetas que entran se convierten en cien, con dos apuntes en
+   * el historial y nada que lo señale salvo el número.
+   */
+  const moviendoRef = useRef(false)
+  const [apuntando, setApuntando] = useState(false)
 
   async function mover(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!moviendo) return
-    const d = new FormData(e.currentTarget)
+    if (!moviendo || moviendoRef.current) return
+    const formulario = e.currentTarget
+    const d = new FormData(formulario)
     const tipo = String(d.get('tipo') ?? 'compra') as 'compra' | 'rotura' | 'ajuste'
     const cantidad = Math.round(Number(d.get('cantidad') ?? 0))
     if (!Number.isFinite(cantidad) || cantidad === 0) {
@@ -145,19 +196,47 @@ export default function TiendaInventario() {
     // Una entrada suma; lo roto resta. El ajuste va con el signo que se teclee,
     // porque un recuento puede salir por arriba o por abajo.
     const conSigno = tipo === 'compra' ? Math.abs(cantidad) : tipo === 'rotura' ? -Math.abs(cantidad) : cantidad
-    const r = await moverStock(moviendo.id, tipo, conSigno, String(d.get('motivo') ?? '').trim())
-    if (!r.ok) {
-      // El mensaje de la base va TAL CUAL: dice «solo hay 2» y ese número es
-      // justo lo que hace falta saber.
-      setError(r.error)
-      return
+    moviendoRef.current = true
+    setApuntando(true)
+    try {
+      const r = await moverStock(moviendo.id, tipo, conSigno, String(d.get('motivo') ?? '').trim())
+      if (!r.ok) {
+        // El mensaje de la base va TAL CUAL: dice «solo hay 2» y ese número es
+        // justo lo que hace falta saber.
+        setError(r.error)
+        return
+      }
+      /*
+       * El stock nuevo se guarda APARTE y no en `productos`. `setProductos`
+       * sincroniza con la base, y bajar el stock aquí marcaba la fila como
+       * cambiada: se mandaba un `update` de la ficha entera —código, nombre,
+       * precio, coste, IVA— con lo que este navegador tuviera en memoria. Si
+       * otro había cambiado el precio entretanto, se lo pisaba con el viejo.
+       *
+       * `stock` no viaja nunca desde el navegador (ver `productoToRow`): lo
+       * mueve la base, y aquí solo se refleja lo que ella acaba de decir.
+       */
+      setStockMovido((prev) => ({
+        ...prev,
+        [moviendo.id]: {
+          valor: r.stock,
+          base: productosDeLaBase.find((p) => p.id === moviendo.id)?.stock ?? r.stock,
+        },
+      }))
+      setMoviendo((m) => (m ? { ...m, stock: r.stock } : m))
+      // Y se limpia el formulario: dejarlo relleno con «50» invita a volver a
+      // darle, que es la otra forma de apuntar la misma entrada dos veces.
+      formulario.reset()
+      const mia = ++vezHistorial.current
+      const h = await historialDeStock(moviendo.id)
+      if (vezHistorial.current === mia) setHistorial(h)
+      setError('')
+      setHecho(`Quedan ${r.stock} de «${moviendo.nombre}».`)
+      setTimeout(() => setHecho(''), 4000)
+    } finally {
+      moviendoRef.current = false
+      setApuntando(false)
     }
-    setProductos((prev) => prev.map((p) => (p.id === moviendo.id ? { ...p, stock: r.stock } : p)))
-    setMoviendo((m) => (m ? { ...m, stock: r.stock } : m))
-    setHistorial(await historialDeStock(moviendo.id))
-    setError('')
-    setHecho(`Quedan ${r.stock} de «${moviendo.nombre}».`)
-    setTimeout(() => setHecho(''), 4000)
   }
 
   return (
@@ -410,11 +489,18 @@ export default function TiendaInventario() {
               <label htmlFor="motivo">Motivo</label>
               <input id="motivo" name="motivo" placeholder="Pedido a la imprenta, se cayó la caja…" />
             </div>
-            <button className="btn btn-primary" type="submit">Apuntar</button>
+            <button className="btn btn-primary" type="submit" disabled={apuntando}>
+              {apuntando ? 'Apuntando…' : 'Apuntar'}
+            </button>
           </form>
 
           <h3>Lo que ha pasado con este artículo</h3>
-          {historial.length === 0 ? (
+          {historial === null ? (
+            <p className="form-hint">
+              Trayendo lo que ha pasado con este artículo… Si se queda así, es que no se ha podido
+              preguntar: mira el aviso de arriba.
+            </p>
+          ) : historial.length === 0 ? (
             <p className="form-hint">Todavía no se ha movido nada.</p>
           ) : (
             <ul className="portal__avisos">

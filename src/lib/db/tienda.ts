@@ -6,8 +6,8 @@
  * y el total de la cesta sale disparatado sin un solo error por medio.
  */
 import type {
-  CanalVenta, Descuento, EstadoVenta, LineaVenta, MovimientoStock, Producto,
-  TipoMovimientoStock, Venta,
+  ArticuloWeb, CanalVenta, Descuento, EstadoReserva, EstadoVenta, LineaReserva,
+  LineaVenta, MovimientoStock, Producto, Reserva, TipoMovimientoStock, Venta,
 } from '../../data/tienda'
 
 /** Un `numeric` que viaja como texto, convertido sin sorpresas. */
@@ -131,5 +131,55 @@ export function rowToMovimientoStock(r: Record<string, unknown>): MovimientoStoc
     ventaId: (r.venta_id as string | null) ?? undefined,
     quien: (r.quien as string | null) ?? undefined,
     fecha: (r.fecha as string) ?? '',
+  }
+}
+
+/**
+ * LAS RESERVAS DE LA WEB. También se leen y no se escriben desde aquí.
+ *
+ * Una reserva la crea `crear_reserva_web()` —que es lo único que puede llamar
+ * quien entra en la web sin cuenta— y la cierran `entregar_reserva()` o
+ * `soltar_reserva()`. Por eso no hay `reservaToRow`: escribirla a mano desde
+ * el navegador sería dejar que el precio lo pusiera el que compra.
+ */
+export function rowToReserva(r: Record<string, unknown>): Reserva {
+  return {
+    id: r.id as string,
+    referencia: (r.referencia as string) ?? '',
+    nombre: (r.nombre as string) ?? '',
+    email: (r.email as string) ?? '',
+    telefono: (r.telefono as string) ?? '',
+    notas: (r.notas as string) ?? '',
+    estado: ((r.estado as string) ?? 'pendiente') as EstadoReserva,
+    recogerAntesDe: (r.recoger_antes_de as string) ?? '',
+    total: num(r.total),
+    ventaId: (r.venta_id as string | null) ?? undefined,
+    creadoEn: (r.creado_en as string) ?? '',
+  }
+}
+
+export function rowToLineaReserva(r: Record<string, unknown>): LineaReserva {
+  return {
+    id: r.id as string,
+    reservaId: r.reserva_id as string,
+    productoId: (r.producto_id as string | null) ?? undefined,
+    codigo: (r.codigo as string) ?? '',
+    nombre: (r.nombre as string) ?? '',
+    cantidad: num(r.cantidad),
+    precioUnitario: num(r.precio_unitario),
+  }
+}
+
+/** Lo que devuelve `catalogo_web()`: la ficha sin el coste ni el stock real. */
+export function rowToArticuloWeb(r: Record<string, unknown>): ArticuloWeb {
+  return {
+    id: r.id as string,
+    codigo: (r.codigo as string) ?? '',
+    nombre: (r.nombre as string) ?? '',
+    descripcion: (r.descripcion as string) ?? '',
+    precio: num(r.precio),
+    iva: num(r.iva),
+    fotoUrl: (r.foto_url as string | null) ?? undefined,
+    disponible: num(r.disponible),
   }
 }

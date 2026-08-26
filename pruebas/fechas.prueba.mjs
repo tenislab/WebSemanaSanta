@@ -96,6 +96,23 @@ async function comprobar({ caso }) {
       if (/toISOString\(\)\.slice\(0,\s*10\)|toISOString\(\)\.split\('T'\)\[0\]/.test(codigo)) {
         culpables.push(ruta.replace('src/', ''))
       }
+      /*
+       * Y LA OTRA FORMA DE ESCRIBIR EL MISMO FALLO, que se coló en la factura
+       * de la tienda: cortar los diez primeros caracteres de una fecha que
+       * viene de la base.
+       *
+       * Las columnas `timestamptz` llegan por la red en UTC
+       * («2026-08-26T22:30:00+00:00»), así que `venta.fecha.slice(0, 10)` da
+       * EL DÍA UTC igual que `toISOString()`. Una venta cobrada a las 00:30
+       * del 27 se imprimía con fecha de emisión del 26.
+       *
+       * Se busca solo sobre nombres que sean claramente una fecha —`fecha`,
+       * `creado…`, `cuando`, `…_en`— para no señalar cualquier `slice(0, 10)`
+       * que corte un texto, que es una cosa legítima y frecuente.
+       */
+      if (/\b\w*(fecha|creado|cuando|actualizado|_en)\w*\s*(\?\?\s*'')?\)?\.slice\(0,\s*10\)/i.test(codigo)) {
+        culpables.push(`${ruta.replace('src/', '')} (corta una fecha de la base en UTC)`)
+      }
     }
   }
   await mirar('src')

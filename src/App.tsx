@@ -118,6 +118,9 @@ const cargarTesoreria = conReintento(() => import('./pages/app/Tesoreria'))
 const cargarInventario = conReintento(() => import('./pages/app/Inventario'))
 const cargarTiendaCaja = conReintento(() => import('./pages/app/TiendaCaja'))
 const cargarTiendaInventario = conReintento(() => import('./pages/app/TiendaInventario'))
+const cargarTiendaReservas = conReintento(() => import('./pages/app/TiendaReservas'))
+const cargarTiendaVentas = conReintento(() => import('./pages/app/TiendaVentas'))
+const cargarTiendaDatos = conReintento(() => import('./pages/app/TiendaDatos'))
 const cargarArchivo = conReintento(() => import('./pages/app/Archivo'))
 const cargarEventos = conReintento(() => import('./pages/app/Eventos'))
 const cargarComunicados = conReintento(() => import('./pages/app/Comunicados'))
@@ -138,6 +141,9 @@ const Tesoreria = lazy(cargarTesoreria)
 const Inventario = lazy(cargarInventario)
 const TiendaCaja = lazy(cargarTiendaCaja)
 const TiendaInventario = lazy(cargarTiendaInventario)
+const TiendaReservas = lazy(cargarTiendaReservas)
+const TiendaVentas = lazy(cargarTiendaVentas)
+const TiendaDatos = lazy(cargarTiendaDatos)
 const Archivo = lazy(cargarArchivo)
 const Eventos = lazy(cargarEventos)
 const Comunicados = lazy(cargarComunicados)
@@ -169,6 +175,9 @@ const PRECARGA = [
   cargarInventario,
   cargarTiendaCaja,
   cargarTiendaInventario,
+  cargarTiendaReservas,
+  cargarTiendaVentas,
+  cargarTiendaDatos,
   cargarArchivo,
   cargarPersonal,
   cargarConfiguracion,
@@ -319,6 +328,9 @@ export default function App() {
         <Route path="inventario" element={<Inventario />} />
         <Route path="tienda" element={<TiendaCaja />} />
         <Route path="tienda/almacen" element={<TiendaInventario />} />
+        <Route path="tienda/reservas" element={<TiendaReservas />} />
+        <Route path="tienda/facturas" element={<TiendaVentas />} />
+        <Route path="tienda/datos" element={<TiendaDatos />} />
         <Route path="archivo" element={<Archivo />} />
         <Route path="eventos" element={<Eventos />} />
         <Route path="comunicados" element={<Comunicados />} />

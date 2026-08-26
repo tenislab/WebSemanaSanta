@@ -53,6 +53,23 @@
   --glass-bloom-1: rgba(214, 188, 138, 0.18);
   --glass-bloom-2: rgba(140, 42, 54, 0.1);
 
+  /*
+   * LOS COLORES DE LAS GRÁFICAS DE LA TIENDA.
+   *
+   * Burdeos y oro de la marca, pero AJUSTADOS y comprobados, no copiados de
+   * --morado-500 y --oro-500 tal cual: el oro de marca (#c5a059) se queda por
+   * debajo del suelo de saturación y se lee como gris en una barra pequeña.
+   * Estos dos pasan las cinco comprobaciones que importan sobre fondo claro
+   * —banda de luminosidad, saturación, separación en daltonismo (ΔE 19,4 en
+   * deuteranopía), suelo de visión normal (22,7) y contraste contra el fondo—.
+   *
+   * Aun así las gráficas nunca se fían del color solo: los dos canales llevan
+   * su nombre escrito al lado.
+   */
+  --grafica-mostrador: #8c2a36;
+  --grafica-internet: #a8802c;
+  --grafica-rejilla: rgba(61, 15, 22, 0.12);
+
   --radius: 12px;
   --radius-sm: 8px;
   --maxw: 1180px;
@@ -115,6 +132,16 @@
   --glass-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.65);
   --glass-bloom-1: rgba(214, 188, 138, 0.08);
   --glass-bloom-2: rgba(140, 42, 54, 0.16);
+
+  /*
+   * NO son los de arriba aclarados: se eligieron aparte y se comprobaron
+   * contra el fondo oscuro. Un burdeos que funciona sobre blanco se hunde
+   * sobre carbón, y un oro que sobre blanco se lee bien, sobre negro se
+   * dispara de luminosidad y deja de estar en la banda.
+   */
+  --grafica-mostrador: #c05867;
+  --grafica-internet: #a8862f;
+  --grafica-rejilla: rgba(214, 188, 138, 0.14);
 }
 
 :root[data-theme='light'] {
@@ -2002,6 +2029,146 @@ span.logo-mark img { width: 100%; height: 100%; }
 .recibo-doc__iban--warn { color: var(--warn-fg); font-variant-numeric: normal; }
 .recibo-doc__note { text-align: center; font-size: 0.74rem; color: var(--text-muted); margin: 0; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
 
+/* =========================================================================
+   Gráficas de la tienda
+   ========================================================================= */
+.grafica {
+  margin: 0 0 1.4rem; padding: 1.2rem 1.3rem;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raised);
+  /* Sin esto, una tabla ancha dentro de «Ver los números» empuja la rejilla de
+     la página y saca la barra horizontal del navegador. */
+  min-width: 0;
+}
+.grafica__titulo { font-weight: 700; color: var(--text); margin-bottom: 0.9rem; }
+
+.grafica__leyenda {
+  display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; list-style: none; padding: 0;
+  margin: -0.4rem 0 0.9rem; font-size: 0.84rem; color: var(--text-muted);
+}
+.grafica__leyenda li { display: flex; align-items: center; gap: 0.45rem; }
+.grafica__punto { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+/* Columnas por mes. En CSS y no en SVG: ver el comentario del componente. */
+.grafica__columnas { position: relative; display: flex; gap: 0.6rem; }
+.grafica__eje-y {
+  display: flex; flex-direction: column; justify-content: space-between;
+  /* La altura del área de dibujo menos la fila de los meses, para que el 0
+     caiga justo en la línea de base y no un renglón más abajo. */
+  height: 190px; padding-bottom: 22px; flex: none;
+  font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  text-align: right; min-width: 2.2rem;
+}
+.grafica__plot { position: relative; flex: 1; min-width: 0; display: flex; align-items: flex-end; height: 190px; }
+/* Rejilla y eje son PAPEL, no dato: un paso por detrás del fondo, de un píxel
+   y continuos — los discontinuos rayan la gráfica y compiten con los datos. */
+.grafica__rejilla-html {
+  position: absolute; inset: 0 0 22px 0; display: flex; flex-direction: column;
+  justify-content: space-between; pointer-events: none;
+}
+.grafica__rejilla-html span { display: block; height: 1px; background: var(--grafica-rejilla); }
+
+.grafica__banda {
+  flex: 1; min-width: 0; height: 100%;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  gap: 4px; border-radius: var(--radius-sm); cursor: default;
+}
+.grafica__banda--encima, .grafica__banda:focus-visible { background: var(--bg-sunken); outline: none; }
+.grafica__pila {
+  /* La columna nunca llena su banda: el aire de los lados es lo que separa
+     unas de otras, sin pintar ni un borde. */
+  width: min(24px, 55%); height: calc(100% - 22px);
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
+}
+.grafica__tramo { display: block; min-height: 1px; }
+.grafica__tramo--cima { border-radius: 4px 4px 0 0; }
+.grafica__mes {
+  font-size: 0.72rem; color: var(--text-muted); height: 18px; line-height: 18px;
+  overflow: hidden; text-overflow: clip;
+}
+
+.grafica__globo {
+  position: absolute; top: 0; right: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 0.1rem;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem; font-size: 0.84rem; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.grafica__barras { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+/* Tres columnas: nombre, carril y valor. El carril se lleva lo que sobre y las
+   otras dos se quedan justas, que es como se lee un ranking. */
+.grafica__barras li {
+  display: grid; grid-template-columns: minmax(6rem, 12rem) 1fr auto;
+  gap: 0.8rem; align-items: center; font-size: 0.88rem;
+}
+.grafica__barra-nombre { min-width: 0; overflow-wrap: anywhere; }
+.grafica__barra-nombre small { color: var(--text-muted); }
+.grafica__barra-carril { display: block; min-width: 0; }
+.grafica__barra { display: block; height: 14px; border-radius: 0 4px 4px 0; }
+.grafica__barra-valor { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+
+.grafica__reparto { display: flex; gap: 2px; height: 26px; border-radius: 6px; overflow: hidden; }
+.grafica__reparto > span { display: block; }
+.grafica__leyenda--reparto { margin: 0.9rem 0 0; font-size: 0.88rem; }
+.grafica__leyenda--reparto b { color: var(--text); font-variant-numeric: tabular-nums; }
+.grafica__leyenda--reparto small { color: var(--text-muted); }
+
+.grafica__tabla { margin-top: 1rem; }
+.grafica__tabla summary { cursor: pointer; font-size: 0.84rem; color: var(--text-muted); }
+.grafica__tabla .table-card { margin-top: 0.7rem; }
+
+.datos-tienda__par { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1.2rem; }
+/* Y que las dos celdas puedan encogerse: sin esto, un nombre de artículo largo
+   estira su columna y la rejilla se sale de la pantalla. */
+.datos-tienda__par > * { min-width: 0; }
+
+@media (max-width: 720px) {
+  /* En el móvil, el nombre y el importe comparten fila y la barra baja
+     debajo: con tres columnas en 390 px la barra se queda en veinte píxeles y
+     no dice nada. El `order` la manda al final para que no se cuele entre el
+     nombre y su importe. */
+  .grafica__barras li { grid-template-columns: 1fr auto; }
+  .grafica__barra-carril { grid-column: 1 / -1; order: 1; }
+  .grafica__barras li { row-gap: 0.35rem; }
+}
+
+/* ---- Factura de la tienda ---- */
+/* Cinco columnas en vez de dos: la de artículo se lleva lo que sobre y las de
+   números se quedan justas, que es como se lee una factura. */
+.factura-doc__table th:not(:first-child),
+.factura-doc__table td:not(:first-child) { text-align: right; white-space: nowrap; }
+.factura-doc__table td { vertical-align: top; padding: 0.5rem 0 0; }
+/* Aire ENTRE columnas. Sin esto, «2» y «15,00 €» se leían pegados —«215,00 €»—
+   y la columna de uds. parecía parte del precio. Al primero no se le pone,
+   que es el que tiene que llevarse el ancho que sobre. */
+.factura-doc__table th + th, .factura-doc__table td + td { padding-left: 1.1rem; }
+/* Y la de artículo se queda con el resto: es la única que puede partir. */
+.factura-doc__table th:first-child, .factura-doc__table td:first-child { width: 100%; }
+.factura-doc__cod { color: var(--text-muted); font-weight: 400; }
+/* La tarifa tachada, al lado de lo que se cobró de verdad: es lo que explica
+   por qué se paga menos de lo que pone en la etiqueta. */
+.factura-doc__tarifa { display: block; font-size: 0.78rem; color: var(--text-muted); }
+
+/* El desglose de IVA va en su propia tabla, un punto más pequeño y con fondo:
+   se lee como un resumen y no como más artículos. */
+.factura-doc__iva { background: var(--bg); border-radius: var(--radius); }
+.factura-doc__iva th, .factura-doc__iva td { padding: 0.45rem 0.7rem; font-size: 0.86rem; }
+.factura-doc__iva th:not(:first-child), .factura-doc__iva td:not(:first-child) { text-align: right; }
+.factura-doc__iva td { font-variant-numeric: tabular-nums; }
+
+.factura-doc__aviso { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+/* «ANULADA» tiene que verse desde el otro lado de la mesa: impresa, es lo
+   único que distingue esta hoja de una factura buena. */
+.factura-doc__anulada {
+  margin: 0; padding: 0.6rem 0.9rem; border: 2px solid var(--err-fg);
+  border-radius: var(--radius); color: var(--err-fg);
+  font-weight: 700; letter-spacing: 0.04em; text-align: center;
+}
+.factura-doc__descuadre {
+  margin: 0; padding: 0.6rem 0.9rem; border-radius: var(--radius);
+  background: rgba(206, 86, 86, 0.18); color: var(--err-fg); font-weight: 600;
+}
+
 .estado-cuentas__seccion {
   margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em;
   color: var(--gold); text-transform: uppercase;
@@ -2226,6 +2393,19 @@ span.logo-mark img { width: 100%; height: 100%; }
   .print-doc .pill { border: 1px solid #999 !important; }
   /* El QR ha de imprimirse tal cual para poder escanearlo. */
   .print-doc img { filter: none !important; }
+
+  /* «ANULADA» tiene que seguir gritando EN PAPEL. En pantalla es roja, pero
+     al imprimir todo pasa a tinta negra y los bordes a gris claro: sin esto,
+     el aviso quedaba en un recuadro tenue y una factura anulada impresa era
+     indistinguible de una buena a un metro de distancia. */
+  .print-doc .factura-doc__anulada {
+    border: 2pt solid #000 !important; font-weight: 700;
+  }
+  .print-doc .factura-doc__descuadre { border: 1.5pt solid #000 !important; font-weight: 700; }
+
+  /* Y el desglose de IVA se separa con líneas, ya que su fondo no se imprime. */
+  .print-doc .factura-doc__iva { border: 0.6pt solid #999 !important; }
+  .print-doc .factura-doc__iva td { border-top: 0.4pt solid #ddd !important; }
 
   /* Papeleta en versión «las dos»: el contenedor es el que sale del flujo, y
      dentro cada versión se apila con salto de página (si fueran las dos
@@ -4365,6 +4545,18 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .caja__linea-mandos label { display: flex; flex-direction: column; gap: 0.15rem; }
 .caja__linea-mandos input { width: 5.5rem; }
 .caja__linea-mandos .icon-btn { margin-left: auto; }
+/* ---- Reservas de la web ---- */
+.reserva__total {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 1.15rem; font-variant-numeric: tabular-nums;
+  padding-top: 0.6rem; border-top: 1px solid var(--line);
+}
+/* Una fila de botones que SE ENVUELVE en vez de estrecharse: «Cobrar y
+   entregar 1.240,00 €» y «No vino: soltar» no caben juntos en el móvil, y
+   apretados se pulsa el que no es. */
+.fila-botones { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.fila-botones .btn { flex: 0 1 auto; }
+
 .caja__articulos {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
   gap: 0.7rem; margin-top: 0.9rem;
@@ -6777,6 +6969,83 @@ html:has(.sitio) { scroll-behavior: smooth; }
   font-variant-numeric: tabular-nums; margin-bottom: 1.2rem;
 }
 .sitio__loteria-cerrada { color: var(--sitio-muted); font-style: italic; }
+
+/* ---- Tienda ---- */
+/* La rejilla se apoya en `auto-fill` y no en `auto-fit`: con dos artículos,
+   `auto-fit` los estira a media pantalla cada uno y una camiseta de 15 € queda
+   con una ficha del tamaño de un cartel. */
+.sitio__tienda-lista {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1.2rem; margin: 0 auto; max-width: var(--sitio-ancho);
+  list-style: none; padding: 0; text-align: left;
+}
+.sitio__articulo {
+  border: 1px solid var(--sitio-linea); border-radius: var(--sitio-radio);
+  background: var(--sitio-bg2); overflow: hidden;
+  display: flex; flex-direction: column; gap: 0.6rem;
+  /* Sin esto la celda no baja de su contenido mínimo y un nombre largo de
+     artículo estira la rejilla hasta sacar la página de la pantalla. */
+  min-width: 0;
+}
+.sitio__articulo img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.sitio__articulo-datos { display: flex; flex-direction: column; gap: 0.3rem; padding: 0 1rem; }
+/* Sin foto no hay nada que separe el título del borde de la tarjeta: el
+   nombre del artículo quedaba pegado arriba. La foto ya trae su propio
+   espacio, así que esto solo entra cuando no la hay. */
+.sitio__articulo-datos:first-child { padding-top: 1rem; }
+.sitio__articulo-datos h3 {
+  font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto); font-size: 1.05rem;
+}
+.sitio__articulo-datos p { font-size: 0.88rem; color: var(--sitio-muted); margin: 0; }
+.sitio__articulo-precio {
+  font-size: 1.1rem !important; font-weight: 700; color: var(--sitio-fg) !important;
+  font-variant-numeric: tabular-nums;
+}
+/* «Queda 1» va en el color de marca: es lo que decide si se pasa hoy. */
+.sitio__articulo-quedan { color: var(--sitio-color2-texto) !important; font-weight: 700; font-size: 0.8rem !important; }
+/* `margin-top: auto` los pega abajo: en una fila de tarjetas, unas con
+   descripción larga y otras sin ninguna, los botones quedaban a tres alturas
+   distintas y la rejilla parecía rota. */
+.sitio__articulo .sitio-btn { margin: auto 1rem 1rem; align-self: flex-start; }
+.sitio__articulo--agotado img { filter: grayscale(1); opacity: 0.55; }
+/* Y lo agotado se apaga entero, no solo su foto: el que no la tiene se veía
+   igual de vivo que el que sí queda. */
+.sitio__articulo--agotado .sitio__articulo-datos { opacity: 0.6; }
+.sitio__articulo-fin {
+  margin: auto 1rem 1rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--sitio-muted); font-weight: 700;
+}
+
+.sitio__cesta {
+  max-width: 46rem; margin: 1.8rem auto 0; text-align: left;
+  border: 1px solid var(--sitio-linea); border-radius: var(--sitio-radio);
+  padding: 1.2rem 1.4rem; background: var(--sitio-bg2);
+}
+.sitio__cesta h3 { font-family: var(--sitio-fuente-titulos); color: var(--sitio-color-texto); font-size: 1.1rem; }
+.sitio__cesta ul { list-style: none; padding: 0; margin: 0.8rem 0; }
+/* Una LISTA y no una tabla: en el móvil, una tabla de cuatro columnas con
+   importes se sale o corta el precio, que es la columna que importa. */
+.sitio__cesta li {
+  display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.7rem; align-items: center;
+  padding: 0.5rem 0; border-bottom: 1px solid var(--sitio-linea);
+}
+.sitio__cesta-nombre { min-width: 0; overflow-wrap: anywhere; }
+.sitio__cesta-cant, .sitio__cesta-importe { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sitio__cesta-importe { font-weight: 700; }
+.sitio__cesta-quitar {
+  border: 1px solid var(--sitio-linea); background: var(--sitio-bg); color: var(--sitio-fg);
+  border-radius: 999px; width: 1.9rem; height: 1.9rem; font: inherit; font-size: 1.1rem;
+  line-height: 1; cursor: pointer;
+}
+.sitio__cesta-quitar:focus-visible { outline: 2px solid var(--sitio-color2); outline-offset: 1px; }
+.sitio__cesta-total {
+  display: flex; justify-content: space-between; font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+/* Dentro de la cesta el formulario ya está en su caja: ni marco ni fondo otra vez. */
+.sitio__cesta .sitio-form {
+  border: 0; background: none; padding: 0; margin-top: 1.2rem; max-width: none;
+}
 
 /* ---- Formularios ---- */
 .sitio-form {

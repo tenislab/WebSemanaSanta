@@ -174,16 +174,57 @@ export function agotado(p: Pick<Producto, 'stock'>): boolean {
  * de datos hace exactamente lo mismo (ver `registrar_venta`), y tienen que
  * coincidir: si no, el total que enseña la pantalla no sería el que se cobra.
  */
-export function precioDeLinea(
+export function precioDeLineaCent(
   producto: Pick<Producto, 'precio'>,
   descuentoPct: number,
   precioAMano?: number | null,
 ): number {
   if (precioAMano != null && Number.isFinite(precioAMano) && precioAMano >= 0) {
-    return Math.round(precioAMano * 100) / 100
+    return Math.round(precioAMano * 100)
   }
   const pct = Number.isFinite(descuentoPct) ? Math.min(100, Math.max(0, descuentoPct)) : 0
-  return Math.round(producto.precio * (1 - pct / 100) * 100) / 100
+  /*
+   * TODO ENTERO, Y NO ES UNA MANÍA.
+   *
+   * Aquí estaba escrito `Math.round(precio * (1 - pct / 100) * 100) / 100`, que
+   * es la forma natural y NO da lo mismo que el `round(numeric, 2)` de
+   * Postgres. `Math.round` redondea un número binario de coma flotante y
+   * `round(numeric,2)` redondea un decimal exacto, así que en los empates a
+   * medio céntimo se van a lados distintos:
+   *
+   *     1,15 € al 50 %  →  pantalla 0,57 €  ·  base 0,58 €
+   *     1,30 € al  5 %  →  pantalla 1,23 €  ·  base 1,24 €
+   *     5,35 € al 10 %  →  pantalla 4,81 €  ·  base 4,82 €
+   *
+   * Probado contra un Postgres de verdad sobre 35.406 combinaciones de precio
+   * y descuento: 500 discrepaban. Un 1,4 %, que en un besamanos de ciento
+   * veinte ventas son una o dos personas a las que se les dice un precio y se
+   * les cobra otro, y un descuadre de caja al final del día sin causa
+   * aparente.
+   *
+   * `porcentaje` es `numeric(5,2)`, así que el descuento puede traer dos
+   * decimales: se pasa a centésimas de punto y todo se hace con enteros.
+   *
+   *     céntimos = precioCent × (10000 − pctCent) / 10000
+   *
+   * y esa división se redondea a la mitad HACIA ARRIBA, que es lo que hace
+   * `round(numeric)`. El resto y el cociente se sacan sin dividir en coma
+   * flotante para que la cuenta sea exacta hasta el último céntimo.
+   */
+  const precioCent = Math.round(producto.precio * 100)
+  const num = precioCent * (10000 - Math.round(pct * 100))
+  const resto = num % 10000
+  const cociente = (num - resto) / 10000
+  return resto * 2 >= 10000 ? cociente + 1 : cociente
+}
+
+/** Lo mismo, en euros, que es como se enseña. */
+export function precioDeLinea(
+  producto: Pick<Producto, 'precio'>,
+  descuentoPct: number,
+  precioAMano?: number | null,
+): number {
+  return precioDeLineaCent(producto, descuentoPct, precioAMano) / 100
 }
 
 /** Lo que suma una cesta antes de cobrarla, para enseñarlo mientras se teclea. */
@@ -203,8 +244,7 @@ export function totalesDeCesta(
   let costeCent = 0
   let unidades = 0
   for (const l of lineas) {
-    const precio = precioDeLinea(l.producto, descuentoPct, l.precioAMano)
-    const brutoCent = Math.round(precio * 100) * l.cantidad
+    const brutoCent = precioDeLineaCent(l.producto, descuentoPct, l.precioAMano) * l.cantidad
     const bCent = Math.round(brutoCent / (1 + l.producto.iva / 100))
     totalCent += brutoCent
     baseCent += bCent
@@ -255,4 +295,360 @@ export function descuentosPara(
   // de la venta anterior sin darse cuenta.
   if (!esHermano) return []
   return descuentos.filter((d) => leCorresponde(d, etiquetasDelHermano))
+}
+
+
+// ----------------------------------------------------------------------------
+//   LA TIENDA EN LA WEB: RESERVAR Y RECOGER
+// ----------------------------------------------------------------------------
+//
+// Quien entra en la web de la hermandad no compra: APARTA. Paga cuando pasa
+// por la casa hermandad y se lo lleva. El porqué —que el dinero es de la
+// hermandad y no de Gobergo, y que cobrar por internet arrastra obligaciones
+// de comercio electrónico que una hermandad de ochenta camisetas al año no
+// tiene por qué asumir— está entero en `supabase/tienda-web.sql`.
+
+/** En qué anda una reserva. */
+export type EstadoReserva = 'pendiente' | 'entregada' | 'anulada' | 'caducada'
+
+/** Un artículo tal como lo ve quien entra en la web: sin coste y sin stock real. */
+export interface ArticuloWeb {
+  id: string
+  codigo: string
+  nombre: string
+  descripcion: string
+  precio: number
+  iva: number
+  fotoUrl?: string
+  /**
+   * LO QUE SE PUEDE PROMETER, que no es lo que hay en la estantería: es el
+   * stock menos lo que ya está apartado y sin recoger. Enseñar el stock a
+   * secas haría que alguien apartara la última camiseta dos veces.
+   */
+  disponible: number
+}
+
+/** Una línea de la cesta de la web. */
+export interface LineaReservaWeb {
+  articulo: ArticuloWeb
+  cantidad: number
+}
+
+export interface Reserva {
+  id: string
+  referencia: string
+  nombre: string
+  email: string
+  telefono: string
+  notas: string
+  estado: EstadoReserva
+  recogerAntesDe: string
+  total: number
+  ventaId?: string
+  creadoEn: string
+}
+
+export interface LineaReserva {
+  id: string
+  reservaId: string
+  productoId?: string
+  codigo: string
+  nombre: string
+  cantidad: number
+  precioUnitario: number
+}
+
+/**
+ * El total de la cesta de la web.
+ *
+ * En céntimos, como todo lo demás de este archivo: sumando decimales, tres
+ * artículos de 6,10 dan 18,299999999999997 y en pantalla sale «18,3 €».
+ */
+export function totalDeLaCesta(lineas: LineaReservaWeb[]): number {
+  return lineas.reduce((n, l) => n + Math.round(l.articulo.precio * 100) * l.cantidad, 0) / 100
+}
+
+/**
+ * Cuántas unidades más de un artículo caben en la cesta.
+ *
+ * Se mira contra lo que ya hay puesto, no solo contra lo disponible: sin eso,
+ * se pueden añadir de tres en tres hasta pasarse, y el rechazo llega al final,
+ * después de haber escrito el nombre y el teléfono.
+ */
+export function cabenTodavia(articulo: ArticuloWeb, lineas: LineaReservaWeb[]): number {
+  const puestas = lineas.find((l) => l.articulo.id === articulo.id)?.cantidad ?? 0
+  return Math.max(0, articulo.disponible - puestas)
+}
+
+/** Si de un artículo ya no se puede prometer ni una unidad. */
+export function seAgoto(articulo: ArticuloWeb): boolean {
+  return articulo.disponible <= 0
+}
+
+/**
+ * Qué se le puede hacer a una reserva. Solo lo pendiente se toca: una entregada
+ * ya es una venta —y se anula desde la venta, no desde aquí, para que la
+ * factura no se quede en el aire— y una anulada o caducada está cerrada.
+ */
+export function sePuedeEntregar(r: Pick<Reserva, 'estado'>): boolean {
+  return r.estado === 'pendiente'
+}
+
+/**
+ * Si se le ha pasado el plazo de recogida.
+ *
+ * Se comparan CADENAS de fecha («2026-08-26»), no objetos `Date`. Es la misma
+ * razón que llevó a `lib/hoy.ts` a existir: `new Date('2026-08-26')` se
+ * interpreta en UTC y en España da las 2:00 del día 26, así que comparar con
+ * `new Date()` a mediodía del 26 lo daba por vencido con horas de adelanto.
+ */
+export function seLePasoElPlazo(r: Pick<Reserva, 'estado' | 'recogerAntesDe'>, hoy: string): boolean {
+  return r.estado === 'pendiente' && Boolean(r.recogerAntesDe) && r.recogerAntesDe < hoy
+}
+
+
+// ----------------------------------------------------------------------------
+//   LA FACTURA
+// ----------------------------------------------------------------------------
+
+/** Una fila del desglose de IVA: todo lo que va al mismo tipo. */
+export interface TramoIva {
+  /** El porcentaje: 21, 10, 4 o 0. */
+  tipo: number
+  base: number
+  cuota: number
+  total: number
+}
+
+/**
+ * EL DESGLOSE DE IVA DE UNA FACTURA, TIPO A TIPO.
+ *
+ * Una venta puede llevar una camiseta al 21 % y un libro al 4 %, y el artículo
+ * 6 del Reglamento de Facturación pide que en ese caso la factura separe la
+ * base y la cuota DE CADA TIPO. Un total de IVA a secas no vale: quien lo
+ * recibe no puede deducirse nada, y quien lo emite no puede cuadrar el 303.
+ *
+ * SE CALCULA LÍNEA A LÍNEA Y LUEGO SE AGRUPA, y no al revés, aunque agrupar
+ * primero sea más corto. La base la calculó `registrar_venta()` línea a línea
+ * —`round(bruto / (1 + iva/100), 2)` por cada una— y la guardó sumada en
+ * `ventas.base`. Agrupando antes de dividir, los redondeos caen en otro sitio
+ * y el desglose de la factura suma un céntimo distinto de lo que dice la
+ * cabecera. Una factura donde el desglose no cuadra con el total es una
+ * factura mal hecha, y es lo primero que mira una inspección.
+ *
+ * Los tramos salen ordenados de mayor a menor tipo, que es como se leen.
+ */
+export function desgloseIvaPorTipo(lineas: readonly LineaVenta[]): TramoIva[] {
+  // En céntimos enteros hasta el final: es lo que evita el 59,999999999.
+  const porTipo = new Map<number, { base: number; total: number }>()
+  for (const l of lineas) {
+    const brutoCent = Math.round(Math.round(l.precioUnitario * 100) * l.cantidad)
+    const baseCent = Math.round(brutoCent / (1 + l.iva / 100))
+    const acc = porTipo.get(l.iva) ?? { base: 0, total: 0 }
+    acc.base += baseCent
+    acc.total += brutoCent
+    porTipo.set(l.iva, acc)
+  }
+  return [...porTipo.entries()]
+    .map(([tipo, { base, total }]) => ({
+      tipo,
+      base: base / 100,
+      // La cuota, RESTANDO: así base + cuota da el total exacto del tramo
+      // aunque el redondeo de la división haya caído a un lado.
+      cuota: (total - base) / 100,
+      total: total / 100,
+    }))
+    .sort((a, b) => b.tipo - a.tipo)
+}
+
+/**
+ * Lo que suma el desglose, para poder compararlo con lo que dice la cabecera
+ * de la venta. Si no cuadran, la factura lo dice en vez de callarse: ver
+ * `FacturaTienda`.
+ */
+export function sumaDelDesglose(tramos: readonly TramoIva[]): { base: number; cuota: number; total: number } {
+  const cent = (n: number) => Math.round(n * 100)
+  return {
+    base: tramos.reduce((n, t) => n + cent(t.base), 0) / 100,
+    cuota: tramos.reduce((n, t) => n + cent(t.cuota), 0) / 100,
+    total: tramos.reduce((n, t) => n + cent(t.total), 0) / 100,
+  }
+}
+
+/**
+ * Si esta venta lleva algo rebajado sobre la tarifa: un descuento por
+ * colectivo o un precio puesto a mano. En la factura se enseña la tarifa
+ * tachada al lado, que es lo que hace que quien la lee entienda por qué paga
+ * menos que lo que pone en la etiqueta.
+ */
+export function seRebajo(l: Pick<LineaVenta, 'precioUnitario' | 'precioTarifa'>): boolean {
+  return l.precioTarifa > 0 && Math.round(l.precioUnitario * 100) < Math.round(l.precioTarifa * 100)
+}
+
+
+// ----------------------------------------------------------------------------
+//   LOS DATOS DE LA TIENDA
+// ----------------------------------------------------------------------------
+
+/** Un mes de un canal, tal como lo suma `datos_tienda()`. */
+export interface MesDeTienda {
+  mes: number
+  canal: CanalVenta
+  total: number
+  base: number
+  iva: number
+  coste: number
+  ventas: number
+}
+
+export interface ArticuloVendido {
+  codigo: string
+  nombre: string
+  canal: CanalVenta
+  unidades: number
+  importe: number
+  coste: number
+}
+
+export interface FormaDePagoUsada {
+  forma: string
+  canal: CanalVenta
+  total: number
+  ventas: number
+}
+
+export interface DatosTienda {
+  anio: number
+  anios: number[]
+  meses: MesDeTienda[]
+  articulos: ArticuloVendido[]
+  formas: FormaDePagoUsada[]
+}
+
+/** Por qué canal se está mirando. `todos` suma los dos. */
+export type FiltroCanal = 'todos' | 'fisica' | 'online'
+
+function entra(canal: CanalVenta, filtro: FiltroCanal): boolean {
+  return filtro === 'todos' || canal === filtro
+}
+
+/** Las cifras de cabecera de un canal (o de los dos juntos). */
+export interface ResumenTienda {
+  total: number
+  base: number
+  iva: number
+  coste: number
+  margen: number
+  ventas: number
+  /** Lo que se lleva de media cada venta. 0 si no hubo ninguna. */
+  ticketMedio: number
+}
+
+export function resumenDeTienda(meses: readonly MesDeTienda[], filtro: FiltroCanal): ResumenTienda {
+  const cent = (n: number) => Math.round(n * 100)
+  let total = 0; let base = 0; let iva = 0; let coste = 0; let ventas = 0
+  for (const m of meses) {
+    if (!entra(m.canal, filtro)) continue
+    total += cent(m.total); base += cent(m.base); iva += cent(m.iva); coste += cent(m.coste)
+    ventas += m.ventas
+  }
+  return {
+    total: total / 100,
+    base: base / 100,
+    iva: iva / 100,
+    coste: coste / 100,
+    margen: (total - coste) / 100,
+    ventas,
+    // Sin ventas no hay media: dividir daría NaN y la pantalla pondría «NaN €».
+    ticketMedio: ventas > 0 ? Math.round(total / ventas) / 100 : 0,
+  }
+}
+
+/**
+ * Los doce meses, siempre los doce.
+ *
+ * La base solo devuelve los meses que tienen algo, que es lo correcto por la
+ * red. Pero una gráfica a la que le faltan los meses vacíos MIENTE: julio y
+ * agosto sin ventas tienen que verse como el hueco que son, y no desaparecer
+ * dejando junio pegado a septiembre como si fueran consecutivos.
+ */
+export function doceMeses(meses: readonly MesDeTienda[], filtro: FiltroCanal): number[] {
+  const cent = new Array<number>(12).fill(0)
+  for (const m of meses) {
+    if (!entra(m.canal, filtro)) continue
+    if (m.mes < 1 || m.mes > 12) continue
+    cent[m.mes - 1] += Math.round(m.total * 100)
+  }
+  return cent.map((c) => c / 100)
+}
+
+/**
+ * Los artículos que más dejan, juntando canales si hace falta.
+ *
+ * Se corta en `cuantos` y SE DEVUELVE TAMBIÉN LO QUE SE HA DEJADO FUERA, para
+ * que la pantalla pueda decirlo. Una lista de «los más vendidos» que se calla
+ * que hay otros treinta se lee como si fueran todos.
+ */
+export function losQueMasSeVenden(
+  articulos: readonly ArticuloVendido[],
+  filtro: FiltroCanal,
+  cuantos = 8,
+): { lista: ArticuloVendido[]; resto: number; restoImporte: number } {
+  const porCodigo = new Map<string, ArticuloVendido>()
+  for (const a of articulos) {
+    if (!entra(a.canal, filtro)) continue
+    const ya = porCodigo.get(a.codigo)
+    if (!ya) {
+      porCodigo.set(a.codigo, { ...a, canal: 'fisica' })
+      continue
+    }
+    ya.unidades += a.unidades
+    ya.importe = (Math.round(ya.importe * 100) + Math.round(a.importe * 100)) / 100
+    ya.coste = (Math.round(ya.coste * 100) + Math.round(a.coste * 100)) / 100
+  }
+  const todos = [...porCodigo.values()].sort((a, b) => b.importe - a.importe)
+  const lista = todos.slice(0, cuantos)
+  const fuera = todos.slice(cuantos)
+  return {
+    lista,
+    resto: fuera.length,
+    restoImporte: fuera.reduce((n, a) => n + Math.round(a.importe * 100), 0) / 100,
+  }
+}
+
+/** Las formas de pago, juntando canales, de más a menos. */
+export function comoPagaLaGente(
+  formas: readonly FormaDePagoUsada[],
+  filtro: FiltroCanal,
+): FormaDePagoUsada[] {
+  const porForma = new Map<string, FormaDePagoUsada>()
+  for (const f of formas) {
+    if (!entra(f.canal, filtro)) continue
+    const ya = porForma.get(f.forma)
+    if (!ya) { porForma.set(f.forma, { ...f, canal: 'fisica' }); continue }
+    ya.total = (Math.round(ya.total * 100) + Math.round(f.total * 100)) / 100
+    ya.ventas += f.ventas
+  }
+  return [...porForma.values()].sort((a, b) => b.total - a.total)
+}
+
+/**
+ * Un techo redondo para el eje de una gráfica.
+ *
+ * `Math.max` a secas deja el eje en 4.317 €, y entonces lo primero que se lee
+ * de la gráfica es ese número raro en vez de los datos. Se sube al siguiente
+ * escalón limpio —1, 1,5, 2, 2,5, 5 o 10 por la magnitud— que es como se
+ * gradúa un eje para que las líneas de la rejilla caigan en cifras que alguien
+ * pueda decir en voz alta.
+ *
+ * Sin datos devuelve 100 y no 0: un techo de cero haría dividir por cero y
+ * dejaría la gráfica llena de `NaN`.
+ */
+export function techoRedondo(maximo: number): number {
+  if (!Number.isFinite(maximo) || maximo <= 0) return 100
+  const magnitud = 10 ** Math.floor(Math.log10(maximo))
+  for (const paso of [1, 1.5, 2, 2.5, 5, 10]) {
+    if (maximo <= paso * magnitud) return paso * magnitud
+  }
+  return 10 * magnitud
 }

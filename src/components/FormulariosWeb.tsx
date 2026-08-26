@@ -10,6 +10,10 @@ import {
 import { crearSolicitudPrincipal, type SolicitudAlta } from '../lib/solicitudes'
 import { pareceUnCorreo, suscribirse, textoDelConsentimiento } from '../lib/suscriptoresWeb'
 import { nuevoId } from '../lib/supabaseSync'
+import { reservarEnLaWeb, type ResguardoReserva } from '../lib/tienda'
+import type { LineaReservaWeb } from '../data/tienda'
+import { formatCurrency } from '../lib/format'
+import { fechaEs } from '../lib/leerTabla'
 
 /**
  * Los formularios de la web pública: lo único de la web que va en sentido
@@ -643,6 +647,129 @@ export function FormularioLoteria({
         </Campo>
       }
     />
+  )
+}
+
+/* ---------------------------------------------------------------------------
+   La tienda
+   --------------------------------------------------------------------------- */
+
+/**
+ * APARTAR GÉNERO DESDE LA WEB.
+ *
+ * Este no es como los demás. Los otros mandan un mensaje al buzón de la
+ * hermandad y ahí acaba su trabajo; este ESCRIBE EN EL ALMACÉN: al terminar
+ * hay unidades comprometidas que ya no se le pueden prometer a nadie más.
+ *
+ * Por eso no pasa por `enviarMensajeWeb` sino por `crear_reserva_web`, que es
+ * quien comprueba —en la base, no aquí— que el artículo es de esa hermandad,
+ * que está publicado, que queda, y qué precio tiene. De este lado no viaja ni
+ * un importe: quien reserva controla su navegador, y un precio que salga de
+ * aquí es un precio que lo pone el comprador.
+ *
+ * NO SE PIDE EL DNI ni la dirección. Para apartar una camiseta y llamar a
+ * alguien hace falta un nombre y un teléfono o un correo. Lo demás se pide en
+ * el mostrador, si es que hace falta para la factura.
+ */
+export function FormularioTienda({
+  interactivo, textoProteccionDatos, slug, lineas, total, onReservado,
+}: {
+  interactivo: boolean
+  textoProteccionDatos: string
+  slug: string
+  lineas: LineaReservaWeb[]
+  total: number
+  onReservado: () => void
+}) {
+  const base = useId()
+  const [datos, setDatos] = useState({ nombre: '', email: '', telefono: '', mensaje: '' })
+  const [consiente, setConsiente] = useState(false)
+  const [errores, setErrores] = useState<Errores>({})
+  const [enviando, setEnviando] = useState(false)
+  const [resguardo, setResguardo] = useState<ResguardoReserva | null>(null)
+  const [fallo, setFallo] = useState('')
+  const antiRobot = useAntiRobot()
+  const set = (k: keyof typeof datos) => (e: { target: { value: string } }) =>
+    setDatos((d) => ({ ...d, [k]: e.target.value }))
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault()
+    const errs = erroresFormulario({ ...datos, consiente })
+    setErrores(errs)
+    if (Object.keys(errs).length > 0) return
+    if (lineas.length === 0) { setFallo('No has apartado nada.'); return }
+    /*
+     * En la vista previa del panel NO se reserva. Quien está montando su web y
+     * le da al botón para ver cómo queda no puede acabar con género apartado
+     * de verdad y un aviso a la mayordomía.
+     */
+    if (!interactivo || antiRobot.esRobot()) {
+      setResguardo({ referencia: 'R-0000-0', total, recogerAntesDe: '' })
+      return
+    }
+    setEnviando(true)
+    setFallo('')
+    const r = await reservarEnLaWeb({
+      slug,
+      lineas,
+      nombre: datos.nombre.trim(),
+      email: datos.email.trim(),
+      telefono: datos.telefono.trim(),
+      notas: datos.mensaje.trim(),
+    })
+    setEnviando(false)
+    if (r.ok) { setResguardo(r.resguardo); onReservado() }
+    else setFallo(r.error)
+  }
+
+  /*
+   * EL RESGUARDO ES LO ÚNICO QUE SE LLEVA. Quien reserva no tiene cuenta y no
+   * puede volver a consultar nada: la referencia que sale aquí es lo que dirá
+   * en el mostrador. Por eso va grande y con la fecha límite al lado, y no en
+   * un «gracias, hemos recibido tu solicitud».
+   */
+  if (resguardo) {
+    return (
+      <Acuse titulo={`Apartado: ${resguardo.referencia}`}>
+        {datos.nombre.trim() ? `${datos.nombre.split(' ')[0]}, t` : 'T'}e lo guardamos en la casa de
+        hermandad. Se paga al recogerlo, {formatCurrency(resguardo.total)} en total.
+        {resguardo.recogerAntesDe && ` Puedes pasar hasta el ${fechaEs(resguardo.recogerAntesDe)}.`}
+        {' '}Apunta la referencia: es lo que te preguntarán.
+      </Acuse>
+    )
+  }
+
+  return (
+    <form className="sitio-form" onSubmit={enviar} noValidate>
+      <h3>Tus datos para recogerlo</h3>
+      <p className="sitio-form__lead">
+        No se paga por internet: te lo apartamos y lo pagas al recogerlo en la casa de hermandad.
+      </p>
+      <div className="sitio-form__grid">
+        <Campo id={`${base}-nom`} etiqueta="Tu nombre" error={errores.nombre}>
+          {(p) => <input {...p} value={datos.nombre} onChange={set('nombre')} autoComplete="name" />}
+        </Campo>
+        <Campo id={`${base}-mail`} etiqueta="Tu correo" error={errores.email}>
+          {(p) => <input {...p} type="email" value={datos.email} onChange={set('email')} autoComplete="email" />}
+        </Campo>
+        <Campo id={`${base}-tel`} etiqueta="Teléfono (opcional)" error={errores.telefono}>
+          {(p) => <input {...p} type="tel" value={datos.telefono} onChange={set('telefono')} autoComplete="tel" />}
+        </Campo>
+      </div>
+      <Campo id={`${base}-msg`} etiqueta="¿Cuándo pasarás? (opcional)">
+        {(p) => <textarea {...p} rows={2} value={datos.mensaje} onChange={set('mensaje')} />}
+      </Campo>
+      {antiRobot.campo}
+      <Consentimiento
+        id={`${base}-rgpd`} texto={textoProteccionDatos} valor={consiente}
+        onChange={setConsiente} error={errores.consiente}
+      />
+      {fallo && <p className="sitio-campo__error" role="alert">{fallo}</p>}
+      <button type="submit" className="sitio-btn" disabled={enviando || lineas.length === 0}>
+        {enviando ? 'Apartando…' : `Apartar ${formatCurrency(total)}`}
+      </button>
+      {!interactivo && <small className="sitio-form__previa">Vista previa: aquí no se aparta nada.</small>}
+    </form>
   )
 }
 

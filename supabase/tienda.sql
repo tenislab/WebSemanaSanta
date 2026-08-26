@@ -664,8 +664,18 @@ grant execute on function mover_stock(uuid, text, int, text) to authenticated;
 -- se contra-apuntan. No se borran tampoco —un asiento borrado es un descuadre
 -- que nadie puede rastrear—: se mete el contrario al lado, que es como se
 -- corrige en contabilidad.
+--
+-- DEVUELVE SI LA HA ANULADO AHORA (`true`) o si ya lo estaba (`false`). No es
+-- un adorno: la pantalla contesta «anulada, el género ha vuelto al almacén», y
+-- eso solo es verdad la primera vez. Con `void`, anular dos veces —dos cargos
+-- a la vez, o una pantalla que se quedó vieja— decía exactamente lo mismo las
+-- dos, y la segunda era mentira.
+--
+-- `drop` antes de `create` porque cambia el tipo devuelto, y `create or
+-- replace` no lo permite: sin esto, volver a ejecutar el fichero falla aquí.
+drop function if exists anular_venta(uuid, text);
 create or replace function anular_venta(p_venta_id uuid, p_motivo text default '')
-returns void
+returns boolean
 language plpgsql security definer set search_path = public as $$
 declare
   v_hermandad uuid := hermandad_actual();
@@ -683,7 +693,9 @@ begin
     raise exception 'Esa venta no es de esta hermandad.';
   end if;
   if v_venta.estado = 'Anulada' then
-    return;  -- Ya estaba: anular dos veces no puede devolver el género dos veces.
+    -- Ya estaba: anular dos veces no puede devolver el género dos veces. Se
+    -- dice que no se ha hecho nada en vez de callarse.
+    return false;
   end if;
 
   for v_linea in select * from lineas_venta l where l.venta_id = p_venta_id loop
@@ -719,7 +731,145 @@ begin
   update ventas set estado = 'Anulada',
          notas = trim(both ' ' from coalesce(notas, '') || ' · Anulada: ' || coalesce(p_motivo, ''))
    where id = p_venta_id;
+  return true;
 end $$;
 
 revoke all on function anular_venta(uuid, text) from public, anon;
 grant execute on function anular_venta(uuid, text) to authenticated;
+
+
+-- ----------------------------------------------------------------------------
+-- 12. LOS DATOS DE LA TIENDA, YA SUMADOS
+-- ----------------------------------------------------------------------------
+--
+-- La pantalla de datos necesita tres cosas: cuánto se vendió cada mes, qué
+-- artículos se venden más, y cómo paga la gente. Y las tres, separadas por
+-- canal —mostrador e internet— porque esa es justamente la pregunta.
+--
+-- SE SUMA AQUÍ Y NO EN EL NAVEGADOR, y no es una optimización prematura. Para
+-- saber qué artículo se vende más hay que recorrer TODAS las líneas de venta
+-- del ejercicio: una hermandad que vende en el besamanos, en la cuaresma y en
+-- la salida junta varios miles al año. Bajarlas por la red para sumarlas en
+-- una tabla de doce filas es tirar los datos móviles de quien mira esto desde
+-- el teléfono, y encima obligaría a abrir `lineas_venta` entera a una pantalla
+-- que solo necesita totales.
+--
+-- LAS ANULADAS NO CUENTAN, en ninguno de los tres bloques. Una factura anulada
+-- no ha entrado en caja, y su género ha vuelto al almacén: sumarla diría que
+-- se vendió algo que se devolvió.
+--
+-- Devuelve un solo `jsonb` con todo dentro. Una llamada y no cuatro: son
+-- cuatro consultas sobre las mismas dos tablas, y hacerlas por separado
+-- multiplica por cuatro la espera con la conexión de una casa de hermandad.
+create or replace function datos_tienda(p_anio int)
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_hermandad uuid := hermandad_actual();
+  v_desde timestamptz;
+  v_hasta timestamptz;
+begin
+  /*
+   * QUIÉN PUEDE MIRAR ESTO. El inventario porque es su tienda, y la tesorería
+   * porque son sus ingresos. A nadie más: aquí está lo que gana la hermandad
+   * con cada artículo, que es información de junta.
+   */
+  if not (modulo_permitido('inventario') or modulo_permitido('tesoreria')) then
+    raise exception 'No tienes permiso para ver los datos de la tienda.';
+  end if;
+  if v_hermandad is null then
+    raise exception 'No se sabe de qué hermandad son estos datos.';
+  end if;
+
+  /*
+   * EL AÑO SE ACOTA POR FECHAS Y NO CON `extract(year from fecha)`.
+   *
+   * Con `extract` no se puede usar el índice de `ventas (hermandad_id, fecha)`
+   * y hay que leer la tabla entera. Y hay algo peor: `extract` sacaría el año
+   * en la zona horaria de la sesión, que en Supabase es UTC — así que una
+   * venta del 1 de enero a las 00:30 en España caería en el ejercicio
+   * anterior. Con `make_timestamptz(..., 'Europe/Madrid')` los límites son las
+   * medianoches DE AQUÍ, que es lo que entiende quien cierra el ejercicio.
+   */
+  v_desde := make_timestamptz(p_anio, 1, 1, 0, 0, 0, 'Europe/Madrid');
+  v_hasta := make_timestamptz(p_anio + 1, 1, 1, 0, 0, 0, 'Europe/Madrid');
+
+  return jsonb_build_object(
+    'anio', p_anio,
+
+    -- Los años que tienen algo, para el selector. Sin esto la pantalla
+    -- ofrecería años vacíos o se quedaría solo con el actual.
+    'anios', coalesce((
+      select jsonb_agg(distinct a order by a desc) from (
+        select extract(year from (v.fecha at time zone 'Europe/Madrid'))::int as a
+          from ventas v where v.hermandad_id = v_hermandad and v.estado <> 'Anulada'
+      ) t
+    ), '[]'::jsonb),
+
+    -- Mes a mes, por canal. Solo los meses que tienen algo: la pantalla
+    -- rellena los doce, que es donde se sabe cuántos hacen falta.
+    'meses', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'mes', m, 'canal', canal, 'total', total, 'base', base,
+               'iva', iva, 'coste', coste, 'ventas', n) order by m, canal)
+        from (
+          select extract(month from (v.fecha at time zone 'Europe/Madrid'))::int as m,
+                 v.canal,
+                 sum(v.total)::numeric(12, 2) as total,
+                 sum(v.base)::numeric(12, 2) as base,
+                 sum(v.iva_total)::numeric(12, 2) as iva,
+                 sum(v.coste_total)::numeric(12, 2) as coste,
+                 count(*)::int as n
+            from ventas v
+           where v.hermandad_id = v_hermandad and v.estado <> 'Anulada'
+             and v.fecha >= v_desde and v.fecha < v_hasta
+           group by 1, 2
+        ) t
+    ), '[]'::jsonb),
+
+    -- Lo que más se vende. Se agrupa por CÓDIGO y no por artículo, para que un
+    -- artículo borrado del catálogo siga contando: su nombre quedó copiado en
+    -- la línea, que es justo para lo que se copió.
+    'articulos', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'codigo', codigo, 'nombre', nombre, 'canal', canal,
+               'unidades', unidades, 'importe', importe, 'coste', coste)
+             order by importe desc)
+        from (
+          select l.codigo, min(l.nombre) as nombre, v.canal,
+                 sum(l.cantidad)::int as unidades,
+                 sum(round(l.precio_unitario * l.cantidad, 2))::numeric(12, 2) as importe,
+                 sum(round(l.coste_unitario * l.cantidad, 2))::numeric(12, 2) as coste
+            from lineas_venta l
+            join ventas v on v.id = l.venta_id
+           where v.hermandad_id = v_hermandad and v.estado <> 'Anulada'
+             and v.fecha >= v_desde and v.fecha < v_hasta
+           group by l.codigo, v.canal
+        ) t
+    ), '[]'::jsonb),
+
+    -- Y cómo paga la gente, que es lo que decide si hace falta datáfono.
+    'formas', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'forma', forma, 'canal', canal, 'total', total, 'ventas', n)
+             order by total desc)
+        from (
+          select coalesce(nullif(trim(v.forma_pago), ''), 'Sin indicar') as forma,
+                 v.canal,
+                 sum(v.total)::numeric(12, 2) as total,
+                 count(*)::int as n
+            from ventas v
+           where v.hermandad_id = v_hermandad and v.estado <> 'Anulada'
+             and v.fecha >= v_desde and v.fecha < v_hasta
+           group by 1, 2
+        ) t
+    ), '[]'::jsonb)
+  );
+end $$;
+
+revoke all on function datos_tienda(int) from public, anon;
+grant execute on function datos_tienda(int) to authenticated;
+
+comment on function datos_tienda(int) is
+  'Lo vendido en un ejercicio, ya sumado: por mes, por artículo y por forma de pago, '
+  'separado por canal. Sin las anuladas. El año se acota en hora de Madrid.';

@@ -57,6 +57,7 @@ export const PIEZAS_ACTUALIZACION = [
   ['mandatos-sepa.sql', 'El mandato SEPA firmado de verdad, por el propio hermano'],
   ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
   ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
+  ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -192,7 +193,11 @@ select * from (values
   ('La tienda (productos, ventas y stock)',
    (select to_regclass('public.ventas') is not null)),
   ('La venta registra sola sus asientos',
-   (select count(*) > 0 from pg_proc where proname = 'registrar_venta'))
+   (select count(*) > 0 from pg_proc where proname = 'registrar_venta')),
+  ('Reservas de la tienda por internet',
+   (select to_regclass('public.reservas_tienda') is not null)),
+  ('Reservar sin cuenta, desde la web pública',
+   (select count(*) > 0 from pg_proc where proname = 'crear_reserva_web'))
 ) as t(que, esta)
 order by esta, que;
 `

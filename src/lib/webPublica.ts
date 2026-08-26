@@ -41,6 +41,7 @@ export type TipoSeccion =
   | 'boletines'
   | 'donativos'
   | 'loteria'
+  | 'tienda'
   | 'contacto'
 export type TipoRed = 'Instagram' | 'Facebook' | 'X' | 'YouTube' | 'TikTok' | 'Web'
 
@@ -269,6 +270,7 @@ export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string; publico: stri
   boletines: { nombre: 'Boletines', publico: 'Boletines' },
   donativos: { nombre: 'Donativos y colaboración', publico: 'Colabora' },
   loteria: { nombre: 'Lotería', publico: 'Lotería' },
+  tienda: { nombre: 'Tienda (recuerdos)', publico: 'Tienda' },
   contacto: { nombre: 'Contacto', publico: 'Contacto' },
 }
 
@@ -1080,6 +1082,15 @@ export const SECCIONES_POR_DEFECTO: SeccionConfig[] = [
   // datos de cobro reales antes de enseñarlas a nadie.
   { tipo: 'donativos', visible: false },
   { tipo: 'loteria', visible: false },
+  /*
+   * Y la tienda igual, por una razón más: lo que se publique aquí SE PUEDE
+   * APARTAR, y apartar compromete unidades del almacén. Encenderla sin haber
+   * marcado antes qué artículos van a la web dejaría una tienda vacía; y con
+   * el catálogo entero marcado sin querer, se puede reservar género que la
+   * hermandad no pensaba vender por internet. Se enciende a mano, desde
+   * «Diseño», cuando el inventario está puesto.
+   */
+  { tipo: 'tienda', visible: false },
   { tipo: 'contacto', visible: true },
 ]
 

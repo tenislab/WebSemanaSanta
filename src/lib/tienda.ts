@@ -17,17 +17,40 @@
  */
 import { useEffect, useState } from 'react'
 import { useSupabaseTable } from './supabaseSync'
-import { CLAVES_DATOS } from './persistencia'
+import { CLAVES_DATOS, leerPersistido } from './persistencia'
 import { isSupabaseConfigured, supabase } from './supabase'
 import {
-  descuentoToRow, productoToRow, rowToDescuento, rowToLineaVenta,
-  rowToMovimientoStock, rowToProducto, rowToVenta,
+  descuentoToRow, productoToRow, rowToArticuloWeb, rowToDescuento, rowToLineaReserva,
+  rowToLineaVenta, rowToMovimientoStock, rowToProducto, rowToReserva, rowToVenta,
 } from './db/tienda'
 import type {
-  CanalVenta, Descuento, LineaCesta, LineaVenta, MovimientoStock, Producto,
+  ArticuloWeb, CanalVenta, DatosTienda, Descuento, LineaCesta, LineaReserva,
+  LineaReservaWeb, LineaVenta, MovimientoStock, Producto, Reserva,
   TipoMovimientoStock, Venta,
 } from '../data/tienda'
-import { precioDeLinea } from '../data/tienda'
+import { precioDeLineaCent } from '../data/tienda'
+
+/**
+ * QUE NO SE HAYA PODIDO PREGUNTAR NO ES LO MISMO QUE «NO HAY NADA».
+ *
+ * `supabase-js` no lanza: devuelve `{ error }` y sigue. Todas las lecturas de
+ * aquí, ante un fallo, devolvían lista vacía y lo dejaban en la consola —que
+ * en la casa de hermandad no mira nadie—. Y las pantallas de la tienda no
+ * enseñan solo una lista: enseñan CIFRAS calculadas sobre ella. Con la sesión
+ * caducada o el proyecto en pausa, la pantalla de facturas decía «todavía no
+ * se ha vendido nada» y, encima, 0,00 € de base, de IVA y de margen. Un
+ * tesorero que la abra para cuadrar el trimestre lee ceros creíbles.
+ *
+ * Se avisa por la misma señal que usa `useSupabaseTable` y que el marco de la
+ * aplicación ya escucha para pintar la banda roja. Ver `supabaseSync.ts`.
+ */
+function avisarDeFallo(que: string, motivo: string) {
+  console.error(`No se pudo traer «${que}»:`, motivo)
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('cabildo-sync-error', {
+    detail: { tabla: que, fallos: [`no se pudo cargar «${que}»: ${motivo}`] },
+  }))
+}
 
 /** El catálogo de la hermandad. Lo edita quien lleva el inventario. */
 export function useProductos(opciones?: { sinEspejo?: boolean }) {
@@ -69,7 +92,7 @@ export function useVentas(): { ventas: Venta[]; cargando: boolean; recargar: () 
         // `supabase-js` no lanza: devuelve `{ error }` y sigue. Sin mirarlo,
         // un fallo de permisos dejaría la pantalla en «no hay ventas», que es
         // una respuesta muy distinta de «no se ha podido preguntar».
-        if (error) console.error('No se pudieron traer las ventas:', error.message)
+        if (error) avisarDeFallo('ventas', error.message)
         setVentas(error || !data ? [] : (data as Record<string, unknown>[]).map(rowToVenta))
         setCargando(false)
       })
@@ -79,26 +102,61 @@ export function useVentas(): { ventas: Venta[]; cargando: boolean; recargar: () 
   return { ventas, cargando, recargar: () => setVez((v) => v + 1) }
 }
 
-/** Las líneas de una venta, para la factura y para el detalle. */
-export async function lineasDeVenta(ventaId: string): Promise<LineaVenta[]> {
-  if (!isSupabaseConfigured || !supabase) return []
+/**
+ * UNA VENTA SUELTA, por su identificador.
+ *
+ * La usa la caja para enseñar la factura de lo que se acaba de cobrar. Se
+ * trae de la base en vez de armarla con lo que la pantalla ya tiene a mano,
+ * que sería más rápido: los importes de la factura tienen que ser los que
+ * QUEDARON GUARDADOS, no los que la pantalla creía estar cobrando. Si algún
+ * día los dos números dejan de coincidir, quiero que se vea en la factura y
+ * no que la pantalla tape el descuadre enseñando su propia cuenta.
+ */
+export async function traerVenta(ventaId: string): Promise<Venta | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  const { data, error } = await supabase.from('ventas').select('*').eq('id', ventaId).maybeSingle()
+  if (error || !data) {
+    if (error) avisarDeFallo('la venta', error.message)
+    return null
+  }
+  return rowToVenta(data as Record<string, unknown>)
+}
+
+/**
+ * Las líneas de una venta, para la factura y para el detalle.
+ *
+ * DEVUELVE `null` CUANDO NO SE HAN PODIDO TRAER, y no una lista vacía. La
+ * diferencia decide lo que se imprime: sin líneas no hay desglose de IVA, y
+ * una factura sin desglose no le sirve a quien la recibe ni a quien la emite.
+ * Devolviendo `[]` en los dos casos, un fallo de red producía un A4 con
+ * membrete, número de factura, NIF y total, sin un solo artículo y sin base ni
+ * cuota — con toda la pinta de un documento bueno.
+ */
+export async function lineasDeVenta(ventaId: string): Promise<LineaVenta[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null
   const { data, error } = await supabase.from('lineas_venta').select('*').eq('venta_id', ventaId)
   if (error || !data) {
-    if (error) console.error('No se pudieron traer las líneas de la venta:', error.message)
-    return []
+    if (error) avisarDeFallo('líneas de la venta', error.message)
+    return null
   }
   return (data as Record<string, unknown>[]).map(rowToLineaVenta)
 }
 
-/** El historial de un artículo: por qué subió y bajó su stock. */
-export async function historialDeStock(productoId: string): Promise<MovimientoStock[]> {
-  if (!isSupabaseConfigured || !supabase) return []
+/**
+ * El historial de un artículo: por qué subió y bajó su stock.
+ *
+ * `null` cuando no se ha podido preguntar, y lista vacía cuando de verdad no
+ * se ha movido nada. Con `[]` para las dos cosas, un fallo de permisos decía
+ * «todavía no se ha movido nada» sobre un artículo con veinte movimientos.
+ */
+export async function historialDeStock(productoId: string): Promise<MovimientoStock[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null
   const { data, error } = await supabase
     .from('movimientos_stock').select('*').eq('producto_id', productoId)
     .order('fecha', { ascending: false })
   if (error || !data) {
-    if (error) console.error('No se pudo traer el historial del artículo:', error.message)
-    return []
+    if (error) avisarDeFallo('historial del artículo', error.message)
+    return null
   }
   return (data as Record<string, unknown>[]).map(rowToMovimientoStock)
 }
@@ -225,8 +283,14 @@ export async function anularVenta(ventaId: string, motivo = ''): Promise<{ ok: b
     return { ok: false, error: 'Sin base de datos conectada no se puede anular.' }
   }
   try {
-    const { error } = await supabase.rpc('anular_venta', { p_venta_id: ventaId, p_motivo: motivo })
-    return error ? { ok: false, error: error.message } : { ok: true }
+    const { data, error } = await supabase.rpc('anular_venta', { p_venta_id: ventaId, p_motivo: motivo })
+    if (error) return { ok: false, error: error.message }
+    // `false` = ya estaba anulada. No es un error, pero tampoco es lo que la
+    // pantalla iba a anunciar: el género NO ha vuelto al almacén otra vez.
+    if (data !== true) {
+      return { ok: false, error: 'Esa factura ya estaba anulada. Recarga para ver cómo está.' }
+    }
+    return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido anular.' }
   }
@@ -235,7 +299,349 @@ export async function anularVenta(ventaId: string, motivo = ''): Promise<{ ok: b
 /** El total de una cesta tal como lo va a cobrar la base, para enseñarlo al teclear. */
 export function loQueSeVaACobrar(lineas: LineaCesta[], descuentoPct: number): number {
   return lineas.reduce(
-    (n, l) => n + Math.round(precioDeLinea(l.producto, descuentoPct, l.precioAMano) * 100) * l.cantidad,
+    (n, l) => n + precioDeLineaCent(l.producto, descuentoPct, l.precioAMano) * l.cantidad,
     0,
   ) / 100
+}
+
+// ----------------------------------------------------------------------------
+//   LAS RESERVAS DE LA WEB
+// ----------------------------------------------------------------------------
+
+/**
+ * EL CATÁLOGO QUE VE QUIEN ENTRA EN LA WEB, sin cuenta de ninguna clase.
+ *
+ * Va por SLUG y no por identificador porque el slug es lo que hay en la barra
+ * de direcciones. Y no lee la tabla: llama a `catalogo_web()`, que devuelve
+ * uno a uno los campos que ya salen impresos en la página. Leer `productos`
+ * directamente traería el `coste` dentro, y lo que la hermandad paga por cada
+ * medalla no es asunto de quien pasa por la web.
+ */
+export function useCatalogoWeb(slug: string): { articulos: ArticuloWeb[]; cargando: boolean; recargar: () => void } {
+  const [articulos, setArticulos] = useState<ArticuloWeb[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [vez, setVez] = useState(0)
+
+  useEffect(() => {
+    /*
+     * SIN BASE DE DATOS —modo local, y la vista previa del panel de quien
+     * todavía no la ha conectado— el catálogo sale de lo guardado en el
+     * navegador. Sin esto, montar la web en local enseñaba una tienda vacía
+     * aunque hubiera artículos dados de alta, y no había forma de ver cómo
+     * quedaba la sección antes de conectar nada.
+     *
+     * `disponible` es aquí el stock a secas: sin base no hay reservas que
+     * descontar, porque tampoco se puede reservar.
+     */
+    if (!isSupabaseConfigured || !supabase) {
+      setArticulos(
+        leerPersistido<Producto[]>(CLAVES_DATOS.productos, [])
+          .filter((p) => p.activo && p.visibleEnWeb)
+          .map((p) => ({
+            id: p.id,
+            codigo: p.codigo,
+            nombre: p.nombre,
+            descripcion: p.descripcion,
+            precio: p.precio,
+            iva: p.iva,
+            fotoUrl: p.fotoUrl,
+            disponible: p.stock,
+          })),
+      )
+      setCargando(false)
+      return
+    }
+    if (!slug) { setCargando(false); return }
+    let cancelado = false
+    setCargando(true)
+    void supabase.rpc('catalogo_web', { p_slug: slug }).then(({ data, error }) => {
+      if (cancelado) return
+      if (error) avisarDeFallo('catálogo de la tienda', error.message)
+      setArticulos(error || !data ? [] : (data as Record<string, unknown>[]).map(rowToArticuloWeb))
+      setCargando(false)
+    })
+    return () => { cancelado = true }
+  }, [slug, vez])
+
+  return { articulos, cargando, recargar: () => setVez((v) => v + 1) }
+}
+
+/** Lo que se le enseña a quien acaba de apartar algo. */
+export interface ResguardoReserva {
+  referencia: string
+  total: number
+  recogerAntesDe: string
+}
+
+export interface DatosDeReserva {
+  slug: string
+  lineas: LineaReservaWeb[]
+  nombre: string
+  email?: string
+  telefono?: string
+  notas?: string
+}
+
+/**
+ * APARTAR DESDE LA WEB.
+ *
+ * Solo se mandan el artículo y la cantidad. EL PRECIO NO VIAJA: lo pone la
+ * base al escribir la línea. Mandándolo desde aquí, cualquiera con la consola
+ * abierta apartaría la medalla de cuarenta euros por cero — y como quien
+ * reserva no tiene sesión, no hay ninguna otra puerta donde pararlo.
+ *
+ * El mensaje de la base se devuelve tal cual: los que puede dar están escritos
+ * para leerlos en pantalla («De "Medalla" ya solo quedan 2 sin apartar»), y
+ * cambiarlos por un «no se ha podido» sería quitarle a esa persona la única
+ * pista de qué hacer.
+ */
+export async function reservarEnLaWeb(d: DatosDeReserva): Promise<
+  { ok: true; resguardo: ResguardoReserva } | { ok: false; error: string }
+> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { ok: false, error: 'La tienda de esta web todavía no está conectada.' }
+  }
+  if (d.lineas.length === 0) return { ok: false, error: 'No has apartado nada.' }
+  if (!d.nombre.trim()) return { ok: false, error: 'Hace falta un nombre para poder llamarte.' }
+
+  try {
+    const { data: hermandad, error: eh } = await supabase.rpc('hermandad_de_la_tienda', { p_slug: d.slug })
+    if (eh) return { ok: false, error: eh.message }
+    if (!hermandad) return { ok: false, error: 'Esta hermandad no tiene tienda publicada.' }
+
+    const { data, error } = await supabase.rpc('crear_reserva_web', {
+      p_hermandad_id: hermandad,
+      p_lineas: d.lineas.map((l) => ({ producto_id: l.articulo.id, cantidad: l.cantidad })),
+      p_nombre: d.nombre.trim(),
+      p_email: d.email?.trim() ?? '',
+      p_telefono: d.telefono?.trim() ?? '',
+      p_notas: d.notas?.trim() ?? '',
+    })
+    if (error) return { ok: false, error: error.message }
+    const r = (data ?? {}) as Record<string, unknown>
+    const referencia = String(r.referencia ?? '')
+
+    /*
+     * Y SE LE MANDA EL RESGUARDO, sin esperarlo y sin que pueda tumbar nada.
+     * La reserva ya está hecha: si el correo no sale, esta persona sigue
+     * teniendo su referencia en pantalla, y avisarla de que «no se ha podido
+     * mandar un correo» solo la asustaría con algo que no le afecta.
+     *
+     * Aquí NO va la dirección de nadie. Solo se dice qué reserva; el correo lo
+     * lee el servidor de la fila que se acaba de crear. Mandándolo desde aquí,
+     * esto sería una forma de enviarle a cualquiera un correo con el membrete
+     * de la hermandad.
+     */
+    void supabase.functions
+      .invoke('enviar-correo', { body: { reserva: { hermandadId: hermandad, referencia } } })
+      .catch(() => {})
+
+    return {
+      ok: true,
+      resguardo: {
+        referencia,
+        total: Number(r.total ?? 0),
+        recogerAntesDe: String(r.recoger_antes_de ?? ''),
+      },
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido apartar.' }
+  }
+}
+
+/** Lo que ha apartado la gente. Solo lectura, como las ventas y por lo mismo. */
+export function useReservas(): { reservas: Reserva[]; cargando: boolean; recargar: () => void } {
+  const [reservas, setReservas] = useState<Reserva[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [vez, setVez] = useState(0)
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) { setCargando(false); return }
+    let cancelado = false
+    setCargando(true)
+    void supabase.from('reservas_tienda').select('*').order('creado_en', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelado) return
+        if (error) avisarDeFallo('reservas', error.message)
+        setReservas(error || !data ? [] : (data as Record<string, unknown>[]).map(rowToReserva))
+        setCargando(false)
+      })
+    return () => { cancelado = true }
+  }, [vez])
+
+  return { reservas, cargando, recargar: () => setVez((v) => v + 1) }
+}
+
+/** Lo que lleva dentro una reserva. `null` = no se ha podido preguntar. */
+export async function lineasDeReserva(reservaId: string): Promise<LineaReserva[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  const { data, error } = await supabase.from('lineas_reserva').select('*').eq('reserva_id', reservaId)
+  if (error || !data) {
+    if (error) avisarDeFallo('líneas de la reserva', error.message)
+    return null
+  }
+  return (data as Record<string, unknown>[]).map(rowToLineaReserva)
+}
+
+/**
+ * COBRAR Y ENTREGAR. Aquí es donde la reserva se convierte en venta: sale la
+ * factura, baja el almacén y entran los dos asientos en Tesorería. Ni un
+ * minuto antes.
+ */
+export async function entregarReserva(reservaId: string, formaPago: string): Promise<
+  { ok: true; venta: VentaRegistrada } | { ok: false; error: string }
+> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { ok: false, error: 'Sin base de datos conectada no se pueden entregar reservas.' }
+  }
+  try {
+    const { data, error } = await supabase.rpc('entregar_reserva', {
+      p_reserva_id: reservaId, p_forma_pago: formaPago,
+    })
+    if (error) return { ok: false, error: error.message }
+    const r = (data ?? {}) as Record<string, unknown>
+    return {
+      ok: true,
+      venta: {
+        id: String(r.id ?? ''),
+        serie: String(r.serie ?? 'A'),
+        numero: Number(r.numero ?? 0),
+        base: Number(r.base ?? 0),
+        iva: Number(r.iva ?? 0),
+        total: Number(r.total ?? 0),
+        coste: Number(r.coste ?? 0),
+        descuentoPct: Number(r.descuento_pct ?? 0),
+      },
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido entregar.' }
+  }
+}
+
+/**
+ * Soltar una reserva que no se va a recoger. No se borra: se marca, y el
+ * género vuelve a estar disponible. Una reserva borrada es una llamada de
+ * teléfono que nadie puede explicar.
+ *
+ * SE MIRA LO QUE CONTESTA, no solo si hubo error. La función devuelve `false`
+ * cuando no ha soltado nada —porque ya estaba entregada, o porque otro la
+ * anuló desde el ordenador de al lado hace un segundo—, y eso NO llega como
+ * error: llega como un `false` que, sin mirarlo, la pantalla enseñaría como
+ * «anulada, el género vuelve a estar disponible».
+ */
+export async function soltarReserva(
+  reservaId: string, motivo = '', estado: 'anulada' | 'caducada' = 'anulada',
+): Promise<{ ok: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { ok: false, error: 'Sin base de datos conectada no se pueden soltar reservas.' }
+  }
+  try {
+    const { data, error } = await supabase.rpc('soltar_reserva', {
+      p_reserva_id: reservaId, p_motivo: motivo, p_estado: estado,
+    })
+    if (error) return { ok: false, error: error.message }
+    if (data !== true) {
+      return {
+        ok: false,
+        error: 'Esa reserva ya no estaba pendiente: puede que la acaben de entregar o de anular. '
+          + 'Recarga para ver cómo está.',
+      }
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido soltar.' }
+  }
+}
+
+
+// ----------------------------------------------------------------------------
+//   LOS DATOS, PARA LAS GRÁFICAS
+// ----------------------------------------------------------------------------
+
+/**
+ * Lo vendido en un ejercicio, ya sumado por la base.
+ *
+ * Una sola llamada que devuelve los tres bloques —meses, artículos y formas de
+ * pago—, cada uno separado por canal. Se suma allí y no aquí porque para saber
+ * qué artículo se vende más hay que recorrer TODAS las líneas del año, y
+ * bajarlas por la red para sumarlas en una tabla de doce filas es tirar los
+ * datos de quien mira esto desde el teléfono. El porqué entero está en
+ * `datos_tienda()`, en `supabase/tienda.sql`.
+ */
+export function useDatosTienda(anio: number): {
+  datos: DatosTienda | null
+  cargando: boolean
+  error: string
+  recargar: () => void
+} {
+  const [datos, setDatos] = useState<DatosTienda | null>(null)
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [vez, setVez] = useState(0)
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setCargando(false)
+      setError('Sin base de datos conectada no hay datos de la tienda que enseñar.')
+      return
+    }
+    let cancelado = false
+    setCargando(true)
+    setError('')
+    void supabase.rpc('datos_tienda', { p_anio: anio }).then(({ data, error: e }) => {
+      if (cancelado) return
+      setCargando(false)
+      if (e) {
+        /*
+         * El fallo SE ENSEÑA, no se deja en la consola. Esta pantalla es toda
+         * cifras: quedándose en blanco con «0,00 €» por todas partes, quien
+         * viene a cuadrar el trimestre lee ceros creíbles.
+         */
+        avisarDeFallo('datos de la tienda', e.message)
+        setError(e.message)
+        setDatos(null)
+        return
+      }
+      const d = (data ?? {}) as Record<string, unknown>
+      setDatos({
+        anio: Number(d.anio ?? anio),
+        anios: Array.isArray(d.anios) ? (d.anios as unknown[]).map(Number) : [],
+        meses: (Array.isArray(d.meses) ? d.meses : []).map((m) => {
+          const r = m as Record<string, unknown>
+          return {
+            mes: Number(r.mes ?? 0),
+            canal: (r.canal === 'online' ? 'online' : 'fisica') as CanalVenta,
+            total: Number(r.total ?? 0),
+            base: Number(r.base ?? 0),
+            iva: Number(r.iva ?? 0),
+            coste: Number(r.coste ?? 0),
+            ventas: Number(r.ventas ?? 0),
+          }
+        }),
+        articulos: (Array.isArray(d.articulos) ? d.articulos : []).map((a) => {
+          const r = a as Record<string, unknown>
+          return {
+            codigo: String(r.codigo ?? ''),
+            nombre: String(r.nombre ?? ''),
+            canal: (r.canal === 'online' ? 'online' : 'fisica') as CanalVenta,
+            unidades: Number(r.unidades ?? 0),
+            importe: Number(r.importe ?? 0),
+            coste: Number(r.coste ?? 0),
+          }
+        }),
+        formas: (Array.isArray(d.formas) ? d.formas : []).map((f) => {
+          const r = f as Record<string, unknown>
+          return {
+            forma: String(r.forma ?? ''),
+            canal: (r.canal === 'online' ? 'online' : 'fisica') as CanalVenta,
+            total: Number(r.total ?? 0),
+            ventas: Number(r.ventas ?? 0),
+          }
+        }),
+      })
+    })
+    return () => { cancelado = true }
+  }, [anio, vez])
+
+  return { datos, cargando, error, recargar: () => setVez((v) => v + 1) }
 }

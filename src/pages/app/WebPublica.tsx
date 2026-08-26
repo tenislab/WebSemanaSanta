@@ -218,7 +218,7 @@ const ALTURAS: { id: AlturaHero; label: string }[] = [
   { id: 'completa', label: 'Pantalla completa' },
 ]
 
-type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'visitas' | 'avisos' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'cartel' | 'caridad' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta' | 'donativos' | 'loteria' | 'buzon'
+type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'visitas' | 'avisos' | 'portada' | 'galeria' | 'actualidad' | 'cultos' | 'cartel' | 'caridad' | 'paginas' | 'boletines' | 'historia' | 'titulares' | 'hazte' | 'estacion' | 'junta' | 'donativos' | 'loteria' | 'tienda' | 'buzon'
 
 /**
  * A qué sección de la web corresponde cada pestaña del editor: la vista previa
@@ -240,6 +240,7 @@ const SECCION_DE_PESTANA: Partial<Record<Pestana, FocoPreview>> = {
   junta: 'junta',
   donativos: 'donativos',
   loteria: 'loteria',
+  tienda: 'tienda',
 }
 /**
  * El orden importa: primero lo que da forma a TODA la web (diseño, cabecera y
@@ -317,6 +318,7 @@ const GRUPOS_PESTANAS: { titulo: string; items: { id: Pestana; label: string; ic
       { id: 'boletines', label: 'Boletines', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg> },
       { id: 'donativos', label: 'Donativos', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20Z" /></svg> },
       { id: 'loteria', label: 'Lotería', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4Z" /><path d="M12 7v10" strokeDasharray="2 2" /></svg> },
+      { id: 'tienda', label: 'Tienda', icono: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 8h12l-1 11a2 2 0 0 1-2 1.8H9A2 2 0 0 1 7 19Z" /><path d="M9.5 8V6a2.5 2.5 0 0 1 5 0v2" /></svg> },
     ],
   },
   {
@@ -798,6 +800,7 @@ export default function WebPublica() {
           {pestana === 'boletines' && <BoletinesTab web={web} editar={editar} actualizar={actualizar} />}
           {pestana === 'donativos' && <DonativosTab web={web} hermandad={hermandad} editar={editar} />}
           {pestana === 'loteria' && <LoteriaTab web={web} editar={editar} />}
+          {pestana === 'tienda' && <TiendaTab />}
           {pestana === 'buzon' && <BuzonWebTab />}
           {pestana === 'visitas' && <VisitasTab />}
           {pestana === 'avisos' && <AvisosTab web={web} editar={editar} />}
@@ -1968,6 +1971,42 @@ function DonativosTab({ web, hermandad, editar }: { web: WebPublica; hermandad: 
         </span>
       </label>
     </section>
+  )
+}
+
+/* --------------------------------- Tienda ---------------------------------- */
+
+/**
+ * La única sección que NO se escribe aquí.
+ *
+ * Lo que se publica en la tienda de la web es el género del almacén: los
+ * artículos marcados como «Publicarlo en la tienda de la web» en su ficha. No
+ * hay un segundo catálogo que rellenar —lo habría, y a la semana diría una
+ * cosa distinta que el almacén—, así que esta pestaña explica de dónde sale y
+ * lleva a donde se toca.
+ */
+function TiendaTab() {
+  return (
+    <div className="app-form">
+      <p className="form-hint">
+        La tienda de la web enseña los artículos del almacén que tengan marcado
+        <b> «Publicarlo en la tienda de la web»</b> en su ficha, con lo que queda de cada uno.
+        No hay nada que escribir aquí: se marca el artículo y sale.
+      </p>
+      <p className="form-hint">
+        <b>No se paga por internet.</b> Quien entra aparta lo que quiere y lo paga al recogerlo en
+        la casa de hermandad. Lo apartado se ve en <b>Tienda → Reservas de la web</b>, y ahí es
+        donde se cobra y se entrega: hasta ese momento no hay factura ni apunte en Tesorería.
+      </p>
+      <div className="fila-botones">
+        <Link className="btn btn-outline" to="/app/tienda/almacen">Ir al almacén</Link>
+        <Link className="btn btn-ghost" to="/app/tienda/reservas">Ver las reservas</Link>
+      </div>
+      <p className="form-hint">
+        Acuérdate de encender la sección en <b>Diseño</b>: sale apagada de fábrica, porque lo que
+        se publica aquí se puede apartar de verdad.
+      </p>
+    </div>
   )
 }
 

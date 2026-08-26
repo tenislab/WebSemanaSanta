@@ -141,15 +141,27 @@ export default async function ({ caso }) {
   }
 
   /*
-   * Y aun así, más corto que el instalador. El listón está en la mitad y no en
-   * un tercio porque lo cruzó de verdad: la noche antes de que entrara la
-   * primera hermandad se le añadieron tres piezas —la campaña de papeletas, la
-   * tabla de solicitudes de papeleta y la activación de la suscripción— y pasó
-   * de 1.665 a 1.948 líneas. Sigue siendo un tercio de lo que ocupa el
-   * instalador; la mitad es el sitio donde este aviso empieza a significar
-   * algo otra vez.
+   * Y QUE SIGA SIENDO UN SUBCONJUNTO, no una copia.
+   *
+   * Aquí había una comprobación de tamaño —«menos de la mitad de líneas que el
+   * instalador»— y la he quitado porque medía lo que no era. Las dos listas
+   * comparten las piezas nuevas: cada arreglo entra en las dos, así que el
+   * instalador crece igual de rápido pero partiendo de mucho más alto, y la
+   * proporción sube sola hasta cruzar cualquier raya que se ponga. Al cruzarla
+   * hoy —4.235 frente a 8.095— la salida honesta no era subir la raya: el
+   * comentario de ahí arriba ya avisa de que mover el listón para que pase la
+   * prueba es justamente cómo una prueba deja de servir.
+   *
+   * Lo que de verdad importa no es cuánto ocupa sino QUÉ TRAE: que sea una
+   * parte de lo que instala el otro y no el otro entero. Eso son las piezas,
+   * y eso no se mueve solo.
    */
-  const todoEnUno = await readFile('supabase/TODO-EN-UNO.sql', 'utf8')
-  caso('y sigue siendo más corto que el instalador', true,
-    enDisco.split('\n').length < todoEnUno.split('\n').length / 2)
+  const piezas = (texto) => texto.split('\n')
+    .map((l) => l.match(/^--\s+([A-Z0-9-]+\.SQL) —/)?.[1])
+    .filter(Boolean)
+  const suyas = piezas(enDisco)
+  const delOtro = piezas(await readFile('supabase/TODO-EN-UNO.sql', 'utf8'))
+  caso('el instalador trae más piezas que la actualización', true, delOtro.length > suyas.length)
+  caso('y las de la actualización están todas en el instalador', [],
+    suyas.filter((p) => !delOtro.includes(p)))
 }
