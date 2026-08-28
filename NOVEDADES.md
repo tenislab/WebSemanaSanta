@@ -1,6 +1,6 @@
 # Qué lleva esta entrega
 
-Seis bloques, todos probados: `tsc`, `lint`, `build` y **3.934 pruebas** que
+Siete bloques, todos probados: `tsc`, `lint`, `build` y **3.946 pruebas** que
 pasan con y sin zona horaria de Madrid. El SQL se instala sobre un Postgres de
 verdad, no solo se lee.
 
@@ -178,6 +178,31 @@ que está en otro sitio.
 Arreglado en el SQL. **Las pruebas no lo cazaron porque montaban pgcrypto en
 `public`** — o sea, probaban contra una base que no existe en ninguna parte.
 Ahora la montan como Supabase, y el fallo se reproduce aquí antes de salir.
+
+---
+
+## 7. Segunda revisión: «no lo sé» no es «no hay nada»
+
+Buscando una clase de fallo distinta apareció otra, y una de las dos hace daño
+de verdad.
+
+**El boletín se mandaba a nadie.** La lista de suscriptores devolvía **lista
+vacía cuando la consulta fallaba**. De esa lista sale el envío, así que el
+boletín se mandaba, no escribía a nadie, y la pantalla remataba con «Enviado por
+correo a 0 suscriptores». La hermandad se quedaba convencida de que había
+salido.
+
+Ahora, si no se pudo leer la lista, **el envío se para** y dice por qué. Un
+envío a cero no es un envío.
+
+**«Tu hermandad no está en Gobergo».** Lo mismo con el buscador de hermandades
+del área del hermano: si la consulta tropieza, no salía ninguna y el mensaje era
+«no encontramos ninguna hermandad con ese nombre». De ahí se sale concluyendo
+que tu hermandad no usa esto, y no se vuelve. Ahora dice que recargue.
+
+Con esto van **dos clases enteras vigiladas por prueba** —esta y la de leer de
+la copia local del navegador— en vez de ir arreglando los casos sueltos según se
+reportan.
 
 ---
 

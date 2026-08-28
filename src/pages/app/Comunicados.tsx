@@ -140,8 +140,17 @@ export default function Comunicados() {
    * abrir la pantalla — no cambian mientras se escribe un comunicado, y
    * volverlos a pedir en cada tecla sería una consulta por letra.
    */
-  const [suscriptores, setSuscriptores] = useState<Suscriptor[]>([])
+  /*
+   * `null` = no se ha podido preguntar · `[]` = de verdad no hay ninguno.
+   *
+   * La diferencia importa porque DE ESTA LISTA SALE EL BOLETÍN: dando por
+   * buena una lista vacía que en realidad es un fallo, el envío se hace, no
+   * escribe a nadie y la pantalla dice «Enviado a 0 suscriptores».
+   */
+  const [suscriptores, setSuscriptores] = useState<Suscriptor[] | null>(null)
   useEffect(() => { void getSuscriptores().then(setSuscriptores) }, [])
+  const listaSuscriptores = suscriptores ?? []
+  const noSeSupoDeLosSuscriptores = suscriptores === null
 
   /*
    * LOS QUE SE APUNTARON Y NO HAN CONFIRMADO.
@@ -152,7 +161,7 @@ export default function Comunicados() {
    * forma— así que están TODOS sin confirmar y esperando un enlace que no
    * llegó. Con el botón de abajo se les manda de una vez.
    */
-  const pendientes = losQueFaltanPorConfirmar(suscriptores)
+  const pendientes = losQueFaltanPorConfirmar(listaSuscriptores)
   const [reenviando, setReenviando] = useState(false)
   const [avisoReenvio, setAvisoReenvio] = useState('')
 
@@ -265,7 +274,7 @@ export default function Comunicados() {
     if (c.destinatarios === SEGMENTO_SUSCRIPTORES) {
       return {
         hermanos: [],
-        soloCorreo: losQueSePuedenAvisar(suscriptores).map((s) => ({
+        soloCorreo: losQueSePuedenAvisar(listaSuscriptores).map((s) => ({
           id: s.id, nombre: s.nombre || s.email, email: s.email,
         })),
         reconocido: true,
@@ -676,9 +685,26 @@ export default function Comunicados() {
      * apagar los avisos, no le hace falta enlace de baja.
      */
     if (alcance.aSuscriptores) {
+      /*
+       * SI NO SE SUPO QUIÉNES SON, NO SE MANDA Y SE DICE.
+       *
+       * `getSuscriptores()` devuelve `null` cuando la consulta no se pudo
+       * hacer. Dando eso por «no hay ninguno», el envío se hacía igual, no
+       * escribía a nadie, y la pantalla decía «Enviado por correo a 0
+       * suscriptores» — con lo que la hermandad se quedaba convencida de que su
+       * boletín había salido. Un envío a cero no es un envío.
+       */
+      if (noSeSupoDeLosSuscriptores) {
+        setEnvioCorreo({
+          estado: 'error',
+          texto: 'No se ha podido leer la lista de suscriptores, así que no se ha mandado nada. '
+            + 'Vuelve a abrir la pantalla y prueba otra vez: mandarlo ahora sería no mandárselo a nadie.',
+        })
+        return
+      }
       const origen = window.location.origin
       const { enviados, fallidos } = await avisarASuscriptores(
-        suscriptores,
+        listaSuscriptores,
         c.titulo,
         (baja) => {
           const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))

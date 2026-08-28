@@ -196,8 +196,26 @@ export async function darseDeBaja(llave: string): Promise<boolean> {
 }
 
 /** La lista, para el panel. Vacía si no se puede leer: nunca inventada. */
-export async function getSuscriptores(): Promise<Suscriptor[]> {
+/**
+ * LOS SUSCRIPTORES DE LA WEB.
+ *
+ * DEVUELVE `null` CUANDO NO SE HA PODIDO PREGUNTAR, y lista vacía cuando de
+ * verdad no hay ninguno. Con `[]` para las dos cosas —que es como estaba— un
+ * fallo de permisos o un tropiezo de red se leía como «no se ha apuntado
+ * nadie», y eso aquí no es un número mal puesto en pantalla:
+ *
+ * DE ESTA LISTA SALE EL BOLETÍN. Con cero suscriptores, el envío se hace, no
+ * escribe a nadie y la pantalla dice «Enviado por correo a 0 suscriptores».
+ * O sea que la hermandad se queda convencida de que su boletín ha salido.
+ *
+ * Es el mismo criterio que `historialDeStock` en `lib/tienda.ts`, y por lo
+ * mismo: no se puede contestar «no hay nada» a una pregunta que no se ha
+ * llegado a hacer.
+ */
+export async function getSuscriptores(): Promise<Suscriptor[] | null> {
   const cliente = supabase
+  // Sin base no hay suscriptores que valgan: eso SÍ es una lista vacía
+  // de verdad, no un «no se pudo».
   if (!isSupabaseConfigured || !cliente) return []
   try {
     /*
@@ -214,7 +232,7 @@ export async function getSuscriptores(): Promise<Suscriptor[]> {
       .order('alta_en', { ascending: false })
       .order('id')
       .range(desde, hasta))
-    if (error || !data) return []
+    if (error || !data) return null
     return (data as Record<string, unknown>[]).map((r) => ({
       id: String(r.id),
       email: String(r.email ?? ''),
@@ -225,7 +243,7 @@ export async function getSuscriptores(): Promise<Suscriptor[]> {
       llave: r.llave ? String(r.llave) : undefined,
     }))
   } catch {
-    return []
+    return null
   }
 }
 

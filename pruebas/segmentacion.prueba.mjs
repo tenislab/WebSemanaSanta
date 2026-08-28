@@ -434,7 +434,13 @@ async function laPantallaLoUsa({ caso }) {
     /c\.destinatarios === SEGMENTO_SUSCRIPTORES/.test(pantalla))
   // Y solo a los CONFIRMADOS: a quien no abrió el enlace del correo no se le
   // escribe. Es lo que evita que los envíos acaben marcados como spam.
-  caso('y solo a los confirmados', true, /losQueSePuedenAvisar\(suscriptores\)/.test(pantalla))
+  /*
+   * Se mira LA LLAMADA, no el nombre de la variable que se le pasa. Lo que
+   * garantiza que solo se escribe a los confirmados es `losQueSePuedenAvisar`;
+   * cómo se llame la lista es cosa de la pantalla, y atarlo aquí hacía que
+   * renombrarla tumbara una prueba que sigue cumpliéndose.
+   */
+  caso('y solo a los confirmados', true, /losQueSePuedenAvisar\(\w+\)/.test(pantalla))
   /*
    * UNO A UNO, no todos en el mismo correo: cada uno lleva SU enlace de baja.
    * Mandados juntos no cabe más que un enlace, así que o no se pone —correo sin

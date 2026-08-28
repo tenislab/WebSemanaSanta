@@ -106,10 +106,21 @@ export interface HermandadPublica {
   logoDataUrl: string | null
 }
 
-export async function hermandadesPublicas(): Promise<HermandadPublica[]> {
+/**
+ * DEVUELVE `null` CUANDO NO SE HA PODIDO PREGUNTAR, y lista vacía cuando de
+ * verdad no hay ninguna.
+ *
+ * Con `[]` para las dos cosas, un tropiezo de red le decía al hermano que
+ * busca la suya que NO ESTÁ — y de ahí se sale concluyendo que su hermandad no
+ * usa Gobergo, no que haya que recargar. Es el mismo criterio que
+ * `historialDeStock` y `getSuscriptores`: no se contesta «no hay» a una
+ * pregunta que no se ha llegado a hacer.
+ */
+export async function hermandadesPublicas(): Promise<HermandadPublica[] | null> {
+  // Sin base, la lista está vacía de verdad: no hay nada que preguntar.
   if (!isSupabaseConfigured || !supabase) return []
   const { data, error } = await supabase.rpc('hermandades_publicas')
-  if (error || !Array.isArray(data)) return []
+  if (error || !Array.isArray(data)) return null
   return (data as Record<string, string | null>[]).map((h) => ({
     id: String(h.id),
     nombre: String(h.nombre ?? ''),

@@ -3937,9 +3937,17 @@ function AvisosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
   const [lista, setLista] = useState<Suscriptor[]>([])
   const [cargando, setCargando] = useState(true)
 
+  /*
+   * `null` = no se pudo preguntar. Se distingue de la lista vacía porque no es
+   * lo mismo «todavía no se ha apuntado nadie» que «no lo sé»: lo primero se
+   * arregla poniendo el formulario en la web, y lo segundo recargando.
+   */
+  const [falloAlLeer, setFalloAlLeer] = useState(false)
   async function recargar() {
     setCargando(true)
-    setLista(await getSuscriptores())
+    const traidos = await getSuscriptores()
+    setFalloAlLeer(traidos === null)
+    setLista(traidos ?? [])
     setCargando(false)
   }
   useEffect(() => { void recargar() }, [])
@@ -4028,6 +4036,18 @@ function AvisosTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
       </div>
 
       {cargando && <p className="form-hint">Cargando…</p>}
+      {/*
+        NO ES LO MISMO «NO HAY NADIE» QUE «NO LO SÉ».
+        Sin este aviso, un fallo al leer la lista se veía exactamente igual que
+        una lista vacía: la hermandad se quedaba creyendo que no se ha apuntado
+        nadie a su boletín. Y de esta misma lista sale el envío.
+      */}
+      {!cargando && falloAlLeer && (
+        <p className="form-hint form-hint--error">
+          No se ha podido leer la lista de suscriptores, así que lo de abajo no es lo que hay.
+          Recarga la página para volver a intentarlo.
+        </p>
+      )}
 
       {!cargando && (
         <>

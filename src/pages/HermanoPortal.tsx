@@ -532,11 +532,16 @@ export default function HermanoPortal() {
   // escribir el DNI: el mismo DNI puede estar en dos hermandades (alguien que
   // es hermano de dos) y sin esto no se sabría a cuál entra.
   const [hermandadesReales, setHermandadesReales] = useState<HermandadPublica[]>([])
+  const [falloElDirectorio, setFalloElDirectorio] = useState(false)
   useEffect(() => {
     if (!usarSupabase) return
     let cancelado = false
     hermandadesPublicas().then((lista) => {
-      if (!cancelado) setHermandadesReales(lista)
+      if (cancelado) return
+      // `null` = no se pudo preguntar. Sin distinguirlo, quien busca su
+      // hermandad no la encuentra y se va creyendo que no está en Gobergo.
+      setFalloElDirectorio(lista === null)
+      setHermandadesReales(lista ?? [])
     })
     return () => {
       cancelado = true
@@ -1444,9 +1449,18 @@ export default function HermanoPortal() {
                   ))}
                   {opcionesHermandad.length === 0 && (
                     <li className="portal__picker-empty">
-                      {queryHermandad.trim()
-                        ? 'No encontramos ninguna hermandad con ese nombre.'
-                        : 'Todavía no hay ninguna hermandad dada de alta en Gobergo.'}
+                      {/*
+                        SI NO SE PUDO LEER LA LISTA, SE DICE. Antes un tropiezo
+                        de red se veía igual que «tu hermandad no está»: quien
+                        busca la suya y no la encuentra se va convencido de que
+                        no usa Gobergo, y no vuelve.
+                      */}
+                      {falloElDirectorio
+                        ? 'No se ha podido cargar la lista de hermandades. Recarga la página e '
+                          + 'inténtalo otra vez; no quiere decir que la tuya no esté.'
+                        : queryHermandad.trim()
+                          ? 'No encontramos ninguna hermandad con ese nombre.'
+                          : 'Todavía no hay ninguna hermandad dada de alta en Gobergo.'}
                     </li>
                   )}
                 </ul>
