@@ -53,7 +53,16 @@ const LARGO_POR_PAIS: Record<string, number> = {
  * JavaScript ya ha perdido precisión — daría restos que no son, y de las dos
  * maneras: dando por bueno un IBAN malo y por malo uno bueno.
  */
-function restoEntre97(texto: string): number {
+/*
+ * SE EXPORTA A PROPÓSITO, y es el único sitio donde se calcula.
+ *
+ * El identificador de acreedor SEPA —`lib/nif.ts`— lleva sus dos dígitos de
+ * control con este mismísimo mecanismo. Escribirlo dos veces es cómo se acaba
+ * teniendo dos reglas ligeramente distintas: una acepta un identificador que la
+ * otra rechaza, y el que se manda al banco es el que pasó por la mala. Hay una
+ * prueba que vigila que no vuelva a haber dos.
+ */
+export function restoEntre97(texto: string): number {
   let resto = 0
   for (const c of texto) {
     const n = c >= 'A' && c <= 'Z' ? String(c.charCodeAt(0) - 55) : c

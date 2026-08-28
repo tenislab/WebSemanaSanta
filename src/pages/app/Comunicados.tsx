@@ -407,6 +407,32 @@ export default function Comunicados() {
       .sort((a, b) => a.nombre.localeCompare(b.nombre)),
     [hermanos, cargosPorHermano],
   )
+  /*
+   * Y EL RESTO DE HERMANOS ACTIVOS, QUE TAMBIÉN PUEDEN LLEVAR LAS REDES.
+   *
+   * Aquí solo se ofrecía la junta, y la razón escrita era que un hermano de a
+   * pie «no podría verlo, porque quien no lleva nada no entra al panel». Eso
+   * es FALSO, y es justo lo contrario de para lo que se hizo esto: la tarea le
+   * sale en SU ÁREA, sin pisar el panel — es lo primero que dice
+   * `lib/tareasRedes.ts`.
+   *
+   * Con esa restricción, una hermandad que todavía no ha repartido cargos en
+   * las fichas se encontraba las dos listas VACÍAS y sin explicación. Llegó
+   * reportado como «no deja asignar hermanos en tareas de redes», y desde
+   * fuera no se distingue de que el desplegable esté roto.
+   *
+   * Quien lleva el Instagram de una hermandad es muchas veces alguien joven
+   * sin cargo ninguno. Decidir si se le encarga o no es de la hermandad, no de
+   * la aplicación; lo que tiene que hacer la aplicación es dejarlo elegir. La
+   * junta va primero, agrupada, porque es el caso normal.
+   */
+  const otrosHermanos = useMemo(
+    () => hermanos
+      .filter((h) => h.estado !== 'Baja' && (cargosPorHermano.get(h.id)?.length ?? 0) === 0)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [hermanos, cargosPorHermano],
+  )
+  const hayAQuienEncargar = laJunta.length > 0 || otrosHermanos.length > 0
   /** Los encargos con algo pendiente. Los terminados no estorban la pantalla. */
   const encargosAbiertos = useMemo(
     () => porEncargo(tareasRedes).filter((g) => g.tareas.some((t) => t.estado === 'pendiente')),
@@ -1015,26 +1041,51 @@ export default function Comunicados() {
             </div>
           </div>
           {/*
-            SOLO SE OFRECE A LA JUNTA. Repartirle un post a un hermano de a pie
-            sería mandarle trabajo que no ha aceptado; y además no podría verlo,
-            porque quien no lleva nada no entra al panel.
+            LA JUNTA PRIMERO, PERO NO SOLO LA JUNTA. La tarea le llega a la
+            persona en SU ÁREA, sin pisar el panel, así que no hace falta que
+            lleve ningún cargo para poder hacerla — y quien lleva el Instagram
+            de una hermandad muchas veces no lo lleva.
           */}
           <div className="form-grid-2">
             <div className="form-row">
               <label htmlFor="encargoQuienCrea">Quién lo escribe</label>
               <select id="encargoQuienCrea" name="quienCrea" defaultValue="">
                 <option value="">Sin repartir todavía</option>
-                {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+                {laJunta.length > 0 && (
+                  <optgroup label="Junta de gobierno">
+                    {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+                  </optgroup>
+                )}
+                {otrosHermanos.length > 0 && (
+                  <optgroup label="Otros hermanos">
+                    {otrosHermanos.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div className="form-row">
               <label htmlFor="encargoQuienSube">Quién lo sube a las redes</label>
               <select id="encargoQuienSube" name="quienSube" defaultValue="">
                 <option value="">Sin repartir todavía</option>
-                {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+                {laJunta.length > 0 && (
+                  <optgroup label="Junta de gobierno">
+                    {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+                  </optgroup>
+                )}
+                {otrosHermanos.length > 0 && (
+                  <optgroup label="Otros hermanos">
+                    {otrosHermanos.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>
+          {!hayAQuienEncargar && (
+            <p className="form-hint form-hint--error">
+              Todavía no hay a quién encargárselo: no hay ningún hermano activo en el censo. El
+              post se puede dejar escrito y repartirlo después.
+            </p>
+          )}
           <div className="assign-box__row">
             <button type="submit" className="btn btn-primary">Encargar y repartir</button>
             {encargoHecho && <span className="alert-item alert-item--ok">{encargoHecho}</span>}

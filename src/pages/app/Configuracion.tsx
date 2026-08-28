@@ -38,6 +38,10 @@ import {
 } from '../../lib/copiaAutomatica'
 import { formatDate } from '../../lib/format'
 import { descargarArchivo } from '../../lib/csv'
+import AvisoDeCampo from '../../components/AvisoDeCampo'
+import { problemaDeBizum, problemaDeTelefono } from '../../lib/telefono'
+import { problemaDeCodigoPostal, problemaDeIdentificadorAcreedor, problemaDeNif } from '../../lib/nif'
+import { porQueNoValeElIban, ibanValido } from '../../lib/iban'
 import AvisoFalta from '../../components/AvisoFalta'
 import { contextoActual, requisito, requisitos } from '../../lib/requisitos'
 import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
@@ -45,7 +49,8 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { getCampana } from '../../lib/campana'
 import type { Papeleta } from '../../data/papeletas'
 import {
-  correoDePrueba, correoDisponible, enviarCorreo, useAjustesCorreo, type AjustesCorreo,
+  correoDePrueba, correoDisponible, diagnosticarCorreo, enviarCorreo, loQueLeFaltaAlCorreo,
+  useAjustesCorreo, type AjustesCorreo,
 } from '../../lib/correo'
 import { hoyIso } from '../../lib/hoy'
 import { conexiones, resumenConexiones } from '../../lib/conexiones'
@@ -718,8 +723,10 @@ export default function Configuracion() {
                 id="cif"
                 value={settings.cif}
                 onChange={(e) => update('cif', e.target.value)}
-                placeholder="G-00000000"
+                placeholder="G41000001"
               />
+              <AvisoDeCampo texto={problemaDeNif(settings.cif)} />
+              <p className="form-hint">Sale en las facturas de la tienda. Las hermandades suelen tener una G o una R.</p>
             </div>
             <div className="form-row">
               <label htmlFor="telefono">Teléfono</label>
@@ -727,8 +734,11 @@ export default function Configuracion() {
                 id="telefono"
                 value={settings.telefono}
                 onChange={(e) => update('telefono', e.target.value)}
-                placeholder="954 000 000"
+                type="tel"
+                inputMode="tel"
+                placeholder="954 00 00 00"
               />
+              <AvisoDeCampo texto={problemaDeTelefono(settings.telefono)} />
             </div>
           </div>
 
@@ -749,8 +759,11 @@ export default function Configuracion() {
                 id="codigoPostal"
                 value={settings.codigoPostal}
                 onChange={(e) => update('codigoPostal', e.target.value)}
+                inputMode="numeric"
+                maxLength={5}
                 placeholder="41010"
               />
+              <AvisoDeCampo texto={problemaDeCodigoPostal(settings.codigoPostal)} />
             </div>
             <div className="form-row">
               <label htmlFor="ciudad">Ciudad</label>
@@ -792,7 +805,12 @@ export default function Configuracion() {
                 id="iban"
                 value={settings.iban}
                 onChange={(e) => update('iban', e.target.value)}
-                placeholder="ES00 0000 0000 0000 0000 0000"
+                placeholder="ES91 2100 0418 4502 0005 1332"
+              />
+              <AvisoDeCampo
+                texto={settings.iban.trim() && !ibanValido(settings.iban)
+                  ? `Ese IBAN no vale: ${porQueNoValeElIban(settings.iban)}.`
+                  : null}
               />
               <p className="form-hint">Para domiciliar cuotas y para que los hermanos paguen por transferencia.</p>
             </div>
@@ -803,8 +821,10 @@ export default function Configuracion() {
                 type="tel"
                 value={settings.bizumTelefono}
                 onChange={(e) => update('bizumTelefono', e.target.value)}
-                placeholder="600 000 000"
+                inputMode="tel"
+                placeholder="600 00 00 00"
               />
+              <AvisoDeCampo texto={problemaDeBizum(settings.bizumTelefono)} />
               <p className="form-hint">Los hermanos verán este número en su área para pagar la papeleta por Bizum.</p>
             </div>
           </div>
@@ -815,8 +835,10 @@ export default function Configuracion() {
               id="identificadorAcreedor"
               value={settings.identificadorAcreedor}
               onChange={(e) => update('identificadorAcreedor', e.target.value)}
-              placeholder="ES23000B12345678"
+              maxLength={20}
+              placeholder="ES11000B12345674"
             />
+            <AvisoDeCampo texto={problemaDeIdentificadorAcreedor(settings.identificadorAcreedor)} />
             <p className="form-hint">Lo asigna tu banco al dar de alta el adeudo directo SEPA. Hace falta para generar la remesa.</p>
           </div>
 
@@ -1633,6 +1655,24 @@ function CorreoCard() {
   const [resultado, setResultado] = useState<{ ok: boolean; texto: string } | null>(null)
   const set = (c: Partial<AjustesCorreo>) => setAjustes({ ...ajustes, ...c })
 
+  /*
+   * QUÉ LE FALTA AL CORREO. Antes solo se podía mandar el de prueba y ver si
+   * llegaba, y ese es justamente el caso que no se puede diagnosticar así: con
+   * el remitente de pruebas de Resend, el envío contesta que todo bien y el
+   * correo no llega nunca. Se pasaron días pensando que era el proveedor.
+   */
+  const [faltan, setFaltan] = useState<string[] | null>(null)
+  const [mirando, setMirando] = useState(false)
+
+  async function mirarQueFalta() {
+    setMirando(true)
+    setResultado(null)
+    const r = await diagnosticarCorreo()
+    setMirando(false)
+    if (!r.ok) { setFaltan([r.error]); return }
+    setFaltan(loQueLeFaltaAlCorreo(r.d))
+  }
+
   async function probar() {
     setEnviando(true)
     setResultado(null)
@@ -1644,6 +1684,10 @@ function CorreoCard() {
         ? { ok: true, texto: `Enviado a ${destinoPrueba}. Míralo, y mira también la carpeta de spam: si ha caído ahí, falta verificar el dominio.` }
         : { ok: false, texto: r.error ?? 'No se pudo enviar.' },
     )
+    // Y si dice que se ha enviado, se mira igualmente qué falta: es el único
+    // caso en que «enviado» y «no llega» conviven, y hay que decirlo ANTES de
+    // que alguien se pase la tarde mirando la carpeta de spam.
+    if (r.ok) void mirarQueFalta()
   }
 
   return (
@@ -1747,6 +1791,18 @@ function CorreoCard() {
           >
             {enviando ? 'Enviando…' : 'Enviar prueba'}
           </button>
+          {/*
+            EL BOTÓN QUE HACÍA FALTA. «No me llegan los mails» no se puede
+            diagnosticar mandando otro que tampoco llegue: hay que preguntarle
+            a la función qué le falta.
+          */}
+          <button
+            type="button" className="btn btn-outline btn-sm"
+            disabled={mirando}
+            onClick={() => void mirarQueFalta()}
+          >
+            {mirando ? 'Mirando…' : 'No me llegan: ¿qué falta?'}
+          </button>
         </div>
         <p className="form-hint">
           Hazlo <b>antes</b> de mandar nada a los hermanos. Es la única forma de saber que funciona
@@ -1756,6 +1812,21 @@ function CorreoCard() {
           <p className={resultado.ok ? 'form-hint form-hint--ok' : 'aviso-falta__error-suelto'}>
             {resultado.ok ? '✓ ' : ''}{resultado.texto}
           </p>
+        )}
+        {faltan !== null && (
+          faltan.length === 0 ? (
+            <p className="form-hint form-hint--ok">
+              ✓ No falta nada: hay clave de Resend, remitente propio y clave de servicio. Si aun
+              así no llega, mira la carpeta de spam y el registro de Resend (Emails → el último).
+            </p>
+          ) : (
+            <div className="banner banner--warn" role="status">
+              <b>{faltan.length === 1 ? 'Falta esto:' : `Faltan ${faltan.length} cosas:`}</b>
+              <ul className="cfg-pasos">
+                {faltan.map((f) => <li key={f}>{f}</li>)}
+              </ul>
+            </div>
+          )
         )}
       </div>
     </section>

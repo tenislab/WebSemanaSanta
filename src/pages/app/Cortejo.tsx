@@ -28,6 +28,9 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { incidenciaToRow, rowToIncidencia } from '../../lib/db/incidencias'
+import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
+import { conApunteDeCobro, origenDePapeleta } from '../../lib/apuntes'
 import { getCampana, useCampana } from '../../lib/campana'
 import { useFocoDeDialogo } from '../../lib/foco'
 
@@ -271,8 +274,44 @@ export default function Cortejo() {
   )
 
   // ---------- acciones ----------
+
+  /*
+   * COBRAR AQUÍ TAMBIÉN ES COBRAR, y esta pantalla no lo apuntaba.
+   *
+   * Desde el cortejo se marca pagada una papeleta —y en el pase de lista del
+   * día de salida se cobra en mano al que llega sin pagar—, y nada de eso
+   * llegaba al libro. Es dinero que entra en un sobre en la puerta de la casa
+   * hermandad y que Tesorería no ve, que es exactamente el caso en el que un
+   * descuadre no se puede reconstruir después.
+   *
+   * `conApunteDeCobro` no duplica: si la papeleta ya se cobró desde su
+   * pantalla, esto no vuelve a apuntarla.
+   */
+  const [, setMovimientos] = useSupabaseTable<Movimiento>(
+    'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
+  )
+
+  function apuntarPapeleta(p: Papeleta, metodo: string | null | undefined, fecha: string) {
+    // Una papeleta exenta se da por pagada a importe cero: no hay dinero que
+    // apuntar, y apuntarlo sería inventarse un ingreso.
+    if (!(p.importe > 0)) return
+    setMovimientos((prev) => conApunteDeCobro(prev, {
+      origen: origenDePapeleta(p.id),
+      concepto: `Papeleta de sitio ${p.anio} — ${hermanos.find((h) => h.id === p.hermanoId)?.nombre ?? 'hermano/a'}`,
+      categoria: 'Papeletas de Sitio',
+      importe: p.importe,
+      fecha,
+      metodo,
+    }))
+  }
+
   function marcarPagada(papeletaId: string) {
-    setPapeletas((prev) => prev.map((p) => (p.id === papeletaId ? { ...p, estado: 'Pagada' } : p)))
+    const hoyTexto = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+    setPapeletas((prev) => prev.map((p) => (p.id === papeletaId
+      ? { ...p, estado: 'Pagada', metodoPago: p.metodoPago ?? 'Efectivo', fechaPago: p.fechaPago ?? hoyTexto }
+      : p)))
+    const p = papeletasTodas.find((x) => x.id === papeletaId)
+    if (p) apuntarPapeleta(p, p.metodoPago ?? 'Efectivo', hoyTexto)
   }
 
   function marcarPresente(papeletaId: string) {
@@ -293,6 +332,15 @@ export default function Cortejo() {
         }
       }),
     )
+    /*
+     * Y SI SE LE HA COBRADO AQUÍ, al libro. En el pase de lista se cobra en
+     * mano al que llega sin haber pagado: ese dinero entra en un sobre en la
+     * puerta y hasta ahora no lo veía nadie más.
+     */
+    const p = papeletasTodas.find((x) => x.id === papeletaId)
+    if (p && p.estado !== 'Pagada' && p.estado !== 'Entregada') {
+      apuntarPapeleta(p, p.metodoPago ?? 'Efectivo', hoyTexto)
+    }
   }
 
   function registrarIncidencia(papeletaId: string, tipo: TipoIncidencia, descripcion: string) {

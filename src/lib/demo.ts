@@ -26,6 +26,9 @@ const CLAVES_COLECCIONES = [
   CLAVES_DATOS.comunicados,
   CLAVES_DATOS.cuentasSociales,
   CLAVES_DATOS.eventos,
+  CLAVES_DATOS.recaudaciones,
+  CLAVES_DATOS.proyectos,
+  CLAVES_DATOS.tareasProyecto,
   'cabildo-solicitudes-papeleta',
   'cabildo-convocatoria',
   // Personal con acceso al panel: en una hermandad vacía tampoco hay cargos
@@ -51,18 +54,30 @@ function limpiarTodo() {
  * salen sin justificante y al hermano no se le puede decir dónde pagar, y lo
  * que se está enseñando es justamente que eso funciona.
  */
+/*
+ * LOS NÚMEROS DE LA DEMO PASAN SUS PROPIAS COMPROBACIONES, y no es un detalle
+ * estético. El CIF, el IBAN y el identificador de acreedor se validan al
+ * teclearlos —lib/nif.ts, lib/iban.ts—, así que unos inventados a ojo pintaban
+ * tres avisos rojos en Configuración nada más entrar en la demo. Quien la abre
+ * para ver si esto le sirve concluye, con razón, que viene rota.
+ *
+ * Los de antes estaban mal los tres: el CIF llevaba control 0 cuando le toca 1,
+ * y del IBAN y el identificador no cuadraban los dígitos de control. Estos están
+ * calculados con la regla oficial y siguen siendo inventados: la cuenta no
+ * existe y el 41010 es un código postal de Sevilla cualquiera.
+ */
 const HERMANDAD_DEMO = {
   nombreLegal: 'Real e Ilustre Hermandad de Nuestro Padre Jesús',
-  cif: 'G41000000',
+  cif: 'G41000001',
   direccion: 'C/ Pureza, 53',
   codigoPostal: '41010',
   ciudad: 'Sevilla',
   provincia: 'Sevilla',
   telefono: '954 000 000',
   email: 'secretaria@hermandad.example',
-  iban: 'ES47 2100 0813 6102 0012 3456',
+  iban: 'ES52 2100 0813 6102 0012 3456',
   bizumTelefono: '655 123 456',
-  identificadorAcreedor: 'ES23000G41000000',
+  identificadorAcreedor: 'ES67000G41000001',
   logoDataUrl: null,
   colorPrimario: '#6A1A23',
   colorSecundario: '#C5A059',

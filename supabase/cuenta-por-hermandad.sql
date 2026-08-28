@@ -41,10 +41,26 @@
 
 /*
  * `gen_random_bytes` y `digest` vienen con `pgcrypto`, no con Postgres a secas.
- * En Supabase está encendida de fábrica, pero se declara igualmente: este
- * archivo se puede ejecutar solo, y sin ella se pararía a la mitad con un error
- * que habla de una función y no de una extensión — que fue exactamente lo que
- * pasó con `suscriptores-web.sql`.
+ *
+ * DECLARARLA NO BASTA, Y ESTO COSTÓ UN FALLO EN PRODUCCIÓN.
+ *
+ * En Supabase pgcrypto viene encendida de fábrica pero EN EL ESQUEMA
+ * `extensions`, no en `public`. Así que este `create extension if not exists`
+ * no hace nada —ya está instalada— y una función declarada con
+ * `set search_path = public` NO LA VE. El error que sale es
+ *
+ *     function gen_random_bytes(integer) does not exist
+ *
+ * que manda a buscar una función cuando lo que pasa es que está en otro
+ * esquema. La recuperación de contraseña del hermano estuvo rota por esto.
+ *
+ * Por eso las funciones de este archivo llevan `set search_path = public,
+ * extensions`. Un esquema que no exista se ignora sin quejarse, así que la
+ * misma línea vale en Supabase y en un Postgres normal —donde la extensión
+ * acaba en `public` y se encuentra igual—.
+ *
+ * Y por eso las pruebas montan ahora `extensions` como lo hace Supabase: con
+ * pgcrypto en `public`, esto pasaba en verde.
  */
 create extension if not exists pgcrypto;
 
@@ -105,7 +121,7 @@ $$;
  */
 create or replace function resolver_email_hermano(p_hermandad_id uuid, p_dni text)
 returns text
-language plpgsql volatile security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public, extensions as $$
 declare
   v_dni text;
   v_huella text;
@@ -208,7 +224,7 @@ revoke all on recuperaciones_hermano from anon, authenticated;
  */
 create or replace function pedir_recuperacion_hermano(p_hermandad_id uuid, p_dni text)
 returns jsonb
-language plpgsql volatile security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public, extensions as $$
 declare
   v_dni text;
   v_hermano record;
@@ -268,7 +284,7 @@ grant execute on function pedir_recuperacion_hermano(uuid, text) to service_role
  */
 create or replace function canjear_recuperacion_hermano(p_token text)
 returns uuid
-language plpgsql volatile security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public, extensions as $$
 declare v_auth uuid;
 begin
   if coalesce(p_token, '') = '' then return null; end if;

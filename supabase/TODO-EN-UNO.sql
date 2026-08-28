@@ -72,6 +72,8 @@
 --   47. encargos-redes.sql         Encargar un post y que se reparta solo entre la junta
 --   48. tienda.sql                 La tienda: productos, ventas, stock y los asientos que generan
 --   49. tienda-web.sql             La tienda en la web: reservar por internet y pagar al recoger
+--   50. campanas-y-proyectos.sql   Campañas de recaudación con su barra, y proyectos a largo plazo
+--   51. reglas-de-reparto.sql      Gastos porcentuales enlazados a una partida, para pérdidas y ganancias
 --
 -- -----------------------------------------------------------------------------
 -- LO ÚNICO QUE HAY QUE LEER ANTES
@@ -2689,15 +2691,16 @@ create or replace function sembrar_permisos_de_fabrica(p_hermandad_id uuid) retu
       ('Hermano Mayor','hermanos'),('Hermano Mayor','cortejo'),('Hermano Mayor','cuotas'),
       ('Hermano Mayor','papeletas'),('Hermano Mayor','tesoreria'),('Hermano Mayor','inventario'),
       ('Hermano Mayor','archivo'),('Hermano Mayor','eventos'),('Hermano Mayor','comunicados'),
-      ('Hermano Mayor','informes'),('Hermano Mayor','web'),
+      ('Hermano Mayor','informes'),('Hermano Mayor','web'),('Hermano Mayor','campanas'),
       ('Hermano Mayor','personal'),('Hermano Mayor','configuracion'),
       ('Secretario/a','hermanos'),('Secretario/a','cortejo'),('Secretario/a','papeletas'),
       ('Secretario/a','archivo'),('Secretario/a','eventos'),('Secretario/a','comunicados'),
-      ('Secretario/a','informes'),('Secretario/a','web'),
+      ('Secretario/a','informes'),('Secretario/a','web'),('Secretario/a','campanas'),
       ('Tesorero/a','tesoreria'),('Tesorero/a','cuotas'),('Tesorero/a','inventario'),('Tesorero/a','informes'),
+      ('Tesorero/a','campanas'),
       ('Fiscal','archivo'),('Fiscal','informes'),
       ('Mayordomo/Prioste','cortejo'),('Mayordomo/Prioste','inventario'),
-      ('Mayordomo/Prioste','eventos'),('Mayordomo/Prioste','informes'),
+      ('Mayordomo/Prioste','eventos'),('Mayordomo/Prioste','informes'),('Mayordomo/Prioste','campanas'),
       ('Diputado/a Mayor de Gobierno','hermanos'),('Diputado/a Mayor de Gobierno','cortejo'),
       ('Diputado/a Mayor de Gobierno','papeletas'),('Diputado/a Mayor de Gobierno','eventos'),
       ('Diputado/a Mayor de Gobierno','informes'),
@@ -3590,15 +3593,16 @@ create or replace function sembrar_permisos_de_fabrica(p_hermandad_id uuid) retu
       ('Hermano Mayor','papeletas'),('Hermano Mayor','tesoreria'),('Hermano Mayor','inventario'),
       ('Hermano Mayor','archivo'),('Hermano Mayor','eventos'),('Hermano Mayor','comunicados'),
       ('Hermano Mayor','informes'),('Hermano Mayor','web'),('Hermano Mayor','personal'),
-      ('Hermano Mayor','configuracion'),
+      ('Hermano Mayor','configuracion'),('Hermano Mayor','campanas'),
       ('Secretario/a','hermanos'),('Secretario/a','cortejo'),('Secretario/a','papeletas'),
       ('Secretario/a','archivo'),('Secretario/a','eventos'),('Secretario/a','comunicados'),
-      ('Secretario/a','informes'),('Secretario/a','web'),
+      ('Secretario/a','informes'),('Secretario/a','web'),('Secretario/a','campanas'),
       ('Tesorero/a','tesoreria'),('Tesorero/a','cuotas'),('Tesorero/a','inventario'),
-      ('Tesorero/a','informes'),
+      ('Tesorero/a','informes'),('Tesorero/a','campanas'),
       ('Fiscal','archivo'),('Fiscal','informes'),
       ('Mayordomo/Prioste','cortejo'),('Mayordomo/Prioste','inventario'),
       ('Mayordomo/Prioste','eventos'),('Mayordomo/Prioste','informes'),
+      ('Mayordomo/Prioste','campanas'),
       ('Diputado/a Mayor de Gobierno','hermanos'),('Diputado/a Mayor de Gobierno','cortejo'),
       ('Diputado/a Mayor de Gobierno','papeletas'),('Diputado/a Mayor de Gobierno','eventos'),
       ('Diputado/a Mayor de Gobierno','informes'),
@@ -4445,16 +4449,21 @@ comment on function contar_visita(uuid, text) is
 -- =============================================================================
 
 /*
- * LA LLAVE DE BAJA SALE DE `gen_random_bytes`, QUE NO ES DE POSTGRES A SECAS.
+ * LA LLAVE DE BAJA NO NECESITA NINGUNA EXTENSIÓN, Y ESO ES A PROPÓSITO.
  *
- * Viene con la extensión `pgcrypto`. En Supabase está encendida de fábrica, así
- * que aquí funcionaba y nadie lo miró; pero es una dependencia que este fichero
- * no declaraba. En un Postgres sin ella, la instalación se para EN ESTA LÍNEA y
- * todo lo que viene detrás —las políticas, las funciones de suscripción, las
- * copias— no llega a crearse. Y como el error habla de una función y no de una
- * extensión, no se entiende.
+ * Salía de `gen_random_bytes`, que es de `pgcrypto`. Y un `default` de columna
+ * se resuelve AL CREAR LA TABLA, con el `search_path` que haya en ese momento:
+ * en Supabase pgcrypto vive en el esquema `extensions`, así que la tabla no se
+ * podía ni crear —«function gen_random_bytes(integer) does not exist»— y el
+ * fichero entero se paraba ahí.
  *
- * Se declara. Si ya está, no hace nada.
+ * `gen_random_uuid()` viene con Postgres desde la 13, sin extensiones. Dos
+ * seguidos dan 64 caracteres al azar, que es más de lo que hacía falta.
+ *
+ * La llave sirve para dos cosas —confirmar y darse de baja— y es lo único que
+ * hace falta saber para las dos: por eso va en la dirección del correo y por
+ * eso es larga. Con un id normal, cualquiera que probara identificadores podría
+ * dar de baja a otro; con esto no hay nada que probar.
  */
 create extension if not exists pgcrypto;
 
@@ -4472,7 +4481,11 @@ create table if not exists suscriptores_web (
    * Con un id normal, cualquiera que probara identificadores podría dar de baja
    * a otro. Con esto, no hay nada que probar.
    */
-  llave text not null default encode(gen_random_bytes(24), 'hex'),
+  -- `gen_random_uuid()` es de Postgres a secas desde la 13: no hace falta
+  -- ninguna extensión, y por eso este `default` se puede resolver siempre.
+  -- Dos seguidos, sin guiones, son 64 caracteres al azar — de sobra para lo
+  -- que hace falta, y sin depender de dónde esté instalada pgcrypto.
+  llave text not null default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
 
   -- Hasta que no abre el enlace del correo, no se le escribe.
   confirmado boolean not null default false,
@@ -5300,10 +5313,26 @@ create trigger solicitudes_con_freno
 
 /*
  * `gen_random_bytes` y `digest` vienen con `pgcrypto`, no con Postgres a secas.
- * En Supabase está encendida de fábrica, pero se declara igualmente: este
- * archivo se puede ejecutar solo, y sin ella se pararía a la mitad con un error
- * que habla de una función y no de una extensión — que fue exactamente lo que
- * pasó con `suscriptores-web.sql`.
+ *
+ * DECLARARLA NO BASTA, Y ESTO COSTÓ UN FALLO EN PRODUCCIÓN.
+ *
+ * En Supabase pgcrypto viene encendida de fábrica pero EN EL ESQUEMA
+ * `extensions`, no en `public`. Así que este `create extension if not exists`
+ * no hace nada —ya está instalada— y una función declarada con
+ * `set search_path = public` NO LA VE. El error que sale es
+ *
+ *     function gen_random_bytes(integer) does not exist
+ *
+ * que manda a buscar una función cuando lo que pasa es que está en otro
+ * esquema. La recuperación de contraseña del hermano estuvo rota por esto.
+ *
+ * Por eso las funciones de este archivo llevan `set search_path = public,
+ * extensions`. Un esquema que no exista se ignora sin quejarse, así que la
+ * misma línea vale en Supabase y en un Postgres normal —donde la extensión
+ * acaba en `public` y se encuentra igual—.
+ *
+ * Y por eso las pruebas montan ahora `extensions` como lo hace Supabase: con
+ * pgcrypto en `public`, esto pasaba en verde.
  */
 create extension if not exists pgcrypto;
 
@@ -5364,7 +5393,7 @@ $$;
  */
 create or replace function resolver_email_hermano(p_hermandad_id uuid, p_dni text)
 returns text
-language plpgsql volatile security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public, extensions as $$
 declare
   v_dni text;
   v_huella text;
@@ -5467,7 +5496,7 @@ revoke all on recuperaciones_hermano from anon, authenticated;
  */
 create or replace function pedir_recuperacion_hermano(p_hermandad_id uuid, p_dni text)
 returns jsonb
-language plpgsql volatile security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public, extensions as $$
 declare
   v_dni text;
   v_hermano record;
@@ -5527,7 +5556,7 @@ grant execute on function pedir_recuperacion_hermano(uuid, text) to service_role
  */
 create or replace function canjear_recuperacion_hermano(p_token text)
 returns uuid
-language plpgsql volatile security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public, extensions as $$
 declare v_auth uuid;
 begin
   if coalesce(p_token, '') = '' then return null; end if;
@@ -7380,21 +7409,48 @@ begin
    */
   select coalesce(max(m.numero), 0) into v_num_mov from movimientos m where m.hermandad_id = v_hermandad;
 
+  /*
+   * EL IVA VA EN SU PROPIA LÍNEA, y no metido dentro del ingreso.
+   *
+   * De una camiseta de 15 €, 12,40 € son de la hermandad y 2,60 € se le están
+   * cobrando a quien compra PARA HACIENDA. Entran en la misma caja, pero no
+   * son lo mismo: sumados en una sola línea, el libro dice que la tienda
+   * ingresa un 21 % más de lo que ingresa, y a la hora del modelo 303 no hay
+   * de dónde sacar la cifra sin recorrer las facturas una a una.
+   *
+   * Las dos líneas suman EXACTAMENTE el total, así que la caja sigue
+   * cuadrando: es la misma cantidad de dinero, contada por separado.
+   *
+   * Si la hermandad no repercute IVA —lo normal en la mayoría— `v_iva` es cero
+   * y sale una sola línea por el total, como antes. Un asiento de cero euros
+   * solo ensucia el libro.
+   */
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
   values (
     v_hermandad, v_num_mov + 1, to_char(now(), 'YYYY-MM-DD'),
     format('Venta en tienda %s-%s', p_serie, v_numero),
-    'Otros ingresos', 'Ingreso', v_total,
+    'Otros ingresos', 'Ingreso', v_total - v_iva,
     case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
     'Pendiente', 'venta:' || v_venta
   );
+
+  if v_iva > 0 then
+    insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
+    values (
+      v_hermandad, v_num_mov + 2, to_char(now(), 'YYYY-MM-DD'),
+      format('IVA repercutido en la venta %s-%s', p_serie, v_numero),
+      'IVA repercutido', 'Ingreso', v_iva,
+      case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
+      'Pendiente', 'iva-venta:' || v_venta
+    );
+  end if;
 
   -- El gasto solo si de verdad costó algo: un artículo donado tiene coste 0 y
   -- un asiento de cero euros solo ensucia el libro.
   if v_coste > 0 then
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
     values (
-      v_hermandad, v_num_mov + 2, to_char(now(), 'YYYY-MM-DD'),
+      v_hermandad, v_num_mov + 3, to_char(now(), 'YYYY-MM-DD'),
       format('Coste del género vendido %s-%s', p_serie, v_numero),
       'Gastos varios menores', 'Gasto', v_coste,
       case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -7594,13 +7650,26 @@ begin
 
   select coalesce(max(m.numero), 0) into v_num from movimientos m where m.hermandad_id = v_hermandad;
 
-  -- El contrario del ingreso: un gasto por lo que se devuelve.
+  /*
+   * El contrario del ingreso: un gasto por lo que se devuelve. Y el del IVA
+   * aparte, como se apuntó: si se contra-apuntara todo junto, el 303 saldría
+   * con el IVA repercutido de una venta que ya no existe.
+   */
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
   values (v_hermandad, v_num + 1, to_char(now(), 'YYYY-MM-DD'),
           format('Anulada la venta %s-%s', v_venta.serie, v_venta.numero),
-          'Gastos varios menores', 'Gasto', v_venta.total,
+          'Gastos varios menores', 'Gasto', v_venta.total - v_venta.iva_total,
           case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
           'Pendiente', 'anula-venta:' || p_venta_id);
+
+  if v_venta.iva_total > 0 then
+    insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
+    values (v_hermandad, v_num + 4, to_char(now(), 'YYYY-MM-DD'),
+            format('IVA de la venta anulada %s-%s', v_venta.serie, v_venta.numero),
+            'IVA repercutido', 'Gasto', v_venta.iva_total,
+            case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
+            'Pendiente', 'anula-iva-venta:' || p_venta_id);
+  end if;
 
   -- Y el contrario del coste, si lo hubo.
   if v_venta.coste_total > 0 then
@@ -8336,3 +8405,474 @@ end $$;
 -- Solo la clave de servicio, que es la que usa `enviar-correo`. Desde el
 -- navegador NO: devuelve el correo y el teléfono de quien reservó.
 revoke all on function resguardo_de_reserva(uuid, text) from public, anon, authenticated;
+
+-- =============================================================================
+--   CAMPANAS-Y-PROYECTOS.SQL — Campañas de recaudación con su barra, y proyectos a largo plazo
+-- =============================================================================
+
+-- ============================================================================
+--   CAMPAÑAS DE RECAUDACIÓN Y PROYECTOS
+-- ============================================================================
+--
+-- Lo que se pidió, tal cual: «hay que crear una parte de campañas y proyectos,
+-- en la que las campañas sean recolecciones de dinero con una barra hasta que
+-- se llegue al objetivo, y los proyectos que sean como tareas pero a largo
+-- plazo».
+--
+-- ----------------------------------------------------------------------------
+-- LA DECISIÓN QUE EXPLICA TODO LO DEMÁS: LO RECAUDADO NO SE GUARDA AQUÍ
+-- ----------------------------------------------------------------------------
+--
+-- En esta tabla no hay ninguna columna «recaudado». Lo que lleva reunido una
+-- campaña se cuenta sumando los APUNTES DE TESORERÍA que llevan su marca en
+-- `origen` — `campana:<id>:<aportacion>` — igual que las cuotas y las
+-- papeletas (ver `lib/apuntes.ts`).
+--
+-- Un contador propio sería más rápido de leer y estaría mal a las dos semanas:
+--
+--   · En cuanto alguien corrige un apunte en Tesorería —una cifra mal
+--     tecleada, un donativo que se anula—, el contador se queda con el número
+--     viejo. Y entonces hay DOS VERDADES sobre el mismo dinero: la que enseña
+--     la barra y la que dice el libro. La que se publica en la web es siempre
+--     la equivocada, porque nadie republica una barra.
+--
+--   · Es exactamente la queja que trajo esto: «el concepto de cuota no se pasa
+--     a tesorería». Dinero que entra y del que el libro no se entera. Contando
+--     desde el libro eso no puede pasar: un donativo que no está en Tesorería
+--     no mueve la barra, así que si la barra sube, el tesorero lo tiene.
+--
+-- Cuesta una consulta más. Merece la pena.
+--
+-- ----------------------------------------------------------------------------
+-- QUIÉN PUEDE QUÉ
+-- ----------------------------------------------------------------------------
+--
+-- Módulo nuevo, `campanas`. Se siembra a los cargos que tienen sentido: el
+-- Hermano Mayor, el Secretario, el Tesorero (una campaña es dinero) y el
+-- Mayordomo (los proyectos suelen ser suyos: el paso, el manto, la casa).
+--
+-- Tesorería e Informes pueden LEER sin poder tocar: el tesorero necesita saber
+-- a qué campaña corresponde un apunte que está conciliando, y el Estado de
+-- Cuentas anual quiere poder decir cuánto se recaudó para qué.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Es seguro repetirlo: no borra ni sobrescribe nada.
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- 1. Las campañas
+-- ----------------------------------------------------------------------------
+
+create table if not exists campanas_recaudacion (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid not null default hermandad_actual() references hermandades(id) on delete cascade,
+  nombre text not null,
+  descripcion text not null default '',
+  /*
+   * EL OBJETIVO, EN CÉNTIMOS Y ENTERO.
+   *
+   * En `numeric` con dos decimales habría que decidir qué pasa con el tercer
+   * decimal, y JavaScript y Postgres no redondean igual los empates: una
+   * campaña de 12.345,675 € se guardaría como una cosa y se leería como otra.
+   * En céntimos no hay nada que redondear. Es lo mismo que se hace en la
+   * tienda con los precios, y por lo mismo.
+   *
+   * CERO SIGNIFICA «SIN OBJETIVO» y es un caso de verdad, no un hueco: el
+   * cepillo de caridad se abre sin cifra. Esas no tienen barra —no hay nada
+   * que llenar—, solo total. Por eso `>= 0` y no `> 0`.
+   */
+  objetivo_cent bigint not null default 0 check (objetivo_cent >= 0),
+  fecha_inicio date not null default current_date,
+  fecha_fin date,
+  estado text not null default 'abierta' check (estado in ('abierta', 'cerrada')),
+  -- Si sale en la web pública con su barra, para que done gente de fuera.
+  en_la_web boolean not null default false,
+  creada_en timestamptz not null default now(),
+  -- Una campaña que acaba antes de empezar es una errata, no una campaña.
+  constraint campanas_fechas_con_sentido check (fecha_fin is null or fecha_fin >= fecha_inicio)
+);
+
+alter table campanas_recaudacion enable row level security;
+
+-- Lo que se pregunta al pintar la web pública: las abiertas que salen fuera.
+create index if not exists campanas_en_la_web_idx
+  on campanas_recaudacion (hermandad_id) where en_la_web and estado = 'abierta';
+
+
+-- ----------------------------------------------------------------------------
+-- 2. Los proyectos
+-- ----------------------------------------------------------------------------
+
+create table if not exists proyectos (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid not null default hermandad_actual() references hermandades(id) on delete cascade,
+  nombre text not null,
+  descripcion text not null default '',
+  /*
+   * «idea» existe a propósito y es el estado más útil de los cuatro: lo que se
+   * habló en un cabildo y quedó ahí. Sin un sitio donde ponerlo se pierde
+   * entre un acta y la siguiente, y a los dos años alguien lo vuelve a
+   * proponer como nuevo.
+   */
+  estado text not null default 'idea' check (estado in ('idea', 'en marcha', 'parado', 'hecho')),
+  responsable_id uuid references hermanos(id) on delete set null,
+  /*
+   * EL NOMBRE DEL RESPONSABLE SE GUARDA ADEMÁS DEL IDENTIFICADOR.
+   *
+   * No es duplicar por duplicar: un proyecto dura años y el hermano que lo
+   * llevaba puede darse de baja. Con solo el identificador, `on delete set
+   * null` lo deja a nulo y el proyecto se queda sin nombre —«responsable:
+   * nadie»— justo cuando hace falta saber quién sabía de esto. Guardando el
+   * nombre queda el rastro aunque la ficha ya no esté.
+   */
+  responsable_nombre text,
+  -- La fecha es un OBJETIVO, no una cita, y puede no estar: «cuando se pueda»
+  -- es una respuesta válida y no puede obligar a inventarse un día.
+  fecha_objetivo date,
+  presupuesto_cent bigint not null default 0 check (presupuesto_cent >= 0),
+  -- La campaña que lo paga, si tiene una. Lo recaudado se cuenta desde
+  -- Tesorería, no se copia aquí.
+  recaudacion_id uuid references campanas_recaudacion(id) on delete set null,
+  creado_en timestamptz not null default now()
+);
+
+alter table proyectos enable row level security;
+
+create table if not exists tareas_proyecto (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid not null default hermandad_actual() references hermandades(id) on delete cascade,
+  proyecto_id uuid not null references proyectos(id) on delete cascade,
+  titulo text not null,
+  hecha boolean not null default false,
+  hermano_id uuid references hermanos(id) on delete set null,
+  hermano_nombre text,
+  fecha_limite date,
+  creada_en timestamptz not null default now()
+);
+
+alter table tareas_proyecto enable row level security;
+
+create index if not exists tareas_proyecto_del_proyecto_idx on tareas_proyecto (proyecto_id);
+
+
+-- ----------------------------------------------------------------------------
+-- 3. Cada hermandad, la suya
+-- ----------------------------------------------------------------------------
+--
+-- El mismo patrón que el resto: una política RESTRICTIVA que encierra la fila
+-- en su hermandad —esa se cumple SIEMPRE, se sume a las demás o no— y encima
+-- las permisivas, que dicen quién puede tocar qué.
+--
+-- Y el disparador que vuelve a fijar `hermandad_id`: el `default` solo actúa
+-- cuando no se manda la columna, y quien manda desde el navegador puede
+-- mandarla. Sin esto, un `insert` con la hermandad de otro se cuela.
+
+do $$
+declare t text;
+begin
+  foreach t in array array['campanas_recaudacion', 'proyectos', 'tareas_proyecto'] loop
+    execute format('drop policy if exists "solo_mi_hermandad" on %I', t);
+    execute format(
+      'create policy "solo_mi_hermandad" on %I as restrictive for all to authenticated '
+      'using (hermandad_id = hermandad_actual()) with check (hermandad_id = hermandad_actual())', t);
+
+    execute format('drop policy if exists "campanas_gestiona" on %I', t);
+    execute format(
+      'create policy "campanas_gestiona" on %I for all to authenticated '
+      'using (modulo_permitido(''campanas'')) with check (modulo_permitido(''campanas''))', t);
+
+    /*
+     * TESORERÍA E INFORMES LEEN, SIN PODER TOCAR.
+     *
+     * El tesorero necesita saber a qué campaña corresponde un apunte que está
+     * conciliando: en el libro solo ve `campana:<id>`, y sin poder leer esta
+     * tabla eso es un identificador y nada más. Y el Estado de Cuentas anual
+     * quiere poder decir cuánto se recaudó y para qué.
+     *
+     * Solo `select`: quien lleva el dinero no decide qué campañas hay.
+     */
+    execute format('drop policy if exists "tesoreria_lee_campanas" on %I', t);
+    execute format(
+      'create policy "tesoreria_lee_campanas" on %I for select to authenticated '
+      'using (modulo_permitido(''tesoreria'') or modulo_permitido(''informes''))', t);
+
+    execute format('grant select, insert, update, delete on %I to authenticated', t);
+  end loop;
+end $$;
+
+create or replace function campanas_fija_hermandad() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.hermandad_id := hermandad_actual();
+  else
+    -- Una fila no se muda de hermandad. Ni por error ni a mano.
+    new.hermandad_id := old.hermandad_id;
+  end if;
+  return new;
+end $$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['campanas_recaudacion', 'proyectos', 'tareas_proyecto'] loop
+    execute format('drop trigger if exists %I on %I', t || '_fija_hermandad', t);
+    execute format(
+      'create trigger %I before insert or update on %I '
+      'for each row execute function campanas_fija_hermandad()', t || '_fija_hermandad', t);
+  end loop;
+end $$;
+
+
+-- ----------------------------------------------------------------------------
+-- 4. El módulo nuevo, sembrado en las hermandades que ya existen
+-- ----------------------------------------------------------------------------
+--
+-- Sin esto, `modulo_permitido('campanas')` da falso para TODO el mundo en
+-- cualquier hermandad ya creada, incluido el Hermano Mayor: la pantalla se lo
+-- ofrecería y la política lo rechazaría, que es justo el fallo que ya pasó una
+-- vez con «eventos» y «web» (ver `permisos-eventos-y-web.sql`).
+--
+-- Y SE AÑADE SOLO A LOS CARGOS QUE ESA HERMANDAD YA RECONOCE. Si nunca se le
+-- sembró «Vocal», no se le inventa uno ahora.
+
+insert into permisos_cargo (hermandad_id, cargo, modulo_id)
+select h.id, f.cargo, 'campanas'
+from hermandades h
+cross join (values
+  ('Hermano Mayor'),
+  ('Secretario/a'),
+  ('Tesorero/a'),
+  ('Mayordomo/Prioste')
+) as f(cargo)
+where exists (
+  select 1 from permisos_cargo pc
+  where pc.hermandad_id = h.id and pc.cargo = f.cargo
+)
+on conflict do nothing;
+
+
+-- ----------------------------------------------------------------------------
+-- 5. Las campañas que salen en la web pública
+-- ----------------------------------------------------------------------------
+--
+-- Quien visita la web NO ha entrado en ningún sitio: es `anon`, y las
+-- políticas de arriba son todas `to authenticated`. Así que la web no vería ni
+-- una campaña — el mismo tropiezo que ya está contado en `tienda-web.sql`.
+--
+-- Se resuelve igual: una función SECURITY DEFINER que devuelve SOLO lo
+-- publicable, con columnas con nombre. No se abre la tabla a `anon`, porque
+-- entonces se vería también la campaña que la hermandad tiene preparada y
+-- todavía no ha anunciado.
+--
+-- LO RECAUDADO SE CALCULA AQUÍ DENTRO, desde los apuntes, por lo mismo que en
+-- todas partes. Y se devuelve solo el TOTAL: quién ha donado y cuánto no sale
+-- de la hermandad.
+
+create or replace function campanas_de_la_web(p_slug text)
+returns table (
+  id uuid,
+  nombre text,
+  descripcion text,
+  objetivo_cent bigint,
+  recaudado_cent bigint,
+  aportaciones integer,
+  fecha_fin date
+)
+language sql stable security definer set search_path = public as $$
+  select
+    c.id,
+    c.nombre,
+    c.descripcion,
+    c.objetivo_cent,
+    -- Los gastos de la campaña se RESTAN: enseñar lo bruto como si fuera lo
+    -- disponible es mentir sobre cuánto falta.
+    coalesce((
+      select sum(case when m.tipo = 'Ingreso' then round(m.importe * 100)
+                      else -round(m.importe * 100) end)::bigint
+      from movimientos m
+      where m.hermandad_id = c.hermandad_id
+        and m.origen like 'campana:' || c.id::text || ':%'
+    ), 0),
+    coalesce((
+      select count(*)::integer
+      from movimientos m
+      where m.hermandad_id = c.hermandad_id
+        and m.tipo = 'Ingreso'
+        and m.origen like 'campana:' || c.id::text || ':%'
+    ), 0),
+    c.fecha_fin
+  from campanas_recaudacion c
+  join web_publica w on w.hermandad_id = c.hermandad_id
+  where w.slug = p_slug
+    -- Una web sin publicar se puede ver desde su propia hermandad, para poder
+    -- comprobar cómo va a quedar antes de anunciarla.
+    and (w.publicada or w.hermandad_id = hermandad_actual())
+    and c.en_la_web
+    and c.estado = 'abierta'
+  order by c.creada_en;
+$$;
+
+grant execute on function campanas_de_la_web(text) to anon, authenticated;
+
+
+-- ----------------------------------------------------------------------------
+-- 6. ¿Ha quedado puesto?
+-- ----------------------------------------------------------------------------
+--
+-- AQUÍ NO SE DEVUELVE NADA A PROPÓSITO. La comprobación de este fichero vive
+-- en el informe único del final de `ACTUALIZAR.sql`, junto a la de todos los
+-- demás.
+--
+-- Tenía su propio `select` al final y estaba mal: `ACTUALIZAR.sql` promete en
+-- su cabecera que «al terminar sale una tabla» y que «es lo único que
+-- devuelve». Con un `select` suelto por el medio salen dos, y quien lo ejecuta
+-- —que no es informático— se queda mirando una tabla de tres números sin
+-- título preguntándose si eso es un error.
+
+-- =============================================================================
+--   REGLAS-DE-REPARTO.SQL — Gastos porcentuales enlazados a una partida, para pérdidas y ganancias
+-- =============================================================================
+
+-- ============================================================================
+--   GASTOS PORCENTUALES ENLAZADOS A UNA PARTIDA
+-- ============================================================================
+--
+-- Lo que se pidió: «opción de añadir gastos porcentuales a los ingresos,
+-- gastos, etc. que se pueda enlazar», para la cuenta de pérdidas y ganancias.
+--
+-- Son DOS COSAS distintas, las dos normales en una hermandad, y el «a los
+-- ingresos, GASTOS, etc.» dice que la regla se engancha a cualquiera de los
+-- dos. Están las dos y se elige al crearla:
+--
+--   · REPARTO — trocear un gasto REAL entre partidas. «La luz: 60 % a la casa
+--     hermandad, 40 % al almacén.» El dinero ya salió y el total NO cambia:
+--     solo se dice a qué corresponde cada trozo.
+--
+--   · COMPROMISO — apartar un % de lo que entre por una partida. «El 10 % de
+--     la lotería va a caridad.» Aquí no ha salido dinero todavía.
+--
+-- ----------------------------------------------------------------------------
+-- ESTO NO ESCRIBE NI UN APUNTE EN TESORERÍA. NUNCA.
+-- ----------------------------------------------------------------------------
+--
+-- Es la decisión que hay que entender antes de tocar nada aquí, y por eso no
+-- existe ningún disparador que genere movimientos desde esta tabla.
+--
+-- Un compromiso NO es un gasto: es dinero que sigue en la cuenta. Apuntarlo en
+-- el libro rompería las dos cosas a la vez:
+--
+--   1. EL SALDO DEJARÍA DE CUADRAR CON EL BANCO. El libro diría que hay 1.000 €
+--      menos de los que hay, y el tesorero buscaría en el extracto un pago que
+--      no existe.
+--
+--   2. SE CONTARÍA DOS VECES. El día que de verdad se dé el dinero a caridad,
+--      ESE sí es un apunte real. Con el compromiso ya apuntado, la caridad
+--      saldría por el doble.
+--
+-- Un reparto tampoco: el gasto ya está en el libro entero y por su importe
+-- bueno, que es el de la factura. Trocearlo ahí sería cambiar una línea que
+-- cuadra con un papel por tres que no cuadran con nada.
+--
+-- Así que esto es una tabla de CONFIGURACIÓN, no de movimientos: dice cómo se
+-- lee el informe, no qué ha pasado con el dinero.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Es seguro repetirlo: no borra ni sobrescribe nada.
+-- ============================================================================
+
+create table if not exists reglas_reparto (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid not null default hermandad_actual() references hermandades(id) on delete cascade,
+  nombre text not null,
+  tipo text not null default 'reparto' check (tipo in ('reparto', 'compromiso')),
+  -- La partida a la que se ENGANCHA. Se guarda el NOMBRE de la categoría, no
+  -- un identificador: las categorías las define cada hermandad en su catálogo
+  -- (`CLAVES_CATALOGOS`) y no hay tabla a la que apuntar.
+  categoria_base text not null,
+  /*
+   * EL PORCENTAJE, EN CENTÉSIMAS DE PUNTO Y ENTERO: 12,5 % → 1250.
+   *
+   * Por lo mismo que el dinero va en céntimos. En `numeric` con decimales,
+   * JavaScript y Postgres redondean distinto los empates, así que el informe de
+   * la pantalla y el que saliera de una consulta a la base darían cifras
+   * distintas para el mismo año — y las dos parecerían correctas.
+   *
+   * El tope es 10000 (100 %): nadie puede repartir más de lo que hay.
+   */
+  porcentaje_cent integer not null check (porcentaje_cent > 0 and porcentaje_cent <= 10000),
+  categoria_destino text not null,
+  activo boolean not null default true,
+  nota text not null default '',
+  creado_en timestamptz not null default now(),
+  /*
+   * ENGANCHARLA A SÍ MISMA deja un informe absurdo —«el 40 % de Mantenimiento
+   * va a Mantenimiento»— y no da error en ninguna parte. Es un despiste de un
+   * clic, porque las dos listas de la pantalla son idénticas, y después nadie
+   * entiende por qué los números no cambian.
+   */
+  constraint reglas_reparto_no_a_si_misma check (categoria_base <> categoria_destino)
+);
+
+alter table reglas_reparto enable row level security;
+
+create index if not exists reglas_reparto_activas_idx
+  on reglas_reparto (hermandad_id) where activo;
+
+
+-- ----------------------------------------------------------------------------
+-- Cada hermandad, las suyas
+-- ----------------------------------------------------------------------------
+--
+-- El mismo patrón que el resto: una política RESTRICTIVA que encierra la fila
+-- en su hermandad —esa se cumple siempre— y encima las permisivas.
+
+drop policy if exists "solo_mi_hermandad" on reglas_reparto;
+create policy "solo_mi_hermandad" on reglas_reparto as restrictive for all to authenticated
+  using (hermandad_id = hermandad_actual())
+  with check (hermandad_id = hermandad_actual());
+
+-- Quien lleva el dinero es quien decide cómo se reparte.
+drop policy if exists "tesoreria_manda" on reglas_reparto;
+create policy "tesoreria_manda" on reglas_reparto for all to authenticated
+  using (modulo_permitido('tesoreria'))
+  with check (modulo_permitido('tesoreria'));
+
+/*
+ * Y QUIEN SACA LOS INFORMES TIENE QUE PODER LEERLAS, aunque no lleve el dinero.
+ *
+ * Sin esto, el Secretario abre la cuenta de pérdidas y ganancias y le sale sin
+ * ninguna regla aplicada: no un error, sino OTRAS CIFRAS. Y RLS no avisa —
+ * devuelve cero filas y ya—. Dos personas de la misma junta imprimirían el
+ * mismo informe del mismo año con resultados distintos, y no habría forma de
+ * saber cuál es el bueno mirando el papel.
+ *
+ * Solo `select`: leerlas para el informe, no decidirlas.
+ */
+drop policy if exists "informes_lee" on reglas_reparto;
+create policy "informes_lee" on reglas_reparto for select to authenticated
+  using (modulo_permitido('informes'));
+
+grant select, insert, update, delete on reglas_reparto to authenticated;
+
+-- Una fila no se muda de hermandad, ni por error ni a mano: el `default` solo
+-- actúa cuando no se manda la columna, y quien escribe desde el navegador
+-- puede mandarla.
+create or replace function reglas_reparto_fija_hermandad() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.hermandad_id := hermandad_actual();
+  else
+    new.hermandad_id := old.hermandad_id;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists reglas_reparto_fija_hermandad on reglas_reparto;
+create trigger reglas_reparto_fija_hermandad
+  before insert or update on reglas_reparto
+  for each row execute function reglas_reparto_fija_hermandad();

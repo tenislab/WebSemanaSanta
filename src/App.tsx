@@ -123,6 +123,7 @@ const cargarTiendaVentas = conReintento(() => import('./pages/app/TiendaVentas')
 const cargarTiendaDatos = conReintento(() => import('./pages/app/TiendaDatos'))
 const cargarArchivo = conReintento(() => import('./pages/app/Archivo'))
 const cargarEventos = conReintento(() => import('./pages/app/Eventos'))
+const cargarCampanas = conReintento(() => import('./pages/app/Campanas'))
 const cargarComunicados = conReintento(() => import('./pages/app/Comunicados'))
 const cargarInformes = conReintento(() => import('./pages/app/Informes'))
 const cargarPersonal = conReintento(() => import('./pages/app/Personal'))
@@ -146,6 +147,7 @@ const TiendaVentas = lazy(cargarTiendaVentas)
 const TiendaDatos = lazy(cargarTiendaDatos)
 const Archivo = lazy(cargarArchivo)
 const Eventos = lazy(cargarEventos)
+const Campanas = lazy(cargarCampanas)
 const Comunicados = lazy(cargarComunicados)
 const Informes = lazy(cargarInformes)
 const Personal = lazy(cargarPersonal)
@@ -333,6 +335,7 @@ export default function App() {
         <Route path="tienda/datos" element={<TiendaDatos />} />
         <Route path="archivo" element={<Archivo />} />
         <Route path="eventos" element={<Eventos />} />
+        <Route path="campanas" element={<Campanas />} />
         <Route path="comunicados" element={<Comunicados />} />
         <Route path="informes" element={<Informes />} />
         <Route path="personal" element={<Personal />} />

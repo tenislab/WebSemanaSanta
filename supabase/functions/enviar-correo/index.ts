@@ -34,6 +34,39 @@ function soloLaDireccion(remitente: string): string {
   const m = remitente.match(/<([^>]+)>/)
   return (m ? m[1] : remitente).trim()
 }
+
+/**
+ * EL REMITENTE DE PRUEBA DE RESEND, Y POR QUÉ HAY QUE DELATARLO.
+ *
+ * Si no se pone `CORREO_REMITENTE`, se usa `onboarding@resend.dev`. Y eso NO
+ * es un remitente cualquiera: Resend solo entrega desde él A LA DIRECCIÓN CON
+ * LA QUE TE REGISTRASTE. A cualquier otra la acepta, contesta 200, y no la
+ * entrega nunca.
+ *
+ * Esa combinación —todo dice que sí y no llega nada— es la peor forma posible
+ * de fallar, y es exactamente lo que reportó la hermandad piloto: «no me
+ * llegan los mails», sin un solo error por ninguna parte. Se pasaron días
+ * pensando que era el proveedor.
+ *
+ * Así que cuando estamos con el de prueba, cada respuesta lo dice. No se
+ * bloquea el envío —sirve para comprobar el circuito, que para eso está— pero
+ * deja de hacerse pasar por un envío normal.
+ */
+const REMITENTE_DE_PRUEBA = 'onboarding@resend.dev'
+function conElRemitenteDePrueba(): boolean {
+  return soloLaDireccion(REMITENTE).toLowerCase() === REMITENTE_DE_PRUEBA
+}
+
+/** El aviso que acompaña a toda respuesta mientras no haya remitente propio. */
+function avisoDelRemitente(): string | undefined {
+  if (!conElRemitenteDePrueba()) return undefined
+  return (
+    'OJO: se está enviando desde onboarding@resend.dev, el remitente de pruebas de Resend. '
+    + 'Solo entrega a la dirección con la que te registraste en Resend; a cualquier otra la '
+    + 'acepta y NO la entrega, sin dar ningún error. Para escribir a los hermanos hay que '
+    + 'verificar el dominio de la hermandad en Resend y poner el secreto CORREO_REMITENTE.'
+  )
+}
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
@@ -65,8 +98,20 @@ const cabeceras = {
   'Content-Type': 'application/json',
 }
 
+/**
+ * Toda respuesta lleva el aviso del remitente de pruebas, si toca.
+ *
+ * Va aquí y no en cada sitio a propósito: son ocho ramas distintas —el envío
+ * normal, la confirmación de la lista, el resguardo de una reserva, las dos de
+ * recuperar contraseña…— y si el aviso se pone a mano en cada una, la novena
+ * se olvida. Y la novena será justo la que alguien esté depurando.
+ */
 function respuesta(cuerpo: unknown, estado = 200): Response {
-  return new Response(JSON.stringify(cuerpo), { status: estado, headers: cabeceras })
+  const aviso = avisoDelRemitente()
+  const conAviso = aviso && cuerpo && typeof cuerpo === 'object'
+    ? { ...(cuerpo as Record<string, unknown>), aviso }
+    : cuerpo
+  return new Response(JSON.stringify(conAviso), { status: estado, headers: cabeceras })
 }
 
 /**
@@ -530,6 +575,36 @@ Deno.serve(async (req: Request) => {
   } catch {
     return respuesta({ error: 'El cuerpo de la petición no es JSON.' }, 400)
   }
+  /*
+   * EL DIAGNÓSTICO, que es lo que convierte «no me llegan los mails» en una
+   * respuesta de diez segundos.
+   *
+   * Va antes del control de sesión por lo mismo que las otras dos ramas
+   * públicas: si lo que está roto es la propia configuración, exigir una
+   * sesión para poder mirarla es cerrar la puerta justo cuando hace falta
+   * abrirla. Y NO REVELA NINGÚN SECRETO: solo dice si cada uno está puesto o
+   * no, y qué dominio se usa de remitente —que es público, va en cada correo
+   * que sale—. Con esto no se puede mandar nada ni entrar en ningún sitio.
+   */
+  if (cuerpoCrudo.diagnostico === true) {
+    const remitente = soloLaDireccion(REMITENTE)
+    return respuesta({
+      diagnostico: {
+        claveDeResend: Boolean(RESEND_API_KEY),
+        remitentePropio: !conElRemitenteDePrueba(),
+        // El dominio, no la dirección entera: basta para saber si es el suyo.
+        dominioRemitente: remitente.split('@')[1] ?? '(sin dirección)',
+        claveDeServicio: Boolean(SERVICE_KEY),
+        urlDeSupabase: Boolean(SUPABASE_URL),
+        // Lo que hace falta para que salga UN correo cualquiera.
+        listoParaEnviar: Boolean(RESEND_API_KEY) && !conElRemitenteDePrueba(),
+        // Y lo que hace falta además para recuperar contraseñas y mandar
+        // resguardos, que leen datos con la clave de servicio.
+        listoParaContrasenas: Boolean(RESEND_API_KEY) && Boolean(SERVICE_KEY) && Boolean(SUPABASE_URL),
+      },
+    })
+  }
+
   const suscripcion = cuerpoCrudo.suscripcion as
     { hermandadId?: string; email?: string; origen?: string } | undefined
   if (suscripcion) return await mandarConfirmacion(suscripcion)

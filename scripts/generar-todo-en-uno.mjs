@@ -79,6 +79,8 @@ export const PIEZAS = [
   ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
   ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
   ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
+  ['campanas-y-proyectos.sql', 'Campañas de recaudación con su barra, y proyectos a largo plazo'],
+  ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
 ]
 
 const CABECERA = `-- =============================================================================

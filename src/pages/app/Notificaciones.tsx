@@ -9,12 +9,15 @@ import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
-import { getSolicitudesPapeleta } from '../../lib/solicitudesPapeleta'
+import { useSolicitudesPapeleta } from '../../lib/solicitudesPapeleta'
 import { avisosPendientes, avisosPorTipo, type Aviso } from '../../lib/notificaciones'
 import { hoyIso } from '../../lib/hoy'
 import { useConceptosCuota } from '../../lib/conceptosCuota'
 import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { resolverSolicitud, MOTIVOS_DE_RECHAZO } from '../../lib/familia'
+import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
+import { conApunteDeCobro, origenDeCuota, origenDePapeleta } from '../../lib/apuntes'
 
 /**
  * NOTIFICACIONES — lo que espera a que la junta haga algo.
@@ -44,9 +47,36 @@ export default function Notificaciones() {
   const [papeletas, setPapeletas] = useSupabaseTable<Papeleta>(
     'papeletas', CLAVES_DATOS.papeletas, PAPELETAS_INICIALES, papeletaToRow, rowToPapeleta,
   )
+  /*
+   * EL LIBRO DE CUENTAS, porque desde aquí se da dinero por cobrado.
+   *
+   * Aceptar el aviso de «he pagado por Bizum» dejaba la cuota en Pagada y no
+   * apuntaba nada: el dinero entraba y Tesorería no lo veía. Es el mismo
+   * agujero que ya se tapó en Papeletas, en otra pantalla.
+   */
+  const [, setMovimientos] = useSupabaseTable<Movimiento>(
+    'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES, movimientoToRow, rowToMovimiento,
+  )
   const solicitudesRemotas = useSolicitudes()
   const [solicitudes, setSolicitudes] = useState<SolicitudAlta[]>(solicitudesRemotas)
-  const peticionesPapeleta = useMemo(() => getSolicitudesPapeleta(), [])
+  /*
+   * DE LA BASE, NO DE LA COPIA DE ESTE NAVEGADOR.
+   *
+   * Esto era `useMemo(() => getSolicitudesPapeleta(), [])`, que lee lo que
+   * hubiera guardado ESTE ordenador la última vez, una sola vez al montar. Y la
+   * solicitud la manda el hermano DESDE SU MÓVIL: en el navegador de secretaría
+   * no ha estado nunca.
+   *
+   * Resultado exacto de lo que se reportó: «se solicita papeleta a través de
+   * cuenta de hermano y la notificación no llega a Notificaciones, si llega al
+   * apartado Papeletas». Papeletas montaba el hook de verdad; esta pantalla no.
+   *
+   * Y el aviso que no sale es peor que en otros sitios: esta pantalla existe
+   * precisamente para no tener que ir a buscar a cada módulo si hay algo
+   * esperando. Un aviso que no aparece aquí es un hermano sin sitio en la
+   * cofradía porque nadie vio su petición.
+   */
+  const [peticionesPapeleta] = useSolicitudesPapeleta()
 
   // Lo traído de la base manda sobre lo que hubiera en pantalla.
   const listaSolicitudes = solicitudes.length > 0 || solicitudesRemotas.length === 0
@@ -102,6 +132,23 @@ export default function Notificaciones() {
       setCuotas(cuotas.map((c) => (c.id === a.refId
         ? { ...c, estado: 'Pagada' as const, fechaPago: hoyIso(), pagoComunicado: null }
         : c)))
+      /*
+       * Y AL LIBRO. El método es el que dijo el hermano al avisar —Bizum,
+       * transferencia, en mano—, no uno inventado: de él depende si el dinero
+       * entra en Caja o en el banco, y de eso depende que el tesorero lo
+       * encuentre al conciliar.
+       */
+      const c = cuotas.find((x) => x.id === a.refId)
+      if (c) {
+        setMovimientos((prev) => conApunteDeCobro(prev, {
+          origen: origenDeCuota(c.id),
+          concepto: `${c.concepto} — ${hermanos.find((h) => h.id === c.hermanoId)?.nombre ?? 'hermano/a'}`,
+          categoria: 'Cuotas Hermanos/as',
+          importe: c.importe,
+          fecha: hoyIso(),
+          metodo: c.pagoComunicado?.metodo ?? c.metodoCobro,
+        }))
+      }
       setHecho(`Cuota de ${a.titulo.split(' ha pagado')[0]} dada por cobrada.`)
       return
     }
@@ -109,6 +156,17 @@ export default function Notificaciones() {
       setPapeletas(papeletas.map((p) => (p.id === a.refId
         ? { ...p, estado: 'Pagada' as const, pagoComunicado: null }
         : p)))
+      const p = papeletas.find((x) => x.id === a.refId)
+      if (p) {
+        setMovimientos((prev) => conApunteDeCobro(prev, {
+          origen: origenDePapeleta(p.id),
+          concepto: `Papeleta de sitio ${p.anio} — ${hermanos.find((h) => h.id === p.hermanoId)?.nombre ?? 'hermano/a'}`,
+          categoria: 'Papeletas de Sitio',
+          importe: p.importe,
+          fecha: hoyIso(),
+          metodo: p.pagoComunicado?.metodo ?? p.metodoPago,
+        }))
+      }
       setHecho(`Papeleta dada por pagada.`)
       return
     }

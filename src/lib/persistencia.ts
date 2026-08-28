@@ -27,13 +27,73 @@ export const CLAVES_DATOS = {
   // local solo serviría para enseñar un total que ya no es el de la base.
   productos: 'cabildo-productos',
   descuentos: 'cabildo-descuentos',
+  // Campañas de recaudación y proyectos. Lo RECAUDADO no está aquí: se cuenta
+  // desde los apuntes de Tesorería cada vez, para que no haya dos verdades
+  // sobre el mismo dinero. Ver `lib/recaudaciones.ts`.
+  recaudaciones: 'cabildo-recaudaciones',
+  proyectos: 'cabildo-proyectos',
+  tareasProyecto: 'cabildo-tareas-proyecto',
+  // Las reglas porcentuales de la cuenta de pérdidas y ganancias. NO son
+  // apuntes: no escriben en Tesorería nunca. Ver `lib/repartos.ts`.
+  repartos: 'cabildo-repartos',
 } as const
 
-/** Lee una colección guardada, o devuelve los datos de ejemplo si aún no hay nada. */
+/**
+ * ¿Lo guardado tiene LA MISMA FORMA que lo que se esperaba?
+ *
+ * No compara campo a campo —eso sería un validador y aquí no hace falta—:
+ * compara la CLASE de valor. Una lista donde se esperaba una lista, un objeto
+ * donde se esperaba un objeto, un texto donde se esperaba un texto. Es lo justo
+ * para que nadie llame a `.filter` sobre algo que no es una lista.
+ */
+function mismaForma(valor: unknown, esperado: unknown): boolean {
+  // `null` solo vale si lo que se esperaba TAMBIÉN podía ser nulo. Este es el
+  // caso que más daño hacía: `JSON.parse('null')` devuelve `null`, y `null`
+  // pasaba de largo hasta que alguien le pedía `.length`.
+  if (valor === null || valor === undefined) return esperado === null
+  if (Array.isArray(esperado)) return Array.isArray(valor)
+  if (esperado === null) return typeof valor === 'object'
+  if (typeof esperado === 'object') return typeof valor === 'object' && !Array.isArray(valor)
+  return typeof valor === typeof esperado
+}
+
+/**
+ * LEE UNA COLECCIÓN GUARDADA, o devuelve lo que se le diga si no hay nada
+ * —o si lo que hay no sirve—.
+ *
+ * ESA SEGUNDA MITAD ES EL ARREGLO DE UN FALLO QUE COSTÓ CARO, y conviene
+ * dejarlo escrito porque la versión de antes parecía correcta:
+ *
+ *     const raw = localStorage.getItem(clave)
+ *     if (raw) return JSON.parse(raw) as T
+ *
+ * El `as T` es una promesa que TypeScript se cree y que nadie comprueba. Si en
+ * el navegador había un `null` —de una versión antigua, de un guardado a
+ * medias, de una migración— esto devolvía `null`, y la pantalla siguiente
+ * hacía `hermanos.filter(...)` sobre él. React desmonta el árbol entero cuando
+ * algo revienta al pintar, así que el resultado era LA PÁGINA EN BLANCO.
+ *
+ * Y en blanco de verdad: sin mensaje, sin pista, y solo en el navegador de esa
+ * persona —en una ventana privada no hay nada guardado y por eso ahí sí
+ * arrancaba—. Barriendo las 35 claves con dos formas equivocadas salieron 25
+ * combinaciones que tumbaban la aplicación entera; entre ellas el censo, las
+ * cuotas, las papeletas, los movimientos, el personal y la suscripción.
+ *
+ * Ahora, un dato con la forma equivocada se descarta y se sigue con el valor
+ * por defecto: la pantalla saldrá vacía, que es incómodo pero se entiende y se
+ * puede contar por teléfono. Se avisa por consola para que quede rastro de
+ * QUÉ clave estaba mal.
+ */
 export function leerPersistido<T>(clave: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(clave)
-    if (raw) return JSON.parse(raw) as T
+    if (raw === null) return fallback
+    const valor = JSON.parse(raw) as unknown
+    if (!mismaForma(valor, fallback)) {
+      console.warn(`«${clave}» está guardado con una forma que no se esperaba: se ignora.`)
+      return fallback
+    }
+    return valor as T
   } catch {
     // localStorage no disponible o datos corruptos: seguimos con los de ejemplo
   }

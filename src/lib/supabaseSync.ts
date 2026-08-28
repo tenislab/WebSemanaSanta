@@ -100,6 +100,12 @@ export function useSupabaseTable<T extends { id: string }>(
     local ? leerPersistido(claveLocal, inicial) : [],
   )
   const cargado = useRef(local)
+  /*
+   * Para no reintentar en bucle. Se pone al reintentar y se quita en cuanto
+   * una carga se da por buena, así que el siguiente cero sospechoso —en otro
+   * momento, por otra causa— vuelve a tener su segunda oportunidad.
+   */
+  const reintentado = useRef(false)
 
   /**
    * De dónde se tira cuando la consulta falla.
@@ -115,6 +121,10 @@ export function useSupabaseTable<T extends { id: string }>(
   function deReserva(): T[] {
     return leerPersistido<T[]>(claveLocal, isSupabaseConfigured ? [] : inicial)
   }
+
+  /* Lo que hay en pantalla AHORA, para poder mirarlo desde dentro del efecto. */
+  const itemsRef = useRef(items)
+  itemsRef.current = items
 
   useEffect(() => {
     if (local || !supabase) return
@@ -150,6 +160,55 @@ export function useSupabaseTable<T extends { id: string }>(
           avisarDeFallo(tabla, error.message)
         } else {
           const traidos = (data ?? []).map(fromRow)
+          /*
+           * UN CERO SOSPECHOSO NO SE DA POR BUENO A LA PRIMERA.
+           *
+           * Esto es lo que se reportó como «registro una papeleta y se borran
+           * todos los datos», y el mecanismo es este:
+           *
+           * RLS NO DA ERROR CUANDO DENIEGA. Devuelve CERO FILAS y un `error`
+           * a nulo — indistinguible de una tabla vacía—. Y esta carga se
+           * repite en cada `onAuthStateChange`: al refrescarse el token, o en
+           * cualquier vaivén de la sesión, hay un instante en que
+           * `hermandad_actual()` todavía no resuelve y TODAS las políticas
+           * deniegan a la vez.
+           *
+           * Con la rama de éxito tal como estaba, ese instante significaba:
+           * pintar la pantalla vacía Y machacar la copia local con `[]`. O sea
+           * que además de quedarse el panel en blanco, se destruía la red de
+           * seguridad de la que tira `deReserva()` cuando la base no responde.
+           *
+           * Así que si la consulta trae CERO y aquí había algo, no se acepta a
+           * la primera: se reintenta una vez. Si el segundo intento también
+           * viene vacío, es que la tabla está vacía de verdad y se acepta.
+           *
+           * Se reintenta EN VEZ DE rechazarlo siempre porque vaciar una tabla
+           * de verdad tiene que poder verse: si otra persona borra el censo
+           * entero desde otro ordenador, este tiene que enterarse. Lo que no
+           * puede es enterarse de un «no» de RLS y creerse que es un borrado.
+           */
+          /*
+           * `itemsRef` y no `items`: este efecto solo se vuelve a montar
+           * cuando cambia `tabla`, así que la `items` que se ve aquí dentro es
+           * la del montaje —vacía— para siempre. Con ella, la comprobación
+           * habría dado «no teníamos nada» justo cuando más datos había.
+           *
+           * Y el área del hermano (`sinEspejo`) se queda fuera a propósito: no
+           * tiene copia local, y sus consultas SÍ vienen vacías de verdad
+           * mientras no ha entrado.
+           */
+          const teniamos = !sinEspejo
+            && (itemsRef.current.length > 0 || leerPersistido<T[]>(claveLocal, []).length > 0)
+          if (traidos.length === 0 && teniamos && !reintentado.current) {
+            reintentado.current = true
+            console.warn(
+              `"${tabla}" ha devuelto CERO filas donde había datos. `
+              + 'Puede ser un rechazo de permisos (RLS no da error al denegar): se reintenta.',
+            )
+            setTimeout(() => { if (!cancelado) cargar() }, 600)
+            return
+          }
+          reintentado.current = false
           setItemsState(traidos)
           if (!sinEspejo) espejarEnLocal(claveLocal, traidos)
           cargado.current = true

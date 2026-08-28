@@ -60,13 +60,18 @@ export default function TiendaVentas() {
 
   const reqBase = requisito('supabase')
 
+  /*
+   * `undefined` = todavía preguntando · `null` = no se pudo · `[]` = sin líneas.
+   * Los tres se pintan distinto, que es lo que faltaba: ver abajo.
+   */
+  const [intento, setIntento] = useState(0)
   useEffect(() => {
     if (!abierta) { setLineas(undefined); return }
     setLineas(undefined)
     let cancelado = false
     void lineasDeVenta(abierta.id).then((ls) => { if (!cancelado) setLineas(ls) })
     return () => { cancelado = true }
-  }, [abierta])
+  }, [abierta, intento])
 
   const visibles = useMemo(() => {
     const q = llano(query.trim())
@@ -249,15 +254,39 @@ export default function TiendaVentas() {
                 Anular
               </button>
             )}
-            {/* Sin artículos no se deja imprimir: saldría un A4 con membrete,
-                número y total, sin una sola línea y sin desglose de IVA. */}
-            <button
-              className="btn btn-primary"
-              onClick={() => window.print()}
-              disabled={!lineas || lineas.length === 0}
-            >
-              {lineas ? 'Imprimir / Descargar' : 'Trayendo los artículos…'}
-            </button>
+            {/*
+              SIN ARTÍCULOS NO SE DEJA IMPRIMIR: saldría un A4 con membrete,
+              número y total, sin una sola línea y sin desglose de IVA.
+
+              PERO HAY QUE DECIR POR QUÉ. Antes el botón se quedaba apagado
+              diciendo «Trayendo los artículos…» PARA SIEMPRE cuando la consulta
+              fallaba —`lineasDeVenta` devuelve `null` en ese caso—, así que un
+              fallo se veía exactamente igual que una carga lenta. Llegó
+              reportado como «no deja imprimir factura», y desde fuera no hay
+              manera de distinguirlo de que el botón esté roto.
+
+              Son tres estados y ahora se ven los tres:
+                · `undefined` — preguntando. El botón espera.
+                · `null`      — no se pudo. Se dice, y se puede reintentar.
+                · `[]`        — la venta no tiene líneas. Se dice también.
+            */}
+            {lineas === null ? (
+              <button className="btn btn-outline" onClick={() => setIntento((n) => n + 1)}>
+                No se pudieron traer los artículos · Reintentar
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={() => window.print()}
+                disabled={lineas === undefined || lineas.length === 0}
+              >
+                {lineas === undefined
+                  ? 'Trayendo los artículos…'
+                  : lineas.length === 0
+                    ? 'Esta factura no tiene artículos'
+                    : 'Imprimir / Descargar'}
+              </button>
+            )}
           </>
         )}
       >

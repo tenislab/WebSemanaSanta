@@ -549,10 +549,38 @@ export default function Cuotas() {
     const ids = recibosRemesables.map((c) => c.id)
     if (ids.length === 0) return
     const fecha = hoy()
-    setCuotas((prev) => simularCobroRemesa(prev, ids, fecha))
+    const despues = simularCobroRemesa(cuotas, ids, fecha)
+    setCuotas(despues)
     // El recibo abierto en la ficha también se actualiza (si no, seguía diciendo
     // «Pendiente» y al marcarlo pagado pisaba la devolución simulada).
     setSelected((prev) => (prev ? simularCobroRemesa([prev], ids, fecha)[0] : prev))
+
+    /*
+     * Y AL LIBRO DE CUENTAS, QUE ES LO QUE FALTABA.
+     *
+     * Esta es la vía que más dinero mueve de toda la aplicación: una hermandad
+     * de seiscientos cobra aquí el ejercicio entero de una vez. Y no apuntaba
+     * NADA — la cuota salía pagada, el hermano quedaba al día, y Tesorería no
+     * se enteraba de que habían entrado veinte mil euros. No se nota hasta que
+     * se cierra el año, y entonces ya no hay forma de reconstruir qué faltó.
+     *
+     * Solo las que de verdad quedaron cobradas: en la remesa hay devoluciones,
+     * y apuntar una devuelta sería contar un dinero que el banco no ha dado.
+     */
+    const cobradas = despues.filter((c) => ids.includes(c.id) && c.estado === 'Pagada')
+    setMovimientos((prev) => cobradas.reduce(
+      (libro, c) => conApunteDeCobro(libro, {
+        origen: origenDeCuota(c.id),
+        concepto: `${c.concepto} — ${hermanos.find((h) => h.id === c.hermanoId)?.nombre ?? 'hermano/a'}`,
+        categoria: 'Cuotas Hermanos/as',
+        importe: c.importe,
+        fecha,
+        // Una remesa es un adeudo en cuenta: nunca es efectivo, aunque el
+        // recibo llevara otro método apuntado de antes.
+        metodo: 'Domiciliado',
+      }),
+      prev,
+    ))
     setRemesaOpen(false)
   }
 

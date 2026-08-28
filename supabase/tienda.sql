@@ -496,21 +496,48 @@ begin
    */
   select coalesce(max(m.numero), 0) into v_num_mov from movimientos m where m.hermandad_id = v_hermandad;
 
+  /*
+   * EL IVA VA EN SU PROPIA LÍNEA, y no metido dentro del ingreso.
+   *
+   * De una camiseta de 15 €, 12,40 € son de la hermandad y 2,60 € se le están
+   * cobrando a quien compra PARA HACIENDA. Entran en la misma caja, pero no
+   * son lo mismo: sumados en una sola línea, el libro dice que la tienda
+   * ingresa un 21 % más de lo que ingresa, y a la hora del modelo 303 no hay
+   * de dónde sacar la cifra sin recorrer las facturas una a una.
+   *
+   * Las dos líneas suman EXACTAMENTE el total, así que la caja sigue
+   * cuadrando: es la misma cantidad de dinero, contada por separado.
+   *
+   * Si la hermandad no repercute IVA —lo normal en la mayoría— `v_iva` es cero
+   * y sale una sola línea por el total, como antes. Un asiento de cero euros
+   * solo ensucia el libro.
+   */
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
   values (
     v_hermandad, v_num_mov + 1, to_char(now(), 'YYYY-MM-DD'),
     format('Venta en tienda %s-%s', p_serie, v_numero),
-    'Otros ingresos', 'Ingreso', v_total,
+    'Otros ingresos', 'Ingreso', v_total - v_iva,
     case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
     'Pendiente', 'venta:' || v_venta
   );
+
+  if v_iva > 0 then
+    insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
+    values (
+      v_hermandad, v_num_mov + 2, to_char(now(), 'YYYY-MM-DD'),
+      format('IVA repercutido en la venta %s-%s', p_serie, v_numero),
+      'IVA repercutido', 'Ingreso', v_iva,
+      case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
+      'Pendiente', 'iva-venta:' || v_venta
+    );
+  end if;
 
   -- El gasto solo si de verdad costó algo: un artículo donado tiene coste 0 y
   -- un asiento de cero euros solo ensucia el libro.
   if v_coste > 0 then
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
     values (
-      v_hermandad, v_num_mov + 2, to_char(now(), 'YYYY-MM-DD'),
+      v_hermandad, v_num_mov + 3, to_char(now(), 'YYYY-MM-DD'),
       format('Coste del género vendido %s-%s', p_serie, v_numero),
       'Gastos varios menores', 'Gasto', v_coste,
       case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -710,13 +737,26 @@ begin
 
   select coalesce(max(m.numero), 0) into v_num from movimientos m where m.hermandad_id = v_hermandad;
 
-  -- El contrario del ingreso: un gasto por lo que se devuelve.
+  /*
+   * El contrario del ingreso: un gasto por lo que se devuelve. Y el del IVA
+   * aparte, como se apuntó: si se contra-apuntara todo junto, el 303 saldría
+   * con el IVA repercutido de una venta que ya no existe.
+   */
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
   values (v_hermandad, v_num + 1, to_char(now(), 'YYYY-MM-DD'),
           format('Anulada la venta %s-%s', v_venta.serie, v_venta.numero),
-          'Gastos varios menores', 'Gasto', v_venta.total,
+          'Gastos varios menores', 'Gasto', v_venta.total - v_venta.iva_total,
           case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
           'Pendiente', 'anula-venta:' || p_venta_id);
+
+  if v_venta.iva_total > 0 then
+    insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
+    values (v_hermandad, v_num + 4, to_char(now(), 'YYYY-MM-DD'),
+            format('IVA de la venta anulada %s-%s', v_venta.serie, v_venta.numero),
+            'IVA repercutido', 'Gasto', v_venta.iva_total,
+            case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
+            'Pendiente', 'anula-iva-venta:' || p_venta_id);
+  end if;
 
   -- Y el contrario del coste, si lo hubo.
   if v_venta.coste_total > 0 then

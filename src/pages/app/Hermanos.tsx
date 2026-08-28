@@ -1,6 +1,8 @@
 import { llano } from '../../lib/buscar'
 import { memo, useDeferredValue, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
-import { limpiarDni, mismoDni } from '../../lib/dni'
+import { limpiarDni, mismoDni, problemaDeDocumento } from '../../lib/dni'
+import { problemaDeTelefono } from '../../lib/telefono'
+import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link, useSearchParams } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -298,6 +300,7 @@ export default function Hermanos() {
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [dniError, setDniError] = useState<string | null>(null)
+  const [telefonoError, setTelefonoError] = useState<string | null>(null)
   /**
    * El del FORMULARIO DE ALTA, aparte del de la ficha (`ibanError`): son dos
    * paneles distintos y el de la ficha ni siquiera está abierto mientras se da
@@ -858,7 +861,36 @@ export default function Hermanos() {
       setGuardandoAlta(false)
       return
     }
+    /*
+     * Y QUE EL DOCUMENTO ESTÉ BIEN. Se comprueba AQUÍ y no al importar: un DNI
+     * que se teclea hoy, con el hermano delante, se puede comprobar; uno que
+     * viene de un Excel de hace quince años, no —ver `lib/dni.ts`—.
+     *
+     * De ese número cuelgan tres cosas que se rompen calladamente: es la llave
+     * con la que el hermano entra en su área, es lo que evita darlo de alta dos
+     * veces, y es lo que va en el mandato SEPA que se le enseña al banco.
+     */
+    const malDocumento = problemaDeDocumento(dni)
+    if (malDocumento) {
+      setDniError(malDocumento)
+      setGuardandoAlta(false)
+      return
+    }
     setDniError(null)
+
+    /*
+     * Y EL TELÉFONO. No tumba nada, pero es por donde se llama al hermano
+     * cuando hay que llamarle —una papeleta que no recoge, un cargo devuelto—,
+     * y un número con una cifra de menos no se descubre hasta que hace falta.
+     */
+    const telefonoTecleado = String(data.get('telefono') ?? '')
+    const malTelefono = problemaDeTelefono(telefonoTecleado)
+    if (malTelefono) {
+      setTelefonoError(malTelefono)
+      setGuardandoAlta(false)
+      return
+    }
+    setTelefonoError(null)
 
     /*
      * EL IBAN MAL ESCRITO SE DECÍA, NO SE TIRABA.
@@ -1729,6 +1761,7 @@ export default function Hermanos() {
                     placeholder="600 000 000"
                     onChange={(e) => setContacto((c) => ({ ...c, telefono: e.target.value }))}
                   />
+                  <AvisoDeCampo texto={problemaDeTelefono(contacto.telefono)} />
                 </div>
                 <div className="form-row">
                   <label htmlFor="dirHermano">Dirección</label>
@@ -2067,7 +2100,8 @@ export default function Hermanos() {
           <div className="form-grid-2">
             <div className="form-row">
               <label htmlFor="telefono">Teléfono</label>
-              <input id="telefono" name="telefono" type="tel" placeholder="600 000 000" />
+              <input id="telefono" name="telefono" type="tel" inputMode="tel" placeholder="600 00 00 00" />
+              <AvisoDeCampo texto={telefonoError} />
             </div>
             <div className="form-row">
               <label htmlFor="fechaNacimiento">Fecha de nacimiento</label>

@@ -58,6 +58,8 @@ export const PIEZAS_ACTUALIZACION = [
   ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
   ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
   ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
+  ['campanas-y-proyectos.sql', 'Campañas de recaudación con su barra, y proyectos a largo plazo'],
+  ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -197,7 +199,24 @@ select * from (values
   ('Reservas de la tienda por internet',
    (select to_regclass('public.reservas_tienda') is not null)),
   ('Reservar sin cuenta, desde la web pública',
-   (select count(*) > 0 from pg_proc where proname = 'crear_reserva_web'))
+   (select count(*) > 0 from pg_proc where proname = 'crear_reserva_web')),
+  ('Campañas de recaudación y proyectos',
+   (select to_regclass('public.campanas_recaudacion') is not null)),
+  /*
+   * El módulo nuevo, mirando SOLO las hermandades que tienen permisos
+   * sembrados, por lo mismo que se explica arriba con «eventos» y «web»: a una
+   * hermandad sin ninguna fila en «permisos_cargo» no se le inventan cargos, y
+   * meterla en esta cuenta haría que el informe dijera «no» después de haber
+   * hecho su trabajo bien.
+   */
+  ('Permiso de «campañas» al Hermano Mayor',
+   (select count(*) = 0 from hermandades h
+     where exists (select 1 from permisos_cargo pc where pc.hermandad_id = h.id)
+       and not exists (
+      select 1 from permisos_cargo pc
+       where pc.hermandad_id = h.id and pc.cargo = 'Hermano Mayor' and pc.modulo_id = 'campanas'))),
+  ('Gastos porcentuales para pérdidas y ganancias',
+   (select to_regclass('public.reglas_reparto') is not null))
 ) as t(que, esta)
 order by esta, que;
 `

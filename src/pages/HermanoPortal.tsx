@@ -1,4 +1,22 @@
 import { limpiarDni, mismoDni } from '../lib/dni'
+import { problemaDeTelefono } from '../lib/telefono'
+import { CLAVE_SESION_HERMANO } from '../lib/sesion'
+
+/**
+ * «SIN DATOS» NO SE ESCRIBE DENTRO DE UN CAMPO PARA RELLENAR.
+ *
+ * Cuando se da de alta a un hermano sin teléfono ni dirección, la ficha guarda
+ * literalmente la cadena «Sin datos» —sirve para que las listas de secretaría
+ * no salgan con huecos—. Pero al hermano, en su área, le aparecía ese texto
+ * DENTRO del recuadro del teléfono, y para poner el suyo tenía que borrarlo
+ * primero. Muchos escribían detrás: «Sin datos 600123456».
+ *
+ * Aquí se cambia por un `placeholder`, que es lo que hace de verdad: dice qué
+ * va en el hueco y desaparece al escribir.
+ */
+function siNoEsElHueco(valor: string): string {
+  return valor === 'Sin datos' ? '' : valor
+}
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
@@ -78,7 +96,8 @@ import { ejercicioDeCuotas } from '../lib/cuotasEmision'
 import { fijarHermandadDeLaPagina, hermandadesPublicas, type HermandadPublica } from '../lib/multiHermandad'
 import { codigoDeHermano } from '../lib/codigoHermano'
 
-const SESION_KEY = 'cabildo-hermano-portal'
+/* La clave vive en `lib/sesion.ts` para que el panel también pueda cerrarla. */
+const SESION_KEY = CLAVE_SESION_HERMANO
 const CONSENT_KEY = 'cabildo-hermano-consent'
 const DNI_DEMO = 'h4' // Francisco Gómez Nieto, nº 501 · usado por el botón "hermano de prueba"
 
@@ -787,6 +806,13 @@ export default function HermanoPortal() {
       setErrorSolicitud('Rellena tu nombre, DNI y correo.')
       return
     }
+    // El teléfono es opcional, pero si lo pone tiene que servir para llamarle:
+    // es por donde secretaría le avisa de que su alta está aprobada.
+    const malTelefono = problemaDeTelefono(telefono)
+    if (malTelefono) {
+      setErrorSolicitud(malTelefono)
+      return
+    }
 
     // Con Supabase conectado esta comprobación no se puede hacer aquí: quien
     // rellena esto no ha iniciado sesión y no puede leer el censo de nadie
@@ -911,6 +937,18 @@ export default function HermanoPortal() {
     const data = new FormData(e.currentTarget)
     const email = String(data.get('email') ?? '').trim()
     const telefono = String(data.get('telefono') ?? '').trim()
+
+    /*
+     * SI SE EQUIVOCA AQUÍ, LA HERMANDAD SE QUEDA SIN FORMA DE LLAMARLE. Este
+     * formulario PISA el teléfono que tenía en su ficha, así que una cifra de
+     * menos no deja el dato viejo: lo borra. Y no se descubre hasta el día que
+     * hay que llamarle por algo.
+     */
+    const malTelefono = problemaDeTelefono(telefono)
+    if (malTelefono) {
+      setDatosError(malTelefono)
+      return
+    }
 
     if (esPrincipal && hermanoPrincipal) {
       const direccion = String(data.get('direccion') ?? '').trim()
@@ -1626,7 +1664,7 @@ export default function HermanoPortal() {
                         </div>
                         <div className="form-row">
                           <label htmlFor="solTelefono">Teléfono</label>
-                          <input id="solTelefono" name="telefono" type="tel" placeholder="600 000 000" />
+                          <input id="solTelefono" name="telefono" type="tel" inputMode="tel" placeholder="600 00 00 00" />
                         </div>
                         <p className="form-hint">
                           Si la hermandad te da de alta, te llega una clave a ese correo para entrar
@@ -2309,12 +2347,20 @@ export default function HermanoPortal() {
             <div className="form-grid-2">
               <div className="form-row">
                 <label htmlFor="miTelefono">Teléfono</label>
-                <input id="miTelefono" name="telefono" type="tel" defaultValue={hermanoActivo.telefono} />
+                <input
+                  id="miTelefono" name="telefono" type="tel" inputMode="tel"
+                  placeholder="600 00 00 00"
+                  defaultValue={siNoEsElHueco(hermanoActivo.telefono)}
+                />
               </div>
               {hermanoPrincipal && (
                 <div className="form-row">
                   <label htmlFor="miDireccion">Dirección</label>
-                  <input id="miDireccion" name="direccion" type="text" defaultValue={hermanoPrincipal.direccion} />
+                  <input
+                    id="miDireccion" name="direccion" type="text"
+                    placeholder="Calle y número"
+                    defaultValue={siNoEsElHueco(hermanoPrincipal.direccion)}
+                  />
                 </div>
               )}
             </div>

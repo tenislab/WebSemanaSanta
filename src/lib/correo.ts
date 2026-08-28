@@ -335,3 +335,97 @@ export function correoDePrueba(nombreHermandad: string): { asunto: string; texto
 function escapar(t: string): string {
   return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
+
+/**
+ * QUÉ LE FALTA AL CORREO PARA FUNCIONAR.
+ *
+ * Nace de un aviso de la hermandad piloto que no traía ni un error: «no me
+ * llegan los mails». Ni fallo, ni pantalla roja, ni nada en la consola —
+ * simplemente no llegaban.
+ *
+ * La causa casi siempre es la misma y es especialmente cruel: si no se ha
+ * puesto el secreto `CORREO_REMITENTE`, se envía desde `onboarding@resend.dev`,
+ * el remitente de pruebas de Resend. Y Resend SOLO entrega desde él a la
+ * dirección con la que te registraste: a cualquier otra la acepta, contesta que
+ * todo bien, y no la entrega jamás. Todo dice que sí y no llega nada.
+ *
+ * Esto se lo pregunta a la propia función, que es la única que sabe qué
+ * secretos tiene puestos. NO devuelve ningún secreto: solo si cada uno está o
+ * no, y el dominio del remitente —que es público: va en cada correo que sale—.
+ */
+export interface DiagnosticoCorreo {
+  claveDeResend: boolean
+  remitentePropio: boolean
+  dominioRemitente: string
+  claveDeServicio: boolean
+  urlDeSupabase: boolean
+  listoParaEnviar: boolean
+  listoParaContrasenas: boolean
+}
+
+export async function diagnosticarCorreo(): Promise<
+  { ok: true; d: DiagnosticoCorreo } | { ok: false; error: string }
+> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { ok: false, error: 'Sin base de datos conectada no hay función de correo que preguntar.' }
+  }
+  try {
+    const { data, error } = await supabase.functions.invoke('enviar-correo', {
+      body: { diagnostico: true },
+    })
+    if (error) {
+      // El mismo traductor que usa el correo de prueba: un 404 aquí significa
+      // que la función no está desplegada, y eso ya explica por qué no llega nada.
+      return { ok: false, error: explicarFalloDeEnvio(error) }
+    }
+    const d = (data as { diagnostico?: DiagnosticoCorreo } | null)?.diagnostico
+    if (!d) {
+      return {
+        ok: false,
+        error: 'La función de correo ha contestado, pero sin el diagnóstico. Seguramente está '
+          + 'desplegada una versión antigua: vuelve a desplegar «enviar-correo».',
+      }
+    }
+    return { ok: true, d }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido preguntar.' }
+  }
+}
+
+/**
+ * El diagnóstico en frases, por orden de lo que hay que arreglar primero.
+ *
+ * Devuelve la lista de lo que falta. Vacía = está todo. Se separa de la
+ * pantalla para poder probarlo sin navegador, que es donde de verdad se
+ * comprueba que el orden y las frases son los correctos.
+ */
+export function loQueLeFaltaAlCorreo(d: DiagnosticoCorreo): string[] {
+  const faltan: string[] = []
+  if (!d.claveDeResend) {
+    faltan.push(
+      'Falta el secreto RESEND_API_KEY. Sin él no sale ni un correo. Se pone en Supabase → '
+      + 'Edge Functions → enviar-correo → Secrets.',
+    )
+  }
+  /*
+   * ESTE ES EL QUE NO DA LA CARA, y por eso va con todas las letras: es el
+   * único fallo que no produce ningún error. Todo contesta que sí.
+   */
+  if (!d.remitentePropio) {
+    faltan.push(
+      'El remitente sigue siendo onboarding@resend.dev, el de pruebas de Resend. SOLO entrega a '
+      + 'la dirección con la que te registraste en Resend; a cualquier otra la acepta y no la '
+      + 'entrega, sin dar ningún error. Esto es lo que hace que «no lleguen los correos» sin que '
+      + 'nada falle. Hay que verificar el dominio de la hermandad en Resend y poner el secreto '
+      + 'CORREO_REMITENTE.',
+    )
+  }
+  if (!d.claveDeServicio || !d.urlDeSupabase) {
+    faltan.push(
+      'Falta el secreto SUPABASE_SERVICE_ROLE_KEY. Los correos normales salen igual, pero NO el '
+      + 'de cambiar la contraseña ni el resguardo de una reserva: esos dos necesitan leer datos '
+      + 'desde el servidor.',
+    )
+  }
+  return faltan
+}

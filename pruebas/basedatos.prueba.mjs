@@ -490,7 +490,7 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
   // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
   caso('los dos módulos ya no salen pendientes', false,
     enFalso.some((x) => /eventos|«web»/.test(x)))
-  caso('y comprueba diecisiete cosas', 17, filas.length)
+  caso('y comprueba veinte cosas', 20, filas.length)
   caso('la tienda sale en el inventario', true, filas.some((f) => /La tienda/.test(f)))
   // Lo último que se ha añadido, por su nombre: el recuento de arriba avisa
   // si el inventario pierde una línea, pero no de CUÁL, y quien ejecuta esto
@@ -608,6 +608,22 @@ async function montarLoQuePoneSupabase({ sql }) {
   await sql(`
     create schema if not exists auth;
     create schema if not exists storage;
+
+    /*
+     * PGCRYPTO VA EN «extensions», COMO EN SUPABASE. No es un detalle.
+     *
+     * Aquí no se instalaba, así que el «create extension if not exists
+     * pgcrypto» de nuestro SQL la instalaba en «public» y todo funcionaba. En
+     * Supabase viene ya instalada de fábrica EN EL ESQUEMA «extensions», así
+     * que ese mismo «if not exists» no hace nada — y una función declarada con
+     * «set search_path = public» no la ve.
+     *
+     * Resultado: «function gen_random_bytes(integer) does not exist» en la
+     * hermandad piloto, con la recuperación de contraseña del hermano rota, y
+     * las pruebas en verde. Montándolo como está allí, se cae aquí primero.
+     */
+    create schema if not exists extensions;
+    create extension if not exists pgcrypto with schema extensions;
 
     -- Las columnas que usa NUESTRO SQL, con el mismo nombre que allí.
     -- «last_sign_in_at» la lee el diagnóstico para ordenar las cuentas por la
@@ -2396,8 +2412,23 @@ async function laTiendaVendeYCuadra({ sql, caso }) {
       .replace(`${PROD.slice(1, -1)}`, `"${PROD.slice(1, -1)}"`))
   caso('quien lleva inventario puede vender', 'sí', venta1.deja)
   caso('el stock baja', '8', numero(await sql(`select stock from productos where id = ${PROD}`)))
-  caso('deja un ingreso por lo cobrado', '30.00', solo(await sql(
+  /*
+   * EL IVA VA EN SU PROPIA LÍNEA. De los 30 € cobrados, 24,79 € son de la
+   * hermandad y 5,21 € se le cobran a quien compra para Hacienda. Sumados en
+   * una sola línea, el libro diría que la tienda ingresa un 21 % más de lo que
+   * ingresa, y el modelo 303 habría que sacarlo recorriendo las facturas.
+   */
+  caso('deja un ingreso por la base', '24.79', solo(await sql(
     `select importe::text from movimientos where origen like 'venta:%' and tipo = 'Ingreso'`)))
+  caso('y el IVA en su propia partida', '5.21', solo(await sql(
+    `select importe::text from movimientos where origen like 'iva-venta:%'`)))
+  caso('con su nombre, para el 303', 'IVA repercutido', solo(await sql(
+    `select categoria from movimientos where origen like 'iva-venta:%'`)))
+  // Y las dos juntas suman EXACTAMENTE lo cobrado: es la misma cantidad de
+  // dinero contada por separado, así que la caja sigue cuadrando.
+  caso('y las dos suman lo que entró en la caja', '30.00', solo(await sql(
+    `select sum(importe)::text from movimientos
+      where (origen like 'venta:%' or origen like 'iva-venta:%') and tipo = 'Ingreso'`)))
   caso('y un gasto por lo que costó', '12.00', solo(await sql(
     `select importe::text from movimientos where origen like 'coste-venta:%' and tipo = 'Gasto'`)))
 
@@ -2478,6 +2509,12 @@ async function laTiendaVendeYCuadra({ sql, caso }) {
     `select estado from ventas where hermandad_id = ${H} order by numero desc limit 1`)))
   caso('y con sus asientos contrarios', '1', numero(await sql(
     `select count(*) from movimientos where hermandad_id = ${H} and origen like 'anula-venta:%'`)))
+  // Y el del IVA aparte, como se apuntó: si se contra-apuntara todo junto, el
+  // 303 saldría con el IVA repercutido de una venta que ya no existe.
+  caso('el IVA también se contra-apunta', '1', numero(await sql(
+    `select count(*) from movimientos where hermandad_id = ${H} and origen like 'anula-iva-venta:%'`)))
+  caso('y en su partida', 'IVA repercutido', solo(await sql(
+    `select categoria from movimientos where hermandad_id = ${H} and origen like 'anula-iva-venta:%'`)))
   // Anular dos veces no devuelve el género dos veces. Y LO DICE: contesta
   // `false`, para que la pantalla no anuncie que ha vuelto el género cuando no
   // ha vuelto nada.
@@ -2669,7 +2706,8 @@ async function laTiendaDeLaWebApartaYNoCobra({ sql, caso }) {
   caso('por los ciento veinte euros', '120.00', solo(await sql(
     `select total::text from ventas where hermandad_id = ${H}`)))
   caso('con su ingreso en tesorería', '120.00', solo(await sql(
-    `select importe::text from movimientos where hermandad_id = ${H} and origen like 'venta:%'`)))
+    `select sum(importe)::text from movimientos where hermandad_id = ${H}
+      and (origen like 'venta:%' or origen like 'iva-venta:%') and tipo = 'Ingreso'`)))
   caso('y el gasto de lo que costó', '36.00', solo(await sql(
     `select importe::text from movimientos where hermandad_id = ${H} and origen like 'coste-venta:%'`)))
   caso('la reserva queda entregada', 'entregada', solo(await sql(

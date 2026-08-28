@@ -44,6 +44,7 @@ function moduloIdDeRuta(pathname: string): string | null {
     { prefix: '/app/tienda', modulo: 'inventario' },
     { prefix: '/app/archivo', modulo: 'archivo' },
     { prefix: '/app/eventos', modulo: 'eventos' },
+    { prefix: '/app/campanas', modulo: 'campanas' },
     { prefix: '/app/comunicados', modulo: 'comunicados' },
     { prefix: '/app/web', modulo: 'web' },
     { prefix: '/app/informes', modulo: 'informes' },
@@ -88,6 +89,9 @@ const ic = {
   ),
   comunicados: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 5h16v11H8l-4 4z" /><path d="M8 9h8M8 12h5" /></svg>
+  ),
+  campanas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.2" /><path d="M12 4V2M12 22v-2M4 12H2M22 12h-2" /></svg>
   ),
   /* «Web pública» llevaba el mismo bocadillo que «Comunicados»: en el menú
      lateral salían dos entradas seguidas con el mismo dibujo, y de un vistazo
@@ -136,6 +140,7 @@ const NAV: NavGroup[] = [
     label: 'Vida de hermandad',
     items: [
       { to: '/app/eventos', label: 'Eventos y tareas', icon: ic.eventos, modulo: 'eventos' },
+      { to: '/app/campanas', label: 'Campañas y proyectos', icon: ic.campanas, modulo: 'campanas' },
       { to: '/app/archivo', label: 'Archivo documental', icon: ic.archivo, modulo: 'archivo' },
       { to: '/app/comunicados', label: 'Comunicados', icon: ic.comunicados, modulo: 'comunicados' },
       { to: '/app/web', label: 'Web pública', icon: ic.web, modulo: 'web' },

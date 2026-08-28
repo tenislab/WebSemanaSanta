@@ -5,6 +5,7 @@ import { supabase, isSupabaseConfigured } from './supabase'
 import { nuevoId } from './supabaseSync'
 import { hermandadDestino } from './multiHermandad'
 import { traducirErrorDeEscritura } from './errorDeBaseDeDatos'
+import { problemaDeTelefono, telefonoValido } from './telefono'
 
 /**
  * Lo que la web pública RECIBE. Hasta ahora la web solo contaba cosas; con
@@ -267,10 +268,21 @@ export function pareceEmail(valor: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)
 }
 
-/** Un teléfono español o internacional escrito de cualquier forma razonable. */
+/**
+ * Un teléfono español o internacional escrito de cualquier forma razonable.
+ *
+ * LA REGLA ESTÁ EN `lib/telefono.ts` Y AQUÍ SOLO SE REENVÍA. Antes había una
+ * copia más floja —cualquier cosa de nueve a quince cifras— y eso significa
+ * que la web pública aceptaba números que la ficha del hermano rechazaba: la
+ * persona pedía el alta con un teléfono, secretaría abría la ficha, y el campo
+ * salía marcado en rojo sin que nadie hubiera tocado nada. Dos reglas para el
+ * mismo dato es siempre esto.
+ *
+ * La copia de antes daba por bueno «123456789», que no empieza como ningún
+ * teléfono español, y daba por bueno un número larguísimo sin el «+» delante.
+ */
 export function pareceTelefono(valor: string): boolean {
-  const solo = valor.replace(/[\s.-]/g, '')
-  return /^\+?\d{9,15}$/.test(solo)
+  return telefonoValido(valor)
 }
 
 export interface CamposFormulario {
@@ -299,7 +311,12 @@ export function erroresFormulario(
   else if (!pareceEmail(c.email)) e.email = 'Ese correo no parece correcto.'
   const tel = (c.telefono ?? '').trim()
   if (opciones.exigeTelefono && !tel) e.telefono = 'Hace falta un teléfono.'
-  else if (tel && !pareceTelefono(tel)) e.telefono = 'Ese teléfono no parece correcto.'
+  // El mensaje dice QUÉ le pasa —si faltan cifras, si sobra el prefijo—, no
+  // «no parece correcto», que delante de nueve cifras no le sirve a nadie.
+  else if (tel) {
+    const mal = problemaDeTelefono(tel)
+    if (mal) e.telefono = mal
+  }
   if (opciones.exigeMensaje && (c.mensaje ?? '').trim().length < 5) e.mensaje = 'Cuéntanos algo más.'
   if (!c.consiente) e.consiente = 'Hay que aceptarlo para poder escribirte.'
   return e

@@ -99,6 +99,9 @@ import {
 import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
 import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import { pedirActivarDominio } from '../../lib/reporteFallo'
+import AvisoDeCampo from '../../components/AvisoDeCampo'
+import { problemaDeTelefono } from '../../lib/telefono'
+import { ibanValido, porQueNoValeElIban } from '../../lib/iban'
 
 /**
  * La copia pequeña para la rejilla de la galería. 520 px de lado basta y sobra
@@ -1905,7 +1908,15 @@ function DonativosTab({ web, hermandad, editar }: { web: WebPublica; hermandad: 
           <input
             id="donIban" type="text" value={d.iban}
             onChange={(e) => set({ iban: e.target.value })}
-            placeholder={hermandad.iban || 'ES00 0000 0000 0000 0000 0000'}
+            placeholder={hermandad.iban || 'ES91 2100 0418 4502 0005 1332'}
+          />
+          {/* Esta cuenta se PUBLICA para que la gente ingrese ahí. Si tiene una
+              cifra cambiada, el donativo se queda en el banco o va a otro sitio,
+              y quien lo manda cree que ha donado. */}
+          <AvisoDeCampo
+            texto={d.iban.trim() && !ibanValido(d.iban)
+              ? `Esa cuenta se publica en la web y no vale: ${porQueNoValeElIban(d.iban)}.`
+              : null}
           />
           <p className="form-hint">Vacío = la cuenta de la hermandad.</p>
         </div>
@@ -4442,7 +4453,7 @@ function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: H
         <p className="form-hint">Si dejas un campo vacío, se usan los datos de <Link to="/app/configuracion">Configuración</Link>.</p>
         <div className="form-row"><label htmlFor="direccion">Dirección</label><input id="direccion" type="text" value={web.direccion} onChange={(e) => editar('direccion', e.target.value)} placeholder={hermandad.direccion || 'Calle, número, ciudad'} /></div>
         <div className="form-grid-2">
-          <div className="form-row"><label htmlFor="telefono">Teléfono</label><input id="telefono" type="text" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder={hermandad.telefono || '954 00 00 00'} /></div>
+          <div className="form-row"><label htmlFor="telefono">Teléfono</label><input id="telefono" type="tel" inputMode="tel" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder={hermandad.telefono || '954 00 00 00'} /><AvisoDeCampo texto={problemaDeTelefono(web.telefono)} /></div>
           <div className="form-row"><label htmlFor="email">Correo</label><input id="email" type="email" value={web.email} onChange={(e) => editar('email', e.target.value)} placeholder={hermandad.email || 'secretaria@…'} /></div>
         </div>
       </section>

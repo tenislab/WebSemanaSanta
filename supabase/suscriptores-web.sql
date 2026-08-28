@@ -28,16 +28,21 @@
 -- =============================================================================
 
 /*
- * LA LLAVE DE BAJA SALE DE `gen_random_bytes`, QUE NO ES DE POSTGRES A SECAS.
+ * LA LLAVE DE BAJA NO NECESITA NINGUNA EXTENSIÓN, Y ESO ES A PROPÓSITO.
  *
- * Viene con la extensión `pgcrypto`. En Supabase está encendida de fábrica, así
- * que aquí funcionaba y nadie lo miró; pero es una dependencia que este fichero
- * no declaraba. En un Postgres sin ella, la instalación se para EN ESTA LÍNEA y
- * todo lo que viene detrás —las políticas, las funciones de suscripción, las
- * copias— no llega a crearse. Y como el error habla de una función y no de una
- * extensión, no se entiende.
+ * Salía de `gen_random_bytes`, que es de `pgcrypto`. Y un `default` de columna
+ * se resuelve AL CREAR LA TABLA, con el `search_path` que haya en ese momento:
+ * en Supabase pgcrypto vive en el esquema `extensions`, así que la tabla no se
+ * podía ni crear —«function gen_random_bytes(integer) does not exist»— y el
+ * fichero entero se paraba ahí.
  *
- * Se declara. Si ya está, no hace nada.
+ * `gen_random_uuid()` viene con Postgres desde la 13, sin extensiones. Dos
+ * seguidos dan 64 caracteres al azar, que es más de lo que hacía falta.
+ *
+ * La llave sirve para dos cosas —confirmar y darse de baja— y es lo único que
+ * hace falta saber para las dos: por eso va en la dirección del correo y por
+ * eso es larga. Con un id normal, cualquiera que probara identificadores podría
+ * dar de baja a otro; con esto no hay nada que probar.
  */
 create extension if not exists pgcrypto;
 
@@ -55,7 +60,11 @@ create table if not exists suscriptores_web (
    * Con un id normal, cualquiera que probara identificadores podría dar de baja
    * a otro. Con esto, no hay nada que probar.
    */
-  llave text not null default encode(gen_random_bytes(24), 'hex'),
+  -- `gen_random_uuid()` es de Postgres a secas desde la 13: no hace falta
+  -- ninguna extensión, y por eso este `default` se puede resolver siempre.
+  -- Dos seguidos, sin guiones, son 64 caracteres al azar — de sobra para lo
+  -- que hace falta, y sin depender de dónde esté instalada pgcrypto.
+  llave text not null default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
 
   -- Hasta que no abre el enlace del correo, no se le escribe.
   confirmado boolean not null default false,

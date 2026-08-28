@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import Drawer from '../../components/Drawer'
 import InformeImpreso from '../../components/InformeImpreso'
 import EstadoCuentas from '../../components/EstadoCuentas'
+import CuentaResultados from '../../components/CuentaResultados'
+import AvisoDeCampo from '../../components/AvisoDeCampo'
+import { cuentaDeResultados } from '../../lib/perdidasYGanancias'
+import {
+  useRepartos, problemaDeReparto, seRepartenDeMas, comoSeLeeElReparto,
+  porcentajeDe, type Reparto, type TipoReparto,
+} from '../../lib/repartos'
+import { CATEGORIAS_INGRESO, CATEGORIAS_GASTO } from '../../data/movimientos'
+import { nuevoId } from '../../lib/supabaseSync'
+import Drawer from '../../components/Drawer'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import { sumaEuros, formatCurrency, formatDate } from '../../lib/format'
@@ -320,9 +329,22 @@ export default function Informes() {
         .map((m) => (m.tipo === 'Ingreso' ? Number(m.importe) : -Number(m.importe)))),
     [movimientosEstado, anioEstado],
   )
-  // Solo un documento de impresión a la vez: pedir el Estado de Cuentas cierra
-  // cualquier informe abierto, para que no se solapen los dos .print-doc.
-  const [imprimiendoEstado, setImprimiendoEstado] = useState(false)
+  const [repartos, setRepartos] = useRepartos()
+  const cuentaPyG = useMemo(
+    () => cuentaDeResultados(movimientos, anioEstado, repartos),
+    [movimientos, anioEstado, repartos],
+  )
+
+  /*
+   * Solo un documento de impresión a la vez, y ahora son DOS: el Estado de
+   * Cuentas y la cuenta de pérdidas y ganancias. Un booleano no vale —los dos
+   * `.print-doc` se solaparían en el mismo folio— así que se guarda CUÁL se
+   * está imprimiendo. El manejo de `afterprint` de abajo se comparte: escribir
+   * esa trampa dos veces es cómo se arregla en una y se queda rota en la otra.
+   */
+  const [imprimiendo, setImprimiendo] = useState<null | 'estado' | 'pyg'>(null)
+  const imprimiendoEstado = imprimiendo !== null
+  const setImprimiendoEstado = (v: boolean) => setImprimiendo(v ? 'estado' : null)
   useEffect(() => {
     if (!imprimiendoEstado) return
     /*
@@ -344,7 +366,7 @@ export default function Informes() {
     const recoger = () => {
       if (recogido) return
       recogido = true
-      setImprimiendoEstado(false)
+      setImprimiendo(null)
     }
     window.addEventListener('afterprint', recoger, { once: true })
     const red = window.setTimeout(recoger, 10000)
@@ -471,6 +493,14 @@ export default function Informes() {
         </div>
       </section>
 
+      <SeccionPyG
+        cuenta={cuentaPyG}
+        anio={anioEstado}
+        repartos={repartos}
+        onRepartos={setRepartos}
+        onImprimir={() => { setSelected(null); setImprimiendo('pyg') }}
+      />
+
       <div className="table-card">
         <table>
           <thead>
@@ -572,7 +602,7 @@ export default function Informes() {
         />
       )}
 
-      {imprimiendoEstado && (
+      {imprimiendo === 'estado' && (
         <EstadoCuentas
           className="screen-hidden"
           hermandad={hermandad}
@@ -582,6 +612,285 @@ export default function Informes() {
           generadoEl={generadoEl}
         />
       )}
+
+      {imprimiendo === 'pyg' && (
+        <CuentaResultados
+          className="screen-hidden"
+          hermandad={hermandad}
+          cuenta={cuentaPyG}
+          generadoEl={generadoEl}
+        />
+      )}
     </div>
+  )
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  CUENTA DE PÉRDIDAS Y GANANCIAS + LAS REGLAS PORCENTUALES                  */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * La tarjeta de pantalla: el resumen, las reglas y el botón de imprimir.
+ *
+ * El documento entero está en `components/CuentaResultados.tsx`; aquí solo se
+ * enseña lo justo para saber si hace falta abrirlo.
+ */
+function SeccionPyG({ cuenta, anio, repartos, onRepartos, onImprimir }: {
+  cuenta: ReturnType<typeof cuentaDeResultados>
+  anio: number
+  repartos: Reparto[]
+  onRepartos: (r: Reparto[]) => void
+  onImprimir: () => void
+}) {
+  const [editando, setEditando] = useState<Reparto | null>(null)
+  const [creando, setCreando] = useState(false)
+  const avisos = seRepartenDeMas(repartos)
+
+  function guardar(r: Reparto) {
+    onRepartos(repartos.some((x) => x.id === r.id)
+      ? repartos.map((x) => (x.id === r.id ? r : x))
+      : [...repartos, r])
+    setEditando(null)
+    setCreando(false)
+  }
+
+  function quitar(r: Reparto) {
+    if (!window.confirm(`¿Quitar la regla «${r.nombre}»? El informe volverá a salir sin ella.`)) return
+    onRepartos(repartos.filter((x) => x.id !== r.id))
+  }
+
+  return (
+    <section className="settings-card">
+      <h2 className="settings-card__title">Cuenta de pérdidas y ganancias</h2>
+      <p className="form-hint">
+        Ingresos y gastos del ejercicio comparados con el año anterior, con el peso de cada partida
+        sobre el total. Contesta a si la hermandad se sostiene, que es otra pregunta distinta de la
+        del Estado de Cuentas.
+      </p>
+
+      <div className="stat-grid stat-grid--3" style={{ marginTop: '1rem' }}>
+        <div className="stat-tile">
+          <span className="stat-tile__label">Ingresos {anio}</span>
+          <span className="stat-tile__value">{formatCurrency(cuenta.totalIngresos)}</span>
+          <span className="stat-tile__trend stat-tile__trend--neutral">
+            {anio - 1}: {formatCurrency(cuenta.totalIngresosAnterior)}
+          </span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-tile__label">Gastos {anio}</span>
+          <span className="stat-tile__value">{formatCurrency(cuenta.totalGastos)}</span>
+          <span className="stat-tile__trend stat-tile__trend--neutral">
+            {anio - 1}: {formatCurrency(cuenta.totalGastosAnterior)}
+          </span>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-tile__label">Resultado</span>
+          <span className="stat-tile__value">{formatCurrency(cuenta.resultado)}</span>
+          <span className={`stat-tile__trend stat-tile__trend--${cuenta.resultado >= 0 ? 'ok' : 'warn'}`}>
+            {anio - 1}: {formatCurrency(cuenta.resultadoAnterior)}
+          </span>
+        </div>
+      </div>
+
+      {/*
+        * Lo comprometido se enseña APARTE y nunca mezclado con el resultado.
+        * Es dinero que sigue en la cuenta: el saldo del banco cuadra con el
+        * resultado del ejercicio, no con este.
+        */}
+      {cuenta.comprometido > 0 && (
+        <p className="form-hint" style={{ marginTop: '0.8rem' }}>
+          De ese resultado hay <b>{formatCurrency(cuenta.comprometido)}</b> ya comprometidos por las
+          reglas de abajo, así que quedarían <b>{formatCurrency(cuenta.resultadoAjustado)}</b>. El
+          dinero <b>sigue en la cuenta</b>: no se ha apuntado ningún gasto en Tesorería.
+        </p>
+      )}
+
+      <h3 className="settings-card__subtitle" style={{ marginTop: '1.4rem' }}>
+        Gastos porcentuales enlazados a una partida
+      </h3>
+      <p className="form-hint">
+        Dos cosas distintas. Un <b>reparto</b> trocea un gasto que ya está pagado entre varias
+        partidas —la luz: 60 % a la casa hermandad, 40 % al almacén— y no cambia ningún total. Un{' '}
+        <b>compromiso</b> aparta un porcentaje de lo que entre por una partida —el 10 % de la
+        lotería para caridad— y ese dinero sigue en la cuenta hasta que se gasta de verdad.
+        Ninguna de las dos escribe nada en Tesorería.
+      </p>
+
+      {avisos.map((a) => <AvisoDeCampo key={a} texto={a} />)}
+
+      {repartos.length > 0 && (
+        <ul className="reglas-lista">
+          {repartos.map((r) => (
+            <li key={r.id} className={r.activo ? '' : 'is-apagada'}>
+              <div className="reglas-lista__texto">
+                <b>{r.nombre}</b>
+                <span className={`pill pill--${r.tipo === 'reparto' ? 'off' : 'warn'}`}>
+                  {r.tipo === 'reparto' ? 'reparto' : 'compromiso'}
+                </span>
+                <small>{comoSeLeeElReparto(r)}</small>
+                {r.nota && <small className="reglas-lista__nota">{r.nota}</small>}
+              </div>
+              <div className="reglas-lista__acciones">
+                <label className="reglas-lista__switch">
+                  <input
+                    type="checkbox"
+                    checked={r.activo}
+                    onChange={() => onRepartos(repartos.map((x) => (x.id === r.id ? { ...x, activo: !x.activo } : x)))}
+                  />{' '}
+                  Activa
+                </label>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditando(r)}>Editar</button>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => quitar(r)}>Quitar</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="assign-box__row" style={{ marginTop: '1rem' }}>
+        <button type="button" className="btn btn-outline" onClick={() => setCreando(true)}>
+          + Añadir una regla
+        </button>
+        <button type="button" className="btn btn-primary" onClick={onImprimir}>
+          Descargar pérdidas y ganancias
+        </button>
+      </div>
+
+      {(creando || editando) && (
+        <FormularioReparto
+          regla={editando}
+          onGuardar={guardar}
+          onCerrar={() => { setEditando(null); setCreando(false) }}
+        />
+      )}
+    </section>
+  )
+}
+
+function FormularioReparto({ regla, onGuardar, onCerrar }: {
+  regla: Reparto | null
+  onGuardar: (r: Reparto) => void
+  onCerrar: () => void
+}) {
+  const [nombre, setNombre] = useState(regla?.nombre ?? '')
+  const [tipo, setTipo] = useState<TipoReparto>(regla?.tipo ?? 'reparto')
+  const [categoriaBase, setCategoriaBase] = useState(regla?.categoriaBase ?? '')
+  const [categoriaDestino, setCategoriaDestino] = useState(regla?.categoriaDestino ?? '')
+  const [porcentaje, setPorcentaje] = useState(regla ? String(porcentajeDe(regla)) : '')
+  const [nota, setNota] = useState(regla?.nota ?? '')
+  const [error, setError] = useState<string | null>(null)
+
+  /*
+   * DE DÓNDE SALE depende del tipo, y no es un detalle de presentación:
+   *
+   *   · Un REPARTO trocea un GASTO. Repartir un ingreso no significa nada: el
+   *     dinero entró una vez y por un importe.
+   *   · Un COMPROMISO aparta parte de un INGRESO. Es «de lo que entre por
+   *     esto, este trozo va para aquello».
+   *
+   * A DONDE VA es siempre un gasto, en los dos casos.
+   */
+  const partidasBase = tipo === 'reparto' ? CATEGORIAS_GASTO : CATEGORIAS_INGRESO
+
+  function enviar(e: React.FormEvent) {
+    e.preventDefault()
+    const pct = Number((porcentaje || '').replace(',', '.'))
+    const candidata: Reparto = {
+      id: regla?.id ?? nuevoId(),
+      nombre: nombre.trim(),
+      tipo,
+      categoriaBase,
+      // Centésimas de punto y entero, como se guarda: ver `lib/repartos.ts`.
+      porcentajeCent: Number.isFinite(pct) ? Math.round(pct * 100) : 0,
+      categoriaDestino,
+      activo: regla?.activo ?? true,
+      nota: nota.trim(),
+      creadoEn: regla?.creadoEn ?? new Date().toISOString(),
+    }
+    const mal = problemaDeReparto(candidata)
+    if (mal) { setError(mal); return }
+    onGuardar(candidata)
+  }
+
+  return (
+    <Drawer open onClose={onCerrar} title={regla ? 'Editar la regla' : 'Nueva regla porcentual'}>
+      <form className="app-form" onSubmit={enviar}>
+        <div className="form-row">
+          <label htmlFor="repNombre">Nombre</label>
+          <input
+            id="repNombre" value={nombre} maxLength={120}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder="Luz y agua: la parte del almacén"
+            required
+          />
+          <p className="form-hint">Sale escrito en el informe, para que dentro de dos años se entienda.</p>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="repTipo">Qué clase de regla</label>
+          <select
+            id="repTipo" value={tipo}
+            onChange={(e) => {
+              setTipo(e.target.value as TipoReparto)
+              // La lista de origen cambia entera al cambiar de tipo, así que
+              // lo elegido antes ya no está en ella: dejarlo puesto guardaría
+              // una regla enganchada a una partida que la pantalla no ofrece.
+              setCategoriaBase('')
+            }}
+          >
+            <option value="reparto">Reparto — trocear un gasto ya pagado</option>
+            <option value="compromiso">Compromiso — apartar parte de un ingreso</option>
+          </select>
+          <p className="form-hint">
+            {tipo === 'reparto'
+              ? 'No cambia ningún total: el gasto ya está en el libro por su importe. Solo dice a qué partida corresponde cada trozo.'
+              : 'Suma un gasto que en el libro NO está. El dinero sigue en la cuenta hasta que se gaste de verdad.'}
+          </p>
+        </div>
+
+        <div className="form-grid-2">
+          <div className="form-row">
+            <label htmlFor="repBase">De qué partida sale</label>
+            <select id="repBase" value={categoriaBase} onChange={(e) => setCategoriaBase(e.target.value)} required>
+              <option value="">Elige una…</option>
+              {partidasBase.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="form-row">
+            <label htmlFor="repPct">Qué porcentaje</label>
+            <input
+              id="repPct" type="number" min="0.01" max="100" step="0.01" inputMode="decimal"
+              value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)}
+              placeholder="40" required
+            />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="repDestino">A qué partida va</label>
+          <select id="repDestino" value={categoriaDestino} onChange={(e) => setCategoriaDestino(e.target.value)} required>
+            <option value="">Elige una…</option>
+            {CATEGORIAS_GASTO.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        <div className="form-row">
+          <label htmlFor="repNota">Por qué (opcional)</label>
+          <textarea
+            id="repNota" rows={2} value={nota} maxLength={400}
+            onChange={(e) => setNota(e.target.value)}
+            placeholder="El contador es único para la casa hermandad y el almacén. Se acordó en el cabildo de enero."
+          />
+          <p className="form-hint">Se imprime debajo de la regla. Es lo que evita tener que preguntar.</p>
+        </div>
+
+        <AvisoDeCampo texto={error} />
+        <div className="assign-box__row">
+          <button type="submit" className="btn btn-primary">Guardar</button>
+          <button type="button" className="btn btn-outline" onClick={onCerrar}>Cancelar</button>
+        </div>
+      </form>
+    </Drawer>
   )
 }

@@ -26,6 +26,7 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
 import { claseTipo, fechaLarga, iso } from '../../lib/calendario'
 import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
+import { agregarAvisoHermano } from '../../lib/avisosHermano'
 
 export default function Eventos() {
   const [eventos, setEventos] = useSupabaseTable<Evento>(
@@ -166,6 +167,35 @@ export default function Eventos() {
   function asignarTarea(eventoId: string, tareaId: string, trabajador: PersonaAsignable | null) {
     const evento = eventos.find((e) => e.id === eventoId)
     if (!evento) return
+    const tareaAntes = evento.tareas.find((t) => t.id === tareaId)
+
+    /*
+     * Y SE LE AVISA. Esto no estaba y llegó reportado como «asigno tarea a
+     * hermano y no llega notificación a hermano».
+     *
+     * La tarea se guardaba con su nombre al lado y ahí se quedaba: la única
+     * forma de enterarse era que alguien se lo dijera por WhatsApp, o entrar en
+     * el panel a mirar — y quien no gestiona no entra al panel. O sea que el
+     * reparto de tareas de un culto no llegaba a la persona que lo tenía que
+     * hacer, que es todo lo que hace esta pantalla.
+     *
+     * Solo a los HERMANOS: el personal de la junta y los roles no tienen área
+     * de hermano donde recibirlo. Y solo cuando cambia de persona, para que
+     * corregir el título de una tarea no vuelva a avisar a quien ya lo sabía.
+     */
+    const esHermano = trabajador
+      && !esRol(trabajador.id)
+      && !personal.some((m) => m.id === trabajador.id)
+    if (esHermano && trabajador && trabajador.id !== tareaAntes?.trabajadorId) {
+      const cuando = evento.fecha ? ` (${fechaLarga(evento.fecha)})` : ''
+      agregarAvisoHermano(
+        trabajador.id,
+        `Te han encargado «${tareaAntes?.titulo ?? 'una tarea'}» para ${evento.titulo}${cuando}.`,
+        'encargo',
+        'Tienes una tarea',
+      )
+    }
+
     aplicarEvento(eventoId, {
       tareas: evento.tareas.map((t) =>
         t.id === tareaId

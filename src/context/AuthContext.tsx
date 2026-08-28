@@ -13,6 +13,7 @@ import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
 import { limpiarModoDemo } from '../lib/demo'
 import { translateError } from '../lib/erroresAuth'
 import { ajustarEspejoALaHermandad, asegurarHermandad, hermandadActualId, olvidarHermandad } from '../lib/multiHermandad'
+import { olvidarSesionDelHermano } from '../lib/sesion'
 
 type AuthResult = { error: string | null }
 
@@ -389,6 +390,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signOut() {
         olvidarHermandad()
         ajustarEspejoALaHermandad(null)
+        /*
+         * Y LA DEL ÁREA DEL HERMANO, que es otra y vive aparte.
+         *
+         * Sin esto, quien entraba por su área y cerraba sesión desde el panel
+         * seguía «dentro» al volver a /hermano, sin sesión de Supabase detrás:
+         * la aplicación lo llevaba a su área en vez de a la de gestión. Y en la
+         * casa de hermandad, donde el ordenador lo usan varios, el siguiente
+         * veía la ficha del anterior. Explicado entero en `lib/sesion.ts`.
+         */
+        olvidarSesionDelHermano()
         if (supabase && !degradado) {
           await supabase.auth.signOut()
           return

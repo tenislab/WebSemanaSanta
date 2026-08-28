@@ -1,4 +1,4 @@
-import { limpiarDni, mismoDni } from '../../lib/dni'
+import { limpiarDni, mismoDni, problemaDeDocumento } from '../../lib/dni'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -434,6 +434,12 @@ export default function Personal() {
     }
     if (clave.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres.')
+      return
+    }
+    // El documento, comprobado: de él depende que esta persona pueda entrar.
+    const malDocumento = problemaDeDocumento(dni)
+    if (malDocumento) {
+      setError(malDocumento)
       return
     }
     if (hermanos.some((h) => mismoDni(h.dni, dni))) {

@@ -10,6 +10,7 @@ import {
   MOVIMIENTOS_INICIALES,
   type CuentaMovimiento,
   type Movimiento,
+  posicionDeIva,
   type TipoMovimiento,
 } from '../../data/movimientos'
 import { CLAVES_CATALOGOS, useLista } from '../../lib/catalogos'
@@ -87,6 +88,14 @@ export default function Tesoreria() {
       })
       .sort((a, b) => b.numero - a.numero)
   }, [movimientos, busqueda, filter])
+
+  /*
+   * La posición de IVA se calcula sobre TODO el libro que está viendo el
+   * tesorero, con sus filtros aplicados o sin ellos según lo que sea
+   * `movimientos` aquí: si un día se filtra por trimestre, esta cifra pasa a
+   * ser la del trimestre, que es justo lo que se quiere para el 303.
+   */
+  const iva = useMemo(() => posicionDeIva(movimientos), [movimientos])
 
   const stats = useMemo(() => {
     const conciliados = movimientos.filter((m) => m.estado === 'Conciliado')
@@ -199,6 +208,47 @@ export default function Tesoreria() {
           </span>
         </div>
       </section>
+
+      {/*
+        EL IVA, SOLO SI LA HERMANDAD LO MUEVE.
+        La mayoría no repercute IVA —las cuotas y los donativos están fuera— y
+        a esas no hay que enseñarles una caja vacía que solo genera dudas. En
+        cuanto hay una sola venta con IVA, aparece: es lo que hace falta para
+        el 303 y es una resta que nadie tiene por qué hacer a mano.
+      */}
+      {(iva.repercutido !== 0 || iva.soportado !== 0 || iva.liquidado !== 0) && (
+        <section className="stat-grid">
+          <div className="stat-tile">
+            <span className="stat-tile__label">IVA repercutido</span>
+            <span className="stat-tile__value">{formatCurrency(iva.repercutido)}</span>
+            {/* Que quede claro de quién es ese dinero: entra en la misma caja
+                pero no es de la hermandad. */}
+            <span className="stat-tile__trend stat-tile__trend--neutral">Cobrado para Hacienda</span>
+          </div>
+          <div className="stat-tile">
+            <span className="stat-tile__label">IVA soportado</span>
+            <span className="stat-tile__value">{formatCurrency(iva.soportado)}</span>
+            <span className="stat-tile__trend stat-tile__trend--neutral">El de las compras</span>
+          </div>
+          <div className="stat-tile">
+            <span className="stat-tile__label">Ya liquidado</span>
+            <span className="stat-tile__value">{formatCurrency(iva.liquidado)}</span>
+            <span className="stat-tile__trend stat-tile__trend--neutral">Ingresado a Hacienda</span>
+          </div>
+          <div className="stat-tile">
+            <span className="stat-tile__label">
+              {iva.aIngresar >= 0 ? 'Queda por ingresar' : 'A favor de la hermandad'}
+            </span>
+            <span className="stat-tile__value">{formatCurrency(Math.abs(iva.aIngresar))}</span>
+            {/* Negativo NO se redondea a cero: significa que se ha soportado
+                más IVA del que se ha repercutido y es Hacienda quien debe.
+                Esconderlo sería esconder un dinero a favor. */}
+            <span className={`stat-tile__trend stat-tile__trend--${iva.aIngresar > 0 ? 'warn' : 'ok'}`}>
+              {iva.aIngresar > 0 ? 'En el próximo 303' : 'Nada pendiente'}
+            </span>
+          </div>
+        </section>
+      )}
 
       <div className="toolbar">
         <input

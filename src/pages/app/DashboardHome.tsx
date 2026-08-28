@@ -5,7 +5,7 @@ import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import { CUOTAS_INICIALES, esAvisado, type Cuota } from '../../data/cuotas'
 import { getMensajesWeb, sinLeer } from '../../lib/mensajesWeb'
 import { contextoActual, requisitosPendientes } from '../../lib/requisitos'
-import { getSolicitudes } from '../../lib/solicitudes'
+import { useSolicitudes } from '../../lib/solicitudes'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { DOCUMENTOS_INICIALES, type Documento } from '../../data/documentos'
@@ -130,6 +130,9 @@ export default function DashboardHome() {
   const [documentos] = useSupabaseTable<Documento>('documentos', CLAVES_DATOS.documentos, DOCUMENTOS_INICIALES, documentoToRow, rowToDocumento)
   const [eventos] = useSupabaseTable<Evento>('eventos', CLAVES_DATOS.eventos, EVENTOS_INICIALES, eventoToRow, rowToEvento)
 
+  /* De la base: llegan desde la web pública, no de este navegador. */
+  const solicitudes = useSolicitudes()
+
   const { stats, actividad, alertas } = useMemo(() => {
     const campana = getCampana()
     const papeletasCampana = papeletas.filter((p) => p.anio === campana.anio)
@@ -215,7 +218,20 @@ export default function DashboardHome() {
     // Todo lo que una PERSONA pide y espera va antes que cualquier número.
     // Las solicitudes de alta solo se veían en un botón dentro de Hermanos:
     // quien no entrase ahí no se enteraba de que había gente esperando.
-    const altasPedidas = getSolicitudes().filter((s) => s.estado === 'Pendiente').length
+    /*
+     * DE LA BASE, NO DE LA COPIA DE ESTE NAVEGADOR.
+     *
+     * Esto era `getSolicitudes()`, que lee lo que hubiera guardado ESTE
+     * ordenador. Y una solicitud de alta llega desde la WEB PÚBLICA, o sea
+     * desde el móvil de quien la pide: aquí no ha estado nunca.
+     *
+     * O sea que la portada del panel decía «no hay nada esperando» con gente
+     * esperando de verdad. Es el mismo fallo que tenía Notificaciones con las
+     * papeletas, en el sitio donde más daño hace: esta pantalla es lo primero
+     * que se abre por la mañana, y su trabajo entero es que no haga falta ir
+     * módulo por módulo a mirar si hay algo.
+     */
+    const altasPedidas = solicitudes.filter((s) => s.estado === 'Pendiente').length
     if (altasPedidas > 0)
       alertas.push({
         text: `${altasPedidas} ${altasPedidas === 1 ? 'persona quiere hacerse hermano' : 'personas quieren hacerse hermanas'}`,
@@ -257,7 +273,7 @@ export default function DashboardHome() {
     // Con las dependencias puestas: los datos llegan de la red DESPUÉS del
     // primer pintado, así que sin esto el Inicio se calcularía una sola vez con
     // las listas vacías y se quedaría en ceros para siempre.
-  }, [hermanos, cuotas, papeletas, movimientos, documentos])
+  }, [hermanos, cuotas, papeletas, movimientos, documentos, solicitudes])
 
   // Se ve un módulo en el Inicio si lo permite el cargo Y lo incluye el pack
   // contratado (si no, una suscripción de solo web vería datos de gestión).

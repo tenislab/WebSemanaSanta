@@ -2030,6 +2030,34 @@ span.logo-mark img { width: 100%; height: 100%; }
 .recibo-doc__note { text-align: center; font-size: 0.74rem; color: var(--text-muted); margin: 0; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
 
 /* =========================================================================
+   La pantalla de «algo se ha roto» (ver SiAlgoPetardea)
+   =========================================================================
+   Se pinta con colores literales y no con los tokens del tema: esta pantalla
+   sale cuando algo ha reventado, y si lo que reventó fuera justamente el tema
+   —o la hoja de estilos no hubiera llegado a aplicarse— un texto en var(--text)
+   se quedaría invisible sobre un fondo en var(--bg). Aquí toca no depender de
+   nada. */
+.petardazo {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 2rem 1.2rem; background: #f3ede2; color: #2c2c2c;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.petardazo__caja {
+  max-width: 34rem; background: #fff; border: 1px solid rgba(61, 15, 22, 0.15);
+  border-radius: 12px; padding: 1.8rem 1.9rem;
+  box-shadow: 0 22px 50px -30px rgba(61, 15, 22, 0.5);
+}
+.petardazo h1 { font-size: 1.4rem; margin: 0 0 0.9rem; color: #6a1a23; }
+.petardazo p { margin: 0 0 0.8rem; line-height: 1.55; font-size: 0.95rem; }
+.petardazo__botones { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1.3rem 0 0.4rem; }
+.petardazo__detalle { margin-top: 1.2rem; }
+.petardazo__detalle summary { cursor: pointer; font-size: 0.85rem; color: #6d6357; }
+.petardazo__detalle pre {
+  margin-top: 0.7rem; padding: 0.8rem; background: #ece2d3; border-radius: 8px;
+  font-size: 0.78rem; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
+
+/* =========================================================================
    Gráficas de la tienda
    ========================================================================= */
 .grafica {
@@ -7762,3 +7790,137 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
   color: var(--text);
 }
 
+
+/* ---------------------------------------------------------------------------
+   CAMPAÑAS Y PROYECTOS
+
+   Dos tarjetas distintas que comparten una barra. La barra es lo único
+   verdaderamente nuevo de esta pantalla: el resto son `panel`, `chip` y `pill`
+   del resto de la aplicación, a propósito.
+
+   LA BARRA NO ES UN `<progress>`. Ese elemento se estiliza distinto en cada
+   navegador —Safari ignora la mitad de las propiedades— y aquí hace falta que
+   el color sea el de la hermandad. Con un `div` y un `span` se pinta igual en
+   todos, y la accesibilidad se declara a mano con `role="progressbar"`, que es
+   lo que lee el lector de pantalla de todas formas.
+   --------------------------------------------------------------------------- */
+
+.objetivos { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.objetivos__acciones { margin-bottom: 1rem; }
+.objetivos__vacio {
+  color: var(--text-muted); font-size: 0.9rem; line-height: 1.6;
+  max-width: 62ch; margin: 1.4rem 0;
+}
+
+/* Una campaña cerrada sigue estando, pero apagada: es de consulta. No se
+   esconde —el año que viene se mira cuánto se sacó la vez anterior—. */
+.campana--cerrada, .proyecto--hecho { opacity: 0.72; }
+
+.campana__cabecera, .proyecto__cabecera {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.5rem;
+}
+.campana__titulo, .proyecto__titulo { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.campana__estado { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--text-muted); }
+.campana__pills { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.campana__texto, .proyecto__texto {
+  margin: 0.5rem 0 0.9rem; font-size: 0.88rem; line-height: 1.55; color: var(--text-muted);
+}
+
+.campana__barra, .proyecto__barra {
+  height: 10px; border-radius: 999px; background: var(--bg-sunken);
+  overflow: hidden; margin: 0.2rem 0 0.6rem;
+}
+.campana__barra span, .proyecto__barra span {
+  display: block; height: 100%; background: var(--gold);
+  border-radius: 999px; transition: width 0.4s ease;
+}
+/* Quien pide que no se le muevan las cosas, que no se le muevan. */
+@media (prefers-reduced-motion: reduce) {
+  .campana__barra span, .proyecto__barra span { transition: none; }
+}
+
+/* Las cifras van con `tabular-nums`: en una rejilla de campañas, los importes
+   quedan uno debajo de otro y se comparan de un vistazo. */
+.campana__cifras {
+  margin: 0; display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+.campana__cifras b { font-size: 1.25rem; }
+.campana__de { color: var(--text-muted); font-size: 0.86rem; }
+.campana__falta { margin-left: auto; font-size: 0.8rem; color: var(--text-muted); }
+.campana__gente { margin: 0.55rem 0 1rem; font-size: 0.8rem; color: var(--text-muted); }
+.campana__acciones { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+
+.proyecto__meta { margin: 0.25rem 0 0; font-size: 0.8rem; color: var(--text-muted); }
+.proyecto__meta .pill { margin-right: 0.3rem; }
+.proyecto__dinero { margin: 0 0 0.7rem; font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.proyecto__avance { margin: 0 0 0.7rem; font-size: 0.78rem; color: var(--text-muted); }
+
+/* El que va tarde se distingue por el borde, no por el fondo: el fondo rojo en
+   una rejilla de seis tarjetas grita tanto que no se lee ninguna. */
+.proyecto--tarde { border-color: var(--err-fg); }
+.proyecto--tarde .proyecto__meta { color: var(--err-fg); }
+
+.proyecto__tareas { list-style: none; margin: 0 0 0.8rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.proyecto__tareas li { font-size: 0.86rem; }
+.proyecto__tareas label { display: inline; cursor: pointer; }
+.proyecto__tareas small { color: var(--text-muted); font-size: 0.76rem; }
+.proyecto__tareas .is-hecha { text-decoration: line-through; color: var(--text-muted); }
+.proyecto__tareas .is-tarde small { color: var(--err-fg); }
+
+.proyecto__nueva { display: flex; gap: 0.4rem; }
+.proyecto__nueva input { flex: 1; min-width: 0; }
+
+@media (max-width: 640px) {
+  .objetivos { grid-template-columns: 1fr; }
+  /* En 390 px, «Faltan 1.200 €» empujado a la derecha se sale de la tarjeta. */
+  .campana__falta { margin-left: 0; width: 100%; }
+}
+
+/* ---------------------------------------------------------------------------
+   CUENTA DE PÉRDIDAS Y GANANCIAS Y SUS REGLAS PORCENTUALES
+   --------------------------------------------------------------------------- */
+
+.settings-card__subtitle { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.3rem; }
+
+/* Todas las cifras en columna: un informe de cuentas se lee comparando de
+   arriba abajo, y con dígitos de ancho variable las comas no se alinean. */
+.pyg__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Lo de apoyo —el año pasado, el peso, la variación— más flojo que la cifra
+   del año en curso, que es la que se busca. */
+.pyg__suave { color: var(--text-muted); font-size: 0.85em; }
+.pyg__lectura { margin: 0.8rem 0 0; font-size: 0.9rem; }
+.pyg__cierre { margin-top: 1rem; }
+.pyg__aviso {
+  margin: 1rem 0 0; padding: 0.8rem 0.9rem; font-size: 0.82rem; line-height: 1.55;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-sunken);
+}
+/* En papel el aviso va en tinta normal y sin fondo: un recuadro gris se
+   imprime como una mancha y se come la línea que hay debajo. */
+@media print {
+  .pyg__aviso { background: none; border: 0; padding: 0.4rem 0; }
+  .pyg__table { font-size: 0.82rem; }
+}
+
+.reglas-lista { list-style: none; margin: 1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.reglas-lista li {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 0.8rem; flex-wrap: wrap;
+  padding: 0.7rem 0.85rem; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); background: var(--bg-raised);
+}
+/* Una regla apagada sigue estando, atenuada: se apagan para probar cómo queda
+   el informe sin ella, y una que desaparece de la lista parece borrada. */
+.reglas-lista li.is-apagada { opacity: 0.55; }
+.reglas-lista__texto { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; flex: 1; }
+.reglas-lista__texto .pill { align-self: flex-start; }
+.reglas-lista__texto small { color: var(--text-muted); font-size: 0.8rem; }
+.reglas-lista__nota { font-style: italic; }
+.reglas-lista__acciones { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.reglas-lista__switch { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .reglas-lista li { flex-direction: column; }
+  .reglas-lista__acciones { width: 100%; }
+}

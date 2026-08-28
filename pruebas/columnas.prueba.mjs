@@ -101,6 +101,19 @@ export default async function ({ caso }) {
          */
         productoToRow: 'productos',
         descuentoToRow: 'descuentos',
+        /*
+         * Las campañas se llaman `campanas_recaudacion` en la base y
+         * `recaudaciones` en el código, a propósito: ya hay una
+         * `lib/campana.ts` que es LA CAMPAÑA DE PAPELETAS, otra cosa
+         * completamente distinta. Está explicado en `lib/recaudaciones.ts`.
+         */
+        recaudacionToRow: 'campanas_recaudacion',
+        // Fichero `db/proyectos.ts`, tabla `tareas_proyecto`: mismo caso que
+        // `solicitudPapeletaToRow`.
+        tareaProyectoToRow: 'tareas_proyecto',
+        // Fichero `db/repartos.ts`, tabla `reglas_reparto`: el fichero se
+        // llama por lo que guarda y la tabla por lo que es.
+        repartoToRow: 'reglas_reparto',
       }
       const tabla = ALIAS[m[1]] ?? [...tablas.keys()]
         .filter((t) => t === base || t === `${base}s` || base.startsWith(t))

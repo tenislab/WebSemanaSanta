@@ -1,4 +1,4 @@
-import { limpiarDni } from '../lib/dni'
+import { limpiarDni, problemaDeDocumento } from '../lib/dni'
 import { useId, useRef, useState, type ReactNode } from 'react'
 import {
   enviarMensajeWeb,
@@ -354,9 +354,21 @@ export function FormularioAlta({
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
     const errs: Errores = erroresFormulario({ ...datos, consiente }, { exigeTelefono: true })
-    // El DNI y la contraseña son de este formulario, no del genérico: con ellos
-    // la persona podrá entrar en su área en cuanto secretaría la dé de alta.
-    if (datos.dni.trim().length < 8) errs.dni = 'Escribe tu DNI o NIE completo.'
+    /*
+     * El DNI es de este formulario, no del genérico: con él la persona podrá
+     * entrar en su área en cuanto secretaría la dé de alta.
+     *
+     * Y SE COMPRUEBA LA LETRA, no la longitud. Contar caracteres —que es lo
+     * que hacía— deja pasar «12345679Z», que es justo la errata que se comete
+     * al copiar de un papel. Y entonces la persona pide el alta con un
+     * documento que no es el suyo: secretaría la da de alta, y el día que
+     * intenta entrar en su área con SU DNI de verdad, no la encuentra.
+     */
+    if (!datos.dni.trim()) errs.dni = 'Escribe tu DNI o NIE.'
+    else {
+      const mal = problemaDeDocumento(datos.dni)
+      if (mal) errs.dni = mal
+    }
     setErrores(errs)
     if (Object.keys(errs).length > 0) return
     // Al robot se le dice que sí y no se guarda nada: si se le enseña el

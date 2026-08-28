@@ -6,6 +6,10 @@ import { comprimirImagen, leerArchivo } from '../lib/imagen'
 import { guardarImagen } from '../lib/almacenImagenes'
 import { getCampana, saveCampana } from '../lib/campana'
 import { CLAVE_ALTA_HECHA } from '../lib/altaHermandad'
+import AvisoDeCampo from './AvisoDeCampo'
+import { problemaDeBizum } from '../lib/telefono'
+import { problemaDeIdentificadorAcreedor, problemaDeNif } from '../lib/nif'
+import { ibanValido, porQueNoValeElIban } from '../lib/iban'
 
 /**
  * El alta de la hermandad, en pasos, justo después de crear la cuenta.
@@ -103,7 +107,8 @@ export default function AltaHermandad({
               <div className="form-grid-2">
                 <div className="form-row">
                   <label htmlFor="altaCif">CIF</label>
-                  <input id="altaCif" type="text" value={datos.cif} onChange={(e) => set({ cif: e.target.value })} placeholder="G41000000" />
+                  <input id="altaCif" type="text" value={datos.cif} onChange={(e) => set({ cif: e.target.value })} placeholder="G41000001" />
+                  <AvisoDeCampo texto={problemaDeNif(datos.cif)} />
                 </div>
                 <div className="form-row">
                   <label htmlFor="altaTel">Teléfono de secretaría</label>
@@ -147,16 +152,23 @@ export default function AltaHermandad({
               </p>
               <div className="form-row">
                 <label htmlFor="altaIban">Cuenta de la hermandad (IBAN)</label>
-                <input id="altaIban" type="text" value={datos.iban} onChange={(e) => set({ iban: e.target.value })} placeholder="ES00 0000 0000 0000 0000 0000" />
+                <input id="altaIban" type="text" value={datos.iban} onChange={(e) => set({ iban: e.target.value })} placeholder="ES91 2100 0418 4502 0005 1332" />
+                <AvisoDeCampo
+                  texto={datos.iban.trim() && !ibanValido(datos.iban)
+                    ? `Ese IBAN no vale: ${porQueNoValeElIban(datos.iban)}.`
+                    : null}
+                />
               </div>
               <div className="form-grid-2">
                 <div className="form-row">
                   <label htmlFor="altaBizum">Bizum</label>
-                  <input id="altaBizum" type="tel" value={datos.bizumTelefono} onChange={(e) => set({ bizumTelefono: e.target.value })} placeholder="Teléfono del Bizum" />
+                  <input id="altaBizum" type="tel" inputMode="tel" value={datos.bizumTelefono} onChange={(e) => set({ bizumTelefono: e.target.value })} placeholder="600 00 00 00" />
+                  <AvisoDeCampo texto={problemaDeBizum(datos.bizumTelefono)} />
                 </div>
                 <div className="form-row">
                   <label htmlFor="altaAcreedor">Identificador de acreedor SEPA</label>
-                  <input id="altaAcreedor" type="text" value={datos.identificadorAcreedor} onChange={(e) => set({ identificadorAcreedor: e.target.value })} placeholder="ES23000B12345678" />
+                  <input id="altaAcreedor" type="text" maxLength={20} value={datos.identificadorAcreedor} onChange={(e) => set({ identificadorAcreedor: e.target.value })} placeholder="ES11000B12345674" />
+                  <AvisoDeCampo texto={problemaDeIdentificadorAcreedor(datos.identificadorAcreedor)} />
                 </div>
               </div>
               <p className="form-hint">
