@@ -1696,6 +1696,8 @@ span.logo-mark img { width: 100%; height: 100%; }
 .form-hint { font-size: 0.8rem; color: var(--text-muted); margin: 0; line-height: 1.5; }
 .form-hint--error { color: var(--err-fg); }
 .form-hint--ok { color: var(--ok-fg); }
+/* El aviso que no es un error: «esto ya lo has empezado», «espera un momento». */
+.form-hint--warn { color: var(--warn-fg); }
 
 .checkbox-row { display: flex; align-items: center; gap: 0.55rem; font-size: 0.86rem; font-weight: 600; color: var(--text); cursor: pointer; }
 .checkbox-row input { width: 16px; height: 16px; accent-color: var(--accent); }
@@ -4669,12 +4671,26 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
    acción principal: es una rectificación, va discreta y al ras de la izquierda. */
 .pago-box--ok .btn { align-self: flex-start; }
 .pago-box code { background: var(--bg-raised); border: 1px solid var(--line); border-radius: 4px; padding: 0.05rem 0.4rem; }
-.pago-metodos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+/*
+ * Los métodos de pago: tantos por fila como quepan.
+ *
+ * Estaban clavados a dos columnas de `1fr`, y `1fr` no baja de lo que mide su
+ * contenido: dentro del cajón de «Pagar mi cuota», que es estrecho, el segundo
+ * método se salía por el borde derecho y el botón quedaba medio cortado. Con
+ * `auto-fit` y un mínimo, caben dos donde hay sitio, uno donde no, y tres en
+ * las cajas anchas.
+ */
+.pago-metodos { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: 0.8rem; }
 .pago-metodo {
   display: flex; flex-direction: column; gap: 0.45rem; align-items: flex-start;
   background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-sm);
   padding: 0.85rem 0.95rem;
+  /* Sin esto, el IBAN estira la columna y la tarjeta se sale de su sitio. */
+  min-width: 0;
 }
+/* Y el botón no puede ser más ancho que su tarjeta: «Ya he enviado el Bizum»
+   se salía por el borde derecho dentro del cajón de pagar. */
+.pago-metodo .btn { max-width: 100%; white-space: normal; }
 .pago-metodo__titulo { font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gold); }
 .pago-metodo__dato { font-weight: 600; font-size: 0.95rem; word-break: break-all; }
 @media (max-width: 560px) {

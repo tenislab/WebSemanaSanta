@@ -244,6 +244,9 @@ export default function TiendaCaja() {
       formaPago,
       hermanoId: hermanoId || null,
       descuentoId: descuentoId || null,
+      // Solo lo usa la demostración: con base de datos, el porcentaje lo
+      // decide ella mirando las etiquetas del hermano. Ver `DatosDeVenta`.
+      descuentoPct,
       compradorNombre: comprador.nombre || hermano?.nombre || '',
       compradorNif: comprador.nif || hermano?.dni || '',
       compradorDireccion: comprador.direccion || hermano?.direccion || '',
@@ -521,7 +524,22 @@ export default function TiendaCaja() {
           <button
             className="btn btn-primary btn-block"
             onClick={() => void cobrar()}
-            disabled={cobrando || cesta.length === 0 || !reqBase.listo}
+            /*
+             * SIN BASE DE DATOS TAMBIÉN SE COBRA, y esto estaba al revés.
+             *
+             * El botón se apagaba con `!reqBase.listo`, así que en la
+             * demostración se podía llenar la cesta, se veía el total con su
+             * IVA… y ahí se acababa el recorrido: ni factura, ni almacén, ni
+             * apunte en el libro. La tienda era el único módulo que no se
+             * podía probar entero, y desde fuera eso no se lee como «falta
+             * conectar la base» sino como «esto no funciona».
+             *
+             * Ahora la venta se registra en el navegador (ver
+             * `lib/tiendaLocal.ts`), que es lo que ya hacen el censo, las
+             * cuotas y las papeletas. El aviso rojo de arriba sigue diciendo
+             * que esos datos no salen de este ordenador.
+             */
+            disabled={cobrando || cesta.length === 0}
           >
             {cobrando ? 'Cobrando…' : `Cobrar ${formatCurrency(totales.total)}`}
           </button>

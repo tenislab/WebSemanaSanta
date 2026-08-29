@@ -1,6 +1,6 @@
 # Qué lleva esta entrega
 
-Siete bloques, todos probados: `tsc`, `lint`, `build` y **3.946 pruebas** que
+Once bloques, todos probados: `tsc`, `lint`, `build` y **4.098 pruebas** que
 pasan con y sin zona horaria de Madrid. El SQL se instala sobre un Postgres de
 verdad, no solo se lee.
 
@@ -206,6 +206,141 @@ reportan.
 
 ---
 
+## 8. Las devoluciones del banco (fichero 19-44 / pain.002)
+
+Se manda la remesa, el banco cobra, y unos días después **devuelve una parte**:
+cuentas canceladas, saldos sin fondos, gente que reclama el cargo. Ese fichero
+no se podía abrir en ninguna parte, y sin leerlo **todos los recibos se quedan
+«Pagada»**:
+
+- La hermandad cree tener un dinero que no tiene, y el saldo del libro no cuadra
+  con el banco sin que nadie sepa por qué.
+- Al hermano devuelto no se le vuelve a pasar el recibo —ya consta pagado— así
+  que se le acumula el año entero.
+- Y a la remesa siguiente entra otra vez la cuenta cancelada, que se vuelve a
+  devolver, con su comisión otra vez.
+
+Ahora se sube en **Cuotas**, se ve qué recibo es de quién y por qué motivo, y se
+aplica cuando alguien lo ha mirado. **El motivo se traduce a cristiano** porque
+no se hace lo mismo con cada uno: «sin fondos» se reintenta el mes que viene,
+«cuenta cancelada» hay que llamar al hermano, y «lo ha rechazado el titular» lo
+arregla secretaría hablando. Con el código a secas —`AC04`— los tres se tratan
+igual.
+
+**El fichero de ancho fijo del cuaderno 19-44 se reconoce y se rechaza con
+instrucciones**, en vez de adivinarlo: adivinar posiciones de columnas en un
+fichero de dinero es como se apunta una devolución en el hermano equivocado.
+
+---
+
+## 9. El hermano paga con tarjeta
+
+Cuota y papeleta, desde su área.
+
+**El dinero no pasa por Gobergo.** El cobro se crea contra la cuenta de la
+hermandad, entra en su saldo y se paga a su IBAN. No hay comisión de Gobergo por
+medio. Y en la base **no se guarda ninguna clave secreta**: solo el
+identificador de la cuenta, que no sirve para cobrar nada.
+
+**El importe no lo manda el navegador.** Lo lee el servidor del propio recibo.
+Si viniera de fuera, cualquiera pagaría su cuota de 60 € por un céntimo
+cambiando un número. Y de quién es el recibo tampoco se cree: se comprueba
+contra la ficha de quien ha iniciado sesión.
+
+**Quien da por cobrado es el aviso de Stripe, no la vuelta del navegador.** Esa
+dirección se puede escribir a mano. Por eso la pantalla dice «en un momento
+verás el recibo actualizado» y no da nada por pagado: la cuota la marca el
+servidor cuando el dinero está de verdad, y de paso **deja el asiento en
+Tesorería**, pendiente de conciliar como todos.
+
+Dos detalles que se ven poco y evitan disgustos:
+
+- **No se puede pagar dos veces el mismo recibo sin querer.** Entre que Stripe
+  cobra y el recibo se pone al día pasan segundos; en ese hueco el hermano ve su
+  cuota en «Pendiente» y la vuelve a pagar. Ahora se le avisa de que ya lo tiene
+  empezado. Devolver un cobro duplicado es media mañana de tesorería.
+- **Nadie puede escribir en la tabla de pagos desde el navegador.** Solo leerla,
+  y solo los suyos. Poder escribirla sería marcarse la cuota como pagada sin
+  pagar.
+
+Para encenderlo hace falta que la hermandad enlace su cuenta de Stripe en
+**Configuración**. Mientras no lo haga, todo sigue exactamente igual que hoy:
+Bizum, transferencia y domiciliación.
+
+---
+
+## 10. La tienda, que no se podía probar
+
+Llegó dicho así: «no aparecen bien los artículos, no se puede hacer facturas».
+Y era verdad. **La tienda era el único módulo que no funcionaba sin base de
+datos**, y eso no se lee como «falta conectar algo», se lee como que está roto:
+
+- **El catálogo salía vacío.** Todos los demás módulos traen ejemplo —treinta y
+  cuatro hermanos, sus cuotas, sus papeletas, el libro entero— y la tienda no
+  traía ni un artículo.
+- **Si dabas uno de alta, nacía con cero existencias**, en la caja aparecía
+  «agotado» y no se podía ni pulsar. Nada decía que faltaba meterle género.
+- **Meterle género llamaba a la base**, así que tampoco se podía.
+- **Y el botón de cobrar estaba apagado.** Fin del recorrido: ni cesta, ni
+  factura, ni apunte en el libro.
+
+Ahora la tienda se puede usar entera sin conectar nada: un catálogo de ejemplo
+**con existencias** (seis artículos, con IVA del 21 %, del 4 % y del 0 %, y uno
+agotado a propósito para que se vea cómo queda), cobrar con su factura, el
+almacén que baja con su movimiento, los tres asientos en Tesorería —el ingreso
+por la base, el IVA en su propia partida y el coste del género—, anular
+devolviendo el género, apartar desde la web pública y cobrarlo al recogerlo.
+
+**Con base de datos no cambia nada.** Sigue mandando `registrar_venta`, porque
+una venta son seis cosas que tienen que pasar juntas o no pasar. Lo de arriba
+es solo para la demostración, y hace lo mismo a propósito: los importes no se
+calculan dos veces, se piden a las mismas funciones que la pantalla usa para
+enseñar el total antes de cobrar.
+
+Dos cosas que **también le pasan a una hermandad con la base conectada**:
+
+- Al dar de alta un artículo **se abre solo su almacén**, con la entrada
+  preparada. Antes había que adivinar que esa pantalla existía, y hasta pasar
+  por ella el artículo no se podía vender.
+- **La tienda de la web pública** leía el catálogo con «ninguno» por defecto:
+  salía vacía aunque el panel enseñara seis artículos.
+
+Y una fila de Ajustes → Conexiones que se había quedado mintiendo: **«Pago con
+tarjeta — todavía no está enchufado»**, cuando ya lo está desde el bloque 9.
+
+---
+
+## 11. Los informes de dinero ignoraban toda venta y todo pago con tarjeta
+
+Este es grave, y se encontró probando la app: al vender algo en la tienda, el
+total de ingresos de **Informes** se iba a **0,00 €** de golpe. No solo dejaba
+de sumar la venta — borraba lo que ya había. Dos fallos distintos.
+
+**El primero: `movimientos.fecha` guarda dos formatos de fecha a la vez, y
+nadie lo sabía.** Cuando la secretaría escribe un apunte a mano en Tesorería,
+se guarda «05 ene 2026». Cuando lo escribe una función del servidor —cobrar
+una venta de la tienda, un pago con tarjeta— se guarda «2026-01-05». La
+**Cuenta de Pérdidas y Ganancias**, el **Estado de Cuentas** y el selector de
+años sacaban el año cogiendo los cuatro últimos caracteres de la fecha, que
+vale para el primer formato y no para el segundo. Cada venta y cada pago con
+tarjeta se volvía invisible para los dos documentos de cuentas, **sin un solo
+error**.
+
+**El segundo, y el que hizo que desapareciera todo y no solo la venta:** en
+una demostración recién elegida, los apuntes de ejemplo del libro de
+Tesorería viven solo en la memoria del navegador hasta que se visita esa
+pantalla por primera vez. Si lo primero que se hacía era irse directo a la
+Tienda y cobrar algo, la función que cierra la venta escribía sus tres
+apuntes **encima de un libro que creía vacío**, y los dieciocho apuntes de
+ejemplo desaparecían para siempre de ese navegador.
+
+Comprobado en el peor caso —demostración recién abierta, directa a la
+Tienda—: antes vender una medalla dejaba el libro con tres apuntes y los
+ingresos del año en 0,00 €; ahora conserva los de ejemplo, numera a
+continuación, y los ingresos suben justo lo cobrado, en los dos documentos.
+
+---
+
 # Lo que tienes que hacer tú
 
 1. **Ejecutar `ACTUALIZAR.sql`** — está explicado paso a paso en
@@ -215,6 +350,14 @@ reportan.
    ```
    supabase functions deploy enviar-correo
    ```
+3. **Solo si quieres el pago con tarjeta** (si no, no hace falta tocar nada y
+   todo sigue funcionando igual):
+   ```
+   supabase secrets set STRIPE_SECRET_KEY=sk_live_...
+   supabase functions deploy crear-pago
+   ```
+   Y pegar el identificador de la cuenta de Stripe de la hermandad
+   (`acct_…`) en **Configuración**. Sin eso, el botón de tarjeta no sale.
 
 ---
 
@@ -226,5 +369,6 @@ reportan.
 - **La pantalla en blanco de gobergo.com** se resolvió sola. Puede ser el
   proyecto de Supabase despertando de la pausa (plan gratuito). Si vuelve a
   pasar, hay que mirarlo con el navegador abierto.
-- **Leer el fichero de devoluciones del banco** (19-44 / pain.002).
-- **Pago con tarjeta del hermano** para cuota y papeleta.
+
+Las dos que quedaban de la lista —**leer el fichero de devoluciones** y **el
+pago con tarjeta**— van en esta entrega, en los bloques 8 y 9.

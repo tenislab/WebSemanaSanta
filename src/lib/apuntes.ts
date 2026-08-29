@@ -108,3 +108,40 @@ export function conApunteDeCobro(movimientos: Movimiento[], cobro: DatosCobro): 
 export function sinApunteDeCobro(movimientos: Movimiento[], origen: string): Movimiento[] {
   return movimientos.filter((m) => m.origen !== origen)
 }
+
+/**
+ * EL CONTRA-APUNTE DE UNA DEVOLUCIÓN DEL BANCO.
+ *
+ * Aquí NO se borra el ingreso, y esa es la diferencia con `sinApunteDeCobro`.
+ *
+ * Cuando un cobro se deshace el mismo día no llegó a existir, y borrarlo deja
+ * el libro limpio. Pero una devolución del banco es otra cosa: EL DINERO ENTRÓ
+ * Y VOLVIÓ A SALIR. Las dos cosas están en el extracto, y el libro tiene que
+ * poder cuadrarse contra el extracto línea a línea. Borrando el ingreso, el
+ * saldo acaba bien y el movimiento del banco se queda sin pareja: el tesorero
+ * conciliando ve un cargo que no está en ningún sitio.
+ *
+ * Va como GASTO y a CUENTA BANCARIA siempre: una devolución no se devuelve en
+ * mano. Y nace «Pendiente» como todo lo demás — conciliar es comprobarlo
+ * contra el extracto, y eso lo hace el tesorero, no esta función.
+ */
+export function conContraApunteDeDevolucion(
+  movimientos: Movimiento[],
+  datos: { origen: string, concepto: string, categoria: string, importe: number, fecha: string },
+): Movimiento[] {
+  if (yaApuntado(movimientos, datos.origen)) return movimientos
+  if (!(datos.importe > 0)) return movimientos
+  const apunte: Movimiento = {
+    id: nuevoId(),
+    numero: siguienteNumero(movimientos),
+    fecha: datos.fecha,
+    concepto: datos.concepto,
+    categoria: datos.categoria,
+    tipo: 'Gasto',
+    importe: datos.importe,
+    cuenta: 'Cuenta bancaria',
+    estado: 'Pendiente',
+    origen: datos.origen,
+  }
+  return [apunte, ...movimientos]
+}

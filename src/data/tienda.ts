@@ -107,6 +107,82 @@ export interface Descuento {
   creadoEn: string
 }
 
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL CATÁLOGO DE LA DEMOSTRACIÓN
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Todos los demás módulos traen ejemplo —treinta y cuatro hermanos, sus cuotas,
+ * sus papeletas, el libro de tesorería—, y la tienda no traía ninguno. Así que
+ * quien abría la demostración para ver la tienda encontraba «no hay artículos»,
+ * y eso no se lee como «esto todavía no está puesto» sino como «esto está
+ * roto». Llegó dicho tal cual: «no aparecen bien los artículos».
+ *
+ * VIENEN CON EXISTENCIAS, y eso es lo que de verdad importa. Un artículo con
+ * cero unidades sale «agotado» en la caja y no se puede ni pulsar, así que un
+ * catálogo de ejemplo sin género seguiría sin dejar probar nada.
+ *
+ * Los precios llevan el IVA incluido, como se dicen en el mostrador. Las
+ * estampas van al 0 %: los impresos de culto suelen estar exentos, y de paso
+ * la demostración enseña que el desglose lo respeta.
+ */
+export const PRODUCTOS_INICIALES: Producto[] = [
+  {
+    id: 'prod-medalla', codigo: 'MED', nombre: 'Medalla de la hermandad',
+    descripcion: 'Plata de ley con cordón burdeos.',
+    precio: 25, coste: 11, iva: 21, stock: 40, stockMinimo: 10,
+    activo: true, visibleEnWeb: true, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+  {
+    id: 'prod-camiseta', codigo: 'CAM', nombre: 'Camiseta de la cuadrilla',
+    descripcion: 'Algodón, con el escudo bordado. Tallas de la S a la XXL.',
+    precio: 15, coste: 6.5, iva: 21, stock: 62, stockMinimo: 15,
+    activo: true, visibleEnWeb: true, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+  {
+    id: 'prod-estampa', codigo: 'EST', nombre: 'Estampa del Señor',
+    descripcion: 'Cartulina, con la oración al dorso.',
+    precio: 1, coste: 0.18, iva: 0, stock: 500, stockMinimo: 100,
+    activo: true, visibleEnWeb: true, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+  {
+    id: 'prod-llavero', codigo: 'LLA', nombre: 'Llavero del escudo',
+    descripcion: 'Metal esmaltado.',
+    precio: 6, coste: 2.2, iva: 21, stock: 85, stockMinimo: 20,
+    activo: true, visibleEnWeb: true, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+  {
+    id: 'prod-libro', codigo: 'LIB', nombre: 'Libro del centenario',
+    descripcion: 'Tapa dura, 240 páginas, con fotografías del archivo.',
+    precio: 30, coste: 17, iva: 4, stock: 24, stockMinimo: 5,
+    activo: true, visibleEnWeb: true, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+  {
+    // Sin existencias A PROPÓSITO: así se ve en la caja cómo queda un artículo
+    // agotado y en el almacén cómo avisa de que hay que reponer.
+    id: 'prod-cera', codigo: 'CER', nombre: 'Vela de la Virgen',
+    descripcion: 'Cera rizada, 60 cm.',
+    precio: 4.5, coste: 1.9, iva: 21, stock: 0, stockMinimo: 24,
+    activo: true, visibleEnWeb: false, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+]
+
+/**
+ * Los descuentos de ejemplo. El de costaleros va por la etiqueta «Costalero»
+ * de la ficha, que es la que llevan los hermanos de la demostración: así se ve
+ * que el descuento aparece solo cuando le corresponde a quien compra.
+ */
+export const DESCUENTOS_INICIALES: Descuento[] = [
+  {
+    id: 'desc-hermanos', nombre: 'Hermanos', porcentaje: 10,
+    activo: true, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+  {
+    id: 'desc-costaleros', nombre: 'Costaleros', porcentaje: 50, etiqueta: 'Costalero',
+    activo: true, creadoEn: '2026-01-15T10:00:00.000Z',
+  },
+]
+
 /** La referencia que se enseña e imprime: «A-14». */
 export function referenciaFactura(v: Pick<Venta, 'serie' | 'numero'>): string {
   return `${v.serie}-${v.numero}`

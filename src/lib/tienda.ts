@@ -28,7 +28,12 @@ import type {
   LineaReservaWeb, LineaVenta, MovimientoStock, Producto, Reserva,
   TipoMovimientoStock, Venta,
 } from '../data/tienda'
-import { precioDeLineaCent } from '../data/tienda'
+import { DESCUENTOS_INICIALES, PRODUCTOS_INICIALES, precioDeLineaCent } from '../data/tienda'
+import {
+  anularVentaLocal, apartadoDe, datosTiendaLocales, entregarReservaLocal, historialLocalDe,
+  lineasDeReservaLocal, lineasLocalesDe, moverStockLocal, registrarVentaLocal,
+  reservarEnLaWebLocal, reservasLocales, soltarReservaLocal, tiendaEnLocal, ventasLocales,
+} from './tiendaLocal'
 
 /**
  * QUE NO SE HAYA PODIDO PREGUNTAR NO ES LO MISMO QUE «NO HAY NADA».
@@ -52,17 +57,27 @@ function avisarDeFallo(que: string, motivo: string) {
   }))
 }
 
-/** El catálogo de la hermandad. Lo edita quien lleva el inventario. */
+/**
+ * El catálogo de la hermandad. Lo edita quien lleva el inventario.
+ *
+ * Los artículos de ejemplo son SOLO para la demostración: `useSupabaseTable`
+ * no los usa nunca con base de datos conectada, ni siquiera si la consulta
+ * falla (ver `deReserva` en `supabaseSync.ts`). Antes esta lista arrancaba
+ * vacía y la tienda de la demostración salía sin un solo artículo, que se lee
+ * como que está rota.
+ */
 export function useProductos(opciones?: { sinEspejo?: boolean }) {
   return useSupabaseTable<Producto>(
-    'productos', CLAVES_DATOS.productos, [], productoToRow, rowToProducto, 'codigo', opciones,
+    'productos', CLAVES_DATOS.productos, PRODUCTOS_INICIALES,
+    productoToRow, rowToProducto, 'codigo', opciones,
   )
 }
 
 /** Los descuentos por colectivo. */
 export function useDescuentos(opciones?: { sinEspejo?: boolean }) {
   return useSupabaseTable<Descuento>(
-    'descuentos', CLAVES_DATOS.descuentos, [], descuentoToRow, rowToDescuento, 'nombre', opciones,
+    'descuentos', CLAVES_DATOS.descuentos, DESCUENTOS_INICIALES,
+    descuentoToRow, rowToDescuento, 'nombre', opciones,
   )
 }
 
@@ -80,6 +95,8 @@ export function useVentas(): { ventas: Venta[]; cargando: boolean; recargar: () 
   const [vez, setVez] = useState(0)
 
   useEffect(() => {
+    // Sin base de datos las ventas viven en el navegador: es la demostración.
+    if (tiendaEnLocal()) { setVentas(ventasLocales()); setCargando(false); return }
     if (!isSupabaseConfigured || !supabase) { setCargando(false); return }
     let cancelado = false
     setCargando(true)
@@ -133,6 +150,7 @@ export async function traerVenta(ventaId: string): Promise<Venta | null> {
  * cuota — con toda la pinta de un documento bueno.
  */
 export async function lineasDeVenta(ventaId: string): Promise<LineaVenta[] | null> {
+  if (tiendaEnLocal()) return lineasLocalesDe(ventaId)
   if (!isSupabaseConfigured || !supabase) return null
   const { data, error } = await supabase.from('lineas_venta').select('*').eq('venta_id', ventaId)
   if (error || !data) {
@@ -150,6 +168,7 @@ export async function lineasDeVenta(ventaId: string): Promise<LineaVenta[] | nul
  * «todavía no se ha movido nada» sobre un artículo con veinte movimientos.
  */
 export async function historialDeStock(productoId: string): Promise<MovimientoStock[] | null> {
+  if (tiendaEnLocal()) return historialLocalDe(productoId)
   if (!isSupabaseConfigured || !supabase) return null
   const { data, error } = await supabase
     .from('movimientos_stock').select('*').eq('producto_id', productoId)
@@ -179,6 +198,17 @@ export interface DatosDeVenta {
   formaPago: string
   hermanoId?: string | null
   descuentoId?: string | null
+  /**
+   * El porcentaje que la pantalla está enseñando.
+   *
+   * CON BASE DE DATOS NO SE MANDA, a propósito: quien decide si a este hermano
+   * le toca el 50 % de costaleros es `registrar_venta`, mirando las etiquetas
+   * de su ficha. Aceptarlo desde el navegador sería dejar que cualquiera con
+   * la consola abierta se aplicara el descuento que quisiera.
+   *
+   * Hace falta solo en la demostración, donde no hay base que lo decida.
+   */
+  descuentoPct?: number
   compradorNombre?: string
   compradorNif?: string
   compradorDireccion?: string
@@ -198,6 +228,7 @@ export interface DatosDeVenta {
 export async function registrarVenta(d: DatosDeVenta): Promise<
   { ok: true; venta: VentaRegistrada } | { ok: false; error: string }
 > {
+  if (tiendaEnLocal()) return registrarVentaLocal({ ...d, descuentoPct: d.descuentoPct ?? 0 })
   if (!isSupabaseConfigured || !supabase) {
     return { ok: false, error: 'Sin base de datos conectada no se pueden registrar ventas.' }
   }
@@ -257,7 +288,15 @@ export async function moverStock(
   tipo: TipoMovimientoStock,
   cantidad: number,
   motivo = '',
+  /** Hace falta solo en la demostración, para el nombre en los mensajes. */
+  producto?: Producto,
 ): Promise<{ ok: true; stock: number } | { ok: false; error: string }> {
+  if (tiendaEnLocal()) {
+    const p = producto ?? leerPersistido<Producto[]>(CLAVES_DATOS.productos, PRODUCTOS_INICIALES)
+      .find((x) => x.id === productoId)
+    if (!p) return { ok: false, error: 'Ese artículo ya no está en el catálogo.' }
+    return moverStockLocal(p, tipo, cantidad, motivo)
+  }
   if (!isSupabaseConfigured || !supabase) {
     return { ok: false, error: 'Sin base de datos conectada no se puede mover el almacén.' }
   }
@@ -279,6 +318,7 @@ export async function moverStock(
  * huecos es lo primero que mira una inspección.
  */
 export async function anularVenta(ventaId: string, motivo = ''): Promise<{ ok: boolean; error?: string }> {
+  if (tiendaEnLocal()) return anularVentaLocal(ventaId, motivo)
   if (!isSupabaseConfigured || !supabase) {
     return { ok: false, error: 'Sin base de datos conectada no se puede anular.' }
   }
@@ -335,7 +375,10 @@ export function useCatalogoWeb(slug: string): { articulos: ArticuloWeb[]; cargan
      */
     if (!isSupabaseConfigured || !supabase) {
       setArticulos(
-        leerPersistido<Producto[]>(CLAVES_DATOS.productos, [])
+        // Con los de ejemplo por defecto, igual que `useProductos`: si no, la
+        // tienda de la web salía vacía en la demostración aunque el panel
+        // enseñara seis artículos.
+        leerPersistido<Producto[]>(CLAVES_DATOS.productos, PRODUCTOS_INICIALES)
           .filter((p) => p.activo && p.visibleEnWeb)
           .map((p) => ({
             id: p.id,
@@ -345,7 +388,10 @@ export function useCatalogoWeb(slug: string): { articulos: ArticuloWeb[]; cargan
             precio: p.precio,
             iva: p.iva,
             fotoUrl: p.fotoUrl,
-            disponible: p.stock,
+            // Lo que se puede prometer, no lo que hay en la estantería: el
+            // stock menos lo ya apartado y sin recoger. Es lo mismo que
+            // devuelve `catalogo_web()`.
+            disponible: Math.max(0, p.stock - apartadoDe(p.id)),
           })),
       )
       setCargando(false)
@@ -398,6 +444,7 @@ export interface DatosDeReserva {
 export async function reservarEnLaWeb(d: DatosDeReserva): Promise<
   { ok: true; resguardo: ResguardoReserva } | { ok: false; error: string }
 > {
+  if (tiendaEnLocal()) return reservarEnLaWebLocal(d)
   if (!isSupabaseConfigured || !supabase) {
     return { ok: false, error: 'La tienda de esta web todavía no está conectada.' }
   }
@@ -456,6 +503,7 @@ export function useReservas(): { reservas: Reserva[]; cargando: boolean; recarga
   const [vez, setVez] = useState(0)
 
   useEffect(() => {
+    if (tiendaEnLocal()) { setReservas(reservasLocales()); setCargando(false); return }
     if (!isSupabaseConfigured || !supabase) { setCargando(false); return }
     let cancelado = false
     setCargando(true)
@@ -474,6 +522,7 @@ export function useReservas(): { reservas: Reserva[]; cargando: boolean; recarga
 
 /** Lo que lleva dentro una reserva. `null` = no se ha podido preguntar. */
 export async function lineasDeReserva(reservaId: string): Promise<LineaReserva[] | null> {
+  if (tiendaEnLocal()) return lineasDeReservaLocal(reservaId)
   if (!isSupabaseConfigured || !supabase) return null
   const { data, error } = await supabase.from('lineas_reserva').select('*').eq('reserva_id', reservaId)
   if (error || !data) {
@@ -491,6 +540,7 @@ export async function lineasDeReserva(reservaId: string): Promise<LineaReserva[]
 export async function entregarReserva(reservaId: string, formaPago: string): Promise<
   { ok: true; venta: VentaRegistrada } | { ok: false; error: string }
 > {
+  if (tiendaEnLocal()) return entregarReservaLocal(reservaId, formaPago)
   if (!isSupabaseConfigured || !supabase) {
     return { ok: false, error: 'Sin base de datos conectada no se pueden entregar reservas.' }
   }
@@ -532,6 +582,7 @@ export async function entregarReserva(reservaId: string, formaPago: string): Pro
 export async function soltarReserva(
   reservaId: string, motivo = '', estado: 'anulada' | 'caducada' = 'anulada',
 ): Promise<{ ok: boolean; error?: string }> {
+  if (tiendaEnLocal()) return soltarReservaLocal(reservaId, estado)
   if (!isSupabaseConfigured || !supabase) {
     return { ok: false, error: 'Sin base de datos conectada no se pueden soltar reservas.' }
   }
@@ -580,6 +631,14 @@ export function useDatosTienda(anio: number): {
   const [vez, setVez] = useState(0)
 
   useEffect(() => {
+    // En la demostración se cuenta lo vendido en el navegador. Sin esto, la
+    // pantalla decía «no hay datos» justo después de cobrar tres facturas.
+    if (tiendaEnLocal()) {
+      setDatos(datosTiendaLocales(anio))
+      setCargando(false)
+      setError('')
+      return
+    }
     if (!isSupabaseConfigured || !supabase) {
       setCargando(false)
       setError('Sin base de datos conectada no hay datos de la tienda que enseñar.')

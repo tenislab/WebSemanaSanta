@@ -16,6 +16,12 @@ import type { MetodoPago, Papeleta } from '../data/papeletas'
 import type { Hermano } from '../data/hermanos'
 import type { HermandadSettings } from '../lib/hermandadSettings'
 import { codigoDeHermano } from '../lib/codigoHermano'
+import {
+  pagarConTarjeta,
+  pagoConTarjetaDisponible,
+  pagoEnMarcha,
+  type IntentoDePago,
+} from '../lib/pagoTarjeta'
 
 function claseCuota(estado: Cuota['estado']) {
   if (estado === 'Pagada') return 'pill--ok'
@@ -63,6 +69,7 @@ export default function HistorialHermano({
   hermandad,
   onPagar,
   onAnularAviso,
+  intentosTarjeta,
 }: {
   hermano: Hermano
   /** Todas las cuotas del hermano, de cualquier ejercicio. */
@@ -75,11 +82,30 @@ export default function HistorialHermano({
   onPagar?: (cuotaId: string, metodo: MetodoPago) => void
   /** Deshace el aviso de pago: quien se equivoca de recibo puede rectificar sin llamar a nadie. */
   onAnularAviso?: (cuotaId: string) => void
+  /**
+   * Sus pagos con tarjeta, para no dejarle pagar dos veces el mismo recibo
+   * mientras el aviso de Stripe va de camino. `null` = no se ha podido mirar,
+   * que no es lo mismo que «no hay ninguno». Ver `lib/pagoTarjeta.ts`.
+   */
+  intentosTarjeta?: IntentoDePago[] | null
 }) {
   const modeloRecibo = useMemo(() => getModeloRecibo(), [])
   const [recibo, setRecibo] = useState<Cuota | null>(null)
   const [papeleta, setPapeleta] = useState<Papeleta | null>(null)
   const [pagando, setPagando] = useState<Cuota | null>(null)
+  // Mientras se abre la pasarela: el botón se apaga para que nadie lo pulse
+  // dos veces y se abran dos cobros del mismo recibo.
+  const [abriendoPasarela, setAbriendoPasarela] = useState(false)
+  const [falloTarjeta, setFalloTarjeta] = useState('')
+  /*
+   * ¿COBRA ESTA HERMANDAD CON TARJETA?
+   *
+   * Depende de que haya enlazado su cuenta de Stripe. Se mira aquí y no solo
+   * en el servidor para no enseñar un botón que va a fallar: un botón de pagar
+   * que da error se lee como «no puedo pagar», y a partir de ahí el hermano ya
+   * no lo intenta por ninguna vía.
+   */
+  const hayTarjeta = pagoConTarjetaDisponible(hermandad.stripeCuenta)
 
   /** Las cuotas por ejercicio y las papeletas por año, de lo nuevo a lo viejo. */
   const ejercicios = useMemo(() => porAnio(cuotas, ejercicioDe), [cuotas])
@@ -261,18 +287,59 @@ export default function HistorialHermano({
                 </button>
               )}
             </div>
-          ) : !hermandad.bizumTelefono && !hermandad.iban ? (
+          ) : !hermandad.bizumTelefono && !hermandad.iban && !hayTarjeta ? (
             <AvisoFalta compacto requisito={requisito('datosCobro', { hermandad })} />
           ) : (
             <div className="pago-box">
               <b>{formatCurrency(pagando.importe)}</b>
-              <p className="form-hint">
-                {/* El código del hermano, no «Recibo 3 - Fulano de Tal»: en el
-                    concepto de un Bizum eso se escribe mal siempre. */}
-                Pon en el concepto tu código de hermano,{' '}
-                <code>{codigoDeHermano(hermano)}</code>, y la tesorería sabrá que es tuyo.
-              </p>
+              {/* El error de la pasarela se enseña tal cual: dice cosas que
+                  hacen falta —«ese recibo ya está cobrado»— y un «no se ha
+                  podido» genérico dejaría al hermano sin saber de quién es el
+                  problema. */}
+              {falloTarjeta && <p className="form-hint form-hint--error">{falloTarjeta}</p>}
+              {pagoEnMarcha(intentosTarjeta ?? null, 'cuota', pagando.id) && (
+                <p className="form-hint form-hint--warn">
+                  <b>Ya has empezado a pagar este recibo con tarjeta.</b> Si acabas de hacerlo,
+                  espera un momento y recarga: el recibo se pone al día solo cuando el banco lo
+                  confirma. Vuelve a pagar solo si el pago no llegó a completarse.
+                </p>
+              )}
+              {(hermandad.bizumTelefono || hermandad.iban) && (
+                <p className="form-hint">
+                  {/* El código del hermano, no «Recibo 3 - Fulano de Tal»: en el
+                      concepto de un Bizum eso se escribe mal siempre. */}
+                  Pon en el concepto tu código de hermano,{' '}
+                  <code>{codigoDeHermano(hermano)}</code>, y la tesorería sabrá que es tuyo.
+                </p>
+              )}
               <div className="pago-metodos">
+                {/*
+                  LA TARJETA VA LA PRIMERA: es el único método que no obliga a
+                  nadie a avisar ni a la tesorería a cotejar el extracto. Los
+                  otros dos siguen ahí porque hay hermanos que no pagan con
+                  tarjeta, y quitárselos sería cambiar una opción por otra.
+                */}
+                {hayTarjeta && (
+                  <div className="pago-metodo">
+                    <span className="pago-metodo__titulo">Tarjeta</span>
+                    <span className="pago-metodo__dato">Se confirma solo</span>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={abriendoPasarela}
+                      onClick={async () => {
+                        setAbriendoPasarela(true)
+                        setFalloTarjeta('')
+                        const r = await pagarConTarjeta('cuota', pagando.id)
+                        if (r.ok) { window.location.href = r.url; return }
+                        setAbriendoPasarela(false)
+                        setFalloTarjeta(r.error)
+                      }}
+                    >
+                      {abriendoPasarela ? 'Abriendo la pasarela…' : `Pagar ${formatCurrency(pagando.importe)}`}
+                    </button>
+                  </div>
+                )}
                 {hermandad.bizumTelefono && (
                   <div className="pago-metodo">
                     <span className="pago-metodo__titulo">Bizum</span>
@@ -300,7 +367,10 @@ export default function HistorialHermano({
                   </div>
                 )}
               </div>
-              <AvisoFalta compacto requisito={requisitoActual('pasarela')} />
+              {/* Si la hermandad ya cobra con tarjeta, este aviso mentiría:
+                  decir «no se puede pagar con tarjeta» justo debajo del botón
+                  de pagar con tarjeta. */}
+              {!hayTarjeta && <AvisoFalta compacto requisito={requisitoActual('pasarela')} />}
             </div>
           )
         )}

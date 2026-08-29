@@ -3,7 +3,7 @@ import InformeImpreso from '../../components/InformeImpreso'
 import EstadoCuentas from '../../components/EstadoCuentas'
 import CuentaResultados from '../../components/CuentaResultados'
 import AvisoDeCampo from '../../components/AvisoDeCampo'
-import { cuentaDeResultados } from '../../lib/perdidasYGanancias'
+import { anioDelMovimiento, cuentaDeResultados } from '../../lib/perdidasYGanancias'
 import {
   useRepartos, problemaDeReparto, seRepartenDeMas, comoSeLeeElReparto,
   porcentajeDe, type Reparto, type TipoReparto,
@@ -315,7 +315,13 @@ export default function Informes() {
 
   const movimientosEstado = movimientos
   const aniosDisponibles = useMemo(() => {
-    const anios = new Set(movimientosEstado.map((m) => Number(m.fecha.trim().slice(-4))).filter((a) => !Number.isNaN(a)))
+    // `anioDelMovimiento`, no un `.slice(-4)` suelto: lee tanto la fecha que
+    // escribe a mano la secretaría («05 ene 2026») como la que escriben las
+    // funciones del servidor («2026-01-05»), y aquí se coló la segunda con la
+    // primera que no. Ver el porqué en `lib/perdidasYGanancias.ts`.
+    const anios = new Set(
+      movimientosEstado.map((m) => anioDelMovimiento(m.fecha)).filter((a) => a > 0),
+    )
     anios.add(new Date().getFullYear())
     return Array.from(anios).sort((a, b) => b - a)
   }, [movimientosEstado])
@@ -323,7 +329,10 @@ export default function Informes() {
   const saldoInicialEstado = useMemo(
     () =>
       sumaEuros(movimientosEstado
-        .filter((m) => Number(m.fecha.trim().slice(-4)) < anioEstado)
+        // `> 0`: una fecha que no se ha podido leer no es «de antes de este
+        // año», es que no se sabe de cuándo es. Meterla igual en el saldo de
+        // arrastre lo infla sin que se note.
+        .filter((m) => anioDelMovimiento(m.fecha) > 0 && anioDelMovimiento(m.fecha) < anioEstado)
         // Igual que el resto: por `sumaEuros`, para que un apunte con el
         // importe vacío no deje el saldo de arrastre en «NaN €».
         .map((m) => (m.tipo === 'Ingreso' ? Number(m.importe) : -Number(m.importe)))),

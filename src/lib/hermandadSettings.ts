@@ -17,6 +17,16 @@ export interface HermandadSettings {
   bizumTelefono: string
   /** Identificador de acreedor SEPA (p. ej. ES23000B12345678), para las remesas de adeudo directo. */
   identificadorAcreedor: string
+  /**
+   * Cuenta conectada de Stripe (`acct_…`) a la que va el dinero de cuotas y
+   * papeletas cobradas con tarjeta.
+   *
+   * NO ES UNA CLAVE SECRETA: es el destinatario del cobro, no la llave. La
+   * clave con la que se habla con Stripe vive en la función del servidor, y
+   * guardar aquí la de cada hermandad habría sido una fuga con veinte cuentas
+   * dentro. Ver `supabase/pago-tarjeta.sql`.
+   */
+  stripeCuenta: string
   /** Imagen del logo como data URL (subida desde el navegador, sin backend). */
   logoDataUrl: string | null
   /** Color de marca de la hermandad; tiñe los botones y acentos de su área del hermano. */
@@ -57,6 +67,7 @@ export const AJUSTES_VACIOS: HermandadSettings = {
   iban: '',
   bizumTelefono: '',
   identificadorAcreedor: '',
+  stripeCuenta: '',
   logoDataUrl: null,
   colorPrimario: '#6A1A23',
   colorSecundario: '#C5A059',
@@ -78,6 +89,7 @@ function rowToSettings(r: Record<string, unknown>, fallbackNombre?: string): Her
     iban: (r.iban as string) ?? '',
     bizumTelefono: (r.bizum_telefono as string) ?? '',
     identificadorAcreedor: (r.identificador_acreedor as string) ?? '',
+    stripeCuenta: (r.stripe_cuenta as string) ?? '',
     logoDataUrl: (r.logo_data_url as string | null) ?? null,
     colorPrimario: (r.color_primario as string) || '#6A1A23',
     colorSecundario: (r.color_secundario as string) || '#C5A059',
@@ -100,6 +112,7 @@ function settingsToRow(s: HermandadSettings): Record<string, unknown> {
     iban: s.iban,
     bizum_telefono: s.bizumTelefono,
     identificador_acreedor: s.identificadorAcreedor,
+    stripe_cuenta: s.stripeCuenta,
     logo_data_url: s.logoDataUrl,
     color_primario: s.colorPrimario,
     color_secundario: s.colorSecundario,

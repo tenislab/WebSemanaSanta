@@ -27,6 +27,20 @@ export const CLAVES_DATOS = {
   // local solo serviría para enseñar un total que ya no es el de la base.
   productos: 'cabildo-productos',
   descuentos: 'cabildo-descuentos',
+  /*
+   * Lo que se ha vendido, SOLO EN LA DEMOSTRACIÓN.
+   *
+   * Con base de datos conectada estas tres no se usan: las ventas las escribe
+   * `registrar_venta` y de ahí se leen, porque una factura son seis cosas que
+   * tienen que pasar juntas. Aquí viven para que la tienda se pueda enseñar
+   * entera sin base de datos, que es como se prueba Gobergo. Ver
+   * `lib/tiendaLocal.ts`.
+   */
+  ventas: 'cabildo-ventas',
+  lineasVenta: 'cabildo-lineas-venta',
+  movimientosStock: 'cabildo-movimientos-stock',
+  reservas: 'cabildo-reservas-tienda',
+  lineasReserva: 'cabildo-lineas-reserva',
   // Campañas de recaudación y proyectos. Lo RECAUDADO no está aquí: se cuenta
   // desde los apuntes de Tesorería cada vez, para que no haya dos verdades
   // sobre el mismo dinero. Ver `lib/recaudaciones.ts`.

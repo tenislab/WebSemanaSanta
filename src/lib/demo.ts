@@ -29,6 +29,15 @@ const CLAVES_COLECCIONES = [
   CLAVES_DATOS.recaudaciones,
   CLAVES_DATOS.proyectos,
   CLAVES_DATOS.tareasProyecto,
+  // La tienda: catálogo, descuentos y lo vendido. En una hermandad que empieza
+  // de cero tampoco hay tienda montada.
+  CLAVES_DATOS.productos,
+  CLAVES_DATOS.descuentos,
+  CLAVES_DATOS.ventas,
+  CLAVES_DATOS.lineasVenta,
+  CLAVES_DATOS.movimientosStock,
+  CLAVES_DATOS.reservas,
+  CLAVES_DATOS.lineasReserva,
   'cabildo-solicitudes-papeleta',
   'cabildo-convocatoria',
   // Personal con acceso al panel: en una hermandad vacía tampoco hay cargos

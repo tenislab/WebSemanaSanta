@@ -8,9 +8,21 @@ export type EstadoCuota = 'Pagada' | 'Pendiente' | 'Devuelta' | 'En mora'
 export type ConceptoCuota = string
 
 /** Cómo se cobra la cuota. */
-export type MetodoCobro = 'Domiciliación' | 'Transferencia' | 'Efectivo' | 'Bizum'
+/**
+ * Cómo se cobra un recibo.
+ *
+ * «Tarjeta» entra con el pago desde el área del hermano (C4). Y entra también
+ * en la lista de la pantalla a propósito: si el hermano puede pagar con
+ * tarjeta, la secretaría tiene que poder registrar a mano el que se pagó en el
+ * datáfono de la casa de hermandad. Un método que existe para uno y no para la
+ * otra obliga a apuntarlo como «Efectivo», y entonces el arqueo de caja no
+ * cuadra al final del día.
+ *
+ * `MetodoPagoPapeleta` ya lo tenía; esto es ponerlas de acuerdo.
+ */
+export type MetodoCobro = 'Domiciliación' | 'Transferencia' | 'Efectivo' | 'Bizum' | 'Tarjeta'
 
-export const METODOS_COBRO: MetodoCobro[] = ['Domiciliación', 'Transferencia', 'Efectivo', 'Bizum']
+export const METODOS_COBRO: MetodoCobro[] = ['Domiciliación', 'Transferencia', 'Efectivo', 'Bizum', 'Tarjeta']
 
 export interface Cuota {
   id: string

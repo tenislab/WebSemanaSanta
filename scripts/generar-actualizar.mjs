@@ -60,6 +60,7 @@ export const PIEZAS_ACTUALIZACION = [
   ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
   ['campanas-y-proyectos.sql', 'Campañas de recaudación con su barra, y proyectos a largo plazo'],
   ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
+  ['pago-tarjeta.sql', 'Que el hermano pague su cuota o su papeleta con tarjeta'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -216,7 +217,9 @@ select * from (values
       select 1 from permisos_cargo pc
        where pc.hermandad_id = h.id and pc.cargo = 'Hermano Mayor' and pc.modulo_id = 'campanas'))),
   ('Gastos porcentuales para pérdidas y ganancias',
-   (select to_regclass('public.reglas_reparto') is not null))
+   (select to_regclass('public.reglas_reparto') is not null)),
+  ('Pago con tarjeta del hermano',
+   (select to_regclass('public.pagos_tarjeta') is not null))
 ) as t(que, esta)
 order by esta, que;
 `

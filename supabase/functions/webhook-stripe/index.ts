@@ -168,12 +168,46 @@ Deno.serve(async (req: Request) => {
       console.log('checkout sin cobrar todavía (%s), no se activa:', estadoPago, objeto.id)
       return respuesta({ recibido: true })
     }
+    const metadata = (objeto.metadata as Record<string, string> | undefined) ?? {}
+
+    /*
+     * C4 · ¿ES EL PAGO DE UNA CUOTA O DE UNA PAPELETA?
+     *
+     * Por esta función pasan ahora dos cobros que no tienen nada que ver:
+     *
+     *   · La SUSCRIPCIÓN, que la hermandad le paga a Gobergo.
+     *   · La CUOTA o la PAPELETA, que el hermano le paga a SU HERMANDAD y que
+     *     ni siquiera pasa por la cuenta de Gobergo (`crear-pago` la cobra
+     *     contra la cuenta conectada de la hermandad).
+     *
+     * Se distinguen por `metadata.tipo`, que pone `crear-pago`. Confundirlos
+     * sería activarle la suscripción a una hermandad porque un hermano suyo
+     * pagó una papeleta de 30 €.
+     *
+     * Y quien da por cobrado es ESTO, no la vuelta del navegador: esa
+     * dirección se puede escribir a mano, y una conexión que se corta deja al
+     * hermano pagado y a la aplicación sin enterarse. Es la misma lección que
+     * costó este archivo con las suscripciones.
+     */
+    if (metadata.tipo === 'cuota' || metadata.tipo === 'papeleta') {
+      const sesion = objeto.id as string | undefined
+      if (!sesion) {
+        console.error('pago de %s sin id de sesión', metadata.tipo)
+        return respuesta({ recibido: true })
+      }
+      const ok = await llamarRpc('cobrar_pago_tarjeta', { p_session: sesion })
+      // Si falla, 502: aquí SÍ interesa que Stripe reintente, porque el dinero
+      // ya está cobrado y lo que falta es apuntarlo. Un 200 lo daría por
+      // resuelto y la cuota se quedaría pendiente para siempre.
+      if (!ok) return respuesta({ error: 'No se ha podido apuntar el cobro.' }, 502)
+      return respuesta({ recibido: true })
+    }
+
     /*
      * `crear-suscripcion` puso `client_reference_id` y `metadata.usuario` al
      * abrir la sesión de pago (ver ese archivo): son el mismo id, por si
      * algún día Stripe deja de mandar uno de los dos.
      */
-    const metadata = (objeto.metadata as Record<string, string> | undefined) ?? {}
     const usuario = (objeto.client_reference_id as string | undefined) || metadata.usuario
     const clienteStripe = (objeto.customer as string | undefined) ?? null
     const suscripcionStripe = (objeto.subscription as string | undefined) ?? null

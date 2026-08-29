@@ -61,6 +61,11 @@ export interface EstadoDeLasConexiones {
   tieneIban: boolean
   /** Bizum de la hermandad, si lo han puesto. */
   bizum?: string
+  /**
+   * La cuenta de Stripe de la hermandad (`acct_…`), si la ha enlazado. Es lo
+   * que enciende el pago con tarjeta del hermano. No es una clave secreta.
+   */
+  stripeCuenta?: string
 }
 
 export function conexiones(e: EstadoDeLasConexiones): Conexion[] {
@@ -114,14 +119,18 @@ export function conexiones(e: EstadoDeLasConexiones): Conexion[] {
       nombre: 'Pago con tarjeta',
       paraQue: 'Que el hermano pague su cuota o su papeleta con tarjeta desde su área.',
       donde: '/app/configuracion?seccion=hermandad',
-      comoLlegar: 'Configuración',
+      comoLlegar: 'Configuración → Identidad y datos',
       /*
-       * Apagado a propósito, y con el motivo escrito. Un apartado en gris sin
-       * explicación se lee como que está roto, y genera la llamada que se
-       * quería evitar.
+       * Estuvo apagado a propósito mientras no había pasarela. Ya la hay
+       * (C4), así que esto es una conexión más: se enciende enlazando la
+       * cuenta de cobro de la hermandad, y hasta entonces se cobra por
+       * transferencia, Bizum y en efectivo, como siempre.
+       *
+       * Dejarlo en «no disponible» era peor que no enseñarlo: quien busca
+       * dónde enchufar la tarjeta lee que no se puede y no vuelve.
        */
-      estado: 'noDisponible',
-      porQueNo: 'Todavía no está enchufado. Mientras tanto se cobra por transferencia, Bizum y en efectivo.',
+      estado: (e.stripeCuenta ?? '').trim() ? 'conectado' : 'sinConectar',
+      detalle: (e.stripeCuenta ?? '').trim() || undefined,
     },
   ]
 }

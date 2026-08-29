@@ -139,9 +139,28 @@ export default function TiendaInventario() {
     setProductos((prev) =>
       editando ? prev.map((p) => (p.id === ficha.id ? ficha : p)) : [...prev, ficha],
     )
+    const eraNuevo = !editando
     setFichaOpen(false)
     setHecho(editando ? `Guardada la ficha de «${nombre}».` : `Dado de alta «${nombre}».`)
     setTimeout(() => setHecho(''), 4000)
+
+    /*
+     * UN ARTÍCULO NUEVO NACE SIN EXISTENCIAS, y eso dejaba el recorrido a
+     * medias: se daba de alta, se iba uno a la caja y allí salía «agotado»,
+     * apagado y sin poder pulsarlo. Nada decía que faltaba meter el género, ni
+     * dónde se hace.
+     *
+     * Así que se abre solo el almacén del artículo recién creado, con la
+     * entrada preparada. Y NO se guarda el stock desde la ficha, que sería lo
+     * cómodo: cada unidad tiene que entrar por un movimiento que diga de dónde
+     * viene, o el almacén deja de poder cuadrarse.
+     *
+     * Se abre después de guardar, y no antes, porque con base de datos el alta
+     * viaja en ese momento: cuando la persona teclee la cantidad y pulse, la
+     * fila ya está. Si aun así no lo estuviera, la base contesta que ese
+     * artículo no existe y se vuelve a intentar; no se estropea nada.
+     */
+    if (eraNuevo) void abrirMovimientos(ficha)
   }
 
   /*

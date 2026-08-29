@@ -3,11 +3,7 @@ import type { HermandadSettings } from '../lib/hermandadSettings'
 import type { Movimiento } from '../data/movimientos'
 import { CATEGORIAS_INGRESO, CATEGORIAS_GASTO } from '../data/movimientos'
 import { sumaEuros, formatCurrency } from '../lib/format'
-
-/** Año de un movimiento a partir de su fecha ya formateada ("5 ene. 2026" → "2026"). */
-function anioDe(fecha: string): string {
-  return fecha.trim().slice(-4)
-}
+import { anioDelMovimiento } from '../lib/perdidasYGanancias'
 
 /**
  * Reparte los movimientos por partida y suma cada una.
@@ -49,7 +45,14 @@ export default function EstadoCuentas({
   generadoEl: string
   className?: string
 }) {
-  const delEjercicio = movimientos.filter((m) => anioDe(m.fecha) === String(anio))
+  /*
+   * `anioDelMovimiento`, no un `.slice(-4)` propio: la columna guarda dos
+   * formatos de fecha —el que escribe a mano la secretaría y el que escriben
+   * las funciones del servidor al cobrar una venta o un pago con tarjeta— y
+   * el segundo se colaba fuera de este documento sin un solo error. Ver
+   * `lib/perdidasYGanancias.ts`.
+   */
+  const delEjercicio = movimientos.filter((m) => anioDelMovimiento(m.fecha) === anio)
   const ingresos = delEjercicio.filter((m) => m.tipo === 'Ingreso')
   const gastos = delEjercicio.filter((m) => m.tipo === 'Gasto')
 

@@ -490,7 +490,7 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
   // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
   caso('los dos módulos ya no salen pendientes', false,
     enFalso.some((x) => /eventos|«web»/.test(x)))
-  caso('y comprueba veinte cosas', 20, filas.length)
+  caso('y comprueba veintiuna cosas', 21, filas.length)
   caso('la tienda sale en el inventario', true, filas.some((f) => /La tienda/.test(f)))
   // Lo último que se ha añadido, por su nombre: el recuento de arriba avisa
   // si el inventario pierde una línea, pero no de CUÁL, y quien ejecuta esto

@@ -44,9 +44,29 @@ import type { Movimiento } from '../data/movimientos'
 import { CATEGORIAS_INGRESO, CATEGORIAS_GASTO } from '../data/movimientos'
 import { trozo, type Reparto } from './repartos'
 
-/** El año de un movimiento a partir de su fecha ya formateada («5 ene 2026» → 2026). */
+/**
+ * EL AÑO DE UN MOVIMIENTO, Y `movimientos.fecha` GUARDA DOS FORMATOS A LA VEZ.
+ *
+ * Cuando lo escribe a mano la secretaría desde Tesorería, es el que se lee:
+ * «05 ene 2026». Pero cuando lo escribe una función del servidor —cobrar una
+ * venta de la tienda, un pago con tarjeta— es `to_char(now(), 'YYYY-MM-DD')`,
+ * o sea «2026-01-05». La columna es texto libre y las dos conviven en la
+ * misma tabla, así que esto tiene que saber leer las dos.
+ *
+ * Se probó con los últimos 4 caracteres nada más, que es lo que vale para el
+ * primer formato. Para el segundo saca el mes y el día, no el año: en
+ * «2026-08-29» los últimos 4 son «8-29», y `Number('8-29')` es `NaN`. Cada
+ * venta de la tienda y cada cuota cobrada con tarjeta desaparecía de la cuenta
+ * de pérdidas y ganancias, del Estado de Cuentas y del selector de años de
+ * Informes, sin un solo error: los tres leían 0 € donde había dinero de
+ * verdad. Se pilló al probar una venta de la tienda en el navegador y ver
+ * cómo el total de ingresos del año se iba a cero de golpe.
+ */
 export function anioDelMovimiento(fecha: string): number {
-  return Number((fecha ?? '').trim().slice(-4)) || 0
+  const f = (fecha ?? '').trim()
+  const iso = /^(\d{4})-\d{2}-\d{2}/.exec(f)
+  if (iso) return Number(iso[1])
+  return Number(f.slice(-4)) || 0
 }
 
 const cent = (n: number) => (Number.isFinite(n) ? Math.round(n * 100) : 0)

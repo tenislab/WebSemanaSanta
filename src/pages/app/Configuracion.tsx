@@ -842,6 +842,35 @@ export default function Configuracion() {
             <p className="form-hint">Lo asigna tu banco al dar de alta el adeudo directo SEPA. Hace falta para generar la remesa.</p>
           </div>
 
+          {/*
+            C4 · LA CUENTA A LA QUE VA EL DINERO DE LAS TARJETAS.
+            No es una clave secreta: es el destinatario del cobro. La clave con
+            la que se habla con Stripe vive en el servidor, y guardar aquí la de
+            cada hermandad sería una fuga con veinte cuentas dentro.
+          */}
+          <div className="form-row">
+            <label htmlFor="stripeCuenta">Cuenta de cobro con tarjeta</label>
+            <input
+              id="stripeCuenta"
+              value={settings.stripeCuenta}
+              onChange={(e) => update('stripeCuenta', e.target.value.trim())}
+              placeholder="acct_1AbCdEfGhIjKlMnO"
+              maxLength={40}
+            />
+            <AvisoDeCampo
+              texto={settings.stripeCuenta.trim() && !/^acct_[A-Za-z0-9]{8,}$/.test(settings.stripeCuenta.trim())
+                ? 'Un identificador de cuenta de Stripe empieza por «acct_». Cópialo del panel de '
+                  + 'Stripe, en Configuración → Datos de la cuenta.'
+                : null}
+            />
+            <p className="form-hint">
+              Con esto, los hermanos pueden pagar su cuota y su papeleta con tarjeta desde su área,
+              y el recibo se marca solo. <b>El dinero va directo a vuestra cuenta</b>: Gobergo no
+              lo toca ni se queda comisión. La de Stripe la asume la hermandad.
+              {' '}Déjalo vacío si no queréis cobrar con tarjeta.
+            </p>
+          </div>
+
           <div className="form-row">
             <label htmlFor="textoPieDocumentos">Texto legal del pie de recibos y justificantes</label>
             <textarea
@@ -1602,6 +1631,7 @@ function ConexionesCard() {
     dominioEnElPack: tieneCapacidad(suscripcion, 'premium'),
     tieneIban: settings.iban.trim().length > 0,
     bizum: settings.bizumTelefono.trim() || undefined,
+    stripeCuenta: settings.stripeCuenta.trim() || undefined,
   })
   const resumen = resumenConexiones(lista)
 

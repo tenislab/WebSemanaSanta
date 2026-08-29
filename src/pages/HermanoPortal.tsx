@@ -1,5 +1,13 @@
 import { limpiarDni, mismoDni } from '../lib/dni'
 import { problemaDeTelefono } from '../lib/telefono'
+import {
+  pagarConTarjeta,
+  pagoConTarjetaDisponible,
+  comoVuelveDePagar,
+  misPagosConTarjeta,
+  pagoEnMarcha,
+  type IntentoDePago,
+} from '../lib/pagoTarjeta'
 import { CLAVE_SESION_HERMANO } from '../lib/sesion'
 
 /**
@@ -308,6 +316,16 @@ export default function HermanoPortal() {
    * para qué le hemos mandado el correo.
    */
   const tokenDelEnlace = new URLSearchParams(window.location.search).get('recuperar') ?? ''
+
+  /*
+   * ¿VUELVE DE PAGAR CON TARJETA?
+   *
+   * Sirve SOLO para el mensaje. Que ponga `pago=hecho` NO significa que el
+   * dinero esté —esa dirección se puede escribir a mano— así que el aviso dice
+   * «en un momento» y no da nada por cobrado. Quien marca la cuota es el
+   * webhook, con la clave de servicio. Ver `lib/pagoTarjeta.ts`.
+   */
+  const vueltaDelPago = comoVuelveDePagar(window.location.search)
   const [poniendoClaveNueva, setPoniendoClaveNueva] = useState(
     () => hayRecuperacionEnMarcha() || tokenDelEnlace !== '',
   )
@@ -547,6 +565,31 @@ export default function HermanoPortal() {
       cancelado = true
     }
   }, [usarSupabase])
+
+  /*
+   * SUS PAGOS CON TARJETA A MEDIO HACER.
+   *
+   * Entre que Stripe cobra y el webhook marca el recibo pasan segundos, y a
+   * veces minutos. En ese hueco el hermano vuelve aquí, ve su cuota todavía
+   * en «Pendiente» y hace lo que haría cualquiera: pagarla otra vez. Esto es
+   * lo que se lo evita.
+   *
+   * `null` es «todavía no lo sé» y NO se pinta como «no tienes ninguno»: la
+   * lista solo se cree cuando la base contesta. Ver `lib/pagoTarjeta.ts`.
+   */
+  const [intentosPago, setIntentosPago] = useState<IntentoDePago[] | null>(null)
+  useEffect(() => {
+    if (!sesion) { setIntentosPago(null); return }
+    let cancelado = false
+    misPagosConTarjeta().then((lista) => {
+      if (!cancelado) setIntentosPago(lista)
+    })
+    return () => {
+      cancelado = true
+    }
+    // `vueltaDelPago` está a propósito: quien acaba de volver de la pasarela
+    // es justo quien necesita ver su intento recién abierto.
+  }, [sesion, vueltaDelPago])
 
   const datosPrincipalDirectorio = useMemo(
     () => ({
@@ -1729,6 +1772,29 @@ export default function HermanoPortal() {
         }}
       />
       <main className="portal__main">
+        {/*
+          VUELVE DE LA PASARELA. El mensaje dice «en un momento» a propósito y
+          NO da nada por cobrado: esta dirección se puede escribir a mano, y
+          quien marca el recibo es el webhook cuando Stripe confirma que el
+          dinero está. Prometer aquí que está pagado sería exactamente el fallo
+          que costó el webhook de las suscripciones.
+        */}
+        {vueltaDelPago === 'hecho' && (
+          <div className="banner-inline banner-inline--ok">
+            <span>
+              <b>Gracias, hemos recibido tu pago.</b> En un momento verás el recibo actualizado en
+              tu área. Si tarda, recarga la página dentro de un minuto.
+            </span>
+          </div>
+        )}
+        {vueltaDelPago === 'cancelado' && (
+          <div className="banner-inline banner-inline--warn">
+            <span>
+              <b>No se ha llegado a pagar.</b> No se te ha cobrado nada. Puedes volver a
+              intentarlo cuando quieras, o pagar por cualquiera de los otros medios.
+            </span>
+          </div>
+        )}
         {deBaja && (
           <div className="banner-inline banner-inline--warn portal__baja">
             <span>
@@ -2271,6 +2337,8 @@ export default function HermanoPortal() {
                         nombreHermandad={nombreHermandadActiva}
                         hermano={hermanoPrincipal}
                         onComunicar={comunicarPago}
+                        cuentaStripe={hermandadPrincipal.stripeCuenta}
+                        intentos={intentosPago}
                       />
                     )}
                     <div className="assign-box__row" style={{ marginTop: '1rem' }}>
@@ -2318,7 +2386,8 @@ export default function HermanoPortal() {
             tramos={tramos}
             hermandad={hermandadPrincipal}
             onPagar={deBaja ? undefined : comunicarPagoCuota}
-              onAnularAviso={deBaja ? undefined : anularAvisoPago}
+            onAnularAviso={deBaja ? undefined : anularAvisoPago}
+            intentosTarjeta={intentosPago}
           />
         )}
 
@@ -2526,8 +2595,12 @@ export default function HermanoPortal() {
  * Pago de la papeleta desde el área del hermano. El dinero va directo a la
  * hermandad (su Bizum o su cuenta); aquí solo se le enseñan al hermano los
  * datos y él avisa de que ya ha pagado, para que la secretaría lo confirme
- * cuando vea el ingreso. El cobro con tarjeta desde la propia página llegará
- * con la pasarela de pago (necesita backend).
+ * cuando vea el ingreso.
+ *
+ * Y CON TARJETA, si la hermandad ha enlazado su cuenta de cobro (C4). Ese sí
+ * se cierra solo: no hace falta que nadie avise ni que nadie cotejo el
+ * extracto. El dinero va igualmente directo a la hermandad — el cobro se crea
+ * contra SU cuenta conectada, Gobergo no lo toca. Ver `lib/pagoTarjeta.ts`.
  */
 function PagoPapeleta({
   papeleta,
@@ -2536,6 +2609,8 @@ function PagoPapeleta({
   nombreHermandad,
   hermano,
   onComunicar,
+  cuentaStripe,
+  intentos,
 }: {
   papeleta: Papeleta
   bizum: string
@@ -2543,7 +2618,24 @@ function PagoPapeleta({
   nombreHermandad: string
   hermano: { nombre: string; numero: number }
   onComunicar: (metodo: MetodoPago) => void
+  /** La cuenta conectada de la hermandad. Sin ella no hay pago con tarjeta. */
+  cuentaStripe?: string | null
+  /** Sus intentos de pago con tarjeta. `null` = no se ha podido mirar. */
+  intentos?: IntentoDePago[] | null
 }) {
+  const [pagando, setPagando] = useState(false)
+  const [falloPago, setFalloPago] = useState('')
+  /*
+   * ¿TIENE ESTA MISMA PAPELETA UN PAGO A MEDIO HACER?
+   *
+   * El recibo tarda en ponerse en «Pagada» lo que tarde el aviso de Stripe en
+   * llegar, y ese hueco es exactamente cuando el hermano vuelve, lo ve
+   * pendiente y paga otra vez. Devolver dos cobros es media mañana de
+   * tesorería, así que se le dice.
+   */
+  const enMarcha = pagoEnMarcha(intentos ?? null, 'papeleta', papeleta.id)
+  const hayTarjeta = pagoConTarjetaDisponible(cuentaStripe)
+
   /*
    * El concepto del pago: un código corto, no una frase.
    *
@@ -2566,19 +2658,61 @@ function PagoPapeleta({
     )
   }
 
-  if (!bizum && !iban) {
+  // Con tarjeta se puede pagar aunque la hermandad no haya publicado ni su
+  // Bizum ni su cuenta: el cobro no necesita que nadie los teclee.
+  if (!bizum && !iban && !hayTarjeta) {
     return <AvisoFalta compacto requisito={requisito('datosCobro', { hermandad: { iban, bizumTelefono: bizum } })} />
   }
 
   return (
     <div className="pago-box">
       <b>Pagar mi papeleta · {formatCurrency(papeleta.importe)}</b>
-      <p className="form-hint">
-        El pago llega directamente a {nombreHermandad}. Pon en el concepto tu código
-        de hermano, <code>{concepto}</code>, y la secretaría sabrá que es tuyo. Es el
-        mismo todo el año: te lo puedes aprender.
-      </p>
+      {/* El error de la pasarela se enseña tal cual: dice cosas que hacen falta
+          —«tu hermandad no ha enlazado su cuenta»— y un «no se ha podido»
+          genérico dejaría al hermano sin saber si el problema es suyo. */}
+      {falloPago && <p className="form-hint form-hint--error">{falloPago}</p>}
+      {enMarcha && (
+        <p className="form-hint form-hint--warn">
+          <b>Ya has empezado a pagar esta papeleta con tarjeta.</b> Si acabas de hacerlo, espera un
+          momento y recarga: el recibo se pone al día solo cuando el banco lo confirma. Vuelve a
+          pagar solo si el pago no llegó a completarse.
+        </p>
+      )}
+      {(bizum || iban) && (
+        <p className="form-hint">
+          El pago llega directamente a {nombreHermandad}. Pon en el concepto tu código
+          de hermano, <code>{concepto}</code>, y la secretaría sabrá que es tuyo. Es el
+          mismo todo el año: te lo puedes aprender.
+        </p>
+      )}
       <div className="pago-metodos">
+        {/*
+          LA TARJETA VA LA PRIMERA a propósito: es el único que no obliga a
+          nadie a avisar ni a cotejar el extracto. Los otros dos siguen ahí
+          porque hay hermanos que no pagan con tarjeta, y quitárselos sería
+          cambiar una opción por otra en vez de sumar.
+        */}
+        {hayTarjeta && (
+          <div className="pago-metodo">
+            <span className="pago-metodo__titulo">Tarjeta</span>
+            <span className="pago-metodo__dato">Se confirma solo</span>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={pagando}
+              onClick={async () => {
+                setPagando(true)
+                setFalloPago('')
+                const r = await pagarConTarjeta('papeleta', papeleta.id)
+                if (r.ok) { window.location.href = r.url; return }
+                setPagando(false)
+                setFalloPago(r.error)
+              }}
+            >
+              {pagando ? 'Abriendo la pasarela…' : `Pagar ${formatCurrency(papeleta.importe)}`}
+            </button>
+          </div>
+        )}
         {bizum && (
           <div className="pago-metodo">
             <span className="pago-metodo__titulo">Bizum</span>
@@ -2598,7 +2732,10 @@ function PagoPapeleta({
           </div>
         )}
       </div>
-      <AvisoFalta compacto requisito={requisitoActual('pasarela')} />
+      {/* Si la hermandad ya cobra con tarjeta, este aviso mentiría: diría «no
+          se puede pagar con tarjeta» justo debajo del botón de pagar con
+          tarjeta. */}
+      {!hayTarjeta && <AvisoFalta compacto requisito={requisitoActual('pasarela')} />}
     </div>
   )
 }

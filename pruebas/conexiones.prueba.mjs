@@ -19,14 +19,14 @@ export default async function ({ cargar, caso }) {
   const todo = {
     correoListo: true, remitente: 'secretaria@hdad.es', redesConectadas: 2, totalRedes: 5,
     dominio: 'hermandaddetriana.es', webPublicada: true, dominioEnElPack: true,
-    tieneIban: true, bizum: '655 000 111',
+    tieneIban: true, bizum: '655 000 111', stripeCuenta: 'acct_1DeLaHermandad',
   }
 
   const lista = m.conexiones(nada)
   caso('están las cinco cosas que se conectan', 5, lista.length)
   caso('ninguna repite identificador', 5, new Set(lista.map((c) => c.id)).size)
   caso('recién creada, ninguna conectada', 0, lista.filter((c) => c.estado === 'conectado').length)
-  caso('con todo puesto, las que se pueden', 4,
+  caso('con todo puesto, las cinco', 5,
     m.conexiones(todo).filter((c) => c.estado === 'conectado').length)
 
   /*
@@ -50,8 +50,20 @@ export default async function ({ cargar, caso }) {
   const apagadas = lista.filter((c) => c.estado === 'noDisponible')
   caso('lo que no se puede, se dice por qué', apagadas.length,
     apagadas.filter((c) => (c.porQueNo ?? '').length > 20).length)
-  caso('el pago con tarjeta sigue sin estar', 'noDisponible',
-    lista.find((c) => c.id === 'pasarela').estado)
+  /*
+   * EL PAGO CON TARJETA YA SE PUEDE (C4), así que aquí ya no es un apartado en
+   * gris: es una conexión más, que se enciende enlazando la cuenta de cobro de
+   * la hermandad. Esta prueba decía «sigue sin estar» y era verdad hasta que
+   * dejó de serlo — que es justo el momento en el que una pantalla se queda
+   * diciendo lo contrario de lo que hace el programa.
+   */
+  const conTarjeta = m.conexiones(todo)
+  caso('con la cuenta enlazada, la tarjeta está conectada', 'conectado',
+    conTarjeta.find((c) => c.id === 'pasarela').estado)
+  caso('sin enlazarla, se puede conectar', 'sinConectar',
+    m.conexiones({ ...todo, stripeCuenta: '' }).find((c) => c.id === 'pasarela').estado)
+  caso('y ya no se dice que no se puede', undefined,
+    conTarjeta.find((c) => c.id === 'pasarela').porQueNo)
 
   // El dominio depende del pack, y eso también se dice en vez de esconderlo.
   const sinPack = m.conexiones({ ...todo, dominioEnElPack: false })
@@ -68,12 +80,18 @@ export default async function ({ cargar, caso }) {
   caso('solo con Bizum ya cuenta', 'conectado',
     m.conexiones({ ...nada, bizum: '600 000 000' }).find((c) => c.id === 'cobros').estado)
 
-  // El resumen de arriba no cuenta lo que no se puede conectar todavía: «1 de
-  // 5» cuando una de las cinco es imposible se lee como un suspenso injusto.
-  const r = m.resumenConexiones(lista)
+  /*
+   * El resumen de arriba no cuenta lo que no se puede conectar: «1 de 5» cuando
+   * una de las cinco es imposible se lee como un suspenso injusto.
+   *
+   * Se mide sobre una hermandad SIN el pack que incluye dominio propio, porque
+   * desde C4 el pago con tarjeta ya se puede enchufar y esa era la otra
+   * imposible: con la lista normal esto ya no probaba nada.
+   */
+  const r = m.resumenConexiones(m.conexiones({ ...nada, dominioEnElPack: false }))
   caso('el resumen no cuenta lo imposible', 4, r.posibles)
   caso('y empieza en cero', 0, r.conectadas)
-  caso('con todo hecho, todas', 4, m.resumenConexiones(conTodo).conectadas)
+  caso('con todo hecho, todas', 5, m.resumenConexiones(conTodo).conectadas)
 
   await estaEnAjustes({ caso })
 }

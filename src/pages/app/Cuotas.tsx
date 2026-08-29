@@ -39,7 +39,9 @@ import { aCentimos, formatCurrency, formatDate, sumaEuros } from '../../lib/form
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
-import { conApunteDeCobro, origenDeCuota, sinApunteDeCobro } from '../../lib/apuntes'
+import {
+  conApunteDeCobro, conContraApunteDeDevolucion, origenDeCuota, sinApunteDeCobro,
+} from '../../lib/apuntes'
 import { apuntar } from '../../lib/registroActividad'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
@@ -47,6 +49,10 @@ import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { descargarArchivo, toCsv } from '../../lib/csv'
+import {
+  leerDevoluciones, cruzarConRecibos, resumenDeLaLectura, origenDeDevolucion,
+  type Devolucion,
+} from '../../lib/devoluciones'
 import ImportarTabla from '../../components/ImportarTabla'
 import { useContextoDeImportacion } from '../../lib/contextoImportacion'
 import { TABLA_CUOTAS } from '../../lib/tablasImportables'
@@ -180,6 +186,11 @@ export default function Cuotas() {
   const cargo = useCargoDeLaSesion() as string | null
   const puedeMora = !cargo || cargo === 'Tesorero/a' || cargo === 'Secretario/a'
   const [remesaOpen, setRemesaOpen] = useState(false)
+  /* C3 · lo que el banco devuelve de una remesa ya mandada. */
+  const [devolucionesOpen, setDevolucionesOpen] = useState(false)
+  const [lectura, setLectura] = useState<{ devoluciones: Devolucion[] } | null>(null)
+  const [falloLectura, setFalloLectura] = useState('')
+  const [aplicando, setAplicando] = useState(false)
   const [fechaRemesa, setFechaRemesa] = useState('')
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modeloRecibo, setModeloRecibo] = useState<ModeloPapeleta | null>(() => getModeloRecibo())
@@ -757,6 +768,95 @@ export default function Cuotas() {
     setCuotas((prev) => prev.map((c) => (ids.has(c.id) ? { ...c, remesadaEl: undefined } : c)))
   }
 
+  /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * C3 · LAS DEVOLUCIONES DEL BANCO
+   * ─────────────────────────────────────────────────────────────────────────
+   *
+   * Se manda la remesa, el banco cobra, y unos días después devuelve una parte.
+   * Sin esto, TODOS los recibos se quedaban «Pagada»: la hermandad creía tener
+   * un dinero que no tenía, al hermano devuelto no se le volvía a pasar el
+   * recibo, y a la remesa siguiente entraba otra vez la cuenta cancelada — con
+   * su comisión otra vez.
+   *
+   * SE LEE Y SE ENSEÑA ANTES DE TOCAR NADA. Aplicar directo al soltar el
+   * fichero sería cambiar veinte recibos y dos docenas de apuntes sin que nadie
+   * haya visto qué trae: si el fichero es de otra remesa, o de otra hermandad,
+   * el destrozo ya está hecho.
+   */
+  async function cargarFicheroDeDevoluciones(archivo: File) {
+    setFalloLectura('')
+    setLectura(null)
+    const texto = await archivo.text()
+    const r = leerDevoluciones(texto)
+    if (!r.ok) { setFalloLectura(r.error); return }
+    setLectura({ devoluciones: r.devoluciones })
+  }
+
+  const cruceDevoluciones = useMemo(
+    () => (lectura ? cruzarConRecibos(lectura.devoluciones, cuotas) : null),
+    [lectura, cuotas],
+  )
+
+  function aplicarDevoluciones() {
+    if (!cruceDevoluciones || cruceDevoluciones.casadas.length === 0) return
+    setAplicando(true)
+    const hoy = hoyIso()
+
+    /*
+     * EL RECIBO VUELVE A «Devuelta», NO A «Pendiente».
+     *
+     * Son cosas distintas y se tratan distinto: «Pendiente» es un recibo que
+     * todavía no se ha intentado cobrar, y volvería a entrar en la siguiente
+     * remesa tal cual — o sea, otra vez a la misma cuenta cancelada y otra
+     * comisión. «Devuelta» dice que ya se intentó y falló, que es lo que hay
+     * que mirar antes de volver a pasarlo.
+     *
+     * Y se le quita `remesadaEl`: ese recibo ya no está en ninguna remesa viva.
+     */
+    const porId = new Map(cruceDevoluciones.casadas.map((c) => [c.recibo.id, c.devolucion]))
+    setCuotas((prev) => prev.map((c) => (porId.has(c.id)
+      ? { ...c, estado: 'Devuelta' as const, fechaPago: undefined, remesadaEl: undefined }
+      : c)))
+
+    /*
+     * Y AL LIBRO, COMO GASTO Y SIN BORRAR EL INGRESO. El dinero entró y volvió
+     * a salir: las dos cosas están en el extracto del banco, y el libro tiene
+     * que poder cuadrarse contra él línea a línea. Ver `lib/apuntes.ts`.
+     */
+    setMovimientos((prev) => cruceDevoluciones.casadas.reduce((libro, { recibo, devolucion }) => {
+      const nombre = hermanos.find((h) => h.id === recibo.hermanoId)?.nombre ?? 'un hermano'
+      return conContraApunteDeDevolucion(libro, {
+        origen: origenDeDevolucion(recibo.id),
+        concepto: `Devolución de ${recibo.concepto} — ${nombre} (${devolucion.motivo})`,
+        categoria: 'Cuotas Hermanos/as',
+        importe: devolucion.importe > 0 ? devolucion.importe : recibo.importe,
+        fecha: hoy,
+      })
+    }, prev))
+
+    // Y al hermano se le dice, que es quien tiene que arreglarlo con su banco.
+    for (const { recibo, devolucion } of cruceDevoluciones.casadas) {
+      agregarAvisoHermano(
+        recibo.hermanoId,
+        `El banco ha devuelto tu recibo de ${recibo.concepto}: ${devolucion.motivo.toLowerCase()}. `
+        + 'Ponte en contacto con la secretaría para arreglarlo.',
+        'cuota',
+        'Un recibo devuelto',
+      )
+    }
+
+    apuntar({
+      autorNombre: miNombre, accion: 'cuota_devuelta', sobreTipo: 'cuota',
+      sobreId: '', sobreNombre: '',
+      detalle: `Cargó las devoluciones del banco: ${cruceDevoluciones.casadas.length} recibo(s) a «Devuelta»`,
+    })
+
+    setAplicando(false)
+    setDevolucionesOpen(false)
+    setLectura(null)
+  }
+
   function abrirNuevaCuota() {
     setHermanoNuevaCuota(null)
     setMetodoNuevaCuota('Domiciliación')
@@ -862,6 +962,12 @@ export default function Cuotas() {
               }
             >
               Preparar remesa <small>{recibosRemesables.length}</small>
+            </button>
+            {/* Justo detrás de la remesa porque es su otra mitad: se manda el
+                fichero, y unos días después el banco contesta cuáles no ha
+                podido cobrar. */}
+            <button type="button" onClick={() => { setDevolucionesOpen(true); setLectura(null); setFalloLectura('') }}>
+              Cargar devoluciones del banco
             </button>
             <button type="button" onClick={() => setModeloOpen(true)}>
               Modelo de recibo
@@ -1548,6 +1654,108 @@ export default function Cuotas() {
             tesorero o el secretario la ponen a mano cuando procede.
           </p>
         </form>
+      </Drawer>
+
+      {/*
+        C3 · LAS DEVOLUCIONES DEL BANCO.
+        La otra mitad de la remesa: se manda el fichero, y unos días después el
+        banco contesta cuáles no ha podido cobrar.
+      */}
+      <Drawer
+        open={devolucionesOpen}
+        onClose={() => { setDevolucionesOpen(false); setLectura(null); setFalloLectura('') }}
+        title="Devoluciones del banco"
+        subtitle={cruceDevoluciones ? resumenDeLaLectura(cruceDevoluciones) : 'Sube el fichero que te da el banco'}
+        ancho="ancho"
+        footer={cruceDevoluciones && cruceDevoluciones.casadas.length > 0 && (
+          <button
+            className="btn btn-primary"
+            onClick={aplicarDevoluciones}
+            disabled={aplicando}
+          >
+            {aplicando
+              ? 'Aplicando…'
+              : `Marcar ${cruceDevoluciones.casadas.length} como devuelto${cruceDevoluciones.casadas.length === 1 ? '' : 's'}`}
+          </button>
+        )}
+      >
+        <div className="app-form">
+          <p className="form-hint">
+            Después de mandar una remesa, el banco devuelve los recibos que no ha podido cobrar.
+            Descarga de tu banca electrónica el fichero <b>pain.002</b> —suele llamarse «informe de
+            estado» o «devoluciones»— y súbelo aquí.
+          </p>
+
+          <div className="form-row">
+            <label htmlFor="ficheroDevoluciones">Fichero del banco</label>
+            <input
+              id="ficheroDevoluciones"
+              type="file"
+              accept=".xml,text/xml,application/xml,.txt"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void cargarFicheroDeDevoluciones(f)
+                // Para poder volver a subir el mismo fichero si hizo falta
+                // corregir algo antes: sin esto, el segundo intento no dispara.
+                e.target.value = ''
+              }}
+            />
+          </div>
+
+          {falloLectura && <p className="form-hint form-hint--error">{falloLectura}</p>}
+
+          {cruceDevoluciones && (
+            <>
+              {cruceDevoluciones.casadas.length > 0 && (
+                <>
+                  <h3 className="settings-card__subtitle">Se va a marcar como devuelto</h3>
+                  <div className="table-card">
+                    <table>
+                      <thead>
+                        <tr><th>Recibo</th><th>Hermano/a</th><th>Importe</th><th>Por qué lo devuelven</th></tr>
+                      </thead>
+                      <tbody>
+                        {cruceDevoluciones.casadas.map(({ recibo, devolucion }) => (
+                          <tr key={recibo.id}>
+                            <td><code>{devolucion.referencia}</code></td>
+                            <td>{hermanos.find((h) => h.id === recibo.hermanoId)?.nombre ?? '—'}</td>
+                            <td className="num">{formatCurrency(devolucion.importe || recibo.importe)}</td>
+                            <td>{devolucion.motivo}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+
+              {/*
+                LAS QUE NO CUADRAN SE ENSEÑAN, NO SE TIRAN. Un recibo que el
+                banco devuelve y que aquí no aparece significa que algo no
+                encaja —el fichero es de otra remesa, o de otra hermandad— y
+                eso hay que verlo antes de aplicar nada.
+              */}
+              {cruceDevoluciones.huerfanas.length > 0 && (
+                <>
+                  <h3 className="settings-card__subtitle" style={{ marginTop: '1.2rem' }}>
+                    No cuadran con ningún recibo de aquí
+                  </h3>
+                  <p className="form-hint form-hint--error">
+                    Estas devoluciones vienen en el fichero pero su recibo no está en esta
+                    hermandad. Míralo antes de aplicar: puede que el fichero sea de otra remesa.
+                  </p>
+                  <ul className="lista-limpia">
+                    {cruceDevoluciones.huerfanas.map((x, i) => (
+                      <li key={`${x.referencia}-${i}`}>
+                        <code>{x.referencia || '(sin referencia)'}</code> · {formatCurrency(x.importe)} · {x.motivo}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          )}
+        </div>
       </Drawer>
 
       {/* Remesa bancaria */}

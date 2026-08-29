@@ -25,10 +25,21 @@ export default async function ({ cargar, caso }) {
     categoriaDestino: '', activo: true, nota: '', creadoEn: '', ...extra,
   })
 
-  /* 1. El año sale de la fecha ya formateada, que es como se guarda. */
+  /*
+   * 1. El año sale de la fecha, y `movimientos.fecha` guarda DOS formatos a
+   * la vez: el que escribe a mano la secretaría desde Tesorería
+   * («05 ene 2026») y el que escriben las funciones del servidor al cobrar
+   * una venta de la tienda o un pago con tarjeta (`to_char(now(),
+   * 'YYYY-MM-DD')`, o sea «2026-01-05»). Con solo el primero, una venta de la
+   * tienda desaparecía de este informe sin un solo error: se descubrió
+   * vendiendo algo en el navegador y viendo cómo el total del año se iba a
+   * cero de golpe.
+   */
   {
     caso('«05 ene 2026» es 2026', 2026, pyg.anioDelMovimiento('05 ene 2026'))
     caso('con espacios de más, también', 2026, pyg.anioDelMovimiento('  05 ene 2026  '))
+    caso('la fecha del servidor, «2026-01-05», también es 2026', 2026, pyg.anioDelMovimiento('2026-01-05'))
+    caso('y con espacios de más', 2026, pyg.anioDelMovimiento('  2026-01-05  '))
     caso('una fecha rota no revienta', 0, pyg.anioDelMovimiento('sin fecha'))
     caso('ni vacía', 0, pyg.anioDelMovimiento(''))
   }
@@ -47,6 +58,14 @@ export default async function ({ cargar, caso }) {
     caso('ingresos del año', 1500, c.totalIngresos)
     caso('gastos del año', 300, c.totalGastos)
     caso('resultado', 1200, c.resultado)
+
+    // La misma cuenta, pero con una venta de la tienda de por medio: su
+    // fecha la escribe el servidor, en ISO. Tiene que sumar igual que las
+    // demás, no desaparecer.
+    const conVenta = pyg.cuentaDeResultados(
+      [...libro, m('2026-06-15', 'Ingreso', 'Otros ingresos', 250)], 2026,
+    )
+    caso('la venta de la tienda entra en el total', 1750, conVenta.totalIngresos)
     caso('ingresos del anterior', 800, c.totalIngresosAnterior)
     caso('gastos del anterior', 900, c.totalGastosAnterior)
     caso('resultado del anterior, en negativo', -100, c.resultadoAnterior)

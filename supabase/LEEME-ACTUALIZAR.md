@@ -34,13 +34,14 @@ Ejecutar los dos tampoco rompe nada, solo sobra.
 
 ## Qué añade esta tanda
 
-Tres cosas nuevas, con sus tablas y sus permisos:
+Cuatro cosas nuevas, con sus tablas y sus permisos:
 
 | Fichero | Qué es |
 |---|---|
 | `campanas-y-proyectos.sql` | Campañas de recaudación con su barra, y proyectos a largo plazo |
 | `reglas-de-reparto.sql` | Gastos porcentuales enlazados a una partida, para pérdidas y ganancias |
 | `tienda-web.sql` | La tienda en la web pública: reservar por internet y pagar al recoger |
+| `pago-tarjeta.sql` | Que el hermano pague su cuota o su papeleta con tarjeta |
 
 Y un arreglo que **no crea nada** pero hace falta:
 
@@ -52,7 +53,7 @@ Y un arreglo que **no crea nada** pero hace falta:
 funciones no la encontraban. Ya viene corregido dentro de `ACTUALIZAR.sql`: con
 volver a ejecutarlo entero queda arreglado.
 
-Los tres van dentro de `ACTUALIZAR.sql`, así que **no hay que ejecutarlos
+Los cinco van dentro de `ACTUALIZAR.sql`, así que **no hay que ejecutarlos
 sueltos**: con pegar `ACTUALIZAR.sql` entero es suficiente.
 
 ### Un módulo de permisos nuevo: «campañas»
@@ -79,6 +80,38 @@ funciona con la versión antigua:
 ```
 supabase functions deploy enviar-correo
 ```
+
+### Y si quieres el pago con tarjeta
+
+Esto es **opcional**. Ejecutar el SQL no enciende nada: mientras no hagas los
+tres pasos de abajo, el botón de tarjeta no le sale a nadie y todo sigue
+cobrándose como hasta ahora (Bizum, transferencia y domiciliación).
+
+1. La clave de Stripe y la función que abre el cobro:
+
+   ```
+   supabase secrets set STRIPE_SECRET_KEY=sk_live_...
+   supabase functions deploy crear-pago
+   ```
+
+2. En el panel de Stripe, en el mismo endpoint del webhook que ya tienes,
+   asegúrate de que están estos dos eventos —son los mismos que usa la
+   suscripción, así que lo normal es que ya estén:
+
+   ```
+   checkout.session.completed
+   checkout.session.async_payment_succeeded
+   ```
+
+3. En Gobergo, **Configuración** → pegar el identificador de la cuenta de
+   Stripe de la hermandad (`acct_…`).
+
+> **El dinero va a la cuenta de la hermandad, no a la de Gobergo**, y por eso
+> hace falta ese `acct_…`: es el destinatario del cobro. **No es una clave
+> secreta** y no sirve para cobrar nada por su cuenta; la clave vive en el
+> servidor y no sale de ahí. La comisión de Stripe la asume la hermandad, que
+> es lo normal: sumársela al hermano significa cobrar un recibo de 30 € por
+> 30,87 €, y eso es lo primero que se reclama en secretaría.
 
 ---
 

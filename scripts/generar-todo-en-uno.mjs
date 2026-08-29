@@ -81,6 +81,7 @@ export const PIEZAS = [
   ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
   ['campanas-y-proyectos.sql', 'Campañas de recaudación con su barra, y proyectos a largo plazo'],
   ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
+  ['pago-tarjeta.sql', 'Que el hermano pague su cuota o su papeleta con tarjeta'],
 ]
 
 const CABECERA = `-- =============================================================================

@@ -1,0 +1,828 @@
+<title>Gobergo módulo a módulo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  /*
+   * Los colores son los de la propia aplicación (src/styles/global.css):
+   * burdeos #6a1a23 y oro #96793e en claro, y en oscuro el oro pasa a ser el
+   * color principal, exactamente como hace Gobergo. No se inventa una paleta
+   * nueva para su propia lista de repaso.
+   */
+  :root {
+    --papel: #f3ede2;
+    --tarjeta: #ffffff;
+    --hundido: #ece2d3;
+    --tinta: #241d1c;
+    --tinta-suave: #6d6357;
+    --linea: #ded2c0;
+    --linea-fuerte: #c9b99f;
+    --acento: #6a1a23;
+    --acento-tinta: #f3ede2;
+    --oro: #96793e;
+    --bien: #2c6a44;
+    --bien-fondo: #dfeade;
+    --falla: #9d2a20;
+    --falla-fondo: #f6e0dc;
+    --sombra: 0 1px 2px rgba(36, 29, 28, .06), 0 8px 24px -16px rgba(36, 29, 28, .3);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --papel: #171413;
+      --tarjeta: #211d1b;
+      --hundido: #2a2422;
+      --tinta: #efe7dd;
+      --tinta-suave: #a89b8d;
+      --linea: #362e2b;
+      --linea-fuerte: #4a403b;
+      --acento: #d6bc8a;
+      --acento-tinta: #1e1a18;
+      --oro: #d6bc8a;
+      --bien: #86c19b;
+      --bien-fondo: #1f3227;
+      --falla: #e5958b;
+      --falla-fondo: #3a2321;
+      --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --papel: #171413;
+    --tarjeta: #211d1b;
+    --hundido: #2a2422;
+    --tinta: #efe7dd;
+    --tinta-suave: #a89b8d;
+    --linea: #362e2b;
+    --linea-fuerte: #4a403b;
+    --acento: #d6bc8a;
+    --acento-tinta: #1e1a18;
+    --oro: #d6bc8a;
+    --bien: #86c19b;
+    --bien-fondo: #1f3227;
+    --falla: #e5958b;
+    --falla-fondo: #3a2321;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .envoltura { max-width: 1000px; margin: 0 auto; padding: 0 clamp(.9rem, 3vw, 2rem) 5rem; }
+
+  /* ---------- Cabecera ---------- */
+  .portada { padding: clamp(2rem, 6vw, 3.5rem) 0 1.5rem; }
+  .marca {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: .72rem; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--oro); margin: 0 0 .9rem;
+  }
+  h1 {
+    font-family: 'Newsreader', Georgia, 'Times New Roman', serif;
+    font-weight: 600; font-size: clamp(2rem, 5.5vw, 3rem); line-height: 1.05;
+    margin: 0 0 .6rem; text-wrap: balance; letter-spacing: -.015em;
+  }
+  .entradilla { max-width: 62ch; color: var(--tinta-suave); margin: 0 0 1.4rem; }
+  .entradilla b { color: var(--tinta); font-weight: 600; }
+
+  /* ---------- Barra de mando ---------- */
+  .mando {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--papel) 92%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--linea);
+    margin: 0 calc(-1 * clamp(.9rem, 3vw, 2rem));
+    padding: .7rem clamp(.9rem, 3vw, 2rem);
+  }
+  .mando__fila { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; }
+  .medidor {
+    flex: 1 1 240px; min-width: 180px; height: 8px; border-radius: 99px;
+    background: var(--hundido); overflow: hidden; display: flex;
+    border: 1px solid var(--linea);
+  }
+  .medidor span { display: block; height: 100%; transition: width .25s ease; }
+  .medidor__bien { background: var(--bien); }
+  .medidor__falla { background: var(--falla); }
+  .cuentas {
+    display: flex; gap: .9rem; font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: .78rem; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .cuentas b { font-weight: 600; }
+  .cuentas .c-bien { color: var(--bien); }
+  .cuentas .c-falla { color: var(--falla); }
+  .cuentas .c-resto { color: var(--tinta-suave); }
+
+  .botones { display: flex; flex-wrap: wrap; gap: .4rem; }
+  button {
+    font: inherit; font-size: .8rem; cursor: pointer;
+    border: 1px solid var(--linea-fuerte); background: var(--tarjeta); color: var(--tinta);
+    border-radius: 7px; padding: .34rem .7rem;
+  }
+  button:hover { border-color: var(--acento); }
+  button:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+  .filtro[aria-pressed="true"] {
+    background: var(--acento); color: var(--acento-tinta); border-color: var(--acento); font-weight: 600;
+  }
+
+  /* ---------- Índice de módulos ---------- */
+  .indice { display: flex; flex-wrap: wrap; gap: .35rem; margin: 1.4rem 0 2.2rem; }
+  .indice a {
+    font-size: .78rem; text-decoration: none; color: var(--tinta-suave);
+    border: 1px solid var(--linea); border-radius: 99px; padding: .25rem .65rem;
+    background: var(--tarjeta);
+  }
+  .indice a:hover { color: var(--acento); border-color: var(--acento); }
+  .indice a b {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .72rem;
+    font-variant-numeric: tabular-nums; font-weight: 400; color: var(--oro); margin-left: .35rem;
+  }
+
+  /* ---------- Módulos ---------- */
+  .modulo {
+    background: var(--tarjeta); border: 1px solid var(--linea);
+    border-radius: 12px; box-shadow: var(--sombra); margin-bottom: 1.1rem; overflow: hidden;
+    scroll-margin-top: 5rem;
+  }
+  .modulo__cab {
+    display: flex; align-items: baseline; gap: .8rem; flex-wrap: wrap;
+    padding: 1rem 1.1rem .8rem; border-bottom: 1px solid var(--linea);
+    background: linear-gradient(to bottom, var(--tarjeta), var(--tarjeta));
+  }
+  .modulo__cab h2 {
+    font-family: 'Newsreader', Georgia, serif; font-weight: 600; font-size: 1.3rem;
+    margin: 0; letter-spacing: -.01em;
+  }
+  .modulo__donde {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .7rem;
+    color: var(--tinta-suave); letter-spacing: .02em;
+  }
+  .modulo__marcador {
+    margin-left: auto; font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: .75rem; font-variant-numeric: tabular-nums; color: var(--tinta-suave);
+  }
+  .modulo__nota {
+    padding: .7rem 1.1rem; font-size: .82rem; color: var(--tinta-suave);
+    border-bottom: 1px solid var(--linea); background: var(--hundido);
+  }
+
+  ul.lista { list-style: none; margin: 0; padding: 0; }
+  .fila { display: flex; gap: .7rem; align-items: flex-start; padding: .6rem 1.1rem; border-bottom: 1px solid var(--linea); }
+  .fila:last-child { border-bottom: 0; }
+  .fila[data-estado="bien"] { background: color-mix(in srgb, var(--bien-fondo) 45%, transparent); }
+  .fila[data-estado="falla"] { background: color-mix(in srgb, var(--falla-fondo) 55%, transparent); }
+  .fila__texto { flex: 1 1 auto; min-width: 0; }
+  .fila__texto p { margin: 0; }
+  .fila__pista {
+    display: block; font-size: .78rem; color: var(--tinta-suave); margin-top: .12rem;
+  }
+  .chip {
+    display: inline-block; font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: .66rem; letter-spacing: .04em; text-transform: uppercase;
+    border: 1px solid var(--linea-fuerte); border-radius: 4px;
+    padding: .05rem .3rem; color: var(--oro); margin-left: .4rem; white-space: nowrap;
+  }
+
+  .estados { display: flex; gap: .2rem; flex: 0 0 auto; padding-top: .1rem; }
+  .estados button {
+    width: 30px; height: 28px; padding: 0; display: grid; place-items: center;
+    font-size: .85rem; line-height: 1; border-radius: 6px; color: var(--tinta-suave);
+  }
+  .estados button[aria-pressed="true"][data-v="bien"] {
+    background: var(--bien); border-color: var(--bien); color: var(--papel); font-weight: 700;
+  }
+  .estados button[aria-pressed="true"][data-v="falla"] {
+    background: var(--falla); border-color: var(--falla); color: var(--papel); font-weight: 700;
+  }
+
+  textarea.apunte {
+    display: block; width: 100%; margin-top: .45rem; font: inherit; font-size: .84rem;
+    background: var(--tarjeta); color: var(--tinta); border: 1px solid var(--falla);
+    border-radius: 7px; padding: .4rem .55rem; resize: vertical; min-height: 2.2rem;
+  }
+  textarea.apunte:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+
+  .oculta { display: none !important; }
+  .pie {
+    margin-top: 2rem; padding-top: 1.2rem; border-top: 1px solid var(--linea);
+    font-size: .82rem; color: var(--tinta-suave);
+  }
+  .aviso {
+    position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%);
+    background: var(--acento); color: var(--acento-tinta); padding: .5rem .95rem;
+    border-radius: 8px; font-size: .85rem; box-shadow: var(--sombra); z-index: 40;
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (max-width: 640px) {
+    /* En el móvil los veinte módulos ocupaban la pantalla entera antes de
+       llegar al primer punto: aquí el índice va en una sola tira que se
+       arrastra con el dedo. */
+    .indice {
+      flex-wrap: nowrap; overflow-x: auto; margin: 1rem 0 1.6rem;
+      padding-bottom: .35rem; scrollbar-width: thin;
+    }
+    .indice a { flex: 0 0 auto; }
+  }
+  @media (max-width: 520px) {
+    .fila { flex-wrap: wrap; }
+    .estados { order: 2; }
+    .fila__texto { flex-basis: 100%; }
+  }
+</style>
+
+<div class="envoltura">
+  <header class="portada">
+    <p class="marca">Gobergo · repaso funcional</p>
+    <h1>Gobergo módulo a módulo</h1>
+    <p class="entradilla">
+      Todo lo que hace la aplicación, agrupado como está agrupada ella: los catorce módulos del
+      panel, el área del hermano, la web pública y lo que hay que probar en el móvil y en papel.
+      Marca <b>✓</b> lo que va, <b>✗</b> lo que no —y escribe qué pasó, que es lo que hace falta
+      para arreglarlo—. Se guarda en este navegador, así que puedes dejarlo a medias.
+    </p>
+  </header>
+
+  <div class="mando">
+    <div class="mando__fila">
+      <div class="medidor" role="img" aria-label="Progreso del repaso">
+        <span class="medidor__bien" id="barraBien" style="width:0%"></span>
+        <span class="medidor__falla" id="barraFalla" style="width:0%"></span>
+      </div>
+      <div class="cuentas">
+        <span class="c-bien"><b id="nBien">0</b> bien</span>
+        <span class="c-falla"><b id="nFalla">0</b> fallan</span>
+        <span class="c-resto"><b id="nResto">0</b> sin ver</span>
+      </div>
+      <div class="botones">
+        <button type="button" class="filtro" data-f="todo" aria-pressed="true">Todo</button>
+        <button type="button" class="filtro" data-f="pendiente" aria-pressed="false">Sin ver</button>
+        <button type="button" class="filtro" data-f="falla" aria-pressed="false">Lo que falla</button>
+        <button type="button" id="copiar">Copiar lo que falla</button>
+        <button type="button" id="limpiar">Empezar de cero</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="indice" id="indice" aria-label="Módulos"></nav>
+  <main id="contenido"></main>
+
+  <p class="pie">
+    Lo que marques vive solo en este navegador: no se manda a ninguna parte y no lo ve nadie más.
+    Si lo abres en otro ordenador, empieza en blanco.
+  </p>
+</div>
+
+<script>
+/*
+ * Los módulos son los de verdad: los catorce de «Personal y permisos» más el
+ * área del hermano, la web pública y lo que solo se ve probando en el móvil o
+ * imprimiendo. Cada punto es algo que se puede comprobar en una pantalla, no
+ * una descripción de por dentro.
+ *
+ *   t = qué se comprueba
+ *   d = dónde se hace
+ *   r = qué hace falta tener conectado para que se pueda probar
+ */
+const MODULOS = [
+  {
+    id: 'acceso', nombre: 'Entrar y salir', donde: '/entrar · /hermano',
+    nota: 'Lo primero que hace todo el mundo y lo último que se prueba. Aquí estaba el fallo de «salgo y al volver me mete en el área del hermano».',
+    items: [
+      { t: 'Entrar con una cuenta de gestión lleva al panel', d: '/entrar' },
+      { t: 'Entrar como hermano (hermandad + DNI + contraseña) lleva a su área', d: '/hermano' },
+      { t: 'Cerrar sesión desde el panel y volver a /hermano NO entra solo', d: 'Panel → salir' },
+      { t: 'Cerrar sesión desde el área del hermano cierra también la del panel', d: '/hermano' },
+      { t: 'Un hermano de dos hermandades elige a cuál entra', d: '/hermano' },
+      { t: 'Contraseña olvidada del hermano: llega el correo y el enlace abre la pantalla de cambiarla', d: '/hermano', r: 'correo' },
+      { t: 'Contraseña olvidada de gestión: llega el correo de Supabase', d: '/recuperar', r: 'correo' },
+      { t: 'Segundo factor (MFA), si está activado, se pide al entrar', d: 'Seguridad', r: 'base de datos' },
+      { t: 'Con la contraseña mal, el mensaje dice qué pasa sin delatar si el DNI existe', d: '/hermano' },
+      { t: 'Tres intentos seguidos fallidos frenan al siguiente', d: '/hermano', r: 'base de datos' },
+    ],
+  },
+  {
+    id: 'notificaciones', nombre: 'Notificaciones', donde: 'Panel → Notificaciones',
+    nota: 'El buzón de todo lo que espera una decisión. Si algo se pide desde fuera y no aparece aquí, no existe para la junta.',
+    items: [
+      { t: 'Una solicitud de alta hecha desde la web aparece aquí', d: 'Web → Hazte hermano' },
+      { t: 'Una solicitud de papeleta hecha por un hermano aparece aquí y en Papeletas', d: '/hermano → papeleta' },
+      { t: 'Un aviso de «ya he pagado» (Bizum o transferencia) aparece aquí', d: '/hermano → pagar' },
+      { t: 'Una solicitud de baja aparece aquí', d: '/hermano → darse de baja' },
+      { t: 'Una solicitud de familiar a cargo aparece aquí', d: '/hermano → mi familia' },
+      { t: 'Aceptar deja el dato puesto donde toca (censo, papeleta, cuota)', d: 'Notificaciones' },
+      { t: 'Rechazar pide un motivo y el hermano lo ve en su área', d: 'Notificaciones' },
+      { t: 'Lo ya resuelto desaparece de la lista y no se puede resolver dos veces', d: 'Notificaciones' },
+    ],
+  },
+  {
+    id: 'hermanos', nombre: 'Hermanos (censo)', donde: 'Panel → Hermanos',
+    items: [
+      { t: 'Alta de hermano: el número y la antigüedad se ponen solos', d: 'Hermanos → Nuevo' },
+      { t: 'Ficha completa: foto, DNI, contacto, dirección, IBAN', d: 'Hermanos → Ver ficha' },
+      { t: 'El DNI/NIE mal escrito se avisa al teclearlo, no al guardar', d: 'Hermanos → Nuevo' },
+      { t: 'El teléfono y el código postal también se comprueban', d: 'Hermanos → Nuevo' },
+      { t: 'Campos propios de la hermandad salen en la ficha', d: 'Configuración → Ficha del hermano' },
+      { t: 'Dar de baja recoloca el escalafón de los demás', d: 'Hermanos → ficha' },
+      { t: 'Reactivar a alguien le devuelve su antigüedad', d: 'Hermanos → ficha' },
+      { t: 'Etiquetas y filtros: se guardan y se recuperan al volver', d: 'Hermanos' },
+      { t: 'Buscar por nombre encuentra con y sin tildes («garcia» → García)', d: 'Hermanos' },
+      { t: 'Importar el censo desde el Excel de la hermandad (.xlsx)', d: 'Configuración → Traer vuestros datos' },
+      { t: 'Las fechas del Excel se importan como fecha, no como «36512»', d: 'Traer vuestros datos' },
+      { t: 'La importación se puede deshacer entera', d: 'Traer vuestros datos' },
+      { t: 'Exportar el censo a Excel/CSV', d: 'Hermanos' },
+      { t: 'Se ve quién no tiene cuenta para entrar, y se le manda', d: 'Hermanos', r: 'correo' },
+      { t: 'Familiares a cargo: alta, aprobación y rechazo con motivo', d: 'Hermanos → ficha' },
+      { t: 'Lo borrado se puede recuperar de la papelera', d: 'Configuración → Copias y datos' },
+    ],
+  },
+  {
+    id: 'cortejo', nombre: 'Cortejo', donde: 'Panel → Cortejo',
+    items: [
+      { t: 'Crear cuerpos y tramos, con su aforo', d: 'Configuración → Cuerpos y tramos' },
+      { t: 'El itinerario se guarda y se ve', d: 'Cortejo' },
+      { t: 'Asignar un hermano a un tramo', d: 'Cortejo → Asignar' },
+      { t: 'Pasado el aforo, avisa en vez de meterlo callando', d: 'Cortejo' },
+      { t: 'La cascada mueve al siguiente tramo cuando uno se llena', d: 'Cortejo' },
+      { t: 'El orden dentro del tramo respeta la antigüedad', d: 'Cortejo' },
+      { t: 'Día de salida: marcar presente uno a uno, y rápido', d: 'Cortejo → día de salida' },
+      { t: 'Registrar una incidencia, con sus tipos propios', d: 'Cortejo' },
+      { t: 'Una incidencia resuelta deja al hermano en el cortejo', d: 'Cortejo' },
+      { t: 'El historial de asistencia por hermano sale año a año', d: 'Hermanos → ficha' },
+      { t: 'Imprimir el listado del tramo se lee en la calle', d: 'Cortejo → imprimir' },
+    ],
+  },
+  {
+    id: 'cuotas', nombre: 'Cuotas', donde: 'Panel → Cuotas',
+    nota: 'El módulo donde un fallo se traduce en dinero. Todo lo que se cobra tiene que acabar en Tesorería sin que nadie lo copie a mano.',
+    items: [
+      { t: 'Conceptos e importes de cuota se configuran', d: 'Configuración → Catálogos y cuotas' },
+      { t: 'Emitir las cuotas del ejercicio a todo el censo', d: 'Cuotas → Emitir' },
+      { t: 'Ningún hermano se queda sin cuota al emitir', d: 'Cuotas' },
+      { t: 'Emitir un recibo suelto a un hermano', d: 'Cuotas → Nueva cuota' },
+      { t: 'Marcar una cuota como pagada deja el apunte en Tesorería', d: 'Cuotas' },
+      { t: 'Ese apunte nace pendiente de conciliar, no conciliado', d: 'Tesorería' },
+      { t: 'Se ve de un vistazo quién está al día y quién no', d: 'Cuotas' },
+      { t: 'Domiciliación: el mandato SEPA firmado queda guardado', d: 'Cuotas → Remesa' },
+      { t: 'Preparar la remesa genera el fichero del banco (pain.008)', d: 'Cuotas → Remesa' },
+      { t: 'Sin los datos del acreedor no deja generar el fichero', d: 'Cuotas → Remesa' },
+      { t: 'Un recibo ya remesado no vuelve a entrar en otra remesa', d: 'Cuotas → Remesa' },
+      { t: 'Un domiciliado sin IBAN se avisa, no se cae en silencio', d: 'Cuotas → Remesa' },
+      { t: 'Subir el fichero de devoluciones del banco (pain.002)', d: 'Cuotas → Devoluciones' },
+      { t: 'Cada devolución dice de quién es y por qué, en cristiano', d: 'Cuotas → Devoluciones' },
+      { t: 'Aplicarlas deja los recibos en «Devuelta» y el contraapunte en Tesorería', d: 'Cuotas → Devoluciones' },
+      { t: 'El fichero de ancho fijo (19-44) se rechaza con instrucciones, no se adivina', d: 'Cuotas → Devoluciones' },
+      { t: 'La mora se aplica con doble confirmación', d: 'Cuotas → Renovación y mora' },
+      { t: 'Salto de año: el ejercicio nuevo arranca sin arrastrar lo pagado', d: 'Cuotas → Salto de año' },
+      { t: 'Ver e imprimir el recibo de una cuota', d: 'Cuotas → Ver recibo' },
+      { t: 'Subir el diseño propio de recibo y colocar los datos encima', d: 'Cuotas → Modelo de recibo' },
+      { t: 'Importar cuotas ya existentes desde un Excel', d: 'Configuración → Traer vuestros datos' },
+    ],
+  },
+  {
+    id: 'papeletas', nombre: 'Papeletas de sitio', donde: 'Panel → Papeletas',
+    items: [
+      { t: 'Ajustes de campaña: año, modalidades e importes', d: 'Papeletas → Ajustes' },
+      { t: 'Las solicitudes de los hermanos llegan y se aceptan o rechazan', d: 'Papeletas' },
+      { t: 'Asignar sitio a mano y renovar el del año pasado', d: 'Papeletas' },
+      { t: 'Guardar varias papeletas seguidas las guarda todas', d: 'Papeletas' },
+      { t: 'Los nombres salen completos y sin cambiarse de fila', d: 'Papeletas' },
+      { t: 'La papeleta lleva QR y el QR verifica de verdad', d: '/verificar' },
+      { t: 'Imprimir todas: un PDF con una papeleta por página', d: 'Papeletas → Imprimir' },
+      { t: 'Subir el diseño propio de papeleta', d: 'Papeletas → Modelo' },
+      { t: 'Aceptar un pago por Bizum deja la papeleta pagada y el apunte hecho', d: 'Notificaciones' },
+      { t: 'El cargo (nazareno, costalero, acólito…) se pone solo según la opción', d: 'Papeletas' },
+      { t: 'Anular o renunciar deja el sitio libre para otro', d: 'Papeletas' },
+      { t: 'La convocatoria por correo se lee bien y no sale rota', d: 'Papeletas', r: 'correo' },
+    ],
+  },
+  {
+    id: 'tesoreria', nombre: 'Tesorería', donde: 'Panel → Tesorería',
+    items: [
+      { t: 'Apuntar un ingreso y un gasto, con su categoría y su cuenta', d: 'Tesorería → Nuevo' },
+      { t: 'Las categorías y las cuentas se configuran', d: 'Configuración → Catálogos' },
+      { t: 'Conciliar un apunte contra el extracto', d: 'Tesorería' },
+      { t: 'Adjuntar el justificante y volver a verlo', d: 'Tesorería → Justificante' },
+      { t: 'Los cobros de cuotas y papeletas aparecen solos', d: 'Tesorería' },
+      { t: 'El IVA sale como su propia partida', d: 'Tesorería' },
+      { t: 'El saldo cuadra con la suma de los apuntes', d: 'Tesorería' },
+      { t: 'Un importe negativo nunca se imprime como «-0,00 €»', d: 'Tesorería' },
+      { t: 'Importar movimientos desde el Excel del banco', d: 'Configuración → Traer vuestros datos' },
+    ],
+  },
+  {
+    id: 'informes', nombre: 'Informes', donde: 'Panel → Informes',
+    items: [
+      { t: 'Estado de cuentas anual, con sus totales', d: 'Informes' },
+      { t: 'Cuenta de pérdidas y ganancias del ejercicio', d: 'Informes' },
+      { t: 'Los gastos porcentuales (reglas de reparto) se reparten donde toca', d: 'Informes' },
+      { t: 'Un gasto no aparece en la tabla de ingresos', d: 'Informes' },
+      { t: 'Comparación con el año anterior', d: 'Informes' },
+      { t: 'Imprimir el informe cabe en el papel', d: 'Informes → imprimir' },
+    ],
+  },
+  {
+    id: 'campanas', nombre: 'Campañas y proyectos', donde: 'Panel → Campañas',
+    items: [
+      { t: 'Crear una campaña con su objetivo y su barra', d: 'Campañas' },
+      { t: 'Lo recaudado se cuenta desde Tesorería, no de un contador aparte', d: 'Campañas' },
+      { t: 'Un gasto de la campaña resta de lo recaudado', d: 'Campañas' },
+      { t: 'La campaña sale en la web pública si se marca', d: 'Web → Colabora' },
+      { t: 'Una aportación desde la web llega a la campaña', d: 'Web pública' },
+      { t: 'Proyectos: idea, en marcha, parado, hecho', d: 'Campañas → Proyectos' },
+      { t: 'Un proyecto con fecha pasada se marca como retrasado', d: 'Campañas → Proyectos' },
+      { t: 'Sus tareas se asignan y el avance se calcula solo', d: 'Campañas → Proyectos' },
+    ],
+  },
+  {
+    id: 'inventario', nombre: 'Inventario', donde: 'Panel → Inventario',
+    items: [
+      { t: 'Alta de pieza con foto, categoría y ubicación', d: 'Inventario → Nueva pieza' },
+      { t: 'Las categorías se configuran', d: 'Configuración → Catálogos' },
+      { t: 'Ficha de la pieza: valor, estado, historial', d: 'Inventario → Ver ficha' },
+      { t: 'Buscar y filtrar por categoría', d: 'Inventario' },
+      { t: 'Importar el inventario desde un Excel', d: 'Configuración → Traer vuestros datos' },
+    ],
+  },
+  {
+    id: 'archivo', nombre: 'Archivo documental', donde: 'Panel → Archivo',
+    items: [
+      { t: 'Subir un documento con su categoría y su fecha', d: 'Archivo → Nuevo' },
+      { t: 'Volver a descargarlo íntegro', d: 'Archivo → Ver ficha' },
+      { t: 'Buscar por título y por categoría', d: 'Archivo' },
+      { t: 'Un documento grande avisa en vez de fallar callando', d: 'Archivo → Nuevo' },
+    ],
+  },
+  {
+    id: 'eventos', nombre: 'Eventos y tareas', donde: 'Panel → Eventos',
+    items: [
+      { t: 'Crear un evento con fecha, hora y lugar', d: 'Eventos → Nuevo' },
+      { t: 'Eventos que se repiten (todos los meses, todos los años)', d: 'Eventos' },
+      { t: 'Tareas dentro del evento, asignadas a un hermano o a un cargo', d: 'Eventos' },
+      { t: 'Al hermano le llega el aviso de la tarea que se le encarga', d: '/hermano → avisos' },
+      { t: 'Se puede asignar hermanos a las tareas de redes', d: 'Comunicados → Redes' },
+      { t: '«Mis tareas» enseña solo las mías', d: 'Eventos' },
+      { t: 'El evento marcado como público sale en el calendario de la web', d: 'Web → Cultos' },
+      { t: 'Descargar el evento al calendario del móvil (.ics)', d: 'Eventos' },
+    ],
+  },
+  {
+    id: 'comunicados', nombre: 'Comunicados', donde: 'Panel → Comunicados',
+    items: [
+      { t: 'Redactar un comunicado y mandarlo por correo', d: 'Comunicados → Nuevo', r: 'correo' },
+      { t: 'Elegir a quién: todos, por cargo, por etiqueta, por estado de cuota', d: 'Comunicados' },
+      { t: 'El envío dice a cuántos ha ido, y no dice «0» cuando ha fallado', d: 'Comunicados', r: 'correo' },
+      { t: 'Al hermano le llega también al buzón de su área', d: '/hermano → avisos' },
+      { t: 'Quien no tiene ficha en el censo puede recibirlo igual', d: 'Comunicados' },
+      { t: 'Redes sociales: el texto sale listo y el botón abre la red', d: 'Comunicados → Redes' },
+      { t: 'El contador de redes no dice «0 de 0» teniendo cuentas', d: 'Comunicados → Redes' },
+    ],
+  },
+  {
+    id: 'tienda', nombre: 'Tienda', donde: 'Panel → Tienda',
+    items: [
+      { t: 'Caja: vender, cobrar y sacar el ticket', d: 'Tienda' },
+      { t: 'La venta descuenta existencias del almacén', d: 'Tienda → Almacén' },
+      { t: 'Al bajar del mínimo, avisa a quien lleva el inventario', d: 'Tienda → Almacén' },
+      { t: 'Reservas hechas desde la web pública llegan aquí', d: 'Tienda → Reservas' },
+      { t: 'Entregar una reserva la cierra y la cobra', d: 'Tienda → Reservas' },
+      { t: 'Factura con IVA, imprimible y numerada sin saltos', d: 'Tienda → Facturas' },
+      { t: 'Los datos fiscales de la tienda salen en la factura', d: 'Tienda → Datos' },
+      { t: 'Lo vendido llega a Tesorería', d: 'Tesorería' },
+    ],
+  },
+  {
+    id: 'web', nombre: 'Web pública', donde: 'Panel → Web pública',
+    nota: 'Lo único que ve la gente de la calle. Un fallo aquí se ve desde fuera antes que desde dentro.',
+    items: [
+      { t: 'Elegir plantilla, tipografía y colores, y verlo al momento', d: 'Web pública' },
+      { t: 'Publicar y despublicar la web', d: 'Web pública' },
+      { t: 'Historia, Junta de gobierno y Estación de penitencia', d: 'Web → secciones' },
+      { t: 'Titulares con su foto y su página propia', d: 'Web → Titulares' },
+      { t: 'Cultos y actos, cada uno con su enlace', d: 'Web → Cultos' },
+      { t: 'La hemeroteca de cultos por años', d: 'Web → Cultos' },
+      { t: 'El cartel del año', d: 'Web → El cartel' },
+      { t: 'Caridad y obra social', d: 'Web → Caridad' },
+      { t: 'Galería por álbumes', d: 'Web → Galería' },
+      { t: 'Noticias con cuerpo, foto y enlace propio', d: 'Web → Actualidad' },
+      { t: 'Boletines descargables', d: 'Web → Boletines' },
+      { t: 'Donativos y colaboración', d: 'Web → Colabora' },
+      { t: 'Lotería', d: 'Web → Lotería' },
+      { t: 'Tienda de recuerdos con reserva', d: 'Web → Tienda' },
+      { t: 'Hazte hermano: el formulario llega a Notificaciones', d: 'Web → Hazte hermano' },
+      { t: 'Contacto: el mensaje llega al buzón del panel', d: 'Web → Contacto' },
+      { t: 'El almacén de imágenes sube y reutiliza fotos', d: 'Web pública' },
+      { t: 'Compartir el enlace en WhatsApp saca foto y titular', d: 'Web pública' },
+      { t: 'Boletín: alguien se suscribe, confirma y puede darse de baja', d: 'Web pública', r: 'correo' },
+      { t: 'El envío del boletín no dice «enviado a 0» cuando no ha podido leer la lista', d: 'Web pública', r: 'correo' },
+      { t: 'El contador de visitas sube', d: 'Web pública' },
+      { t: 'Dominio propio conectado', d: 'Web → Compartir', r: 'dominio' },
+      { t: 'En el móvil no se sale nada por los lados', d: 'Web pública' },
+    ],
+  },
+  {
+    id: 'hermano', nombre: 'Área del hermano', donde: '/hermano',
+    nota: 'La pantalla que van a usar cientos de personas desde el móvil, muchas por primera vez.',
+    items: [
+      { t: '«Lo que tengo que hacer» enseña lo que de verdad le falta', d: '/hermano' },
+      { t: 'Su papeleta del año y su sitio en el cortejo', d: '/hermano' },
+      { t: 'Su tramo el día de la salida, con quién va delante y detrás', d: '/hermano' },
+      { t: 'Pedir la papeleta de sitio y ver en qué estado está', d: '/hermano' },
+      { t: 'Su vida en la hermandad: papeletas y cuotas año a año', d: '/hermano' },
+      { t: 'Descargar el recibo de hace tres años para la declaración', d: '/hermano' },
+      { t: 'Pagar una cuota por Bizum o transferencia y avisar', d: '/hermano → pagar' },
+      { t: 'Pagar con tarjeta la cuota', d: '/hermano → pagar', r: 'Stripe' },
+      { t: 'Pagar con tarjeta la papeleta', d: '/hermano → pagar', r: 'Stripe' },
+      { t: 'Si ya tiene un pago a medias, se le avisa antes de pagar dos veces', d: '/hermano', r: 'Stripe' },
+      { t: 'Al volver de la pasarela no se da nada por pagado hasta que el banco lo confirma', d: '/hermano', r: 'Stripe' },
+      { t: 'Deshacer un aviso de pago dado por error', d: '/hermano' },
+      { t: 'Su carné digital con QR, y a pantalla completa', d: '/hermano' },
+      { t: 'Cambiar sus datos de contacto', d: '/hermano' },
+      { t: 'Subir su foto y dar (o quitar) el permiso para usarla', d: '/hermano' },
+      { t: 'Su domiciliación SEPA: verla y firmarla', d: '/hermano' },
+      { t: 'Su familia a cargo: pedir el alta de un hijo', d: '/hermano' },
+      { t: 'Sus avisos, y elegir cuáles quiere recibir', d: '/hermano' },
+      { t: 'Descargar todos sus datos (RGPD)', d: '/hermano' },
+      { t: 'Pedir la baja, con motivo', d: '/hermano' },
+      { t: 'Cambiar su contraseña', d: '/hermano' },
+      { t: 'El calendario de la hermandad', d: '/hermano' },
+      { t: 'De baja: ve su histórico pero no saca papeleta', d: '/hermano' },
+    ],
+  },
+  {
+    id: 'personal', nombre: 'Personal y permisos', donde: 'Panel → Personal',
+    items: [
+      { t: 'Poner un cargo a un hermano', d: 'Personal' },
+      { t: 'El cargo se guarda y sigue puesto al volver', d: 'Personal' },
+      { t: 'Cambiar qué módulos ve cada cargo', d: 'Personal → Permisos' },
+      { t: 'Quien no tiene un módulo no lo ve en el menú ni entrando por la dirección', d: 'Panel' },
+      { t: 'Dar de alta a alguien que no está en el censo', d: 'Personal' },
+      { t: 'Quitar un cargo le quita el acceso', d: 'Personal' },
+      { t: 'El cargo aparece también en la ficha del hermano', d: 'Hermanos → ficha' },
+    ],
+  },
+  {
+    id: 'configuracion', nombre: 'Configuración', donde: 'Panel → Configuración',
+    items: [
+      { t: 'Identidad: nombre legal, NIF, dirección, logo', d: 'Configuración → Identidad' },
+      { t: 'El NIF/CIF mal puesto se avisa al teclearlo', d: 'Configuración → Identidad' },
+      { t: 'IBAN y Bizum de la hermandad, comprobados', d: 'Configuración → Identidad' },
+      { t: 'Identificador de acreedor SEPA, comprobado', d: 'Configuración → Identidad' },
+      { t: 'Cuenta de cobro con tarjeta (acct_…)', d: 'Configuración → Identidad', r: 'Stripe' },
+      { t: 'Campos propios de la ficha del hermano', d: 'Configuración → Ficha' },
+      { t: 'Cuerpos, tramos y aforos', d: 'Configuración → Cuerpos y tramos' },
+      { t: 'Catálogos: categorías de ingresos, gastos, inventario, incidencias', d: 'Configuración → Catálogos' },
+      { t: 'Conexiones: se ve qué está conectado y qué falta', d: 'Configuración → Conexiones' },
+      { t: 'Correo: proveedor, dominio verificado y correo de prueba', d: 'Configuración → Correo', r: 'correo' },
+      { t: 'El diagnóstico de correo dice por qué no llega, si no llega', d: 'Configuración → Correo', r: 'correo' },
+      { t: 'Puesta en marcha: la guía de primeros pasos se va cuando ya no hace falta', d: 'Panel → Inicio' },
+      { t: 'Copia de seguridad: descargarla y volver a subirla', d: 'Configuración → Copias' },
+      { t: 'Papelera: recuperar algo borrado', d: 'Configuración → Copias' },
+    ],
+  },
+  {
+    id: 'seguridad', nombre: 'Seguridad', donde: 'Panel → Seguridad',
+    items: [
+      { t: 'Estado de la cuenta y segundo factor', d: 'Seguridad', r: 'base de datos' },
+      { t: 'Quién hizo qué: el registro de actividad se llena', d: 'Seguridad', r: 'base de datos' },
+      { t: 'Una hermandad no ve ni un dato de otra', d: 'dos cuentas', r: 'base de datos' },
+      { t: 'Un hermano no ve la ficha de otro hermano', d: '/hermano', r: 'base de datos' },
+      { t: 'La suscripción caducada cierra el panel', d: 'Panel', r: 'Stripe' },
+    ],
+  },
+  {
+    id: 'transversal', nombre: 'De todo un poco', donde: 'toda la aplicación',
+    nota: 'Lo que no es de ningún módulo y se nota en todos. Se prueba una vez, al final.',
+    items: [
+      { t: 'En un móvil de 390 px no se sale nada por los lados', d: 'todas las pantallas' },
+      { t: 'Con el teclado se llega a todo y se ve dónde está el foco', d: 'todas las pantallas' },
+      { t: 'En tema oscuro se lee todo', d: 'todas las pantallas' },
+      { t: 'Lo que se imprime (recibo, papeleta, informe, listado) cabe y se lee', d: 'imprimir' },
+      { t: 'Cambiar de pestaña y volver no parpadea ni recarga', d: 'Panel' },
+      { t: 'Con la base de datos caída avisa, y no enseña datos de ejemplo como si fueran suyos', d: 'Panel', r: 'base de datos' },
+      { t: 'Ningún listado se queda vacío por un error: dice que no ha podido leerlo', d: 'Panel' },
+      { t: 'Al recargar, lo guardado sigue ahí', d: 'Panel' },
+    ],
+  },
+];
+
+const CLAVE = 'gobergo-repaso-v1';
+let estado = {};
+try { estado = JSON.parse(localStorage.getItem(CLAVE) || '{}') || {}; } catch (e) { estado = {}; }
+
+function guardar() {
+  try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch (e) { /* sin sitio o en privado: se sigue usando en memoria */ }
+}
+
+const contenido = document.getElementById('contenido');
+const indice = document.getElementById('indice');
+let filtro = 'todo';
+
+function clave(mi, ii) { return mi + ':' + ii; }
+
+function pintar() {
+  contenido.innerHTML = '';
+  indice.innerHTML = '';
+  MODULOS.forEach((mod, mi) => {
+    const sec = document.createElement('section');
+    sec.className = 'modulo';
+    sec.id = 'm-' + mod.id;
+
+    const cab = document.createElement('div');
+    cab.className = 'modulo__cab';
+    const h2 = document.createElement('h2');
+    h2.textContent = mod.nombre;
+    const donde = document.createElement('span');
+    donde.className = 'modulo__donde';
+    donde.textContent = mod.donde;
+    const marcador = document.createElement('span');
+    marcador.className = 'modulo__marcador';
+    marcador.id = 'marcador-' + mod.id;
+    cab.append(h2, donde, marcador);
+    sec.append(cab);
+
+    if (mod.nota) {
+      const nota = document.createElement('p');
+      nota.className = 'modulo__nota';
+      nota.textContent = mod.nota;
+      sec.append(nota);
+    }
+
+    const ul = document.createElement('ul');
+    ul.className = 'lista';
+    mod.items.forEach((it, ii) => {
+      const k = clave(mi, ii);
+      const guardado = estado[k] || {};
+      const li = document.createElement('li');
+      li.className = 'fila';
+      li.dataset.estado = guardado.v || 'pendiente';
+      li.dataset.k = k;
+
+      const estados = document.createElement('div');
+      estados.className = 'estados';
+      [['bien', '✓', 'Va bien'], ['falla', '✗', 'Falla']].forEach(([v, sig, titulo]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.v = v;
+        b.textContent = sig;
+        b.title = titulo;
+        b.setAttribute('aria-label', titulo + ': ' + it.t);
+        b.setAttribute('aria-pressed', String(guardado.v === v));
+        b.addEventListener('click', () => marcar(k, v));
+        estados.append(b);
+      });
+
+      const texto = document.createElement('div');
+      texto.className = 'fila__texto';
+      const p = document.createElement('p');
+      p.textContent = it.t;
+      if (it.r) {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = 'necesita ' + it.r;
+        p.append(chip);
+      }
+      const pista = document.createElement('span');
+      pista.className = 'fila__pista';
+      pista.textContent = it.d;
+      texto.append(p, pista);
+
+      const apunte = document.createElement('textarea');
+      apunte.className = 'apunte';
+      apunte.rows = 2;
+      apunte.placeholder = 'Qué ha pasado exactamente: qué pulsaste, qué esperabas, qué salió.';
+      apunte.value = guardado.n || '';
+      apunte.setAttribute('aria-label', 'Qué falla en: ' + it.t);
+      if (guardado.v !== 'falla') apunte.classList.add('oculta');
+      apunte.addEventListener('input', () => {
+        estado[k] = Object.assign({}, estado[k], { n: apunte.value });
+        guardar();
+      });
+      texto.append(apunte);
+
+      li.append(estados, texto);
+      ul.append(li);
+    });
+    sec.append(ul);
+    contenido.append(sec);
+
+    const a = document.createElement('a');
+    a.href = '#m-' + mod.id;
+    a.textContent = mod.nombre;
+    const cuenta = document.createElement('b');
+    cuenta.id = 'chip-' + mod.id;
+    a.append(cuenta);
+    indice.append(a);
+  });
+  actualizar();
+}
+
+function marcar(k, v) {
+  const actual = (estado[k] || {}).v;
+  const nuevo = actual === v ? null : v;
+  estado[k] = Object.assign({}, estado[k], { v: nuevo });
+  if (!nuevo && !(estado[k].n || '').trim()) delete estado[k];
+  guardar();
+  const li = contenido.querySelector('[data-k="' + k + '"]');
+  if (li) {
+    li.dataset.estado = nuevo || 'pendiente';
+    li.querySelectorAll('.estados button').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.v === nuevo));
+    });
+    const ta = li.querySelector('.apunte');
+    ta.classList.toggle('oculta', nuevo !== 'falla');
+    if (nuevo === 'falla') ta.focus();
+  }
+  actualizar();
+}
+
+function actualizar() {
+  let bien = 0, falla = 0, total = 0;
+  MODULOS.forEach((mod, mi) => {
+    let mBien = 0, mFalla = 0;
+    mod.items.forEach((it, ii) => {
+      const v = (estado[clave(mi, ii)] || {}).v;
+      if (v === 'bien') mBien++;
+      if (v === 'falla') mFalla++;
+    });
+    bien += mBien; falla += mFalla; total += mod.items.length;
+    const marcador = document.getElementById('marcador-' + mod.id);
+    if (marcador) {
+      marcador.textContent = (mBien + mFalla) + '/' + mod.items.length
+        + (mFalla ? '  ·  ' + mFalla + ' falla' + (mFalla > 1 ? 'n' : '') : '');
+      marcador.style.color = mFalla ? 'var(--falla)' : ((mBien === mod.items.length) ? 'var(--bien)' : 'var(--tinta-suave)');
+    }
+    const chip = document.getElementById('chip-' + mod.id);
+    if (chip) chip.textContent = (mBien + mFalla) + '/' + mod.items.length;
+  });
+  document.getElementById('nBien').textContent = bien;
+  document.getElementById('nFalla').textContent = falla;
+  document.getElementById('nResto').textContent = total - bien - falla;
+  document.getElementById('barraBien').style.width = (bien / total * 100) + '%';
+  document.getElementById('barraFalla').style.width = (falla / total * 100) + '%';
+  aplicarFiltro();
+}
+
+function aplicarFiltro() {
+  contenido.querySelectorAll('.modulo').forEach((sec) => {
+    let visibles = 0;
+    sec.querySelectorAll('.fila').forEach((li) => {
+      const v = li.dataset.estado;
+      const cabe = filtro === 'todo'
+        || (filtro === 'pendiente' && v === 'pendiente')
+        || (filtro === 'falla' && v === 'falla');
+      li.classList.toggle('oculta', !cabe);
+      if (cabe) visibles++;
+    });
+    sec.classList.toggle('oculta', visibles === 0);
+  });
+}
+
+document.querySelectorAll('.filtro').forEach((b) => {
+  b.addEventListener('click', () => {
+    filtro = b.dataset.f;
+    document.querySelectorAll('.filtro').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+    aplicarFiltro();
+  });
+});
+
+function decir(texto) {
+  const a = document.createElement('div');
+  a.className = 'aviso';
+  a.setAttribute('role', 'status');
+  a.textContent = texto;
+  document.body.append(a);
+  setTimeout(() => a.remove(), 2600);
+}
+
+document.getElementById('copiar').addEventListener('click', () => {
+  const lineas = [];
+  MODULOS.forEach((mod, mi) => {
+    const suyas = [];
+    mod.items.forEach((it, ii) => {
+      const g = estado[clave(mi, ii)] || {};
+      if (g.v !== 'falla') return;
+      suyas.push('  · ' + it.t + ' (' + it.d + ')' + ((g.n || '').trim() ? '\n      ' + g.n.trim() : ''));
+    });
+    if (suyas.length) lineas.push(mod.nombre.toUpperCase() + '\n' + suyas.join('\n'));
+  });
+  if (!lineas.length) { decir('No has marcado nada como fallo.'); return; }
+  const texto = 'LO QUE FALLA EN GOBERGO\n\n' + lineas.join('\n\n');
+  navigator.clipboard.writeText(texto)
+    .then(() => decir('Copiado: pégalo donde quieras.'))
+    .catch(() => decir('No se ha podido copiar en este navegador.'));
+});
+
+document.getElementById('limpiar').addEventListener('click', () => {
+  if (!confirm('Se borra todo lo que has marcado y lo que has escrito. ¿Seguimos?')) return;
+  estado = {};
+  guardar();
+  pintar();
+  decir('Listo, otra vez en blanco.');
+});
+
+pintar();
+</script>
