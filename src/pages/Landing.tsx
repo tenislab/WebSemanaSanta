@@ -133,36 +133,6 @@ const ANIO_COFRADE = [
  * Las tres cosas por las que una hermandad se acerca a esto. No son «los
  * módulos»: son lo que se dice cuando alguien pregunta para qué sirve.
  */
-const CLAVES = [
-  {
-    titulo: 'Censo de hermanos',
-    sub: 'siempre al día',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-        <rect x="3.5" y="4" width="17" height="16" rx="2" /><path d="M3.5 9h17M8 4v16" />
-      </svg>
-    ),
-  },
-  {
-    titulo: 'Cuotas y papeletas',
-    sub: 'cobradas sin perseguir a nadie',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-        <rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M2.5 10h19" /><path d="M6 14.5h4" />
-      </svg>
-    ),
-  },
-  {
-    titulo: 'Área propia',
-    sub: 'para cada hermano',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-        <circle cx="12" cy="8" r="3.4" /><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" />
-      </svg>
-    ),
-  },
-]
-
 const AUDIENCE = [
   {
     n: '01',
@@ -242,32 +212,46 @@ export default function Landing() {
         <div className="wrap hero-grid">
           <div className="hero-copy">
             <p className="eyebrow">El software para hermandades y cofradías</p>
-            {/* En VERSALES y en dos líneas partidas a mano. La cursiva de antes
-                bajaba el tono justo en la frase que tiene que sonar rotunda, y
-                dejar que el navegador parta por donde quiera deja «desde un»
-                colgando al final de la primera línea. */}
+            {/* En VERSALES, y el reparto en renglones lo hace `text-wrap:
+                balance`, no un salto a mano. Con el titular anterior, más
+                corto, el salto iba puesto aquí; este es de 55 caracteres y
+                cualquier salto fijo se descuadra en cuanto cambia el ancho de
+                la ventana —a 1440 px salían tres renglones, uno de ellos de
+                dos palabras—. La cursiva de antes bajaba el tono justo en la
+                frase que tiene que sonar rotunda. */}
             <h1>
-              Gestiona tu hermandad<br />desde un solo lugar
+              Toda la vida de tu hermandad, organizada y bajo control
             </h1>
             <p className="lede">
-              Hermanos, cuotas, papeletas de sitio, cortejo, tesorería y comunicaciones. Todo lo
-              que antes vivía en carpetas y hojas de cálculo, ordenado en una única plataforma.
+              Menos papeles, más hermandad. Gestiona el día a día sin complicaciones, ahorra
+              tiempo a la Junta y crea un vínculo más fuerte con los hermanos para seguir sumando.
             </p>
             {/*
-              LAS TRES COSAS, en tarjetas y no en una lista de tres rayitas.
-              Son lo que decide si una hermandad sigue leyendo, y una lista de
-              puntos se salta con la vista.
-            */}
-            <ul className="hero-claves">
-              {CLAVES.map((c) => (
-                <li className="hero-clave" key={c.titulo}>
-                  <span className="hero-clave__ic">{c.icon}</span>
-                  <b>{c.titulo}</b>
-                  <span>{c.sub}</span>
+              TODOS LOS MÓDULOS, Y NO TRES.
 
-                </li>
-              ))}
+              Aquí había tres tarjetas —censo, cuotas, área del hermano—, y tres
+              tarjetas en la portada no se leen como «tres ejemplos»: se leen
+              como «esto es lo que hace». Una hermandad que necesita llevar el
+              cortejo o la priostía cerraba la página creyendo que esto no le
+              servía.
+
+              Y ponerlos los nueve en tarjeta tampoco: el hero es lo que decide
+              si alguien sigue bajando, y nueve cajas tapan el titular y los
+              botones. Así que van todos, pero en una tira callada. Se lee «hay
+              muchas cosas» de un vistazo, sin quitarle sitio a nada, y quien
+              quiera el detalle lo tiene una pantalla más abajo.
+
+              SALEN DE `FEATURES`, que es la lista de verdad de los módulos. Una
+              copia a mano aquí se quedaría vieja el día que se añada uno, y
+              entonces la portada prometería de menos sin que nadie se entere.
+            */}
+            <ul className="hero-modulos" aria-label="Módulos incluidos">
+              {FEATURES.map((f) => <li key={f.title}>{f.title}</li>)}
             </ul>
+            <p className="hero-modulos__pie">
+              Todo incluido, sin módulos aparte ni precio por función.{' '}
+              <a href="#funciones">Ver qué hace cada uno</a>
+            </p>
             <div className="hero-actions">
               <Link className="btn btn-primary btn-glass-dynamic" to="/registro">
                 <span>Crear mi hermandad</span>
@@ -418,7 +402,7 @@ export default function Landing() {
         <div className="wrap">
           <div className="section-head">
             <p className="eyebrow">Un módulo para cada tarea</p>
-            <h2>Toda la vida de la hermandad, ordenada</h2>
+            <h2>Qué hace cada módulo</h2>
             <p className="section-lead">
               Desde el censo hasta la estación de penitencia. Cada área tiene su sitio, y todo
               conecta entre sí.

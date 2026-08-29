@@ -360,6 +360,40 @@ span.logo-mark img { width: 100%; height: 100%; }
 .landing-bg .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.36; will-change: transform; }
 
 /*
+ * EL DAMASCO DEL FONDO.
+ *
+ * Encima de las luces, sin tocarlas: el granate y los focos se quedan como
+ * están y esto solo les pone la trama de un tejido de altar. Muy claro a
+ * propósito —se tiene que notar sin llegar a verse—; en cuanto sube, compite
+ * con el titular, que es lo único que hay que leer ahí.
+ *
+ * VA DIBUJADO, no es una foto. Por lo mismo que la cruz de aquí al lado: esta
+ * es la primera página que carga cualquiera, y un damasco en JPG son cientos
+ * de kilobytes y una descarga más. Esto es un SVG de medio kilobyte metido en
+ * el propio CSS: ni archivo que servir, ni petición que esperar.
+ *
+ * El dibujo es la retícula ojival del damasco —las ojivas que se cruzan— con
+ * una flor de cuatro pétalos en el centro de cada una. El azulejo está hecho
+ * para repetirse sin junta: las curvas entran y salen por el medio de cada
+ * lado, así que la de un azulejo continúa la del de al lado.
+ *
+ * `mix-blend-mode: soft-light` en vez de opacidad a secas: así la trama toma
+ * el color de lo que tiene debajo —más cálida sobre el foco dorado, más
+ * apagada en las esquinas— en lugar de quedarse como una malla gris pegada
+ * por encima de todo.
+ */
+.landing-bg::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23e8d3a8' stroke-width='1.5'%3E%3Cpath d='M0,90 Q45,0 90,0 Q135,0 180,90'/%3E%3Cpath d='M0,90 Q45,180 90,180 Q135,180 180,90'/%3E%3Cpath d='M0,90 Q30,45 90,42 Q150,45 180,90' stroke-width='0.9' opacity='0.6'/%3E%3Cpath d='M0,90 Q30,135 90,138 Q150,135 180,90' stroke-width='0.9' opacity='0.6'/%3E%3C/g%3E%3Cg fill='none' stroke='%23e8d3a8' stroke-width='1.2'%3E%3Ccircle cx='90' cy='79' r='9.5'/%3E%3Ccircle cx='90' cy='101' r='9.5'/%3E%3Ccircle cx='79' cy='90' r='9.5'/%3E%3Ccircle cx='101' cy='90' r='9.5'/%3E%3C/g%3E%3Cg fill='%23e8d3a8'%3E%3Ccircle cx='90' cy='90' r='3.4'/%3E%3Ccircle cx='90' cy='0' r='2.6'/%3E%3Ccircle cx='90' cy='180' r='2.6'/%3E%3Ccircle cx='0' cy='90' r='2.6'/%3E%3Ccircle cx='180' cy='90' r='2.6'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 190px 190px;
+  opacity: 0.16;
+  mix-blend-mode: soft-light;
+}
+/* En el móvil se quita: sobre 390 px de ancho la trama se apelmaza y lo único
+   que hace es restarle contraste al titular, que ahí ya va justo. */
+@media (max-width: 720px) { .landing-bg::before { display: none; } }
+
+/*
  * LA CRUZ DEL FONDO.
  *
  * En la maqueta hay una cruz de guía detrás del panel de la derecha, muy
@@ -488,56 +522,68 @@ span.logo-mark img { width: 100%; height: 100%; }
    baja con la segunda línea en cursiva bajaba el tono justo ahí. El
    interletrado se abre un pelo porque las versales juntas se emplastan. */
 .hero-copy h1 {
-  /* El tamaño está atado a que «Gestiona tu hermandad» quepa EN UNA LÍNEA: el
-     salto de línea lo pone el texto a mano, y si el tipo es mayor el navegador
-     mete otro por su cuenta y el titular sale en tres renglones descuadrados. */
-  font-size: clamp(1.9rem, 3.45vw, 2.95rem); line-height: 1.16; margin-top: 1.1rem;
+  /* El salto de línea lo pone el texto a mano, por la coma. El tamaño está
+     atado a que «TODA LA VIDA DE TU HERMANDAD,» quepa en su renglón: si el
+     tipo es mayor, el navegador mete otro salto por su cuenta y el titular
+     sale en tres renglones descuadrados.
+
+     Ya NO lleva `text-wrap: nowrap`. Lo llevaba con el titular anterior, que
+     era más corto; con este se salía de la caja en cuanto la ventana bajaba de
+     1100 px, y al salirse arrastraba la página entera a lo ancho. */
+  font-size: clamp(1.7rem, 2.5vw, 2.2rem); line-height: 1.18; margin-top: 1.1rem;
   color: #f6efe4; text-transform: uppercase; letter-spacing: 0.01em; font-weight: 400;
-  text-wrap: nowrap;
+  /* Que reparta él los renglones y los deje parejos. Un salto a mano se
+     descuadra en cuanto cambia el ancho: con esta frase, de 55 caracteres,
+     salían tres renglones y el último de dos palabras. */
+  text-wrap: balance;
 }
 .hero-copy h1 em { font-style: normal; color: #e7d3a6; }
-.lede { margin-top: 1.3rem; max-width: 48ch; color: rgba(245, 237, 230, 0.7); font-size: 1.08rem; }
+/* El gris del cuerpo, un punto más claro que antes: a 0.7 sobre el granate
+   se leía apagado, y es el texto que explica de qué va todo. */
+.lede { margin-top: 1.3rem; max-width: 52ch; color: rgba(245, 237, 230, 0.84); font-size: 1.08rem; }
 /* -------------------------------------------------------------------------
-   Las tres claves del hero.
+   LA TIRA DE MÓDULOS DEL HERO.
 
-   Antes eran tres líneas con una palomita delante. Una lista de tres puntos se
-   salta con la vista: en tarjeta se leen, que es lo que decide si la hermandad
-   sigue bajando.
+   Aquí había tres tarjetas. Tres tarjetas en la portada no se leen como «tres
+   ejemplos», se leen como «esto es lo que hace»: la hermandad que necesitaba
+   llevar el cortejo o la priostía cerraba la página creyendo que esto no le
+   servía. Y los nueve en tarjeta tapaban el titular y los botones, que es lo
+   que decide si alguien sigue bajando.
+
+   Así que están los nueve, pero callados: se lee «hay muchas cosas» de un
+   vistazo y el detalle está una pantalla más abajo.
    ------------------------------------------------------------------------- */
-.hero-claves {
-  list-style: none; padding: 0; margin: 2rem 0 0;
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem;
+.hero-modulos {
+  list-style: none; padding: 0; margin: 1.7rem 0 0;
+  display: flex; flex-wrap: wrap; gap: 0.4rem 0.5rem;
 }
-.hero-clave {
-  display: flex; flex-direction: column; gap: 0.3rem;
-  padding: 0.9rem 0.95rem; border-radius: 12px;
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+.hero-modulos li {
+  font-size: 0.79rem; line-height: 1.2;
+  padding: 0.42rem 0.72rem; border-radius: 999px;
+  color: rgba(245, 237, 230, 0.86);
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(222, 196, 140, 0.22);
 }
-.hero-clave__ic { width: 20px; height: 20px; color: #d6bc8a; margin-bottom: 0.15rem; }
-.hero-clave__ic svg { width: 100%; height: 100%; }
-.hero-clave b {
-  font-size: 0.82rem; color: #f3ede2; line-height: 1.3;
-  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+.hero-modulos__pie {
+  margin-top: 0.9rem; font-size: 0.85rem; color: rgba(245, 237, 230, 0.72);
 }
-.hero-clave span:last-child { font-size: 0.79rem; color: rgba(245,237,230,0.62); line-height: 1.35; }
-@media (max-width: 720px) { .hero-claves { grid-template-columns: minmax(0, 1fr); } }
+.hero-modulos__pie a { color: #e0c68f; text-decoration: underline; text-underline-offset: 3px; }
+.hero-modulos__pie a:hover { color: #f0dcb0; }
 
 /*
- * EL TITULAR, EN EL MÓVIL: QUE PUEDA PARTIRSE.
+ * EL TITULAR, EN EL MÓVIL: QUE SE REPARTA SOLO.
  *
- * Arriba lleva `text-wrap: nowrap` y tiene su motivo: el salto de línea de
- * «Gestiona tu hermandad / desde un solo lugar» está puesto a mano, y si el
- * navegador mete otro por su cuenta el titular sale en tres renglones
- * descuadrados.
+ * En una pantalla de 390 px, «TODA LA VIDA DE TU HERMANDAD,» en versales no
+ * cabe en un renglón de ninguna manera. El salto que trae el texto a mano
+ * —por la coma— deja de servir ahí, así que se le deja partir por donde
+ * quiera y con `balance`, para que los renglones queden parejos en vez de uno
+ * largo y otro de dos palabras.
  *
- * Pero en una pantalla de 390 px «GESTIONA TU HERMANDAD» en versales no cabe
- * de ninguna manera, y con `nowrap` no se encoge: se sale. Y al salirse
- * arrastraba la PÁGINA ENTERA 39 px a lo ancho, así que la portada —lo primero
- * que ve una hermandad que entra desde el teléfono— se movía de lado al
- * tocarla, con una franja vacía a la derecha.
- *
- * Aquí se le deja partir, y con `balance` para que las dos líneas queden
- * parejas en vez de una larga y una de dos palabras.
+ * Esto viene de un fallo de verdad, y por eso el tamaño de arriba se quedó
+ * corto a propósito: con el titular anterior había un `text-wrap: nowrap` que
+ * no dejaba encogerlo, y en el móvil se salía de la caja arrastrando la PÁGINA
+ * ENTERA 39 px a lo ancho. La portada —lo primero que ve una hermandad que
+ * entra desde el teléfono— se movía de lado al tocarla.
  */
 @media (max-width: 720px) {
   .hero-copy h1 {
@@ -547,7 +593,7 @@ span.logo-mark img { width: 100%; height: 100%; }
 }
 
 .bullets { list-style: none; padding: 0; margin: 1.8rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
-.bullets li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; color: rgba(245, 237, 230, 0.9); }
+.bullets li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.95rem; color: rgba(245, 237, 230, 0.92); }
 .bullets svg { width: 18px; height: 18px; color: #d6bc8a; flex: none; }
 .hero-actions { display: flex; gap: 0.9rem; margin-top: 2.1rem; flex-wrap: wrap; }
 .hero-actions .btn { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.82rem; padding: 0.95rem 1.6rem; }
@@ -4953,7 +4999,18 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
    ========================================================================= */
 @media (max-width: 900px) {
   .hero-grid { grid-template-columns: 1fr; }
-  .hero-visual { order: -1; }
+  /*
+   * EN EL MÓVIL, PRIMERO LO QUE SE LEE Y DESPUÉS EL PANEL.
+   *
+   * Aquí el panel iba con `order: -1`, o sea el primero. En una pantalla de
+   * 390 px eso significa que lo primero que ve quien entra son unas cifras
+   * —«812 papeletas emitidas»— de una hermandad que no es la suya y sin haber
+   * leído todavía de qué va esto. El titular, que es el mensaje, quedaba por
+   * debajo del doblez.
+   *
+   * El panel sigue ahí y sigue haciendo su trabajo: enseñar de qué se habla
+   * sin pedirle a nadie que se registre. Solo que después de decirlo.
+   */
   .feature-grid { grid-template-columns: 1fr 1fr; }
   .audience-grid { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
