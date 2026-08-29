@@ -1781,6 +1781,26 @@ function CorreoCard() {
           Cuando le den a «responder», la respuesta irá aquí. Vacío = a la dirección desde la que se
           envía, que puede no leer nadie.
         </p>
+        {/*
+         * ESTE AVISO SALE CARO SI NO ESTÁ.
+         *
+         * El proveedor de correo no acepta este campo a medias: si no tiene
+         * forma de dirección, RECHAZA EL ENVÍO ENTERO. No manda el correo sin
+         * «responder a»: no manda nada. Un «secretaria» sin dominio aquí
+         * dejaba a la hermandad sin poder mandar ni una convocatoria, con un
+         * error que hablaba del proveedor y no de este campo.
+         *
+         * La función ya se protege sola —se va sin «responder a» antes que no
+         * salir—, pero eso pierde las respuestas de los hermanos en silencio.
+         * Así que aquí se dice, que es donde se arregla.
+         */}
+        {ajustes.responderA.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(ajustes.responderA.trim()) && (
+          <p className="form-hint form-hint--error">
+            Esto no tiene forma de dirección de correo. Los envíos saldrán igual, pero las
+            respuestas de los hermanos no llegarán aquí: irán a la dirección desde la que se
+            envía. Escríbela entera, como <code>secretaria@hermandad.es</code>, o déjalo vacío.
+          </p>
+        )}
       </div>
 
       <div className="form-row">

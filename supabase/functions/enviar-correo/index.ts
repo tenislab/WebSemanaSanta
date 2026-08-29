@@ -36,6 +36,47 @@ function soloLaDireccion(remitente: string): string {
 }
 
 /**
+ * Una dirección de correo con la forma que pide Resend.
+ *
+ * La misma regla que se aplica a los destinatarios, con nombre, porque hace
+ * falta en tres sitios y el tercero llegó tarde y caro (ver `replyToValido`).
+ */
+const ES_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+function correoValido(d: string): boolean {
+  return ES_CORREO.test(d.trim())
+}
+
+/**
+ * EL «RESPONDER A», VALIDADO ANTES DE SALIR — Y POR QUÉ ESTO ERA GRAVE.
+ *
+ * A `reply_to` iba, sin mirarlo, lo que hubiera en «Configuración → Correo →
+ * Responder a», y si eso estaba vacío, el correo de la ficha de la hermandad.
+ * Ninguno de los dos se comprobaba en ningún momento.
+ *
+ * Y Resend no perdona ese campo: si no tiene forma de dirección, RECHAZA EL
+ * ENVÍO ENTERO con un 422. No manda el correo sin «responder a» — no manda
+ * nada. Así que un espacio de más, un «secretaria» sin dominio o el nombre de
+ * la hermandad escrito ahí por confusión dejaban a la hermandad SIN MANDAR UN
+ * SOLO CORREO, y el error que se veía hablaba del proveedor, que no tenía
+ * ninguna culpa. Nada apuntaba al campo que lo causaba.
+ *
+ * Ahora, si no vale, se va sin él: las respuestas irán al remitente en vez de
+ * a la secretaría, que es un incordio pequeño y reparable. Quedarse sin mandar
+ * la convocatoria de papeletas no lo es.
+ */
+function replyToValido(...candidatos: (string | undefined)[]): string | null {
+  for (const c of candidatos) {
+    const d = (c ?? '').trim()
+    if (!d) continue
+    // La primera que haya puesta manda, valga o no: si la hermandad configuró
+    // una dirección mala, caer a la siguiente mandaría las respuestas a un
+    // sitio que nadie ha elegido, y en silencio.
+    return correoValido(d) ? d : null
+  }
+  return null
+}
+
+/**
  * EL REMITENTE DE PRUEBA DE RESEND, Y POR QUÉ HAY QUE DELATARLO.
  *
  * Si no se pone `CORREO_REMITENTE`, se usa `onboarding@resend.dev`. Y eso NO
@@ -252,7 +293,7 @@ async function mandarConfirmacion(
     return respuesta({ error: 'El servidor no está configurado para confirmar suscripciones.' }, 503)
   }
   const email = (datos.email ?? '').trim()
-  if (!datos.hermandadId || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+  if (!datos.hermandadId || !correoValido(email)) {
     return respuesta({ error: 'Faltan datos para mandar la confirmación.' }, 400)
   }
 
@@ -639,13 +680,26 @@ Deno.serve(async (req: Request) => {
   const cuerpo = cuerpoCrudo as
     { para?: string[]; asunto?: string; texto?: string; html?: string; responderA?: string }
 
-  const para = (cuerpo.para ?? []).map((d) => d.trim()).filter((d) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d))
+  const para = (cuerpo.para ?? []).map((d) => d.trim()).filter((d) => correoValido(d))
   if (para.length === 0) return respuesta({ error: 'No hay ninguna dirección válida a la que enviar.' }, 400)
   if (para.length > MAXIMO_DESTINATARIOS) {
     return respuesta({ error: `Como mucho ${MAXIMO_DESTINATARIOS} direcciones por envío.` }, 400)
   }
   if (!cuerpo.asunto?.trim()) return respuesta({ error: 'Falta el asunto.' }, 400)
   if (!cuerpo.texto?.trim() && !cuerpo.html?.trim()) return respuesta({ error: 'El correo está vacío.' }, 400)
+
+  const responderA = replyToValido(cuerpo.responderA, firma.responderA)
+  const responderAPuesto = (cuerpo.responderA ?? firma.responderA ?? '').trim()
+  if (responderAPuesto && !responderA) {
+    // Se apunta, porque si no el arreglo tapa el problema: las respuestas de
+    // los hermanos dejan de llegar a la secretaría y nadie lo sabe. Sale en
+    // Supabase → Edge Functions → enviar-correo → Invocations.
+    console.error(
+      'El «responder a» no tiene forma de dirección de correo y se ha ido sin él:',
+      JSON.stringify(responderAPuesto),
+      '· Arréglalo en Configuración → Correo, o en el correo de la ficha de la hermandad.',
+    )
+  }
 
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -664,9 +718,10 @@ Deno.serve(async (req: Request) => {
       // hermandad haya puesto en Configuración → Correo; si no, el correo de su
       // ficha. Sin esto, las respuestas se perderían en un buzón que no lee
       // nadie, y el hermano creería que ha contestado a su secretaría.
-      ...((cuerpo.responderA ?? firma.responderA)
-        ? { reply_to: cuerpo.responderA || firma.responderA }
-        : {}),
+      //
+      // Va comprobado: si no tiene forma de dirección, Resend rechaza el envío
+      // ENTERO con un 422 y no sale ni un correo. Ver `replyToValido`.
+      ...(responderA ? { reply_to: responderA } : {}),
     }),
   })
 

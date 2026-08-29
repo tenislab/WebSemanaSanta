@@ -87,6 +87,7 @@ export const PIEZAS_ACTUALIZACION = [
   ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
   ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
   ['campanas-y-proyectos.sql', 'Campañas de recaudación con su barra, y proyectos a largo plazo'],
+  ['campana-con-partida.sql', 'Enlazar una campaña a sus partidas: la barra se llena sola'],
   ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
   ['pago-tarjeta.sql', 'Que el hermano pague su cuota o su papeleta con tarjeta'],
 ]

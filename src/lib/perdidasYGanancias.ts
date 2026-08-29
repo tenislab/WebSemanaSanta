@@ -69,6 +69,44 @@ export function anioDelMovimiento(fecha: string): number {
   return Number(f.slice(-4)) || 0
 }
 
+/**
+ * Los meses como los escribe el navegador en español, por su prefijo de tres
+ * letras. Ninguno es prefijo de otro, así que basta con eso — y así entran
+ * también «sept» (que es como sale septiembre en los navegadores de ahora,
+ * con cuatro letras) y el nombre completo si alguna vez llega escrito entero.
+ */
+const MESES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/**
+ * LA FECHA COMPLETA DE UN MOVIMIENTO, EN ISO, LEYENDO LOS DOS FORMATOS.
+ *
+ * El hermano mayor de `anioDelMovimiento`, y por el mismo motivo: la columna
+ * es texto libre y conviven «05 ene 2026» (lo que escribe la secretaría desde
+ * Tesorería) y «2026-01-05» (lo que escriben las funciones del servidor al
+ * cobrar una venta o un pago con tarjeta).
+ *
+ * Con el año bastaba para los informes anuales. Para saber si un apunte cae
+ * DENTRO DE LAS FECHAS DE UNA CAMPAÑA hace falta el día, así que hace falta
+ * esto. Devuelve ISO justamente porque dos fechas ISO se comparan como dos
+ * textos y sale bien, sin construir ningún `Date` ni pasar por zonas horarias
+ * —que es donde un apunte del día 1 se convierte en del día 31 del mes
+ * anterior—.
+ *
+ * `null` cuando no hay forma de leerla. Quien llama decide, y en la campaña se
+ * decide NO contarla: es mejor que una barra pública se quede corta a que
+ * cuente dinero que a lo mejor no es de esa campaña.
+ */
+export function fechaIsoDelMovimiento(fecha: string): string | null {
+  const f = (fecha ?? '').trim()
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(f)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+  const es = /^(\d{1,2})\s+([a-záéíóúñ]+)\.?\s+(\d{4})$/i.exec(f)
+  if (!es) return null
+  const mes = MESES_ES.findIndex((m) => es[2].toLowerCase().startsWith(m))
+  if (mes < 0) return null
+  return `${es[3]}-${String(mes + 1).padStart(2, '0')}-${es[1].padStart(2, '0')}`
+}
+
 const cent = (n: number) => (Number.isFinite(n) ? Math.round(n * 100) : 0)
 /** `-0` se imprime «-0,00 €» y asusta a quien lo ve. Y `-0 === 0`. */
 const sinCeroNegativo = (n: number) => (n === 0 ? 0 : n)

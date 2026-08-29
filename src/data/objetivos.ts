@@ -44,6 +44,7 @@ export const RECAUDACIONES_INICIALES: Recaudacion[] = [
     estado: 'abierta',
     enLaWeb: true,
     creadaEn: '2026-01-07T10:00:00.000Z',
+    partidas: [],
   },
   {
     id: CAMPANA_CARIDAD,
@@ -57,6 +58,7 @@ export const RECAUDACIONES_INICIALES: Recaudacion[] = [
     estado: 'abierta',
     enLaWeb: true,
     creadaEn: '2026-01-01T09:00:00.000Z',
+    partidas: [],
   },
   {
     id: CAMPANA_TEJADO,
@@ -70,6 +72,7 @@ export const RECAUDACIONES_INICIALES: Recaudacion[] = [
     estado: 'cerrada',
     enLaWeb: false,
     creadaEn: '2025-03-01T09:00:00.000Z',
+    partidas: [],
   },
 ]
 

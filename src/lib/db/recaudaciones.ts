@@ -20,6 +20,7 @@ export function recaudacionToRow(r: Recaudacion): Record<string, unknown> {
     fecha_fin: r.fechaFin ?? null,
     estado: r.estado,
     en_la_web: r.enLaWeb,
+    partidas: r.partidas ?? [],
   }
 }
 
@@ -34,5 +35,8 @@ export function rowToRecaudacion(row: Record<string, unknown>): Recaudacion {
     estado: (row.estado as Recaudacion['estado']) ?? 'abierta',
     enLaWeb: !!row.en_la_web,
     creadaEn: (row.creada_en as string) ?? '',
+    // Una base que todavía no tiene la columna devuelve `undefined`, y una
+    // campaña sin partidas enlazadas es un caso normal, no un hueco.
+    partidas: Array.isArray(row.partidas) ? (row.partidas as string[]) : [],
   }
 }

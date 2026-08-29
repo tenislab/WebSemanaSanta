@@ -50,6 +50,7 @@ import { CLAVES_DATOS } from './persistencia'
 import { recaudacionToRow, rowToRecaudacion } from './db/recaudaciones'
 import type { Movimiento } from '../data/movimientos'
 import { RECAUDACIONES_INICIALES } from '../data/objetivos'
+import { fechaIsoDelMovimiento } from './perdidasYGanancias'
 
 export type EstadoRecaudacion = 'abierta' | 'cerrada'
 
@@ -70,6 +71,20 @@ export interface Recaudacion {
   /** Si sale en la web pública con su barra, para que done gente de fuera. */
   enLaWeb: boolean
   creadaEn: string
+  /**
+   * PARTIDAS DE TESORERÍA ENLAZADAS. Vacío = ninguna, y la campaña funciona
+   * como siempre (solo suma lo que se apunta desde su propia pantalla).
+   *
+   * Pedido así: «cuando se crea una campaña debe de poder ir asociada una
+   * cuenta de gasto o ingreso a ella; entonces cuando se anote un ingreso o
+   * gasto con razón a esa partida se rellena parte de la barra
+   * automáticamente».
+   *
+   * Son varias y no una porque una campaña de verdad tiene las dos caras: los
+   * donativos que entran y los gastos que genera —la imprenta de las huchas,
+   * el transporte—. Con una sola habría que elegir cuál de las dos se cuenta.
+   */
+  partidas: string[]
 }
 
 /** La marca que llevan en Tesorería los ingresos de una campaña. */
@@ -77,9 +92,55 @@ export function origenDeRecaudacion(recaudacionId: string, aportacionId: string)
   return `campana:${recaudacionId}:${aportacionId}`
 }
 
-/** ¿Este apunte es de esta campaña? */
+/** ¿Este apunte lleva la marca de esta campaña? */
 export function esDeLaRecaudacion(m: Pick<Movimiento, 'origen'>, recaudacionId: string): boolean {
   return (m.origen ?? '').startsWith(`campana:${recaudacionId}:`)
+}
+
+/**
+ * ¿CAE ESTE APUNTE DENTRO DE LAS FECHAS DE LA CAMPAÑA?
+ *
+ * Esto es lo que hace que enlazar una partida sea seguro. Sin la ventana de
+ * fechas, abrir hoy una campaña enlazada a «Donativos, Ofrendas y Cepillos»
+ * enseñaría de golpe TODOS los donativos de la historia de la hermandad como
+ * si fueran de la campaña. La barra saldría llena el primer día.
+ *
+ * Se comparan textos ISO, que ordenan igual que las fechas. Nada de `Date`:
+ * ahí es donde el apunte del día 1 se vuelve del 31 del mes anterior según la
+ * zona horaria del ordenador que lo mire.
+ */
+export function dentroDeLasFechas(fecha: string, r: Pick<Recaudacion, 'fechaInicio' | 'fechaFin'>): boolean {
+  const f = fechaIsoDelMovimiento(fecha)
+  // Sin fecha legible no se cuenta: más vale una barra corta que una barra
+  // que enseña en la web dinero que a lo mejor no es de esta campaña.
+  if (!f) return false
+  if (r.fechaInicio && f < r.fechaInicio) return false
+  if (r.fechaFin && f > r.fechaFin) return false
+  return true
+}
+
+/**
+ * ¿CUENTA ESTE APUNTE PARA ESTA CAMPAÑA? Por marca o por partida enlazada.
+ *
+ * Tres reglas, y el orden importa:
+ *
+ *   1. LA MARCA MANDA. Lo que se apuntó desde la propia campaña cuenta
+ *      siempre, esté en la partida que esté y sea cual sea su fecha — si
+ *      alguien lo apuntó ahí a mano, sabía lo que hacía.
+ *
+ *   2. UN APUNTE MARCADO PARA OTRA CAMPAÑA NO LO ABSORBE LA PARTIDA DE ESTA.
+ *      Si no, un donativo del palio contaría también en la del tejado por
+ *      compartir partida, y la hermandad tendría el mismo euro llenando dos
+ *      barras. Con dos campañas abiertas a la vez —que es lo normal— eso pasa
+ *      el primer día.
+ *
+ *   3. Y POR PARTIDA, SOLO DENTRO DE LAS FECHAS. Ver `dentroDeLasFechas`.
+ */
+export function cuentaParaLaRecaudacion(m: Movimiento, r: Recaudacion): boolean {
+  if (esDeLaRecaudacion(m, r.id)) return true
+  if (!r.partidas?.length || !r.partidas.includes(m.categoria)) return false
+  if ((m.origen ?? '').startsWith('campana:')) return false
+  return dentroDeLasFechas(m.fecha, r)
 }
 
 /**
@@ -93,11 +154,11 @@ export function esDeLaRecaudacion(m: Pick<Movimiento, 'origen'>, recaudacionId: 
  * lo disponible es mentir sobre cuánto falta: se compra el paso con el dinero
  * que queda, no con el que pasó por caja.
  */
-export function loRecaudado(movimientos: readonly Movimiento[], recaudacionId: string): number {
+export function loRecaudado(movimientos: readonly Movimiento[], r: Recaudacion): number {
   const cent = (n: number) => (Number.isFinite(n) ? Math.round(n * 100) : 0)
   let total = 0
   for (const m of movimientos) {
-    if (!esDeLaRecaudacion(m, recaudacionId)) continue
+    if (!cuentaParaLaRecaudacion(m, r)) continue
     total += m.tipo === 'Ingreso' ? cent(m.importe) : -cent(m.importe)
   }
   // `-0` se imprime «-0,00 €», que asusta al que lo ve. Y `-0 === 0`.
@@ -105,8 +166,22 @@ export function loRecaudado(movimientos: readonly Movimiento[], recaudacionId: s
 }
 
 /** Cuántas aportaciones lleva. Sirve para decir «de 34 personas», que motiva más que el euro. */
-export function cuantasAportaciones(movimientos: readonly Movimiento[], recaudacionId: string): number {
-  return movimientos.filter((m) => esDeLaRecaudacion(m, recaudacionId) && m.tipo === 'Ingreso').length
+export function cuantasAportaciones(movimientos: readonly Movimiento[], r: Recaudacion): number {
+  return movimientos.filter((m) => cuentaParaLaRecaudacion(m, r) && m.tipo === 'Ingreso').length
+}
+
+/**
+ * Los apuntes de la campaña, para poder enseñarlos: de dónde sale la cifra.
+ *
+ * Con partidas enlazadas la barra se mueve sola, y una barra que se mueve sola
+ * y no deja ver qué la movió es exactamente lo que hace desconfiar de un
+ * número. Que se pueda abrir y mirar.
+ */
+export function apuntesDeLaRecaudacion(
+  movimientos: readonly Movimiento[],
+  r: Recaudacion,
+): Movimiento[] {
+  return movimientos.filter((m) => cuentaParaLaRecaudacion(m, r))
 }
 
 /**

@@ -115,4 +115,88 @@ export default async function ({ cargar, caso }) {
   // «no llega» conviven, y hay que decirlo antes de que alguien se pase la
   // tarde mirando la carpeta de spam.
   caso('y también al mandar la prueba', true, /if \(r\.ok\) void mirarQueFalta\(\)/.test(cfg))
+
+  await elResponderAMalEscrito({ caso })
+}
+
+/**
+ * Y LA SEGUNDA FORMA DE NO MANDAR NADA: EL «RESPONDER A» MAL ESCRITO.
+ *
+ * De la misma hermandad, semanas después, y con la misma pinta desde fuera:
+ * no sale ningún correo. Pero esta vez SÍ había error, y encima uno que
+ * apuntaba al sitio equivocado:
+ *
+ *     422 validation_error · Invalid `reply_to` field.
+ *
+ * A `reply_to` iba, sin comprobarlo, lo que hubiera en «Configuración →
+ * Correo → A dónde contestan los hermanos»; y si estaba vacío, el correo de
+ * la ficha de la hermandad. Ninguno de los dos se miraba nunca.
+ *
+ * Y Resend no acepta ese campo a medias: si no tiene forma de dirección
+ * RECHAZA EL ENVÍO ENTERO. No manda el correo sin «responder a» — no manda
+ * nada. Así que un «secretaria» sin dominio, o el nombre de la hermandad
+ * escrito ahí por confusión, dejaba a la hermandad sin poder mandar una
+ * convocatoria de papeletas, con un error que hablaba del proveedor.
+ *
+ * La regla: el correo SALE SIEMPRE. Perder el «responder a» es un incordio
+ * pequeño; perder la convocatoria, no.
+ */
+async function elResponderAMalEscrito({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const fn = await readFile('supabase/functions/enviar-correo/index.ts', 'utf8')
+
+  /*
+   * Se ejecuta la función de verdad, no se mira si el texto está: una prueba
+   * que solo busca el nombre se queda verde el día que alguien invierta la
+   * condición. Se le quitan los tipos para poder correrla en Node; si eso
+   * dejara de funcionar, esta prueba se cae, que es lo correcto — significa
+   * que la función ha cambiado de forma y hay que volver a mirarla.
+   */
+  const trozo = fn.slice(fn.indexOf('const ES_CORREO'), fn.indexOf('function replyToValido'))
+    + fn.slice(fn.indexOf('function replyToValido'), fn.indexOf('/** El aviso que acompaña'))
+  const enJs = trozo
+    .replace(/: \(string \| undefined\)\[\]/g, '')
+    .replace(/: string \| null/g, '')
+    .replace(/: string/g, '')
+    .replace(/: boolean/g, '')
+  const replyToValido = new Function(`${enJs}; return replyToValido`)()
+
+  caso('una dirección buena pasa', 'secretaria@hermandad.es',
+    replyToValido('secretaria@hermandad.es'))
+  caso('con espacios alrededor, se limpia', 'secretaria@hermandad.es',
+    replyToValido('  secretaria@hermandad.es  '))
+
+  // El fallo que tumbaba el envío entero, en sus tres formas habituales.
+  caso('sin dominio, fuera', null, replyToValido('secretaria'))
+  caso('un nombre escrito por confusión, fuera', null, replyToValido('Hermandad de la Vera-Cruz'))
+  caso('sin punto en el dominio, fuera', null, replyToValido('secretaria@hermandad'))
+  caso('dos direcciones juntas, fuera', null,
+    replyToValido('secretaria@hermandad.es, tesoreria@hermandad.es'))
+
+  // Vacío no es un error: es «no pongas reply_to», que es perfectamente válido.
+  caso('vacío no pone nada', null, replyToValido(''))
+  caso('sin nada configurado, nada', null, replyToValido(undefined, undefined))
+
+  /*
+   * Y SI LA HERMANDAD CONFIGURÓ UNA MALA, NO SE CAE A LA SIGUIENTE.
+   *
+   * Sería peor: mandaría las respuestas de los hermanos a una dirección que
+   * nadie ha elegido, y sin decirlo. Mejor sin «responder a» y con el aviso
+   * en el registro.
+   */
+  caso('una mala no cae a la de reserva', null,
+    replyToValido('secretaria', 'ficha@hermandad.es'))
+  caso('pero vacía sí deja pasar la de reserva', 'ficha@hermandad.es',
+    replyToValido('', 'ficha@hermandad.es'))
+
+  // Y que el envío no dependa de esto: `reply_to` solo se pone si vale.
+  caso('reply_to va comprobado', true,
+    /\.\.\.\(responderA \? \{ reply_to: responderA \} : \{\}\)/.test(fn))
+  caso('y si no valía, queda apuntado', true,
+    /console\.error\([\s\S]{0,120}responder a/.test(fn))
+
+  // La pantalla lo dice donde se arregla, que es el campo mismo.
+  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  caso('Configuración avisa del formato', true,
+    /no tiene forma de dirección de correo/.test(cfg))
 }

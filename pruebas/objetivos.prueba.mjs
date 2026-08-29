@@ -16,6 +16,17 @@ export default async function ({ cargar, caso }) {
   const p = await cargar('src/lib/proyectos.ts')
 
   const mov = (importe, tipo, origen) => ({ importe, tipo, origen })
+  /*
+   * Una campaña de mentira. `loRecaudado` ya no puede trabajar con un id
+   * suelto: desde que una campaña puede enlazar partidas de Tesorería, cuánto
+   * lleva recogido depende también de sus partidas y de sus fechas. La firma
+   * lo dice, que para eso está.
+   */
+  const camp = (id, extra = {}) => ({
+    id, nombre: id, descripcion: '', objetivo: 0,
+    fechaInicio: '2026-01-01', estado: 'abierta', enLaWeb: false,
+    creadaEn: '2026-01-01T00:00:00.000Z', partidas: [], ...extra,
+  })
 
   /*
    * 1. LO RECAUDADO SALE DE LOS APUNTES, Y SOLO DE LOS QUE LLEVAN SU MARCA.
@@ -28,10 +39,10 @@ export default async function ({ cargar, caso }) {
       mov(999, 'Ingreso', undefined),        // apuntado a mano, sin campaña
       mov(999, 'Ingreso', 'cuota:x'),        // una cuota
     ]
-    caso('suma solo lo suyo', 150, r.loRecaudado(libro, 'A'))
-    caso('y lo de la otra, lo suyo', 999, r.loRecaudado(libro, 'B'))
-    caso('una campaña sin nada da cero', 0, r.loRecaudado(libro, 'C'))
-    caso('cuenta las aportaciones', 2, r.cuantasAportaciones(libro, 'A'))
+    caso('suma solo lo suyo', 150, r.loRecaudado(libro, camp('A')))
+    caso('y lo de la otra, lo suyo', 999, r.loRecaudado(libro, camp('B')))
+    caso('una campaña sin nada da cero', 0, r.loRecaudado(libro, camp('C')))
+    caso('cuenta las aportaciones', 2, r.cuantasAportaciones(libro, camp('A')))
   }
 
   /*
@@ -43,8 +54,120 @@ export default async function ({ cargar, caso }) {
    */
   {
     const libro = [mov(1000, 'Ingreso', 'campana:A:1'), mov(145, 'Gasto', 'campana:A:g1')]
-    caso('el gasto se resta', 855, r.loRecaudado(libro, 'A'))
-    caso('pero no cuenta como aportación', 1, r.cuantasAportaciones(libro, 'A'))
+    caso('el gasto se resta', 855, r.loRecaudado(libro, camp('A')))
+    caso('pero no cuenta como aportación', 1, r.cuantasAportaciones(libro, camp('A')))
+  }
+
+  /*
+   * 3-BIS. LA CAMPAÑA ENLAZADA A SUS PARTIDAS DE TESORERÍA.
+   *
+   * Pedido así: «cuando se crea una campaña debe de poder ir asociada una
+   * cuenta de gasto o ingreso a ella; entonces cuando se anote un ingreso o
+   * gasto con razón a esa partida se rellena parte de la barra
+   * automáticamente».
+   *
+   * Antes el tesorero tenía que apuntar el donativo DESDE la campaña para que
+   * la barra se enterara. Si lo apuntaba en Tesorería, que es donde él
+   * trabaja, la barra se quedaba a cero.
+   */
+  {
+    const apunte = (importe, tipo, categoria, fecha, origen) =>
+      ({ importe, tipo, categoria, fecha, origen })
+    const donativos = camp('D', {
+      partidas: ['Donativos, Ofrendas y Cepillos'],
+      fechaInicio: '2026-01-01',
+      fechaFin: '2026-12-31',
+    })
+
+    // Lo que se pidió: se apunta en Tesorería, y la barra lo coge.
+    caso('un ingreso de la partida enlazada llena la barra', 300,
+      r.loRecaudado([apunte(300, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '05 mar 2026')], donativos))
+
+    // Y un gasto de una partida enlazada resta, que es la otra mitad de
+    // «un ingreso o gasto».
+    caso('y un gasto de una partida enlazada resta', 250,
+      r.loRecaudado([
+        apunte(300, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '05 mar 2026'),
+        apunte(50, 'Gasto', 'Donativos, Ofrendas y Cepillos', '06 mar 2026'),
+      ], donativos))
+
+    // Otra partida no entra, por muy cerca que caiga la fecha.
+    caso('otra partida no cuenta', 0,
+      r.loRecaudado([apunte(300, 'Ingreso', 'Subvenciones', '05 mar 2026')], donativos))
+
+    /*
+     * LA VENTANA DE FECHAS, que es lo que hace que esto sea seguro.
+     *
+     * Sin ella, abrir hoy una campaña sobre «Donativos» enseñaría de golpe
+     * TODOS los donativos de la historia de la hermandad como si fueran suyos,
+     * y encima en la web pública. La barra saldría llena el primer día.
+     */
+    caso('lo anterior a la campaña no cuenta', 0,
+      r.loRecaudado([apunte(999, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '20 dic 2025')], donativos))
+    caso('ni lo posterior', 0,
+      r.loRecaudado([apunte(999, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '02 ene 2027')], donativos))
+    caso('el primer día sí cuenta', 40,
+      r.loRecaudado([apunte(40, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '01 ene 2026')], donativos))
+    caso('y el último también', 40,
+      r.loRecaudado([apunte(40, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '31 dic 2026')], donativos))
+
+    // Sin fecha de cierre, la campaña sigue cogiendo lo que venga.
+    const abierta = camp('D', { partidas: ['Donativos, Ofrendas y Cepillos'], fechaInicio: '2026-01-01' })
+    caso('sin fecha de cierre coge lo de después', 40,
+      r.loRecaudado([apunte(40, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '02 ene 2029')], abierta))
+
+    /*
+     * LAS DOS FORMAS DE FECHA. `movimientos.fecha` guarda «05 ene 2026» cuando
+     * lo escribe la secretaría y «2026-01-05» cuando lo escribe una función
+     * del servidor —una venta de la tienda, un pago con tarjeta—. Leer solo
+     * una de las dos es el fallo que dejó la cuenta de pérdidas y ganancias a
+     * cero, y aquí se repetiría igual de callado.
+     */
+    caso('la fecha en formato del servidor también se lee', 75,
+      r.loRecaudado([apunte(75, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '2026-03-05')], donativos))
+    caso('y fuera de fechas, en ese formato, tampoco cuenta', 0,
+      r.loRecaudado([apunte(75, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '2025-03-05')], donativos))
+    // Septiembre lo escribe el navegador como «sept», con cuatro letras.
+    caso('septiembre se lee aunque venga como «sept»', 20,
+      r.loRecaudado([apunte(20, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '10 sept 2026')], donativos))
+    // Una fecha ilegible NO se cuenta: más vale una barra corta que una barra
+    // pública que enseña dinero que a lo mejor no es de esta campaña.
+    caso('una fecha que no se entiende no cuenta', 0,
+      r.loRecaudado([apunte(500, 'Ingreso', 'Donativos, Ofrendas y Cepillos', 'el jueves')], donativos))
+
+    /*
+     * LA MARCA MANDA SOBRE LA PARTIDA, en los dos sentidos.
+     */
+    // Lo apuntado desde la campaña cuenta aunque esté fuera de sus fechas y en
+    // otra partida: si alguien lo puso ahí a mano, sabía lo que hacía.
+    caso('lo marcado a mano cuenta aunque no cuadre', 500,
+      r.loRecaudado([apunte(500, 'Ingreso', 'Subvenciones', '20 dic 2025', 'campana:D:1')], donativos))
+
+    /*
+     * Y LO MARCADO PARA OTRA CAMPAÑA NO LO ABSORBE ESTA POR COMPARTIR PARTIDA.
+     *
+     * Si no, con dos campañas abiertas a la vez —que es lo normal— el mismo
+     * euro llenaría las dos barras el primer día.
+     */
+    caso('un apunte de otra campaña no lo roba la partida', 0,
+      r.loRecaudado([apunte(500, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '05 mar 2026', 'campana:X:1')], donativos))
+
+    // Y nada se cuenta dos veces por estar marcado Y en la partida.
+    caso('marcado y en la partida cuenta una vez', 100,
+      r.loRecaudado([apunte(100, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '05 mar 2026', 'campana:D:1')], donativos))
+
+    // Sin partidas enlazadas, la campaña se comporta como siempre.
+    caso('sin partidas enlazadas no coge nada de Tesorería', 0,
+      r.loRecaudado([apunte(300, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '05 mar 2026')], camp('D')))
+
+    // Los apuntes se pueden mirar: una barra que se mueve sola y no deja ver
+    // qué la movió es lo que hace desconfiar de un número.
+    caso('se pueden ver los apuntes que la mueven', 2,
+      r.apuntesDeLaRecaudacion([
+        apunte(300, 'Ingreso', 'Donativos, Ofrendas y Cepillos', '05 mar 2026'),
+        apunte(50, 'Gasto', 'Donativos, Ofrendas y Cepillos', '06 mar 2026'),
+        apunte(999, 'Ingreso', 'Subvenciones', '06 mar 2026'),
+      ], donativos).length)
   }
 
   /*
@@ -53,11 +176,11 @@ export default async function ({ cargar, caso }) {
    */
   {
     const libro = Array.from({ length: 30 }, (_, i) => mov(0.1, 'Ingreso', `campana:A:${i}`))
-    caso('treinta veces diez céntimos son tres euros exactos', 3, r.loRecaudado(libro, 'A'))
-    caso('y no 2,9999999999999996', true, String(r.loRecaudado(libro, 'A')).length <= 3)
+    caso('treinta veces diez céntimos son tres euros exactos', 3, r.loRecaudado(libro, camp('A')))
+    caso('y no 2,9999999999999996', true, String(r.loRecaudado(libro, camp('A'))).length <= 3)
     // Y el «-0», que se imprime «-0,00 €» y asusta a quien lo ve.
     const soloGasto = [mov(0, 'Gasto', 'campana:A:g')]
-    caso('cero no sale en negativo', false, Object.is(r.loRecaudado(soloGasto, 'A'), -0))
+    caso('cero no sale en negativo', false, Object.is(r.loRecaudado(soloGasto, camp('A')), -0))
   }
 
   /*
@@ -192,7 +315,7 @@ export default async function ({ cargar, caso }) {
     caso('hay campañas de ejemplo', true, campanas.length >= 3)
 
     // TODA campaña de ejemplo tiene dinero apuntado en el libro.
-    const secas = campanas.filter((c) => r.cuantasAportaciones(libro, c.id) === 0)
+    const secas = campanas.filter((c) => r.cuantasAportaciones(libro, c) === 0)
     caso('ninguna campaña de la demo sale a cero', '', secas.map((c) => c.nombre).join(', '))
 
     // Y NINGÚN apunte marcado apunta a una campaña que no existe.
@@ -206,7 +329,7 @@ export default async function ({ cargar, caso }) {
     // La del palio va a medias: es la que enseña la barra a medio llenar, que
     // es literalmente lo que se pidió.
     const palio = campanas.find((c) => c.id === objetivos.CAMPANA_PALIO)
-    const llevaPalio = r.loRecaudado(libro, palio.id)
+    const llevaPalio = r.loRecaudado(libro, palio)
     caso('la del palio ha recogido algo', true, llevaPalio > 0)
     caso('pero no ha llegado al objetivo', true, llevaPalio < palio.objetivo)
     // 5000 + 1340,50 + 2870 − 145 de gasto.
@@ -217,7 +340,7 @@ export default async function ({ cargar, caso }) {
     // Y una cerrada que llegó, que es lo que se mira al año siguiente.
     const cerrada = campanas.find((c) => c.estado === 'cerrada')
     caso('hay una cerrada', true, Boolean(cerrada))
-    caso('y llegó a su objetivo', true, r.loRecaudado(libro, cerrada.id) >= cerrada.objetivo)
+    caso('y llegó a su objetivo', true, r.loRecaudado(libro, cerrada) >= cerrada.objetivo)
 
     // Los proyectos: sus tareas son suyas, y la campaña que enlazan existe.
     const proyectos = objetivos.PROYECTOS_INICIALES

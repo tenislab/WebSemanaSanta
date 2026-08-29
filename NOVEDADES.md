@@ -1,6 +1,6 @@
 # Qué lleva esta entrega
 
-Trece bloques, todos probados: `tsc`, `lint`, `build` y **4.100 pruebas** que
+Quince bloques, todos probados: `tsc`, `lint`, `build` y **4.130 pruebas** que
 pasan con y sin zona horaria de Madrid. El SQL se instala sobre un Postgres de
 verdad, no solo se lee.
 
@@ -399,6 +399,78 @@ Se separan las dos cosas: un botón para **descargar/imprimir** (lo de
 siempre) y otro para **enviar por correo**, que ahora sí manda el aviso de
 verdad —el mismo que se manda al asignar el sitio, con la hora de citación y
 la fecha de salida— y dice claramente si ha salido o por qué no.
+
+---
+
+## 14. Un «responder a» mal escrito dejaba a la hermandad sin mandar NADA
+
+El último de la tanda, y de los caros. El error que llegaba era este:
+
+```
+422 validation_error · Invalid `reply_to` field.
+```
+
+En **Configuración → Correo** hay un campo, «A dónde contestan los hermanos».
+Lo que hubiera ahí se mandaba al proveedor tal cual, sin mirarlo nunca; y si
+estaba vacío, se usaba el correo de la ficha de la hermandad, tampoco mirado.
+
+Y el proveedor no acepta ese campo a medias: si no tiene forma de dirección
+**rechaza el envío entero**. No manda el correo sin «responder a» — no manda
+nada. Así que un «secretaria» sin dominio, o el nombre de la hermandad
+escrito ahí por confusión, dejaba a la hermandad sin poder mandar una
+convocatoria de papeletas. Y el error hablaba del proveedor, que no tenía
+ninguna culpa: nada apuntaba al campo que lo causaba.
+
+Ahora el correo **sale siempre**. Si esa dirección no vale, se envía sin
+«responder a» —las respuestas irán al remitente en vez de a la secretaría,
+que es un incordio pequeño y reparable— y queda apuntado en el registro de la
+función. Y el campo avisa en la propia pantalla, que es donde se arregla.
+
+---
+
+## 15. La campaña enlazada a sus partidas: la barra se llena sola
+
+Lo de Víctor: «cuando se crea una campaña debe de poder ir asociada una cuenta
+de gasto o ingreso a ella; entonces cuando se anote un ingreso o gasto con
+razón a esa partida se rellena parte de la barra automáticamente».
+
+Hasta ahora la barra solo subía con lo que se apuntaba **desde la pantalla de
+la campaña**. Eso obliga al tesorero a apuntar el donativo por la campaña y no
+por Tesorería, que es donde él trabaja — y si lo apunta en Tesorería, la barra
+no se entera.
+
+Ahora, al crear o editar una campaña, se marcan las **partidas** que son suyas.
+Lo que se apunte en Tesorería en esas partidas llena la barra solo. Los
+ingresos suman y los gastos restan, que es lo que se pidió: «un ingreso **o
+gasto**».
+
+Se pueden marcar varias a propósito, porque una campaña tiene las dos caras:
+los donativos que entran y los gastos que genera —la imprenta de las huchas, el
+transporte—.
+
+**La regla que hace que esto sea seguro son las fechas.** Un apunte solo cuenta
+por partida si cae **dentro de las fechas de la campaña**. Sin eso, abrir hoy
+una campaña sobre «Donativos, Ofrendas y Cepillos» enseñaría de golpe todos los
+donativos de la historia de la hermandad como si fueran suyos: la barra saldría
+llena el primer día, y encima en la web pública. El formulario lo dice en
+cuanto marcas una partida.
+
+Y dos reglas más, que se ven al probarlo con los datos de ejemplo:
+
+- **Lo apuntado a mano desde la campaña cuenta siempre**, esté en la partida
+  que esté. Si alguien lo puso ahí, sabía lo que hacía.
+- **Un apunte de otra campaña no lo absorbe la partida de esta.** Con dos
+  campañas abiertas a la vez —lo normal— el mismo euro llenaría dos barras.
+  Probado: al enlazar «Donativos» a la campaña del palio, los donativos del
+  cepillo de caridad, que están en esa misma partida y dentro de las mismas
+  fechas, se quedan donde estaban.
+
+Comprobado en el navegador con la demo: la campaña del palio pasa de 9.065,50 €
+a 9.365,50 € al enlazar la partida, recogiendo exactamente el donativo de 300 €
+que estaba apuntado a mano en Tesorería sin marca de campaña.
+
+**Hay que ejecutar `ACTUALIZAR.sql`** para que la base guarde las partidas de
+cada campaña.
 
 ---
 

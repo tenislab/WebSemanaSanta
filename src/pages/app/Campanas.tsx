@@ -31,7 +31,9 @@ import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { useSupabaseTable, nuevoId } from '../../lib/supabaseSync'
 import { CLAVES_DATOS } from '../../lib/persistencia'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
-import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
+import {
+  MOVIMIENTOS_INICIALES, CATEGORIAS_INGRESO, CATEGORIAS_GASTO, type Movimiento,
+} from '../../data/movimientos'
 import { conApunteDeCobro } from '../../lib/apuntes'
 import { formatCurrency } from '../../lib/format'
 import { hoyIso } from '../../lib/hoy'
@@ -49,6 +51,14 @@ import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 
 type Pestana = 'campanas' | 'proyectos'
+
+/*
+ * Las partidas del libro, las de entrada y las de salida, para poder
+ * enlazarlas a una campaña. En una sola lista y con el sentido aparte: en la
+ * pantalla se eligen juntas, y lo que distingue a una de otra es la flecha.
+ */
+const TODAS_LAS_PARTIDAS: readonly string[] = [...CATEGORIAS_INGRESO, ...CATEGORIAS_GASTO]
+const esIngreso = (c: string) => (CATEGORIAS_INGRESO as readonly string[]).includes(c)
 
 /** La categoría del libro a la que van los donativos de una campaña. */
 const CATEGORIA_CAMPANA = 'Donativos, Ofrendas y Cepillos'
@@ -186,8 +196,8 @@ function TarjetaCampana({ campana, movimientos, onEditar, onAportar }: {
   onEditar: () => void
   onAportar: () => void
 }) {
-  const recaudado = loRecaudado(movimientos, campana.id)
-  const cuantas = cuantasAportaciones(movimientos, campana.id)
+  const recaudado = loRecaudado(movimientos, campana)
+  const cuantas = cuantasAportaciones(movimientos, campana)
   const pct = comoVa(recaudado, campana.objetivo)
   const falta = loQueFalta(recaudado, campana.objetivo)
 
@@ -272,7 +282,11 @@ function FormularioCampana({ campana, onGuardar, onCerrar }: {
   const [fechaFin, setFechaFin] = useState(campana?.fechaFin ?? '')
   const [estado, setEstado] = useState(campana?.estado ?? 'abierta')
   const [enLaWeb, setEnLaWeb] = useState(campana?.enLaWeb ?? false)
+  const [partidas, setPartidas] = useState<string[]>(campana?.partidas ?? [])
   const [error, setError] = useState<string | null>(null)
+
+  const alternarPartida = (p: string) =>
+    setPartidas((ps) => (ps.includes(p) ? ps.filter((x) => x !== p) : [...ps, p]))
 
   /*
    * Una campaña que acaba antes de empezar es una errata, y la base la
@@ -301,6 +315,7 @@ function FormularioCampana({ campana, onGuardar, onCerrar }: {
       estado,
       enLaWeb,
       creadaEn: campana?.creadaEn ?? new Date().toISOString(),
+      partidas,
     })
   }
 
@@ -353,6 +368,41 @@ function FormularioCampana({ campana, onGuardar, onCerrar }: {
             <input id="campFin" type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
             <AvisoDeCampo texto={fechasAlReves ? 'Esta fecha es anterior a la de apertura.' : null} />
           </div>
+        </div>
+        <div className="form-row">
+          <label>Partidas de Tesorería que cuentan para esta campaña</label>
+          <p className="form-hint">
+            Lo que se apunte en Tesorería en estas partidas llena la barra <b>solo</b>, sin
+            tener que anotarlo aquí. Los ingresos suman y los gastos restan. Puedes no marcar
+            ninguna: entonces la campaña solo cuenta lo que se apunte desde esta pantalla.
+          </p>
+          <div className="etiquetas-chips">
+            {TODAS_LAS_PARTIDAS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`chip chip--toggle${partidas.includes(c) ? ' chip--active' : ''}`}
+                aria-pressed={partidas.includes(c)}
+                onClick={() => alternarPartida(c)}
+              >
+                {esIngreso(c) ? '▲' : '▼'} {c}
+              </button>
+            ))}
+          </div>
+          {/*
+            * La ventana de fechas no es un detalle: es lo que hace que enlazar
+            * una partida general —«Donativos, Ofrendas y Cepillos»— no llene la
+            * barra de golpe con todos los donativos de la historia. Quien marca
+            * la casilla tiene que saberlo ANTES de guardar, no descubrirlo al
+            * ver la barra rara.
+            */}
+          {partidas.length > 0 && (
+            <p className="form-hint">
+              Solo cuentan los apuntes con fecha desde el {fechaEs(fechaInicio)}
+              {fechaFin ? ` hasta el ${fechaEs(fechaFin)}` : ' en adelante'}. Lo anterior se
+              queda fuera, aunque sea de la misma partida.
+            </p>
+          )}
         </div>
         <div className="form-row form-row--check">
           <label htmlFor="campWeb">
@@ -592,7 +642,7 @@ function TarjetaProyecto({ proyecto, tareas, campana, movimientos, hoy, onEditar
         <p className="proyecto__dinero">
           Presupuesto: <b>{formatCurrency(proyecto.presupuesto)}</b>
           {campana && (
-            <> · lleva recogido <b>{formatCurrency(loRecaudado(movimientos, campana.id))}</b> en «{campana.nombre}»</>
+            <> · lleva recogido <b>{formatCurrency(loRecaudado(movimientos, campana))}</b> en «{campana.nombre}»</>
           )}
         </p>
       )}
