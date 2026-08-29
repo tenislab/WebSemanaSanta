@@ -193,12 +193,25 @@ img, svg { max-width: 100%; }
 
 /* familia serif para titulares con carácter */
 .serif,
+/*
+ * GEORGIA, y no de reserva.
+ *
+ * Aquí iba «Iowan Old Style, Palatino Linotype, Palatino, Georgia…», con
+ * Georgia de tercera. Eso quiere decir que casi nadie la veía: en un Mac ganaba
+ * Iowan y en Windows Palatino, así que la portada tenía una letra distinta
+ * según con qué se mirara — y ninguna de las dos era la que se estaba
+ * eligiendo al diseñarla.
+ *
+ * Georgia va delante porque además es la única de las tres que está en
+ * TODOS los equipos, Mac y Windows: lo que se ve al probarla es lo que van a
+ * ver las hermandades.
+ */
 h1, h2, h3,
 .brand-name,
 .auth-title,
 .hero-copy h1,
 .section-head h2 {
-  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+  font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Times New Roman', serif;
   font-weight: 400;
 }
 
@@ -517,10 +530,10 @@ span.logo-mark img { width: 100%; height: 100%; }
 /* hero */
 .hero { padding: 4.5rem 0 4rem; }
 .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 3.5rem; align-items: center; }
-/* EL TITULAR, EN VERSALES.
-   Es la frase que tiene que sonar rotunda y la primera que se lee. En caja
-   baja con la segunda línea en cursiva bajaba el tono justo ahí. El
-   interletrado se abre un pelo porque las versales juntas se emplastan. */
+/* EL TITULAR.
+   Es la frase que tiene que sonar rotunda y la primera que se lee. Estuvo en
+   versales una temporada; en caja baja se lee de corrido y cabe más grande,
+   que al final es lo que la hace sonar. */
 .hero-copy h1 {
   /* El salto de línea lo pone el texto a mano, por la coma. El tamaño está
      atado a que «TODA LA VIDA DE TU HERMANDAD,» quepa en su renglón: si el
@@ -530,8 +543,12 @@ span.logo-mark img { width: 100%; height: 100%; }
      Ya NO lleva `text-wrap: nowrap`. Lo llevaba con el titular anterior, que
      era más corto; con este se salía de la caja en cuanto la ventana bajaba de
      1100 px, y al salirse arrastraba la página entera a lo ancho. */
-  font-size: clamp(1.7rem, 2.5vw, 2.2rem); line-height: 1.18; margin-top: 1.1rem;
-  color: #f6efe4; text-transform: uppercase; letter-spacing: 0.01em; font-weight: 400;
+  /* EN CAJA BAJA. En versales la frase se leía a golpes y ocupaba una línea
+     más; en caja baja cabe más grande, que es lo que la hace sonar. Y sin el
+     interletrado abierto, que hacía falta para las versales —juntas se
+     emplastan— y en caja baja solo separa lo que debería ir junto. */
+  font-size: clamp(1.85rem, 3.1vw, 2.75rem); line-height: 1.2; margin-top: 1.1rem;
+  color: #f6efe4; font-weight: 400; letter-spacing: -0.005em;
   /* Que reparta él los renglones y los deje parejos. Un salto a mano se
      descuadra en cuanto cambia el ancho: con esta frase, de 55 caracteres,
      salían tres renglones y el último de dos palabras. */
@@ -587,8 +604,7 @@ span.logo-mark img { width: 100%; height: 100%; }
  */
 @media (max-width: 720px) {
   .hero-copy h1 {
-    text-wrap: balance;
-    font-size: clamp(1.55rem, 7.5vw, 2.2rem);
+    font-size: clamp(1.75rem, 8vw, 2.3rem);
   }
 }
 
