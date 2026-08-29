@@ -440,6 +440,35 @@ export default function Papeletas() {
     setPendingCuerpo('')
   }
 
+  /*
+   * QUÉ LLEVA ESTE CORREO, y por qué cada cosa.
+   *
+   * Antes decía «Ya tienes sitio: Cirio 1º tramo» y poco más. Eso está bien
+   * como aviso, pero deja fuera lo único que el hermano va a necesitar
+   * buscar después: A QUÉ HORA TIENE QUE ESTAR. Es literalmente la pregunta
+   * de la semana antes de la salida, la que satura el teléfono de secretaría
+   * y el grupo de WhatsApp.
+   *
+   * La hora de citación es de cada tramo —no salen todos a la vez— y hasta
+   * ahora no se podía ni guardar, porque a la tabla le faltaba la columna.
+   * Ya se guarda, así que ya se puede decir aquí.
+   */
+  function parrafosDePapeleta(texto: string, tramoId?: string | null): string[] {
+    const t = tramoId ? tramos.find((x) => x.id === tramoId) : null
+    const parrafos = [texto]
+    if (t?.horaCitacion?.trim()) {
+      parrafos.push(`Tu hora de citación es a las ${t.horaCitacion.trim()}.`)
+    }
+    if (campana.fechaSalida) {
+      const f = new Date(`${campana.fechaSalida}T12:00:00`)
+      if (!Number.isNaN(f.getTime())) {
+        parrafos.push(`La salida es el ${f.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}.`)
+      }
+    }
+    parrafos.push('Puedes ver tu papeleta y descargarla desde tu área de hermano.')
+    return parrafos
+  }
+
   /**
    * Le dice al hermano que ya tiene sitio. Es lo que espera desde que manda la
    * solicitud, y hasta ahora se enteraba al entrar en su área por su cuenta.
@@ -455,43 +484,66 @@ export default function Papeletas() {
     const h = hermanos.find((x) => x.id === hermanoId)
     if (!h) return
 
-    /*
-     * QUÉ LLEVA ESTE CORREO, y por qué cada cosa.
-     *
-     * Antes decía «Ya tienes sitio: Cirio 1º tramo» y poco más. Eso está bien
-     * como aviso, pero deja fuera lo único que el hermano va a necesitar
-     * buscar después: A QUÉ HORA TIENE QUE ESTAR. Es literalmente la pregunta
-     * de la semana antes de la salida, la que satura el teléfono de secretaría
-     * y el grupo de WhatsApp.
-     *
-     * La hora de citación es de cada tramo —no salen todos a la vez— y hasta
-     * ahora no se podía ni guardar, porque a la tabla le faltaba la columna.
-     * Ya se guarda, así que ya se puede decir aquí.
-     */
-    const t = tramoId ? tramos.find((x) => x.id === tramoId) : null
-    const parrafos = [texto]
-    if (t?.horaCitacion?.trim()) {
-      parrafos.push(`Tu hora de citación es a las ${t.horaCitacion.trim()}.`)
-    }
-    if (campana.fechaSalida) {
-      const f = new Date(`${campana.fechaSalida}T12:00:00`)
-      if (!Number.isNaN(f.getTime())) {
-        parrafos.push(`La salida es el ${f.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}.`)
-      }
-    }
-    parrafos.push('Puedes ver tu papeleta y descargarla desde tu área de hermano.')
-
     void avisarPorCorreo(
       [{ id: h.id, nombre: h.nombre, email: h.email }],
       'papeleta',
       'Tu papeleta de sitio',
-      parrafos,
+      parrafosDePapeleta(texto, tramoId),
       'Este aviso lo puedes apagar desde tu área de hermano.',
     ).then((r) => {
       // No corta el guardado —la papeleta ya está emitida y eso es lo que
       // importa— pero deja rastro de que el aviso no salió.
       if (r.error) console.warn(`El aviso de papeleta a ${h.nombre} no salió: ${r.error}`)
     })
+  }
+
+  /**
+   * EL BOTÓN «DESCARGAR / ENVIAR» SOLO IMPRIMÍA.
+   *
+   * La versión de móvil llevaba escrito «es la que se envía al hermano por
+   * correo», pero el botón hacía `window.print()` y nada más: en ningún caso
+   * —ni en local, ni con la base de datos conectada— salía un correo de
+   * verdad. Quien lo pulsaba pensando que eso avisaba al hermano se quedaba
+   * sin saberlo, porque no fallaba con un error: simplemente no hacía lo que
+   * decía.
+   *
+   * Esto sí manda el correo, con el mismo aviso que se le manda solo al
+   * asignar el sitio (para cuando el hermano dice que no le llegó, o hay que
+   * reenviárselo).
+   */
+  const [enviandoPapeleta, setEnviandoPapeleta] = useState(false)
+  async function enviarPapeletaPorCorreo(hermanoId: string, tramo: string | null, opcion: string | null, tramoId?: string | null) {
+    if (enviandoPapeleta) return
+    const h = hermanos.find((x) => x.id === hermanoId)
+    if (!h) return
+    if (!h.email || !h.email.includes('@')) {
+      window.alert(`${h.nombre.split(' ')[0]} no tiene correo en su ficha. Añádeselo desde Hermanos y vuelve a intentarlo.`)
+      return
+    }
+    const que = tramo ?? opcion
+    const texto = que
+      ? `Aquí tienes tu papeleta de sitio para la estación de penitencia de ${campana.anio}: ${que}.`
+      : `Aquí tienes tu papeleta para la estación de penitencia de ${campana.anio}.`
+    setEnviandoPapeleta(true)
+    try {
+      const r = await avisarPorCorreo(
+        [{ id: h.id, nombre: h.nombre, email: h.email }],
+        'papeleta',
+        'Tu papeleta de sitio',
+        parrafosDePapeleta(texto, tramoId),
+        'Este aviso lo puedes apagar desde tu área de hermano.',
+      )
+      if (r.enviados > 0) {
+        window.alert(`Correo enviado a ${h.nombre}.`)
+      } else {
+        window.alert(
+          `No ha salido el correo${r.error ? `: ${r.error}` : '.'}\n\n`
+          + 'Comprueba en Configuración → Correo que el envío está encendido.',
+        )
+      }
+    } finally {
+      setEnviandoPapeleta(false)
+    }
   }
 
   function actualizarPapeleta(id: string, cambios: Partial<Papeleta>) {
@@ -1279,19 +1331,28 @@ export default function Papeletas() {
                     </div>
                     <p className="form-hint no-print">
                       {variantePapeleta === 'movil'
-                        ? 'Versión de móvil: lleva el QR de verificación. Es la que se envía al hermano por correo (envío real al conectar la base de datos).'
+                        ? 'Versión de móvil: lleva el QR de verificación. Descárgala o imprímela, o mándasela por correo con el botón de abajo.'
                         : variantePapeleta === 'fisica'
                         ? 'Versión física: sin QR, pensada para imprimir en papel.'
-                        : 'Se sacan las dos: la de móvil con QR (para enviar por correo) y la física sin QR (para imprimir). Al imprimir salen ambas.'}
+                        : 'Se sacan las dos: la de móvil con QR (también se puede mandar por correo) y la física sin QR (para imprimir). Al imprimir salen ambas.'}
                     </p>
                     <div className="assign-box__row no-print" style={{ marginTop: '0.4rem' }}>
                       <button className="btn btn-outline btn-sm" onClick={() => window.print()}>
                         {variantePapeleta === 'movil'
-                          ? 'Descargar / enviar (con QR)'
+                          ? 'Descargar / imprimir (con QR)'
                           : variantePapeleta === 'fisica'
                           ? 'Imprimir física (sin QR)'
-                          : 'Imprimir / enviar las dos'}
+                          : 'Imprimir las dos'}
                       </button>
+                      {variantePapeleta !== 'fisica' && (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={enviandoPapeleta}
+                          onClick={() => enviarPapeletaPorCorreo(h.id, tramoActual ? etiquetaTramo(tramoActual) : null, actual.opcion ?? null, actual.tramoId)}
+                        >
+                          {enviandoPapeleta ? 'Enviando…' : `Enviar por correo${h.email ? '' : ' (sin correo en su ficha)'}`}
+                        </button>
+                      )}
                     </div>
                     {actual.estado === 'Asignada' && actual.pagoComunicado && (
                       <div className="banner-inline banner-inline--accent" style={{ marginTop: '1rem' }}>

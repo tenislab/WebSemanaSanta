@@ -258,6 +258,7 @@ export default async function ({ caso }) {
   await elHermanoCambiaSuFicha({ sql, caso })
   await elCargoMalEscrito({ sql, caso })
   await actualizarUnaBaseQueYaFunciona({ sql, caso })
+  await elTesoreroQueEsHermanoNoSeQuedaFuera({ sql, caso })
   await elRegistroNoCrecePorSiempre({ sql, caso })
   await elBarridoDeDniSeCorta({ sql, caso })
   await laSegundaHermandadGuardaSusCatalogos({ sql, caso })
@@ -519,6 +520,98 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
       group by cargo, modulo_id having count(*) > 1
     ) x`)
   caso('y sin duplicar ningún permiso', '', repetidos.trim())
+}
+
+/**
+ * EL TESORERO QUE TAMBIÉN ES HERMANO NO SE QUEDABA FUERA POR CASUALIDAD:
+ * SE QUEDABA POR NO HABER EJECUTADO «HERMANO-CON-CARGO.SQL».
+ *
+ * Reportado por dos vías el mismo día: «las notificaciones me siguen sin
+ * llegar» —se le asigna una tarea a un hermano y en su cuenta no aparece
+ * nada pendiente— y «el tesorero no ve bien la base de datos». Las dos son
+ * la misma causa: una hermandad que montó su base ANTES de que existiera
+ * «una persona, una ficha» y desde entonces solo ha ido pegando
+ * `ACTUALIZAR.sql` en el editor se queda con la versión VIEJA de
+ * `auth_es_hermano()`, que no sabe que un hermano puede llevar cargo en su
+ * propia ficha. Y esa función decide, entre otras cosas, quién puede
+ * escribirle un aviso a otro hermano: la política exige «esta cuenta no es
+ * de hermano», y quien reparte tareas suele ser precisamente eso.
+ *
+ * Aquí se deja la base con esa versión vieja puesta a mano —para no
+ * depender de si `hermano-con-cargo.sql` ya se había ejecutado antes en
+ * esta misma base de pruebas—, se comprueba que el fallo reportado se
+ * reproduce de verdad (no con el superusuario: con la sesión RLS del
+ * propio secretario), y que `ACTUALIZAR.sql` lo arregla.
+ */
+async function elTesoreroQueEsHermanoNoSeQuedaFuera({ sql, caso }) {
+  const HD = "'d0000000-0000-0000-0000-0000000000d1'"
+  const CUENTA = "'e0000000-0000-0000-0000-0000000000e1'"
+  const SECRETARIO = "'f0000000-0000-0000-0000-0000000000f1'"
+  const DESTINO = "'f0000000-0000-0000-0000-0000000000f2'"
+
+  await sql(`
+    insert into hermandades (id, nombre) values (${HD}, 'Hdad. del secretario hermano')
+      on conflict (id) do nothing;
+    select sembrar_permisos_de_fabrica(${HD});
+    insert into auth.users (id, email) values (${CUENTA}, 'secretario-hermano@ejemplo.com')
+      on conflict (id) do nothing;
+    delete from avisos_hermano where hermano_id in (${SECRETARIO}, ${DESTINO});
+    delete from hermanos where id in (${SECRETARIO}, ${DESTINO});
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, cargo, email, auth_user_id) values
+      (${SECRETARIO}, ${HD}, 'El Secretario', '11111111H', 90, 'Activo', 'Secretario/a', 'secretario-hermano@ejemplo.com', ${CUENTA}),
+      (${DESTINO}, ${HD}, 'Quien Recibe', '22222222J', 91, 'Activo', null, 'quien-recibe@ejemplo.com', null);
+  `)
+
+  // La versión VIEJA de antes de «una persona, una ficha»: no excluye a
+  // quien lleva cargo en su propia ficha de hermano.
+  await sql(`
+    create or replace function auth_es_hermano() returns boolean
+      language sql stable security definer set search_path = public as $func$
+        select
+          exists (select 1 from hermanos where auth_user_id = auth.uid())
+          and not exists (select 1 from titulares where auth_user_id = auth.uid())
+          and not exists (select 1 from personal where auth_user_id = auth.uid() and activo)
+      $func$;
+  `)
+
+  const comoElSecretario = (consulta) => sql(`
+    begin;
+    set local role authenticated;
+    set local request.jwt.claim.sub = ${CUENTA};
+    ${consulta}
+    rollback;
+  `)
+
+  let antesDelArreglo = ''
+  try {
+    await comoElSecretario(`
+      insert into avisos_hermano (hermandad_id, hermano_id, texto, tipo, titulo)
+        values (${HD}, ${DESTINO}, 'PRUEBA tarea asignada', 'ficha', 'Nueva tarea');
+    `)
+    antesDelArreglo = 'lo ha dejado (mal)'
+  } catch {
+    antesDelArreglo = 'no le deja'
+  }
+  caso('con la función vieja, el secretario no puede avisar a un hermano',
+    'no le deja', antesDelArreglo)
+
+  const actualizar = await readFile('supabase/ACTUALIZAR.sql', 'utf8')
+  await sql(actualizar)
+
+  let despuesDelArreglo = ''
+  try {
+    await comoElSecretario(`
+      insert into avisos_hermano (hermandad_id, hermano_id, texto, tipo, titulo)
+        values (${HD}, ${DESTINO}, 'PRUEBA tarea asignada', 'ficha', 'Nueva tarea');
+    `)
+    despuesDelArreglo = 'lo ha dejado'
+  } catch (e) {
+    despuesDelArreglo = String(e?.stderr ?? e).split('\n')[0]
+  }
+  caso('con ACTUALIZAR.sql puesto, el aviso le llega al hermano',
+    'lo ha dejado', despuesDelArreglo)
+
+  await sql(`delete from avisos_hermano where hermano_id in (${SECRETARIO}, ${DESTINO});`)
 }
 
 /**

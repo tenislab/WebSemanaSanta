@@ -38,6 +38,34 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..')
  */
 export const PIEZAS_ACTUALIZACION = [
   ['ajustes-de-la-hermandad.sql', 'Los ajustes de cuotas y las etiquetas, guardados en la hermandad'],
+  /*
+   * Redefine `auth_es_hermano()` y `modulo_permitido()`, y de todas las
+   * definiciones de una función manda la última que se ejecuta. Va aquí, justo
+   * en el sitio que le toca en el instalador, y nada de lo que sigue en esta
+   * lista vuelve a tocar ninguna de las dos.
+   *
+   * ESTO FALTABA AQUÍ, Y ES GRAVE. Cualquier hermandad que montó su base ANTES
+   * de que existiera «una persona, una ficha» —el cargo va en la ficha del
+   * hermano, no en una tabla aparte— y desde entonces solo ha ido ejecutando
+   * `ACTUALIZAR.sql`, se ha quedado para siempre con la versión VIEJA de estas
+   * dos funciones, sin ninguna forma de ponerse al día: este fichero no estaba
+   * en la lista.
+   *
+   * Y la vieja versión de `auth_es_hermano()` no sabe que un hermano puede
+   * llevar cargo en su propia ficha. Eso rompe, en silencio y sin un solo
+   * error visible, TODO lo que dependa de «esta cuenta es de gestión, no de
+   * hermano» para cualquiera que sea las dos cosas a la vez:
+   *
+   *   · El tesorero que es hermano no ve bien Tesorería —RLS le trata como
+   *     hermano a secas y le enseña una vista recortada, no la de gestión—.
+   *   · Encargar una tarea a un hermano, o un post de redes, no le llega: la
+   *     política que deja escribir el aviso exige «esta cuenta NO es de
+   *     hermano», y quien reparte tareas suele ser precisamente eso, un
+   *     hermano con cargo.
+   *
+   * Los dos llegaron reportados el mismo día, y son la misma causa.
+   */
+  ['hermano-con-cargo.sql', 'Una persona, una ficha: el cargo va en la ficha del hermano'],
   ['clave-de-catalogos.sql', 'Que cada hermandad tenga sus propios catálogos (la clave era global)'],
   ['imagenes.sql', 'El almacén de fotos: que la web no lleve las imágenes dentro'],
   ['visitas-web.sql', 'El contador de visitas de la web, sin cookies ni Google Analytics'],
@@ -107,12 +135,13 @@ ${PIEZAS_ACTUALIZACION.map(([f, q], i) => `--   ${i + 1}. ${f.padEnd(30)} ${q}`)
 -- -----------------------------------------------------------------------------
 --
 -- 1. \`permisos-por-hermandad.sql\` NO ESTÁ, y no se debe ejecutar suelto sobre
---    una base al día. Redefine \`modulo_permitido()\`, que \`hermano-con-cargo.sql\`
---    vuelve a definir después con una vía más: el hermano que lleva un cargo en
---    su ficha. Manda la última definición que se ejecuta, así que el fichero
---    viejo por su cuenta deja fuera al tesorero que además es hermano. De ahí
---    solo hacía falta el relleno de «eventos» y «web», y ese va arriba, en su
---    propio fichero, sin tocar ninguna función.
+--    una base al día. Redefine \`modulo_permitido()\`, y \`hermano-con-cargo.sql\`
+--    —que SÍ va en esta lista, en el sitio que le toca— la vuelve a definir
+--    después con una vía más: el hermano que lleva un cargo en su propia
+--    ficha. Manda la última definición que se ejecute, así que el fichero
+--    viejo por su cuenta dejaría fuera otra vez al tesorero que además es
+--    hermano. De ahí solo hacía falta el relleno de «eventos» y «web», y ese
+--    va arriba, en su propio fichero, sin tocar ninguna función.
 --
 -- 2. \`tareas-programadas.sql\` NO ESTÁ porque necesita la extensión \`pg_cron\`
 --    activada antes, y eso se hace a mano: Database → Extensions → pg_cron.

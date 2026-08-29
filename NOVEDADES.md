@@ -1,8 +1,11 @@
 # Qué lleva esta entrega
 
-Once bloques, todos probados: `tsc`, `lint`, `build` y **4.098 pruebas** que
+Trece bloques, todos probados: `tsc`, `lint`, `build` y **4.100 pruebas** que
 pasan con y sin zona horaria de Madrid. El SQL se instala sobre un Postgres de
 verdad, no solo se lee.
+
+**El bloque 12 es urgente** — es un fallo que ya está pasando ahora mismo en
+una hermandad real. Hay que ejecutar `ACTUALIZAR.sql` en cuanto se pueda.
 
 ---
 
@@ -341,10 +344,68 @@ continuación, y los ingresos suben justo lo cobrado, en los dos documentos.
 
 ---
 
+## 12. Urgente: al secretario o al tesorero que además es hermano no le llegaba nada
+
+Reportado el mismo día por dos vías que parecían no tener relación: **«las
+notificaciones me siguen sin llegar»** —se le asigna una tarea a un hermano,
+tanto de Eventos como de redes, y en su propia cuenta no aparece nada
+pendiente— y **«el tesorero no ve bien la base de datos»**. Son el mismo
+fallo.
+
+La causa: `auth_es_hermano()` es la función que decide, entre otras muchas
+cosas, si una cuenta es «de gestión» o «de hermano a secas». Desde que existe
+«una persona, una ficha» —el cargo va en la ficha del hermano, no en una
+tabla aparte—, esa función sabe que un hermano puede llevar cargo. Pero el
+fichero que se lo enseña, `hermano-con-cargo.sql`, **no estaba en la lista de
+`ACTUALIZAR.sql`**. Cualquier hermandad que montó su base antes de que
+existiera esa pieza, y desde entonces solo ha ido pegando `ACTUALIZAR.sql`,
+se ha quedado para siempre con la versión vieja de esa función — sin ninguna
+forma de ponerse al día, porque el fichero que la arregla nunca se le ofrecía.
+
+Con la versión vieja, cualquiera que sea las dos cosas a la vez —hermano y
+cargo— pierde en silencio, sin un solo error, todo lo que dependa de «esta
+cuenta es de gestión»:
+
+- **Encargar una tarea a un hermano, o un post de redes, no le llega**: la
+  política que deja escribir el aviso exige «esta cuenta no es de hermano», y
+  quien reparte tareas suele ser precisamente eso, un hermano con cargo.
+- **El tesorero que es hermano no ve bien Tesorería**: se le trata como
+  hermano a secas y se le enseña la vista recortada, no la de gestión.
+- Y por el mismo motivo, no se le mandan los correos que solo ve quien
+  gestiona.
+
+Se ha añadido `hermano-con-cargo.sql` a `ACTUALIZAR.sql`, en el sitio que le
+corresponde. Y se ha escrito una prueba que reproduce el fallo de verdad —con
+la sesión del propio secretario, no con el superusuario— antes de arreglarlo
+y después: antes, el secretario no podía avisar a un hermano; con
+`ACTUALIZAR.sql` puesto, el aviso le llega.
+
+---
+
+## 13. El botón «enviar» de la papeleta solo imprimía
+
+Reportado probando la pantalla en vivo: se abre la ficha de un hermano en
+**Papeletas de sitio**, se pulsa «Descargar / enviar (con QR)», y no llega
+ningún correo. El texto de ayuda de al lado ya lo avisaba, sin que nadie se
+fijara: *«envío real al conectar la base de datos»* — es decir, el botón
+nunca mandó un correo de verdad, ni en local ni conectado. Solo abre el
+diálogo de imprimir del navegador.
+
+La papeleta sí manda un correo automático, pero solo una vez: al asignarle
+sitio por primera vez. Si el hermano dice que no le llegó, o hay que
+reenviárselo, no había manera desde esta pantalla.
+
+Se separan las dos cosas: un botón para **descargar/imprimir** (lo de
+siempre) y otro para **enviar por correo**, que ahora sí manda el aviso de
+verdad —el mismo que se manda al asignar el sitio, con la hora de citación y
+la fecha de salida— y dice claramente si ha salido o por qué no.
+
+---
+
 # Lo que tienes que hacer tú
 
-1. **Ejecutar `ACTUALIZAR.sql`** — está explicado paso a paso en
-   `supabase/LEEME-ACTUALIZAR.md`.
+1. **Ejecutar `ACTUALIZAR.sql`, cuanto antes** — trae el arreglo urgente del
+   bloque 12. Está explicado paso a paso en `supabase/LEEME-ACTUALIZAR.md`.
 2. **Volver a desplegar la función de correo**, para que funcione el
    diagnóstico nuevo:
    ```
