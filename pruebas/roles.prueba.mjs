@@ -118,6 +118,36 @@ async function cargoPorCuenta({ cargar, caso }) {
   // Salvo que sea el titular, claro.
   caso('salvo que conste como titular', null, m.cargoDeCuenta(undefined, personal, true))
 
+  /*
+   * LA CUENTA DE LA HERMANDAD LO VE TODO, AUNQUE ADEMÁS SEA HERMANA CON CARGO.
+   *
+   * Dicho por la hermandad: «la hermandad tiene que poder verlo todo; los
+   * roles son solo para cuando un hermano mayor entre desde su cuenta».
+   *
+   * Y es el caso NORMAL, no uno raro: la cuenta de la hermandad es casi
+   * siempre la del Hermano Mayor, que tiene su ficha de hermano con el cargo
+   * escrito. Antes ganaba el cargo de la ficha y la cuenta de la hermandad se
+   * quedaba con los permisos de «Hermano Mayor», viendo menos de lo que le
+   * toca.
+   *
+   * Encima quedaba en desacuerdo con la base, que sí lo tiene bien:
+   * `modulo_permitido()` empieza por `es_titular() or …`. La base le dejaba
+   * escribir donde la pantalla no le enseñaba nada.
+   */
+  const hermanosConCargo = [
+    { authUserId: 'uid-hm', cargo: 'Hermano Mayor', estado: 'Activo' },
+    { authUserId: 'uid-tesorero-hermano', cargo: 'Tesorero/a', estado: 'Activo' },
+  ]
+  caso('el titular que además es hermano con cargo lo sigue viendo todo', null,
+    m.cargoDeCuenta('uid-hm', personal, true, hermanosConCargo))
+  caso('y por «lo ve todo» se entiende cualquier módulo', true,
+    m.puedeVerModulo(m.cargoDeCuenta('uid-hm', personal, true, hermanosConCargo), 'tesoreria'))
+
+  // Pero el hermano con cargo que NO es titular sigue con lo suyo y nada más:
+  // los roles siguen sirviendo para lo que sirven.
+  caso('el hermano con cargo, entrando por su cuenta, sigue limitado', 'Tesorero/a',
+    m.cargoDeCuenta('uid-tesorero-hermano', personal, false, hermanosConCargo))
+
   // Y que las pantallas usen el hook, no el metadata.
   const { readFile } = await import('node:fs/promises')
   for (const f of ['src/components/AppShell.tsx', 'src/pages/app/Cuotas.tsx', 'src/pages/app/DashboardHome.tsx']) {

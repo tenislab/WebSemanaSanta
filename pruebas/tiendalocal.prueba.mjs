@@ -299,6 +299,40 @@ export async function reservasDeLaWeb({ cargar, caso }) {
   caso('ni sin decir quién eres', false,
     m.reservarEnLaWebLocal({ lineas: [{ articulo: camiseta, cantidad: 1 }], nombre: '  ' }).ok)
 
+  /*
+   * 2 bis. Y EL MOSTRADOR TAMPOCO VENDE LO QUE ESTÁ APARTADO.
+   *
+   * Es la mitad que faltaba y la que de verdad rompía cosas. `apartadoDe` ya
+   * existía y la web ya lo descontaba, pero la caja miraba `producto.stock` a
+   * secas: con tres camisetas prometidas y 62 en la estantería, el mostrador
+   * vendía las 62 sin decir nada. La persona que reservó venía con su
+   * resguardo y no había nada, y encima su reserva se quedaba IMPOSIBLE DE
+   * ENTREGAR, porque al intentarlo ya no quedaba género.
+   */
+  {
+    const todas = m.registrarVentaLocal({
+      lineas: [{ producto: camiseta, cantidad: 62 }], canal: 'fisica', formaPago: 'Efectivo',
+    })
+    caso('el mostrador NO vende las 62 con 3 apartadas', false, todas.ok)
+    // Y lo dice entero, con los dos números: quien está en el mostrador tiene
+    // que poder explicárselo a quien tiene delante.
+    caso('y dice cuántas hay y cuántas están comprometidas', true,
+      /3 están comprometidas por la web/.test(todas.error ?? ''))
+    caso('sin tocar el almacén', 62, de('CAM').stock)
+
+    // Vender lo que sí queda sin apartar se prueba al final, para no cambiar
+    // los números con los que sigue contando el resto del recorrido.
+  }
+
+  /*
+   * 2 ter. LA RESERVA SE PUEDE ENTREGAR AUNQUE NO QUEDE NADA MÁS.
+   *
+   * Es la trampa de todo esto: si al entregar se comprobara el disponible,
+   * las líneas de la propia reserva contarían como apartadas y la reserva se
+   * bloquearía A SÍ MISMA. Quedan exactamente 3 en la estantería y las 3 son
+   * suyas.
+   */
+
   /* 3. Entregar: ahí sí se cobra */
   const reserva = leer(K.reservas)[0]
   const entrega = m.entregarReservaLocal(reserva.id, 'Efectivo')
@@ -344,6 +378,43 @@ export async function reservasDeLaWeb({ cargar, caso }) {
     m.anularVentaLocal(entrega.venta.id, 'Devuelta')
     const despues = m.datosTiendaLocales(anio)
     caso('lo anulado no cuenta en el resumen', 0, despues.meses.length)
+  }
+
+  /*
+   * 6. Y EL MOSTRADOR VENDE LO QUE SÍ QUEDA SIN APARTAR.
+   *
+   * Va al final para no mover los números del recorrido de arriba. Se aparta
+   * de nuevo —la reserva anterior ya está entregada— y se comprueba el freno
+   * por los dos lados: lo apartado no, lo demás sí.
+   */
+  {
+    const quedan = de('CAM').stock
+    const nueva = m.reservarEnLaWebLocal({
+      lineas: [{ articulo: de('CAM'), cantidad: 4 }], nombre: 'Otra que aparta',
+    })
+    caso('se aparta otra tanda', true, nueva.ok)
+    caso('no se venden todas las que hay en la estantería', false,
+      m.registrarVentaLocal({
+        lineas: [{ producto: de('CAM'), cantidad: quedan }], canal: 'fisica', formaPago: 'Efectivo',
+      }).ok)
+    caso('pero sí todas menos las apartadas', true,
+      m.registrarVentaLocal({
+        lineas: [{ producto: de('CAM'), cantidad: quedan - 4 }], canal: 'fisica', formaPago: 'Efectivo',
+      }).ok)
+    caso('y quedan justo las apartadas', 4, de('CAM').stock)
+    caso('con lo apartado intacto', 4, m.apartadoDe(de('CAM').id))
+
+    /*
+     * Y ESA RESERVA SE PUEDE ENTREGAR aunque no quede ni una más. Es la trampa:
+     * si al entregar se comprobara el disponible, las líneas de la propia
+     * reserva contarían como apartadas y la reserva se bloquearía A SÍ MISMA.
+     * Pasó de verdad, y el síntoma era «de "Camiseta" solo quedan 0 sin
+     * apartar» al entregar una reserva perfectamente válida.
+     */
+    const suya = leer(K.reservas).find((x) => x.referencia === nueva.resguardo.referencia)
+    caso('la reserva se entrega aunque no quede nada más', true,
+      m.entregarReservaLocal(suya.id, 'Efectivo').ok)
+    caso('y el almacén queda a cero', 0, de('CAM').stock)
   }
 
   Object.values(K).forEach((k) => localStorage.removeItem(k))

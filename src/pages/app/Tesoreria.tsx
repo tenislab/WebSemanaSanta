@@ -174,7 +174,7 @@ export default function Tesoreria() {
               —meter apuntes— pero de golpe. Lo que trae una hermandad el primer
               día es el ejercicio entero en un Excel o el extracto del banco. */}
           <button className="btn btn-outline" onClick={() => setImportarOpen(true)}>
-            Traer vuestro libro de caja
+            Traer vuestro libro de caja (Excel o CSV)
           </button>
           <button className="btn btn-primary" onClick={abrirNuevo}>
             + Nuevo movimiento

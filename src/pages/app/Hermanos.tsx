@@ -18,7 +18,7 @@ import { esMiembro, aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumple
 import { getAsistencias, historialDeAsistencia, asistenciaEnUnaFrase } from '../../lib/asistencia'
 import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
-import { isSupabaseConfigured } from '../../lib/supabase'
+import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { crearAccesoHermano } from '../../lib/accesos'
 import { darLaBienvenida } from '../../lib/bienvenida'
 import { contarLaTanda, enviarAcceso, enviarAccesoEnTanda, porQueNoSePuede } from '../../lib/enviarAcceso'
@@ -377,6 +377,21 @@ export default function Hermanos() {
   const [ibanSaved, setIbanSaved] = useState(false)
   const [contacto, setContacto] = useState({ email: '', telefono: '', direccion: '' })
   const [contactoSaved, setContactoSaved] = useState(false)
+  /*
+   * LOS DATOS DE IDENTIDAD SE PUEDEN CORREGIR, Y HASTA AHORA NO.
+   *
+   * De la ficha solo se podían tocar el contacto y los datos sueltos (talla,
+   * parroquia, notas). El nombre, el DNI, el número y las fechas se escribían
+   * en el alta y se quedaban así PARA SIEMPRE.
+   *
+   * Y hay una errata en el nombre o en el DNI de cada dos altas. Peor: cuando
+   * se intentaba dar de alta otra vez a alguien que ya estaba, el propio aviso
+   * decía «busca la que ya está y edítala» — mandando a hacer justo lo único
+   * que no se podía hacer.
+   */
+  const [ident, setIdent] = useState({ nombre: '', dni: '', numero: '', antiguedad: '', fechaNacimiento: '' })
+  const [identError, setIdentError] = useState<string | null>(null)
+  const [identSaved, setIdentSaved] = useState(false)
 
   const solicitudesRemotas = useSolicitudes()
   const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(solicitudesRemotas)
@@ -616,6 +631,16 @@ export default function Hermanos() {
       direccion: selected?.direccion && selected.direccion !== 'Sin datos' ? selected.direccion : '',
     })
     setContactoSaved(false)
+    setIdent({
+      nombre: selected?.nombre ?? '',
+      dni: selected?.dni ?? '',
+      numero: String(selected?.numero ?? 0),
+      antiguedad: String(selected?.antiguedad ?? ''),
+      fechaNacimiento: selected?.fechaNacimiento ?? '',
+    })
+    setIdentError(null)
+    setIdentSaved(false)
+
     // Solo al CAMBIAR de hermano (por eso la dependencia es el id y no la ficha
     // entera): si dependiera de cada campo, el formulario se reiniciaría solo
     // mientras se está escribiendo en él.
@@ -646,7 +671,20 @@ export default function Hermanos() {
       .filter((h) => {
         const q = llano(busqueda)
         if (!q) return true
-        return llano(h.nombre).includes(q) || String(h.numero).includes(q)
+        /*
+         * Y POR DNI. Faltaba, y es por lo que se busca cuando alguien llama
+         * por teléfono: el hermano no se sabe su número y el nombre lo
+         * comparten tres. Papeletas ya buscaba por DNI; aquí no, y es la
+         * pantalla donde más se busca.
+         *
+         * Sin puntos ni guiones y sin distinguir mayúsculas, que es como lo
+         * dicta la gente: `llano` ya quita los acentos y baja a minúsculas.
+         */
+        const dni = llano(h.dni ?? '').replace(/[^a-z0-9]/g, '')
+        const qDni = q.replace(/[^a-z0-9]/g, '')
+        return llano(h.nombre).includes(q)
+          || String(h.numero).includes(q)
+          || (qDni.length > 0 && dni.includes(qDni))
       })
       // Los de baja (sin número activo) van al final, nunca delante del nº 1.
       .sort((a, b) => {
@@ -674,6 +712,83 @@ export default function Hermanos() {
 
   /** Añade o quita una etiqueta a un hermano (y refleja el cambio en la ficha abierta). */
   /** Cambia unos cuantos campos de un hermano. Se guarda al escribir, como el resto. */
+  /**
+   * GUARDA LOS DATOS DE IDENTIDAD DE LA FICHA: nombre, DNI, número, año de
+   * antigüedad y fecha de nacimiento.
+   *
+   * Se comprueba lo mismo que en el alta, y por lo mismo:
+   *
+   *   · EL DNI, letra incluida. Es por lo que entra el hermano en su área, y
+   *     con la letra mal el que no puede entrar es él, con un «DNI o
+   *     contraseña incorrectos» que le hace probar contraseñas hasta rendirse.
+   *   · QUE NO SE REPITA, ni el DNI ni el número. La base tiene índices únicos
+   *     para los dos: si se cuela, el error que sale es un «duplicate key» que
+   *     no dice nada, y encima llega DESPUÉS de haber cerrado el panel.
+   *
+   * El número se puede dejar en 0 —el hermano civil no ocupa escalafón— pero
+   * no se puede poner uno que ya tenga otro.
+   */
+  function guardarIdentidad() {
+    if (!selected) return
+    setIdentError(null)
+    const nombre = ident.nombre.trim()
+    if (!nombre) { setIdentError('El nombre no puede quedarse vacío.'); return }
+
+    /*
+     * EL DNI SE COMPRUEBA SOLO SI SE HA TOCADO.
+     *
+     * Es la misma regla que en el alta y por el mismo motivo: se valida lo que
+     * se teclea HOY, con el hermano delante, no lo que vino de un Excel de
+     * hace quince años. Un censo importado trae erratas, y son fichas de gente
+     * de verdad.
+     *
+     * Comprobarlo siempre dejaba la ficha bloqueada entera: con el DNI mal de
+     * origen no se podía corregir ni el nombre, que es justo para lo que se
+     * abre esto. Se comprueba lo que se cambia, y lo demás se deja pasar.
+     */
+    const dni = limpiarDni(ident.dni)
+    if (!mismoDni(dni, selected.dni)) {
+      const problema = problemaDeDocumento(dni)
+      if (problema) { setIdentError(problema); return }
+    }
+    if (hermanos.some((h) => h.id !== selected.id && mismoDni(h.dni, dni))) {
+      setIdentError(`Ya hay otro hermano con el DNI ${dni}.`)
+      return
+    }
+
+    const numero = Number(ident.numero)
+    if (!Number.isInteger(numero) || numero < 0) {
+      setIdentError('El número de hermano tiene que ser un número entero, o 0 si no ocupa escalafón.')
+      return
+    }
+    if (numero > 0 && hermanos.some((h) => h.id !== selected.id && h.numero === numero)) {
+      const quien = hermanos.find((h) => h.id !== selected.id && h.numero === numero)
+      setIdentError(`El número ${numero} ya lo tiene ${quien?.nombre}.`)
+      return
+    }
+
+    const antiguedad = ident.antiguedad.trim() === '' ? selected.antiguedad : Number(ident.antiguedad)
+    if (!Number.isInteger(antiguedad) || antiguedad < 1000 || antiguedad > 2999) {
+      setIdentError('El año de antigüedad tiene que ser un año de cuatro cifras.')
+      return
+    }
+
+    aplicarHermano(selected.id, {
+      nombre,
+      dni,
+      numero,
+      antiguedad,
+      fechaNacimiento: ident.fechaNacimiento || undefined,
+    })
+    apuntar({
+      autorNombre: quienSoy, accion: 'ficha', sobreTipo: 'hermano',
+      sobreId: selected.id, sobreNombre: nombre,
+      detalle: `Corrigió los datos de la ficha de ${nombre}`,
+    })
+    setIdentSaved(true)
+    setTimeout(() => setIdentSaved(false), 2500)
+  }
+
   function aplicarHermano(hermanoId: string, cambios: Partial<Hermano>) {
     setHermanos((prev) => prev.map((h) => (h.id === hermanoId ? { ...h, ...cambios } : h)))
   }
@@ -1066,9 +1181,40 @@ export default function Hermanos() {
    * escalafón de antigüedad). El hermano de baja sale de la numeración activa
    * (número 0, se muestra como «—»); su historial se conserva.
    */
-  function darDeBaja(hermanoId: string) {
+  /*
+   * DAR DE BAJA NO ES TOCAR UNA FICHA: ES TOCAR EL ESCALAFÓN ENTERO.
+   *
+   * El que se va sale de la numeración y todos los de detrás suben un puesto.
+   * En una hermandad de mil, dar de baja al nº 8 son novecientas noventa y dos
+   * fichas cambiadas.
+   *
+   * Eso se mandaba ficha a ficha, de seis en seis y EN PARALELO, y el índice
+   * único `(hermandad_id, numero)` lo rechazaba casi todo: el nº 9 intentaba
+   * ponerse el 8 mientras el 8 todavía era el 8. Salían veinte errores de
+   * «duplicate key» y LA BAJA NO SE GUARDABA — en la pantalla sí, en la base
+   * no. Los dos lados diciendo cosas distintas sobre el censo.
+   *
+   * Ahora lo hace la base de una vez, en una transacción: o se hace entero o
+   * no se hace nada. Ver `supabase/baja-de-hermano.sql`.
+   *
+   * Y VA ANTES DE TOCAR LA PANTALLA a propósito. Si falla, no se pinta una
+   * baja que no ha ocurrido; y si sale bien, lo que la sincronización mande
+   * después ya coincide con lo que hay guardado, así que no choca con nada.
+   */
+  async function darDeBaja(hermanoId: string) {
     const objetivo = hermanos.find((h) => h.id === hermanoId)
     if (!objetivo || objetivo.estado === 'Baja') return
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.rpc('dar_de_baja_hermano', { p_hermano: hermanoId })
+      if (error) {
+        window.alert(
+          `No se ha podido tramitar la baja de ${objetivo.nombre}: ${error.message}\n\n`
+          + 'No se ha cambiado nada. Si esto se repite, puede que a la base le falte la última '
+          + 'actualización: ejecuta ACTUALIZAR.sql.',
+        )
+        return
+      }
+    }
     // Se recoloca dentro del updater: la lista pudo cambiar (otra pestaña, una
     // recarga desde la base) entre el clic y este momento.
     setHermanos((prev) => darDeBajaEnCenso(prev, hermanoId))
@@ -1280,8 +1426,8 @@ export default function Hermanos() {
         <input
           ref={buscador}
           className="search-box"
-          placeholder="Buscar por nombre o número  ( / )"
-          aria-label="Buscar por nombre o número de hermano"
+          placeholder="Buscar por nombre, número o DNI  ( / )"
+          aria-label="Buscar por nombre, número o DNI del hermano"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -1736,6 +1882,73 @@ export default function Hermanos() {
               </div>
             </dl>
 
+            {/*
+              CORREGIR LA FICHA.
+
+              Faltaba entero: el nombre, el DNI, el número y las fechas se
+              escribían en el alta y se quedaban así para siempre. Con una
+              errata en el nombre no había nada que hacer, y con el DNI mal el
+              hermano no podía entrar en su área.
+
+              Y era peor de lo que parece: al intentar dar de alta a alguien
+              que ya estaba, el aviso decía «busca la que ya está y edítala» —
+              mandando a hacer justo lo único que no se podía hacer.
+            */}
+            <div className="assign-box">
+              <label>Corregir la ficha</label>
+              <p className="form-hint">
+                Los datos con los que se dio de alta. El DNI es con el que entra en su área, así
+                que si está mal, quien no puede entrar es él.
+              </p>
+              <div className="form-row">
+                <label htmlFor="identNombre">Nombre y apellidos</label>
+                <input
+                  id="identNombre" value={ident.nombre} maxLength={120}
+                  onChange={(e) => setIdent((v) => ({ ...v, nombre: e.target.value }))}
+                />
+              </div>
+              <div className="form-grid-2">
+                <div className="form-row">
+                  <label htmlFor="identDni">DNI o NIE</label>
+                  <input
+                    id="identDni" value={ident.dni}
+                    onChange={(e) => setIdent((v) => ({ ...v, dni: e.target.value }))}
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="identNumero">Nº de hermano</label>
+                  <input
+                    id="identNumero" type="number" min={0} value={ident.numero}
+                    onChange={(e) => setIdent((v) => ({ ...v, numero: e.target.value }))}
+                  />
+                  <p className="form-hint">0 = no ocupa escalafón (hermano civil).</p>
+                </div>
+              </div>
+              <div className="form-grid-2">
+                <div className="form-row">
+                  <label htmlFor="identAnt">Año de antigüedad</label>
+                  <input
+                    id="identAnt" type="number" min={1000} max={2999} value={ident.antiguedad}
+                    onChange={(e) => setIdent((v) => ({ ...v, antiguedad: e.target.value }))}
+                  />
+                </div>
+                <div className="form-row">
+                  <label htmlFor="identNac">Fecha de nacimiento</label>
+                  <input
+                    id="identNac" type="date" value={ident.fechaNacimiento}
+                    onChange={(e) => setIdent((v) => ({ ...v, fechaNacimiento: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <AvisoDeCampo texto={identError} />
+              <div className="assign-box__row">
+                <button type="button" className="btn btn-primary btn-sm" onClick={guardarIdentidad}>
+                  Guardar la ficha
+                </button>
+                {identSaved && <span className="pill pill--ok">Guardado</span>}
+              </div>
+            </div>
+
             <div className="assign-box">
               <label>Datos de contacto</label>
               <p className="form-hint">
@@ -2004,7 +2217,7 @@ export default function Hermanos() {
                     className="btn btn-ghost btn-sm rgpd-borrar"
                     onClick={() => {
                       if (window.confirm(`¿Dar de baja a ${selected.nombre}? Los números de hermano se recolocarán.`)) {
-                        darDeBaja(selected.id)
+                        void darDeBaja(selected.id)
                       }
                     }}
                   >

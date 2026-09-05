@@ -164,4 +164,100 @@ export default async function ({ caso }) {
   caso('el instalador trae más piezas que la actualización', true, delOtro.length > suyas.length)
   caso('y las de la actualización están todas en el instalador', [],
     suyas.filter((p) => !delOtro.includes(p)))
+
+  /*
+   * --- LA OTRA FORMA DE QUEDARSE FUERA: UNA COLUMNA ---
+   *
+   * `schema.sql` va lleno de `alter table … add column if not exists`, y su
+   * propio comentario dice para qué: «PARA LAS BASES QUE YA EXISTEN: el
+   * create table if not exists no toca una tabla que ya está, así que a ellas
+   * la columna solo les llega por aquí».
+   *
+   * La intención es la correcta y el reparto no: `schema.sql` solo va en el
+   * INSTALADOR. Una hermandad montada hace meses, que desde entonces solo pega
+   * `ACTUALIZAR.sql`, no vuelve a ejecutarlo nunca. Así que las columnas
+   * «para las bases que ya existen» eran justo las que no les llegaban.
+   *
+   * Nueve se quedaron fuera así, y no se veía: cuando la aplicación escribe en
+   * una columna que no está, Postgres rechaza LA SENTENCIA ENTERA. No se
+   * pierde ese dato — no se guarda la fila. El tramo entero, el cobro entero.
+   * Se reportó como «pongo la hora de citación y al recargar está en blanco».
+   *
+   * Esto lo vigila mecánicamente: toda columna que el instalador añada con
+   * `alter table` tiene que tener camino hasta `ACTUALIZAR.sql`.
+   */
+  const columnasQueAnade = (texto) =>
+    [...texto.matchAll(/alter table\s+(\w+)\s+add column if not exists\s+(\w+)/gi)]
+      .map((m) => `${m[1]}.${m[2]}`)
+
+  const delInstalador = new Set(columnasQueAnade(await readFile('supabase/schema.sql', 'utf8')))
+  const deActualizarSql = new Set(columnasQueAnade(enDisco))
+  const sinCamino = [...delInstalador].filter((c) => !deActualizarSql.has(c))
+  caso('ninguna columna del instalador se queda sin llegar a ACTUALIZAR.sql', '',
+    sinCamino.join(', '))
+  /*
+   * --- Y LA TERCERA FORMA, QUE ES LA QUE MÁS DUELE ---
+   *
+   * Una columna puede quedarse fuera aunque no la añada `schema.sql`. El caso
+   * real: `movimientos.origen` la crea `apuntes-automaticos.sql`, que tampoco
+   * va en esta lista. Sola no molestaba a nadie. Lo que la volvió urgente es
+   * que `tienda.sql` SÍ va, y su `registrar_venta` ESCRIBE en `origen`.
+   *
+   * Resultado: en una base actualizada, cobrar en la tienda fallaba entero,
+   * con «column "origen" of relation "movimientos" does not exist» — un error
+   * que no le dice nada a quien está detrás del mostrador con la cola delante.
+   *
+   * La regla, entonces, no es sobre de dónde viene la columna sino sobre lo
+   * que este fichero se atreve a nombrar: SI `ACTUALIZAR.sql` ESCRIBE EN UNA
+   * COLUMNA, TIENE QUE GARANTIZAR QUE ESA COLUMNA EXISTE. O la crea él, o está
+   * en el `create table` del esquema. No hay tercera opción, porque este
+   * fichero es todo lo que va a ejecutar una hermandad que ya está montada.
+   */
+  const esquema = await readFile('supabase/schema.sql', 'utf8')
+  const columnasPorTabla = {}
+  const anota = (tabla, columna) => {
+    columnasPorTabla[tabla] = columnasPorTabla[tabla] || new Set()
+    columnasPorTabla[tabla].add(columna)
+  }
+  // Lo que declaran los `create table`, de los dos ficheros.
+  for (const texto of [esquema, enDisco]) {
+    for (const m of texto.matchAll(/create table if not exists\s+(\w+)\s*\(([\s\S]*?)\n\);/g)) {
+      for (const linea of m[2].split('\n')) {
+        const c = linea.trim().match(/^([a-z_][a-z_0-9]*)\s+/)
+        // «primary key (…)» y compañía empiezan igual que una columna.
+        if (c && !['primary', 'unique', 'check', 'foreign', 'constraint'].includes(c[1])) anota(m[1], c[1])
+      }
+    }
+    for (const m of texto.matchAll(/alter table\s+(\w+)\s+add column if not exists\s+(\w+)/gi)) anota(m[1], m[2])
+  }
+
+  /*
+   * La única excepción, y va nombrada para que no se convierta en costumbre:
+   * `multi-hermandad.sql` es lo que partió la base en hermandades. Una base
+   * sin él no es una base a la que le falte una actualización: es una base de
+   * antes de que el producto tuviera dueños, donde no funciona ni una política
+   * de seguridad. No se arregla con `add column`, se arregla con aquel fichero
+   * entero, que además rellena y pone la columna obligatoria.
+   */
+  const deAntesDeLosDuenos = new Set(['movimientos.hermandad_id', 'permisos_cargo.hermandad_id'])
+
+  const sinGarantia = new Set()
+  for (const m of enDisco.matchAll(/insert into\s+(\w+)\s*\(([^)]*)\)/gi)) {
+    const tabla = m[1]
+    // Solo se juzgan las tablas que este proyecto conoce: `storage.buckets` y
+    // demás no son suyas.
+    if (!columnasPorTabla[tabla]) continue
+    for (const columna of m[2].split(',').map((s) => s.trim())) {
+      if (!/^[a-z_][a-z_0-9]*$/.test(columna)) continue
+      const clave = `${tabla}.${columna}`
+      if (!columnasPorTabla[tabla].has(columna) && !deAntesDeLosDuenos.has(clave)) sinGarantia.add(clave)
+    }
+  }
+  caso('no escribe en ninguna columna que no garantice', '', [...sinGarantia].join(', '))
+
+  // Y el caso concreto que lo destapó, nombrado: es el que hay que reconocer.
+  caso('trae la columna «origen» de los movimientos', true,
+    /alter table movimientos add column if not exists origen text;/.test(enDisco))
+  caso('y su índice único por hermandad', true,
+    /create unique index if not exists movimientos_origen_por_hermandad/.test(enDisco))
 }

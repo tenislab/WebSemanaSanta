@@ -49,6 +49,28 @@ export default async function ({ cargar, caso }) {
   caso('ni uno vacío contra uno lleno', false, m.mismoDni('', '12345678A'))
   caso('ni con solo puntos', false, m.mismoDni('...', '---'))
 
+
+  /*
+   * LOS DNI DE LA DEMO TIENEN QUE PASAR LA COMPROBACIÓN DE LA PROPIA APP.
+   *
+   * Los quince escritos a mano iban con la letra puesta a ojo —12345678A,
+   * 23456789B, 33445566N…— y ninguno cuadraba. Es lo mismo que ya pasó con el
+   * CIF y el IBAN de la hermandad de ejemplo, y molesta en dos sitios:
+   *
+   *   · Quien abre la demo y corrige cualquier cosa de una ficha se choca con
+   *     «la letra no cuadra» en un dato que no ha tocado.
+   *   · Y quien prueba el acceso del hermano con esos DNI se lleva un rechazo
+   *     que parece un fallo de la aplicación.
+   *
+   * Los generados (`10000000 + i * 137`) siempre estuvieron bien: calculan la
+   * letra con la regla. Estos van ahora igual.
+   */
+  const censo = await cargar('src/data/hermanos.ts')
+  const malos = censo.HERMANOS_INICIALES
+    .filter((h) => h.dni && !m.documentoValido(h.dni))
+    .map((h) => `${h.nombre}: ${h.dni}`)
+  caso('ningún hermano de ejemplo lleva un DNI inválido', '', malos.join(' · '))
+
   await todosUsanLaMisma({ caso })
 }
 

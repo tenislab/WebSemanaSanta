@@ -451,4 +451,70 @@ export async function lasCifrasDeLosDatos({ cargar, caso }) {
     caso('ni con algo que no es número', 100, m.techoRedondo(Number.NaN))
     caso('ni con un negativo', 100, m.techoRedondo(-5))
   }
+  /*
+   * 7. EL PRECIO DE HERMANO EN LA WEB.
+   *
+   * Hasta ahora el descuento solo existía en el mostrador: el hermano que
+   * compraba por internet pagaba tarifa, sin que nada le dijera que entrando en
+   * su área le habría costado menos.
+   *
+   * `precioHermano` VACÍO NO ES «igual que el precio». Son dos cosas distintas
+   * —«no le corresponde ninguno, o no ha entrado» frente a «le corresponde»— y
+   * la página las dice distinto: a uno le ofrece entrar y al otro le enseña la
+   * tarifa tachada. Rellenarlo con `precio` cuando no hay descuento borraría esa
+   * diferencia y el enlace de «entra y verás tu precio» no saldría nunca.
+   */
+  {
+    const tarifa = { precio: 25 }
+    const rebajado = { precio: 25, precioHermano: 22.5 }
+    caso('sin descuento se paga la tarifa', 25, m.precioParaMi(tarifa))
+    caso('y no se dice que esté rebajado', false, m.seRebajoParaMi(tarifa))
+    caso('con descuento se paga el suyo', 22.5, m.precioParaMi(rebajado))
+    caso('y sí se dice', true, m.seRebajoParaMi(rebajado))
+    // Un descuento del 0 % existe y no es una rebaja: enseñar la tarifa tachada
+    // al lado del mismo número es de las cosas que hacen desconfiar de un precio.
+    caso('un 0 % no se pinta como rebaja', false,
+      m.seRebajoParaMi({ precio: 25, precioHermano: 25 }))
+
+    /*
+     * Y EL TOTAL DE LA CESTA CON EL PRECIO DE HERMANO. Es lo que se le enseña
+     * antes de dar los datos y lo que va escrito en el resguardo: si aquí
+     * saliera la tarifa, la web prometería un importe y el mostrador cobraría
+     * otro, con un papel de por medio.
+     */
+    const art = (id, precio, precioHermano) => ({
+      id, codigo: id, nombre: id, descripcion: '', precio, iva: 21, disponible: 10, precioHermano,
+    })
+    caso('la cesta suma con el precio de hermano', 22.5 * 2 + 5.4,
+      m.totalDeLaCesta([
+        { articulo: art('a', 25, 22.5), cantidad: 2 },
+        { articulo: art('b', 6, 5.4), cantidad: 1 },
+      ]))
+    caso('y sin él, con la tarifa', 25 * 2 + 6,
+      m.totalDeLaCesta([
+        { articulo: art('a', 25), cantidad: 2 },
+        { articulo: art('b', 6), cantidad: 1 },
+      ]))
+    /*
+     * En céntimos, como todo lo demás de este archivo. Tres artículos de 6,10
+     * sumados con decimales dan 18,299999999999997, y en pantalla «18,3 €».
+     */
+    caso('y en céntimos, sin arrastrar decimales', 18.3,
+      m.totalDeLaCesta([{ articulo: art('c', 7, 6.1), cantidad: 3 }]))
+  }
+
+  /*
+   * 8. CUÁNTO MÁS CABE: la misma cuenta para la web y para el mostrador.
+   *
+   * Estaba escrita dos veces con dos criterios: la web contra lo disponible y
+   * la caja contra nada en absoluto —dejaba teclear 99 de algo de lo que
+   * quedaban 3, y el rechazo llegaba al cobrar, con la persona delante—.
+   */
+  {
+    caso('caben las que quedan menos las puestas', 2, m.loQueQuedaPorPoner(5, 3))
+    caso('no cabe nada si ya están todas', 0, m.loQueQuedaPorPoner(3, 3))
+    // Nunca negativo: un «caben −2» se usaría como número en algún sitio.
+    caso('ni con más puestas de las que hay', 0, m.loQueQuedaPorPoner(3, 7))
+    caso('ni con el disponible en negativo', 0, m.loQueQuedaPorPoner(-2, 0))
+  }
 }

@@ -34,7 +34,7 @@ import type { Hermano } from '../data/hermanos'
  * porque los cambios de ficha son muchos y menores. Resultado: una hermandad
  * recién configurada no mandaba ninguno de los dos y no había forma de saberlo.
  */
-export type TipoAviso = 'ficha' | 'comunicado' | 'cuota' | 'papeleta' | 'importante' | 'encargo' | 'existencias'
+export type TipoAviso = 'ficha' | 'comunicado' | 'cuota' | 'papeleta' | 'importante' | 'encargo' | 'existencias' | 'tienda'
 
 export interface AvisoHermano {
   id: string
@@ -69,6 +69,12 @@ export const TIPOS_AVISO: { id: TipoAviso; nombre: string; icono: string; explic
    * cargo lleva cada uno, y no lo sabe ni tiene por qué.
    */
   { id: 'existencias', nombre: 'Cuando queda poco género', icono: '📦', explica: 'Si llevas el inventario, cuando un artículo de la tienda baja del mínimo.' },
+  /*
+   * Y este es el de la otra punta: le llega a quien HA APARTADO algo por la web
+   * y ya lo puede recoger. El resguardo del principio se manda solo; esto lo
+   * dispara una persona cuando la reserva está preparada de verdad.
+   */
+  { id: 'tienda', nombre: 'Mis reservas de la tienda', icono: '🛍️', explica: 'Cuando lo que apartaste por la web ya se puede recoger.' },
 ]
 
 const CLAVE = 'cabildo-avisos-hermano'

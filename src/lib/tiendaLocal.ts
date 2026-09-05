@@ -50,11 +50,14 @@ import { modoDemoActivo } from './demo'
 import { nuevoId } from './supabaseSync'
 import { hoyIso } from './hoy'
 import {
-  PRODUCTOS_INICIALES, precioDeLineaCent, totalesDeCesta,
-  type ArticuloVendido, type DatosTienda, type FormaDePagoUsada, type LineaCesta,
+  DESCUENTOS_INICIALES, PRODUCTOS_INICIALES, descuentosPara, precioDeLineaCent, totalesDeCesta,
+  type ArticuloVendido, type DatosTienda, type Descuento, type FormaDePagoUsada, type LineaCesta,
   type LineaReserva, type LineaVenta, type MesDeTienda, type MovimientoStock,
   type Producto, type Reserva, type TipoMovimientoStock, type Venta,
 } from '../data/tienda'
+import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
+import { CLAVE_SESION_HERMANO } from './sesion'
+import { agregarAvisoHermano } from './avisosHermano'
 import type { Movimiento } from '../data/movimientos'
 import { CATEGORIA_IVA_REPERCUTIDO, MOVIMIENTOS_INICIALES } from '../data/movimientos'
 
@@ -85,6 +88,17 @@ export function ventasLocales(): Venta[] {
   return leer<Venta>(CLAVES_DATOS.ventas)
     .slice()
     .sort((a, b) => (a.fecha === b.fecha ? b.numero - a.numero : (a.fecha < b.fecha ? 1 : -1)))
+}
+
+/**
+ * Una venta suelta, la que se acaba de cobrar.
+ *
+ * Sin esto, `traerVenta` devolvía `null` en la demostración y el botón «Ver la
+ * factura» que sale al cobrar no enseñaba nada: justo el paso que quiere ver
+ * quien está probando la aplicación.
+ */
+export function ventaLocalPorId(ventaId: string): Venta | null {
+  return leer<Venta>(CLAVES_DATOS.ventas).find((v) => v.id === ventaId) ?? null
 }
 
 export function lineasLocalesDe(ventaId: string): LineaVenta[] {
@@ -177,6 +191,7 @@ export function moverStockLocal(
   tipo: TipoMovimientoStock,
   cantidad: number,
   motivo: string,
+  aunqueEsteApartado = false,
 ): { ok: true; stock: number } | { ok: false; error: string } {
   if (cantidad === 0) return { ok: false, error: 'No has puesto cuántas unidades.' }
   const actual = stockDe(producto.id)
@@ -185,6 +200,16 @@ export function moverStockLocal(
   // un negativo es un descuadre que ya nadie sabe de dónde viene.
   if (nuevo < 0) {
     return { ok: false, error: `Solo hay ${actual} de «${producto.nombre}».` }
+  }
+  // Y tampoco por debajo de lo que la web ya tiene prometido, salvo que se
+  // insista: una rotura es un hecho, pero tiene que quedar dicho a quién deja
+  // colgado.
+  const apartado = apartadoDe(producto.id)
+  if (cantidad < 0 && nuevo < apartado && !aunqueEsteApartado) {
+    return {
+      ok: false,
+      error: `De «${producto.nombre}» quedarían ${nuevo} y hay ${apartado} apartadas por la web. Suelta esas reservas, o repite marcando que se hace igualmente.`,
+    }
   }
   fijarStock(producto.id, nuevo)
   anotarMovimiento(producto, tipo, cantidad, motivo)
@@ -264,12 +289,26 @@ export function registrarVentaLocal(d: {
 }): { ok: true; venta: VentaLocalRegistrada } | { ok: false; error: string } {
   if (d.lineas.length === 0) return { ok: false, error: 'No has puesto nada en la cesta.' }
 
-  // No se vende lo que no hay, igual que en la base. Se mira ANTES de tocar
-  // nada: media venta apuntada es peor que ninguna.
+  /*
+   * No se vende lo que no hay Y TAMPOCO LO QUE ESTÁ APARTADO, igual que en la
+   * base. Se mira ANTES de tocar nada: media venta apuntada es peor que
+   * ninguna.
+   *
+   * Miraba solo el stock, y con eso el mostrador de la demostración vendía las
+   * camisetas que la web tenía prometidas — el mismo fallo que en la base, y
+   * enseñado además a quien está probando la aplicación por primera vez.
+   */
   for (const l of d.lineas) {
     const hay = stockDe(l.producto.id)
-    if (l.cantidad > hay) {
-      return { ok: false, error: `Solo hay ${hay} de «${l.producto.nombre}».` }
+    const apartado = apartadoDe(l.producto.id)
+    const disponible = hay - apartado
+    if (l.cantidad > disponible) {
+      return {
+        ok: false,
+        error: apartado > 0
+          ? `De «${l.producto.nombre}» solo quedan ${Math.max(disponible, 0)} sin apartar: hay ${hay} y ${apartado} están comprometidas por la web.`
+          : `Solo hay ${hay} de «${l.producto.nombre}».`,
+      }
     }
   }
 
@@ -416,6 +455,50 @@ export function anularVentaLocal(ventaId: string, motivo: string): { ok: boolean
 // menos lo que ya está apartado y sin recoger. Enseñar el stock a secas hace
 // que alguien aparte la última camiseta dos veces.
 
+/**
+ * EL DESCUENTO QUE LE TOCA AL HERMANO QUE ESTÁ NAVEGANDO, en la demostración.
+ *
+ * Con base de datos esto lo decide `mejor_descuento_para` y el precio lo
+ * calcula `catalogo_web`; aquí hay que hacer lo mismo a mano, y con el MISMO
+ * criterio, o la demostración enseñaría una tienda que no se parece a la de
+ * verdad.
+ *
+ * Quién está mirando sale de la sesión del área del hermano —la misma que usa
+ * `/hermano`—, no de un parámetro: es lo más cerca que se puede estar aquí de
+ * «el navegador no dice quién es».
+ */
+export function hermanoLocalDeLaSesion(): string | null {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_SESION_HERMANO)
+    if (!crudo) return null
+    return String((JSON.parse(crudo) as { hermanoId?: unknown }).hermanoId ?? '') || null
+  } catch {
+    // Sin sessionStorage, o con algo que no es JSON: no hay sesión y ya está.
+    return null
+  }
+}
+
+export function descuentoDelHermanoLocal(): { id: string; porcentaje: number } | null {
+  const hermanoId = hermanoLocalDeLaSesion()
+  if (!hermanoId) return null
+
+  const hermano = leerPersistido<Hermano[]>(CLAVES_DATOS.hermanos, HERMANOS_INICIALES)
+    .find((h) => h.id === hermanoId)
+  if (!hermano || hermano.estado === 'Baja') return null
+
+  // Uno solo, el mayor: la factura guarda un descuento, no una lista. Mismo
+  // criterio que `mejor_descuento_para`.
+  const suyos = descuentosPara(
+    leerPersistido<Descuento[]>(CLAVES_DATOS.descuentos, DESCUENTOS_INICIALES),
+    hermano.etiquetas,
+    true,
+  )
+  const mejor = suyos.reduce<Descuento | null>(
+    (m, d) => (m === null || d.porcentaje > m.porcentaje ? d : m), null,
+  )
+  return mejor ? { id: mejor.id, porcentaje: mejor.porcentaje } : null
+}
+
 /** Lo apartado y todavía sin recoger de un artículo. */
 export function apartadoDe(productoId: string): number {
   const vivas = new Set(
@@ -457,6 +540,10 @@ export function reservarEnLaWebLocal(d: {
   const lineas: LineaReserva[] = []
   let total = 0
   const reservaId = nuevoId()
+  // El descuento del hermano que esté navegando, resuelto aquí y no recibido:
+  // igual que en la base, donde `crear_reserva_web` lo saca de la sesión y
+  // nunca de un parámetro.
+  const suyo = descuentoDelHermanoLocal()
 
   for (const l of d.lineas) {
     const p = catalogo.find((x) => x.id === l.articulo.id)
@@ -469,10 +556,13 @@ export function reservarEnLaWebLocal(d: {
     if (l.cantidad > libres) {
       return { ok: false, error: `De «${p.nombre}» ya solo quedan ${Math.max(0, libres)} sin apartar.` }
     }
-    total += Math.round(p.precio * 100) * l.cantidad
+    // El precio con su descuento, con la misma cuenta que aplica la caja al
+    // cobrar. Si aquí saliera un céntimo distinto, el resguardo mentiría.
+    const cent = precioDeLineaCent(p, suyo?.porcentaje ?? 0, null)
+    total += cent * l.cantidad
     lineas.push({
       id: nuevoId(), reservaId, productoId: p.id, codigo: p.codigo,
-      nombre: p.nombre, cantidad: l.cantidad, precioUnitario: p.precio,
+      nombre: p.nombre, cantidad: l.cantidad, precioUnitario: cent / 100,
     })
   }
 
@@ -502,6 +592,9 @@ export function reservarEnLaWebLocal(d: {
     recogerAntesDe: hoyIso(limite),
     total: total / 100,
     creadoEn: new Date().toISOString(),
+    hermanoId: hermanoLocalDeLaSesion() ?? undefined,
+    descuentoId: suyo?.id,
+    descuentoPct: suyo?.porcentaje ?? 0,
   }
   guardar(CLAVES_DATOS.reservas, [...reservas, reserva])
   guardar(CLAVES_DATOS.lineasReserva, [...leer<LineaReserva>(CLAVES_DATOS.lineasReserva), ...lineas])
@@ -538,6 +631,23 @@ export function entregarReservaLocal(
     cesta.push({ producto: p, cantidad: l.cantidad, precioAMano: l.precioUnitario })
   }
 
+  /*
+   * LA RESERVA SE MARCA ENTREGADA **ANTES** DE COBRARLA, y el orden es toda la
+   * trampa de esto.
+   *
+   * Desde que la venta mira lo disponible y no el stock a secas, las líneas de
+   * esta misma reserva cuentan como apartadas mientras siga «pendiente». Con el
+   * marcado detrás, la reserva SE BLOQUEABA A SÍ MISMA: entregar una reserva
+   * perfectamente válida contestaba «de "Camiseta" solo quedan 0 sin apartar»,
+   * y quedaba pendiente para siempre.
+   *
+   * Y si la venta no sale, se deshace: aquí no hay transacción que lo haga
+   * sola, así que se escribe a mano y se comprueba en las pruebas.
+   */
+  guardar(CLAVES_DATOS.reservas, reservas.map((r) => (
+    r.id === reservaId ? { ...r, estado: 'entregada' as const } : r
+  )))
+
   const venta = registrarVentaLocal({
     lineas: cesta,
     canal: 'online',
@@ -545,12 +655,65 @@ export function entregarReservaLocal(
     compradorNombre: reserva.nombre,
     notas: `Reserva ${reserva.referencia}`,
   })
-  if (!venta.ok) return venta
+  if (!venta.ok) {
+    guardar(CLAVES_DATOS.reservas, leer<Reserva>(CLAVES_DATOS.reservas).map((r) => (
+      r.id === reservaId ? { ...r, estado: 'pendiente' as const } : r
+    )))
+    return venta
+  }
 
-  guardar(CLAVES_DATOS.reservas, reservas.map((r) => (
-    r.id === reservaId ? { ...r, estado: 'entregada' as const, ventaId: venta.venta.id } : r
+  guardar(CLAVES_DATOS.reservas, leer<Reserva>(CLAVES_DATOS.reservas).map((r) => (
+    r.id === reservaId ? { ...r, ventaId: venta.venta.id } : r
   )))
   return venta
+}
+
+/**
+ * «TU RESERVA ESTÁ LISTA», en la demostración.
+ *
+ * Hace lo mismo que la base salvo el correo, que aquí no existe —y se dice—.
+ * Lo que sí se hace es empujar el aviso en el área del hermano, que es lo que
+ * se puede enseñar: quien esté probando la aplicación pulsa el botón en la
+ * pestaña de reservas y ve aparecer el aviso en la otra pantalla.
+ */
+export function avisarReservaListaLocal(reservaId: string):
+  { ok: true; hayCorreo: boolean; esHermano: boolean; yaAvisada: boolean } | { ok: false; error: string } {
+  const reservas = leer<Reserva>(CLAVES_DATOS.reservas)
+  const reserva = reservas.find((r) => r.id === reservaId)
+  if (!reserva) return { ok: false, error: 'Esa reserva ya no está.' }
+  if (reserva.estado !== 'pendiente') {
+    return { ok: false, error: `Esa reserva ya está ${reserva.estado}, así que no hay nada que avisar.` }
+  }
+
+  // Avisar dos veces el mismo día no es insistir, es molestar.
+  const hace24h = Date.now() - 24 * 60 * 60 * 1000
+  const yaAvisada = Boolean(reserva.avisadaEn) && new Date(reserva.avisadaEn ?? '').getTime() > hace24h
+
+  const ahora = new Date().toISOString()
+  guardar(CLAVES_DATOS.reservas, reservas.map((r) => (
+    r.id === reservaId
+      ? { ...r, listaEn: r.listaEn ?? ahora, avisadaEn: yaAvisada ? r.avisadaEn : ahora }
+      : r
+  )))
+
+  if (reserva.hermanoId && !yaAvisada) {
+    // La fecha como se lee, no como se guarda: «2026-12-31» en medio de una
+    // frase es de las cosas que hacen que un aviso parezca un error.
+    const [a, m2, d2] = (reserva.recogerAntesDe ?? '').split('-')
+    const plazo = a && m2 && d2 ? `, y te lo guardamos hasta el ${d2}/${m2}/${a}` : ''
+    agregarAvisoHermano(
+      reserva.hermanoId,
+      `Ya puedes pasar a recoger lo que apartaste (${reserva.referencia}). `
+        + `Son ${reserva.total.toFixed(2).replace('.', ',')} €, que se pagan al recogerlo${plazo}.`,
+      'tienda',
+      'Tu reserva está lista',
+    )
+  }
+
+  // `hayCorreo: false` siempre: sin base de datos no hay función de envío que
+  // llamar, y decir que se ha mandado un correo que no existe es peor que no
+  // mandarlo.
+  return { ok: true, hayCorreo: false, esHermano: Boolean(reserva.hermanoId), yaAvisada }
 }
 
 /**

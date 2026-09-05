@@ -446,6 +446,96 @@ async function mandarResguardoDeReserva(
 
 /*
  * ---------------------------------------------------------------------------
+ *   «TU RESERVA ESTÁ LISTA»
+ * ---------------------------------------------------------------------------
+ *
+ * Lo dispara una persona desde el panel cuando lo que alguien apartó ya se
+ * puede recoger. Va DESPUÉS de comprobar quién llama, al revés que el
+ * resguardo: aquel lo pide la web pública, sin sesión de nadie; este lo pide la
+ * casa de hermandad, que sí la tiene.
+ *
+ * Los cierres de verdad están en la base (`datos_para_avisar_reserva`): solo
+ * contesta si alguien ha marcado la reserva como lista, y solo una vez al día.
+ */
+async function mandarAvisoDeReservaLista(
+  datos: { hermandadId?: string; referencia?: string },
+): Promise<Response> {
+  if (!SERVICE_KEY) {
+    console.error('Falta SUPABASE_SERVICE_ROLE_KEY: no se puede avisar de la reserva.')
+    return respuesta({ error: 'El servidor no está configurado para mandar avisos.' }, 503)
+  }
+  if (!datos.hermandadId || !(datos.referencia ?? '').trim()) {
+    return respuesta({ error: 'Faltan datos para mandar el aviso.' }, 400)
+  }
+
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/datos_para_avisar_reserva`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      apikey: SERVICE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_hermandad_id: datos.hermandadId, p_referencia: datos.referencia }),
+  })
+  if (!r.ok) {
+    console.error('datos_para_avisar_reserva falló:', r.status, await r.text())
+    return respuesta({ error: 'No se ha podido preparar el aviso.' }, 502)
+  }
+  const res = await r.json()
+  /*
+   * Sin fila —o sin correo— se contesta que no se ha mandado nada, y ya está.
+   * No es un error: es «esa persona no dejó dirección», o «ya se le avisó hoy»,
+   * y las dos son respuestas buenas. El panel lo dice en pantalla.
+   */
+  if (!res?.email) return respuesta({ enviados: 0 })
+
+  const hermandad = String(res.hermandad ?? '').trim()
+  const dequien = hermandad || 'la hermandad'
+  const euros = (n: unknown) => `${Number(n ?? 0).toFixed(2).replace('.', ',')} €`
+  const lineas = (Array.isArray(res.lineas) ? res.lineas : []) as
+    { nombre?: string; cantidad?: number; importe?: number }[]
+  const nombre = String(res.nombre ?? '').trim()
+  const saluda = nombre ? `Hola, ${nombre.split(' ')[0]}:` : 'Hola:'
+  const plazo = res.recoger_antes_de
+    ? `Te lo guardamos hasta el ${String(res.recoger_antes_de)}.`
+    : 'Pásate cuando puedas por la casa de hermandad.'
+
+  const asunto = `Ya puedes recoger tu reserva ${res.referencia}`
+  const texto = [
+    saluda,
+    '',
+    `Ya está listo lo que apartaste en ${dequien}:`,
+    ...lineas.map((l) => `  · ${l.cantidad} × ${l.nombre} — ${euros(l.importe)}`),
+    '',
+    `Se paga al recogerlo: ${euros(res.total)}`,
+    `Referencia: ${res.referencia}`,
+    '',
+    plazo,
+  ].join('\n')
+  const html = `<p>${escapar(saluda)}</p>
+    <p>Ya está listo lo que apartaste en <b>${escapar(dequien)}</b>:</p>
+    <ul>${lineas.map((l) =>
+      `<li>${Number(l.cantidad ?? 0)} × ${escapar(String(l.nombre ?? ''))} — ${euros(l.importe)}</li>`).join('')}</ul>
+    <p><b>Se paga al recogerlo: ${euros(res.total)}</b><br>
+    Referencia: <b>${escapar(String(res.referencia))}</b></p>
+    <p>${escapar(plazo)}</p>`
+
+  const envio = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: firmarComo(hermandad), to: [String(res.email)], subject: asunto, text: texto, html,
+    }),
+  })
+  if (!envio.ok) {
+    console.error('Resend devolvió un error al avisar de la reserva:', envio.status, await envio.text())
+    return respuesta({ error: 'No se ha podido mandar el aviso.' }, 502)
+  }
+  return respuesta({ enviados: 1 })
+}
+
+/*
+ * ---------------------------------------------------------------------------
  *   «HE OLVIDADO MI CONTRASEÑA» — la recuperación del hermano
  * ---------------------------------------------------------------------------
  *
@@ -671,6 +761,14 @@ Deno.serve(async (req: Request) => {
 
   const permiso = await quienLlama(req)
   if (!permiso.ok) return respuesta({ error: permiso.motivo }, 401)
+
+  /*
+   * «Tu reserva está lista» va AQUÍ, detrás de la comprobación, y no arriba con
+   * el resguardo: aquel lo pide la web pública sin sesión de nadie, y este lo
+   * dispara una persona de la casa de hermandad, que sí la tiene.
+   */
+  const listaAviso = cuerpoCrudo.reservaLista as { hermandadId?: string; referencia?: string } | undefined
+  if (listaAviso) return await mandarAvisoDeReservaLista(listaAviso)
 
   // Con qué nombre firma esta hermandad, y a dónde van las respuestas.
   const firma = await comoFirmaSuHermandad(permiso.auth ?? '')

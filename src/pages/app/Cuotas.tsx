@@ -981,7 +981,7 @@ export default function Cuotas() {
                 impago de hace dos años ni decir desde cuándo alguien está al
                 corriente. */}
             <button type="button" onClick={() => setImportarOpen(true)}>
-              Traer el historial de cuotas
+              Traer el historial de cuotas (Excel o CSV)
             </button>
           </MenuAcciones>
           <button className="btn btn-primary" onClick={abrirNuevaCuota}>

@@ -26,7 +26,7 @@ function siNoEsElHueco(valor: string): string {
   return valor === 'Sin datos' ? '' : valor
 }
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { LogoMark } from '../components/Logo'
 import EscudoHermandad from '../components/EscudoHermandad'
 import PapeletaTicket from '../components/PapeletaTicket'
@@ -131,6 +131,26 @@ function leerSesion(): Sesion | null {
 
 function guardarSesion(sesion: Sesion) {
   sessionStorage.setItem(SESION_KEY, JSON.stringify(sesion))
+}
+
+/**
+ * A DÓNDE VOLVER DESPUÉS DE ENTRAR, si a esta pantalla se llegó desde otro sitio.
+ *
+ * Lo usa la tienda de la web pública: «¿Eres hermano? Entra y verás tu precio»
+ * manda aquí con `?volver=/w/mi-hermandad#tienda`, y al entrar se vuelve al
+ * escaparate con los precios ya rebajados. Sin esto, quien pulsa ese enlace
+ * acaba en su área del hermano preguntándose qué ha pasado con su cesta.
+ *
+ * SOLO SE ADMITE UN CAMINO DE ESTA MISMA WEB: tiene que empezar por una barra y
+ * NO por dos. `//otrositio.com` es una dirección absoluta con el esquema
+ * heredado, así que sin la segunda comprobación bastaría con mandarle a alguien
+ * `…/hermano?volver=//parecido-a-gobergo.com` para que, tras teclear su DNI y
+ * su contraseña aquí, acabara en una página ajena.
+ */
+function aDondeVolver(destino: string | null): string | null {
+  if (!destino) return null
+  if (!destino.startsWith('/') || destino.startsWith('//')) return null
+  return destino
 }
 
 /**
@@ -285,6 +305,30 @@ export default function HermanoPortal() {
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+
+  /*
+   * Y SI SE LLEGÓ AQUÍ DESDE OTRO SITIO, SE VUELVE ALLÍ AL ENTRAR.
+   *
+   * Lo usa la tienda de la web pública: quien pulsa «entra y verás tu precio»
+   * tiene que aparecer otra vez en el escaparate, con los precios ya rebajados
+   * y no en su área del hermano preguntándose qué ha pasado con su cesta.
+   *
+   * En un efecto y no dentro de las tres ramas del `entrar()` —Supabase,
+   * hermandad principal sin base y hermandades de muestra—: es la misma
+   * decisión para las tres y escrita tres veces se olvidaría en una.
+   *
+   * `yaVolví` para que ocurra UNA sola vez: sin él, volver a `/hermano` desde
+   * la propia web con el parámetro todavía en la barra sería un ida y vuelta
+   * del que no se sale.
+   */
+  const yaVolvi = useRef(false)
+  const volverA = aDondeVolver(searchParams.get('volver'))
+  useEffect(() => {
+    if (!sesion || !volverA || yaVolvi.current) return
+    yaVolvi.current = true
+    navigate(volverA)
+  }, [sesion, volverA, navigate])
 
   // ---- Identificación: buscar hermandad → iniciar sesión o solicitar alta ----
   const [paso, setPaso] = useState<'buscar' | 'acceso'>('buscar')

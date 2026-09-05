@@ -1597,17 +1597,46 @@ export default function Papeletas() {
       {/* Zona de impresión masiva: oculta en pantalla, visible al imprimir con la clase print-masivo */}
       {listaImpresion && (
         <div className="impresion-masiva" aria-hidden="true">
+          {/*
+            CON EL MODELO DE LA HERMANDAD, IGUAL QUE LA DE UNA EN UNA.
+
+            Aquí iba siempre `PapeletaTicket`, el diseño de fábrica. La ficha
+            de un hermano sí respetaba el modelo que la hermandad se había
+            hecho —escudo, tipografía, textos suyos—, pero al imprimir la tanda
+            salían las cuatrocientas con el genérico.
+
+            Y es justo al revés de como se usa: la de una en una se saca para
+            una consulta; la tanda es la que se reparte a los hermanos, la que
+            lleva el escudo y la que se ve. La hermandad monta su modelo, lo
+            comprueba en una ficha, imprime las cuatrocientas y le salen todas
+            sin él.
+          */}
           {listaImpresion.map((it) => (
             <div className="impresion-masiva__pagina" key={it.papeleta.id}>
-              <PapeletaTicket
-                papeleta={it.papeleta}
-                hermano={it.hermano}
-                hermandad={hermandad}
-                tramo={it.tramo}
-                puesto={it.puesto}
-                excedeAforo={it.excedeAforo}
-                opcion={it.papeleta.opcion}
-              />
+              {modelo ? (
+                <PapeletaModeloRender
+                  modelo={modelo}
+                  sinQr={false}
+                  datos={{
+                    hermano: it.hermano,
+                    papeleta: it.papeleta,
+                    tramoEtiqueta: it.tramo ? etiquetaTramo(it.tramo) : null,
+                    puesto: it.puesto,
+                    hermandadNombre: hermandad.nombreLegal || (user?.user_metadata?.hermandad as string | undefined) || '',
+                    fechaSalida: campana.fechaSalida,
+                  }}
+                />
+              ) : (
+                <PapeletaTicket
+                  papeleta={it.papeleta}
+                  hermano={it.hermano}
+                  hermandad={hermandad}
+                  tramo={it.tramo}
+                  puesto={it.puesto}
+                  excedeAforo={it.excedeAforo}
+                  opcion={it.papeleta.opcion}
+                />
+              )}
             </div>
           ))}
         </div>

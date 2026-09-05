@@ -129,11 +129,17 @@ const NAV: NavGroup[] = [
     items: [
       { to: '/app/tesoreria', label: 'Tesorería', icon: ic.tesoreria, modulo: 'tesoreria' },
       { to: '/app/inventario', label: 'Inventario', icon: ic.inventario, modulo: 'inventario' },
+      /*
+       * UNA ENTRADA Y NO CINCO. La tienda ocupaba cinco de las quince líneas
+       * del menú —Tienda, Almacén y artículos, Reservas de la web, Facturas de
+       * la tienda, Datos de la tienda— para un módulo que se usa dos veces al
+       * año. Y las cinco eran caras del mismo mostrador: lo que se aparta por
+       * la web sale del mismo estante que lo que se cobra a mano.
+       *
+       * Ahora son pestañas dentro de la pantalla, y las cinco direcciones de
+       * siempre siguen abriendo su pestaña.
+       */
       { to: '/app/tienda', label: 'Tienda', icon: ic.tienda, modulo: 'inventario' },
-      { to: '/app/tienda/almacen', label: 'Almacén y artículos', icon: ic.inventario, modulo: 'inventario' },
-      { to: '/app/tienda/reservas', label: 'Reservas de la web', icon: ic.tienda, modulo: 'inventario' },
-      { to: '/app/tienda/facturas', label: 'Facturas de la tienda', icon: ic.tesoreria, modulo: 'inventario' },
-      { to: '/app/tienda/datos', label: 'Datos de la tienda', icon: ic.informes, modulo: 'inventario' },
     ],
   },
   {

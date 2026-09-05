@@ -116,6 +116,32 @@ export default async function ({ cargar, caso }) {
   // tarde mirando la carpeta de spam.
   caso('y también al mandar la prueba', true, /if \(r\.ok\) void mirarQueFalta\(\)/.test(cfg))
 
+  /*
+   * 8. Y LA FUNCIÓN DE ENVÍO SABE MANDAR EL AVISO DE «TU RESERVA ESTÁ LISTA»,
+   * con los cierres en el sitio.
+   *
+   * Lo que importa comprobar aquí no es que mande el correo —eso lo hace
+   * Resend— sino DÓNDE está enchufado en el despacho: detrás de `quienLlama`,
+   * al revés que el resguardo. El resguardo lo pide la web pública, sin sesión
+   * de nadie; este lo dispara la casa de hermandad, que sí la tiene, y ponerlo
+   * delante sería abrir a cualquiera una forma de mandar correos a nombre de la
+   * hermandad.
+   */
+  {
+    const fn = await readFile('supabase/functions/enviar-correo/index.ts', 'utf8')
+    caso('la función sabe avisar de una reserva lista', true, /mandarAvisoDeReservaLista/.test(fn))
+    // Lee los datos con la clave de servicio y de la función que tiene los
+    // cierres, no de la tabla a pelo.
+    caso('y los datos los pide a la base, no a la tabla', true,
+      /rpc\/datos_para_avisar_reserva/.test(fn))
+    const dondeAviso = fn.indexOf('cuerpoCrudo.reservaLista')
+    const dondePermiso = fn.indexOf('const permiso = await quienLlama(req)')
+    const dondeResguardo = fn.indexOf('cuerpoCrudo.reserva as')
+    caso('el aviso va DETRÁS de comprobar quién llama', true, dondeAviso > dondePermiso)
+    // Y el resguardo delante, que es lo contrario y a propósito.
+    caso('y el resguardo delante, que lo pide la web sin sesión', true, dondeResguardo < dondePermiso)
+  }
+
   await elResponderAMalEscrito({ caso })
 }
 

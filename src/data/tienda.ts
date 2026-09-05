@@ -402,6 +402,31 @@ export interface ArticuloWeb {
    * secas haría que alguien apartara la última camiseta dos veces.
    */
   disponible: number
+  /**
+   * LO QUE LE CUESTA A QUIEN ESTÁ MIRANDO, si resulta ser hermano y le toca
+   * algún descuento.
+   *
+   * `undefined` NO ES LO MISMO QUE «igual que el precio», y por eso no se
+   * rellena con `precio` cuando no hay descuento: vacío significa «a esta
+   * persona no le corresponde ninguno, o no ha entrado en su área», y de eso
+   * depende que la página le diga «entra para ver tu precio» o no le diga nada.
+   *
+   * Lo calcula la base (`catalogo_web`), nunca el navegador: aquí solo se
+   * pinta.
+   */
+  precioHermano?: number
+  /** El porcentaje que se le está aplicando, para poder decirlo. */
+  descuentoPct?: number
+}
+
+/** Lo que le cuesta a quien está mirando: el suyo si lo hay, y si no la tarifa. */
+export function precioParaMi(a: Pick<ArticuloWeb, 'precio' | 'precioHermano'>): number {
+  return a.precioHermano ?? a.precio
+}
+
+/** Si a quien está mirando se le está rebajando de verdad. */
+export function seRebajoParaMi(a: Pick<ArticuloWeb, 'precio' | 'precioHermano'>): boolean {
+  return a.precioHermano != null && a.precioHermano < a.precio
 }
 
 /** Una línea de la cesta de la web. */
@@ -422,6 +447,21 @@ export interface Reserva {
   total: number
   ventaId?: string
   creadoEn: string
+  /**
+   * QUIÉN APARTÓ, si resultó ser hermano de la casa.
+   *
+   * Lo resuelve la base contra la sesión, nunca el navegador. De saberlo salen
+   * dos cosas: que se le cobre su precio al recogerlo, y que se le pueda avisar
+   * cuando lo suyo está listo.
+   */
+  hermanoId?: string
+  descuentoId?: string
+  /** El porcentaje que llevaba aplicado. 0 = tarifa. */
+  descuentoPct: number
+  /** Cuándo se marcó que ya se puede recoger. */
+  listaEn?: string
+  /** Y cuándo se le dijo. Sirve para no avisar dos veces el mismo día. */
+  avisadaEn?: string
 }
 
 export interface LineaReserva {
@@ -441,19 +481,30 @@ export interface LineaReserva {
  * artículos de 6,10 dan 18,299999999999997 y en pantalla sale «18,3 €».
  */
 export function totalDeLaCesta(lineas: LineaReservaWeb[]): number {
-  return lineas.reduce((n, l) => n + Math.round(l.articulo.precio * 100) * l.cantidad, 0) / 100
+  // Con el precio de hermano cuando lo hay: el importe que se enseña tiene que
+  // ser el que se va a cobrar, y el que va escrito en el resguardo.
+  return lineas.reduce((n, l) => n + Math.round(precioParaMi(l.articulo) * 100) * l.cantidad, 0) / 100
 }
 
 /**
- * Cuántas unidades más de un artículo caben en la cesta.
+ * CUÁNTO MÁS SE PUEDE PONER: la misma cuenta para la web y para el mostrador.
  *
- * Se mira contra lo que ya hay puesto, no solo contra lo disponible: sin eso,
- * se pueden añadir de tres en tres hasta pasarse, y el rechazo llega al final,
- * después de haber escrito el nombre y el teléfono.
+ * Es una resta de dos números, y por eso mismo estaba escrita dos veces con dos
+ * criterios distintos: la web contra lo disponible y la caja contra nada en
+ * absoluto —dejaba teclear 99 de un artículo del que quedaban 3 y el rechazo
+ * llegaba al final, después de haber cobrado con la persona delante—.
+ *
+ * Se mira contra lo que YA HAY PUESTO, no solo contra lo disponible: sin eso,
+ * se puede añadir de tres en tres hasta pasarse.
  */
+export function loQueQuedaPorPoner(disponible: number, yaPuestas: number): number {
+  return Math.max(0, disponible - yaPuestas)
+}
+
+/** Lo mismo, dicho para la cesta de la web. */
 export function cabenTodavia(articulo: ArticuloWeb, lineas: LineaReservaWeb[]): number {
   const puestas = lineas.find((l) => l.articulo.id === articulo.id)?.cantidad ?? 0
-  return Math.max(0, articulo.disponible - puestas)
+  return loQueQuedaPorPoner(articulo.disponible, puestas)
 }
 
 /** Si de un artículo ya no se puede prometer ni una unidad. */

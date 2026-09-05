@@ -1700,6 +1700,18 @@ span.logo-mark img { width: 100%; height: 100%; }
 }
 .chip:hover { border-color: var(--gold); color: var(--text); }
 .chip--active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/*
+ * Y EL ACTIVO NO CAMBIA DE COLOR AL PASAR POR ENCIMA.
+ *
+ * `.chip:hover` pone `color: var(--text)` —texto oscuro—, y como va después en
+ * la hoja le ganaba a `.chip--active`, que pinta el fondo con el acento. O sea
+ * que pasar el ratón por la pestaña que ya estaba puesta dejaba texto oscuro
+ * sobre burdeos: ilegible, y justo encima del sitio donde acabas de pulsar.
+ *
+ * Pasaba en todos los conmutadores del panel —Cuotas, Campañas, la Tienda— y no
+ * se veía en las capturas porque el ratón no sale en ellas.
+ */
+.chip--active:hover { color: var(--accent-ink); border-color: var(--accent); }
 
 .table-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; box-shadow: var(--glass-shadow); }
 .table-card table { width: 100%; border-collapse: collapse; min-width: 720px; }
@@ -4658,9 +4670,117 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .caja__articulos .portal__card-mini { padding: 0.7rem 0.8rem; }
 .caja__articulos .portal__card-mini__value { font-size: 1rem; }
 .caja__articulos .portal__card-mini[disabled] { opacity: 0.55; cursor: not-allowed; }
+/* Lo que la web tiene prometido de este artículo. Va DENTRO de la tarjeta y en
+   pequeño porque explica el número de arriba: sin ella, «quedan 2» con cinco
+   camisetas a la vista en el mostrador parece un error de la aplicación. */
+.caja__apartadas {
+  margin-top: 0.3rem; font-size: 0.7rem; font-weight: 600;
+  color: var(--warn-fg); letter-spacing: 0.01em;
+}
 @media (max-width: 900px) {
   .caja__mesa { grid-template-columns: 1fr; }
 }
+
+/* =========================================================================
+   LA TIENDA EN UNA SOLA PANTALLA
+   ------------------------------------------------------------------------
+   Cinco pestañas con una cabecera común. Lo que sigue es solo lo que esa
+   cabecera necesita y no existía: todo lo demás son las clases de siempre.
+   ========================================================================= */
+
+/*
+ * TRES CIFRAS, NO CUATRO. `.stat-grid` reparte en cuatro columnas, y con tres
+ * tarjetas dejaba un hueco muerto a la derecha que se lee como si faltara algo.
+ * En pantalla ancha van tres a lo ancho; a partir de tableta bajan a dos y la
+ * tercera —«bajo mínimo», la que manda a reponer— ocupa la fila entera.
+ */
+.stat-grid--vitales { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) {
+  .stat-grid--vitales { grid-template-columns: 1fr 1fr; }
+  .stat-grid--vitales > :last-child { grid-column: 1 / -1; }
+}
+
+/*
+ * LA TARJETA QUE SE PUEDE PULSAR.
+ *
+ * Es un `<button>` de verdad —se llega con el tabulador y se activa con Intro—
+ * pero no se disfraza de botón: lo único que cambia a la vista es el borde al
+ * pasar por encima, igual que `.quick-action`. Tres botones grandes ahí arriba
+ * competirían con el de cobrar, que es el que tiene que ganar siempre.
+ */
+.stat-tile--accion {
+  text-align: left; font: inherit; color: inherit; cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.stat-tile--accion:hover { border-color: var(--gold); transform: translateY(-1px); }
+.stat-tile--accion:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .stat-tile--accion { transition: none; }
+  .stat-tile--accion:hover { transform: none; }
+}
+
+/*
+ * Cinco pestañas no caben de una vez en un móvil, y envueltas en tres líneas
+ * dejan de leerse como una fila de pestañas. Se deslizan de lado, que es el
+ * gesto que ya hace todo el mundo en el teléfono, y sin barra a la vista.
+ */
+@media (max-width: 640px) {
+  .filters--tienda {
+    flex-wrap: nowrap; overflow-x: auto;
+    overscroll-behavior-x: contain; scrollbar-width: none;
+    /* Un pelín de aire abajo para que la sombra del chip activo no se corte. */
+    padding-bottom: 0.9rem;
+  }
+  .filters--tienda::-webkit-scrollbar { display: none; }
+  .filters--tienda .chip { flex: none; white-space: nowrap; }
+}
+
+/*
+ * EL TOTAL A COBRAR no es un dato más de la cesta: es EL dato. Se distingue con
+ * el borde y el color del acento, no con un fondo pintado —el fondo de color
+ * convierte una rejilla de tres en un semáforo—.
+ *
+ * `TiendaCaja.tsx` escribía esta clase desde el primer día y NO EXISTÍA EN
+ * NINGUNA HOJA: la tarjeta del total se veía exactamente igual que la del IVA.
+ */
+.stat-tile--destacada { border-color: var(--accent); }
+.stat-tile--destacada .stat-tile__value { color: var(--accent); }
+
+/* Las tres cifras de la cesta caben en tres columnas; la rejilla de cuatro
+   dejaba la del total sola en una fila. */
+.stat-grid--cesta { grid-template-columns: repeat(3, 1fr); margin: 1.1rem 0 0.9rem; }
+@media (max-width: 560px) {
+  .stat-grid--cesta { grid-template-columns: 1fr 1fr; }
+  .stat-grid--cesta > :last-child { grid-column: 1 / -1; }
+}
+
+/* Un campo con su rótulo dentro de la cabecera —el ejercicio de «Cómo va»—. */
+.dash-head__campo { display: flex; flex-direction: column; gap: 0.2rem; }
+.dash-head__campo .search-box { max-width: 9rem; }
+
+/*
+ * Un guion donde no hay nada que contar. En gris y sin peso: en una columna de
+ * cincuenta filas, cincuenta ceros son ruido y esconden los tres números que
+ * sí dicen algo.
+ */
+.tienda-nada { color: var(--text-muted); opacity: 0.6; }
+
+/*
+ * Y EL DISPONIBLE EN NEGATIVO, EN ROJO. No es un error de cuentas: significa que
+ * se ha vendido en el mostrador género que ya estaba prometido a alguien por la
+ * web. Es la única cifra de esta pantalla que pide levantar el teléfono.
+ */
+.tienda-sobrevendido { color: var(--err-fg); }
+
+/* El nombre del artículo, con sitio para no partirse en tres líneas. Es por lo
+   que se busca en la tabla; el código de al lado ocupa cinco letras. */
+.tienda-articulos td:nth-child(2) { min-width: 13rem; }
+/* Y lo que queda, en una sola columna con su explicación debajo cuando hay algo
+   apartado. Tres columnas de números para un dato que casi siempre es uno solo
+   sacaban la tabla de la pantalla. */
+.tienda-quedan { display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; }
+.tienda-quedan small { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+.tienda-quedan small b { color: var(--warn-fg); font-weight: 700; }
 
 /* Tarjetas de resumen del área del hermano (dashboard) */
 .portal__cards {
@@ -7118,6 +7238,33 @@ html:has(.sitio) { scroll-behavior: smooth; }
   font-size: 1.1rem !important; font-weight: 700; color: var(--sitio-fg) !important;
   font-variant-numeric: tabular-nums;
 }
+/*
+ * EL PRECIO DE HERMANO. Se entiende de una forma y solo de una: viendo AL LADO
+ * el que NO se le está cobrando. Una nota que diga «llevas un 10 %» debajo de
+ * un número no dice lo mismo que ese número tachado.
+ */
+.sitio__articulo-tarifa {
+  margin-left: 0.5rem; font-size: 0.85rem; font-weight: 500;
+  color: var(--sitio-muted); text-decoration: line-through;
+}
+.sitio__articulo-hermano {
+  display: block; margin-top: 0.15rem;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--sitio-color2-texto) !important;
+}
+/*
+ * Y QUIEN NO HA ENTRADO TIENE QUE SABER QUE ESE PRECIO EXISTE. Sin esta línea,
+ * el descuento de hermano solo lo conoce quien ya lo tenía, que es exactamente
+ * lo contrario de para lo que está.
+ */
+.sitio__tienda-aviso {
+  margin: 0 0 1.2rem; padding: 0.7rem 0.9rem;
+  font-size: 0.88rem; color: var(--sitio-fg);
+  border: 1px solid var(--sitio-linea); border-radius: var(--sitio-radio);
+  background: var(--sitio-bg2);
+}
+.sitio__tienda-aviso a { color: var(--sitio-color2-texto); font-weight: 700; }
+
 /* «Queda 1» va en el color de marca: es lo que decide si se pasa hoy. */
 .sitio__articulo-quedan { color: var(--sitio-color2-texto) !important; font-weight: 700; font-size: 0.8rem !important; }
 /* `margin-top: auto` los pega abajo: en una fila de tarjetas, unas con

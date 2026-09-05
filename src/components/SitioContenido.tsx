@@ -6,7 +6,10 @@ import { LogoMark } from './Logo'
 import { formatCurrency, formatDate } from '../lib/format'
 import { FormularioAlta, FormularioAvisos, FormularioContacto, FormularioDonativo, FormularioLoteria, FormularioTienda } from './FormulariosWeb'
 import { useCatalogoWeb } from '../lib/tienda'
-import { cabenTodavia, seAgoto, totalDeLaCesta, type ArticuloWeb, type LineaReservaWeb } from '../data/tienda'
+import {
+  cabenTodavia, precioParaMi, seAgoto, seRebajoParaMi, totalDeLaCesta,
+  type ArticuloWeb, type LineaReservaWeb,
+} from '../data/tienda'
 import { diasHasta as diasHastaFecha, getCampana, ventanaAbierta } from '../lib/campana'
 import { baseDeRutas } from '../lib/seoWeb'
 import IconoRed from './IconoRed'
@@ -1127,8 +1130,33 @@ function Tienda({ web, interactivo }: { web: WebPublica; interactivo: boolean })
     )
   }
 
+  /*
+   * EL PRECIO DE HERMANO SE DICE, TAMBIÉN A QUIEN NO LO TIENE.
+   *
+   * Hasta ahora el descuento solo existía en el mostrador: el hermano que
+   * compraba por internet pagaba tarifa y nada en pantalla le decía que
+   * entrando en su área le habría costado menos. Un descuento que solo conoce
+   * quien ya lo tenía no es un descuento, es un secreto.
+   *
+   * Quién está mirando lo resuelve la base, no esta página: aquí solo llega el
+   * precio ya calculado, o nada.
+   */
+  const conDescuento = articulos.find((a) => seRebajoParaMi(a))
+  const volverAqui = `/hermano?volver=${encodeURIComponent(`/w/${web.slug}#tienda`)}`
+
   return (
     <div className="sitio__tienda">
+      {conDescuento ? (
+        <p className="sitio__tienda-aviso">
+          Estás dentro como hermano: estos precios ya llevan tu descuento
+          {conDescuento.descuentoPct ? ` del ${conDescuento.descuentoPct} %` : ''}.
+        </p>
+      ) : (
+        <p className="sitio__tienda-aviso">
+          ¿Eres hermano? <a href={volverAqui}>Entra en tu área</a> y verás aquí tu precio, si te
+          corresponde alguno.
+        </p>
+      )}
       <ul className="sitio__tienda-lista">
         {articulos.map((a) => {
           const enCesta = cesta.find((l) => l.articulo.id === a.id)?.cantidad ?? 0
@@ -1139,7 +1167,20 @@ function Tienda({ web, interactivo }: { web: WebPublica; interactivo: boolean })
               <div className="sitio__articulo-datos">
                 <h3>{a.nombre}</h3>
                 {a.descripcion && <p>{a.descripcion}</p>}
-                <p className="sitio__articulo-precio">{formatCurrency(a.precio)}</p>
+                {/* El precio de hermano se entiende de una forma y solo de
+                    una: viendo AL LADO el que no se le cobra. Tachado y en
+                    gris, no en una nota debajo. */}
+                {seRebajoParaMi(a) ? (
+                  <p className="sitio__articulo-precio">
+                    {formatCurrency(precioParaMi(a))}
+                    <span className="sitio__articulo-tarifa">{formatCurrency(a.precio)}</span>
+                    <span className="sitio__articulo-hermano">
+                      precio de hermano{a.descuentoPct ? ` (−${a.descuentoPct} %)` : ''}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="sitio__articulo-precio">{formatCurrency(a.precio)}</p>
+                )}
                 {/* Se dice cuánto queda solo cuando queda poco: «quedan 47» no
                     le importa a nadie, «queda 1» decide la visita de hoy. */}
                 {!agotado && a.disponible <= 5 && (
@@ -1174,7 +1215,7 @@ function Tienda({ web, interactivo }: { web: WebPublica; interactivo: boolean })
                 <span className="sitio__cesta-nombre">{l.articulo.nombre}</span>
                 <span className="sitio__cesta-cant">× {l.cantidad}</span>
                 <span className="sitio__cesta-importe">
-                  {formatCurrency(l.articulo.precio * l.cantidad)}
+                  {formatCurrency(precioParaMi(l.articulo) * l.cantidad)}
                 </span>
                 <button
                   type="button"

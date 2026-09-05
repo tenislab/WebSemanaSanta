@@ -67,6 +67,17 @@ const INTERRUPTOR: Record<Exclude<TipoAviso, 'importante'>, 'comunicados' | 'cuo
    * más que tomar sobre algo que no afecta a nadie más.
    */
   existencias: 'comunicados',
+  /*
+   * Y «tu reserva está lista», también.
+   *
+   * Este ADEMÁS se manda por su propio camino —lo dispara la persona que
+   * prepara la reserva, con `avisar_reserva_lista`, y va también a quien no es
+   * hermano— así que lo de aquí es solo el interruptor que decide si el aviso
+   * del área se acompaña de correo cuando sale por esta vía. No merece un
+   * interruptor nuevo en Configuración para una hermandad que a lo mejor ni
+   * tiene tienda.
+   */
+  tienda: 'comunicados',
 }
 
 /**

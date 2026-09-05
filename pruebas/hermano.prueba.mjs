@@ -43,8 +43,11 @@ export default async function ({ cargar, caso }) {
   // quien lleva un cargo, y es trabajo, no información.
   // Seis desde que la tienda avisa a quien lleva el inventario cuando queda
   // poco de un artículo.
-  caso('hay seis tipos de aviso', 6, av.TIPOS_AVISO.length)
+  // Y siete desde que la tienda avisa por la OTRA punta: a quien apartó algo
+  // por la web, cuando ya lo puede pasar a recoger.
+  caso('hay siete tipos de aviso', 7, av.TIPOS_AVISO.length)
   caso('y uno es el de que queda poco género', true, av.TIPOS_AVISO.some((t) => t.id === 'existencias'))
+  caso('y otro el de que tu reserva está lista', true, av.TIPOS_AVISO.some((t) => t.id === 'tienda'))
   caso('y uno es el encargo de la junta', true, av.TIPOS_AVISO.some((t) => t.id === 'encargo'))
   caso('cada uno con su icono', true, av.TIPOS_AVISO.every((t) => t.icono && t.nombre && t.explica))
 

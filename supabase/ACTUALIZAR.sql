@@ -35,32 +35,34 @@
 -- QUÉ AÑADE
 -- -----------------------------------------------------------------------------
 --
---   1. ajustes-de-la-hermandad.sql    Los ajustes de cuotas y las etiquetas, guardados en la hermandad
---   2. hermano-con-cargo.sql          Una persona, una ficha: el cargo va en la ficha del hermano
---   3. clave-de-catalogos.sql         Que cada hermandad tenga sus propios catálogos (la clave era global)
---   4. imagenes.sql                   El almacén de fotos: que la web no lleve las imágenes dentro
---   5. visitas-web.sql                El contador de visitas de la web, sin cookies ni Google Analytics
---   6. suscriptores-web.sql           Avisos por correo para quien sigue a la hermandad sin ser hermano
---   7. copias.sql                     Las copias de seguridad, guardadas solas cada semana
---   8. permisos-eventos-y-web.sql     Los dos módulos que nunca se sembraron: «eventos» y «web»
---   9. lo-que-toca-el-hermano.sql     Que el hermano no se ponga la cuota como pagada desde la consola
---   10. sin-contrasenas-en-las-solicitudes.sql Fuera la contraseña en claro que guardaba cada solicitud de alta
---   11. freno-de-los-formularios.sql   Un tope a lo que cualquiera puede meter desde la web pública
---   12. cuenta-por-hermandad.sql       Ser hermano de dos hermandades: una cuenta por hermandad + DNI
---   13. solicitudes-de-papeleta.sql    Que la solicitud de papeleta del hermano llegue a la hermandad
---   14. activar-la-suscripcion.sql     Que el botón de activar la suscripción llegue a la base
---   15. numero-de-recibo-unico.sql     Que no pueda haber dos recibos con el mismo número
---   16. borrar-una-hermandad.sql       Que una hermandad se pueda borrar (el registro lo impedía)
---   17. documentos-restringidos.sql    Que el documento restringido lo sea también en la base
---   18. webhook-stripe.sql             Que la suscripción se active cuando Stripe confirma el cobro, no antes
---   19. mandatos-sepa.sql              El mandato SEPA firmado de verdad, por el propio hermano
---   20. encargos-redes.sql             Encargar un post y que se reparta solo entre la junta
---   21. tienda.sql                     La tienda: productos, ventas, stock y los asientos que generan
---   22. tienda-web.sql                 La tienda en la web: reservar por internet y pagar al recoger
---   23. campanas-y-proyectos.sql       Campañas de recaudación con su barra, y proyectos a largo plazo
---   24. campana-con-partida.sql        Enlazar una campaña a sus partidas: la barra se llena sola
---   25. reglas-de-reparto.sql          Gastos porcentuales enlazados a una partida, para pérdidas y ganancias
---   26. pago-tarjeta.sql               Que el hermano pague su cuota o su papeleta con tarjeta
+--   1. columnas-que-faltan.sql        Columnas que solo llegaban a las bases nuevas (hora de citación, cobros…)
+--   2. ajustes-de-la-hermandad.sql    Los ajustes de cuotas y las etiquetas, guardados en la hermandad
+--   3. hermano-con-cargo.sql          Una persona, una ficha: el cargo va en la ficha del hermano
+--   4. clave-de-catalogos.sql         Que cada hermandad tenga sus propios catálogos (la clave era global)
+--   5. imagenes.sql                   El almacén de fotos: que la web no lleve las imágenes dentro
+--   6. visitas-web.sql                El contador de visitas de la web, sin cookies ni Google Analytics
+--   7. suscriptores-web.sql           Avisos por correo para quien sigue a la hermandad sin ser hermano
+--   8. copias.sql                     Las copias de seguridad, guardadas solas cada semana
+--   9. permisos-eventos-y-web.sql     Los dos módulos que nunca se sembraron: «eventos» y «web»
+--   10. lo-que-toca-el-hermano.sql     Que el hermano no se ponga la cuota como pagada desde la consola
+--   11. sin-contrasenas-en-las-solicitudes.sql Fuera la contraseña en claro que guardaba cada solicitud de alta
+--   12. freno-de-los-formularios.sql   Un tope a lo que cualquiera puede meter desde la web pública
+--   13. cuenta-por-hermandad.sql       Ser hermano de dos hermandades: una cuenta por hermandad + DNI
+--   14. solicitudes-de-papeleta.sql    Que la solicitud de papeleta del hermano llegue a la hermandad
+--   15. activar-la-suscripcion.sql     Que el botón de activar la suscripción llegue a la base
+--   16. numero-de-recibo-unico.sql     Que no pueda haber dos recibos con el mismo número
+--   17. borrar-una-hermandad.sql       Que una hermandad se pueda borrar (el registro lo impedía)
+--   18. documentos-restringidos.sql    Que el documento restringido lo sea también en la base
+--   19. webhook-stripe.sql             Que la suscripción se active cuando Stripe confirma el cobro, no antes
+--   20. mandatos-sepa.sql              El mandato SEPA firmado de verdad, por el propio hermano
+--   21. encargos-redes.sql             Encargar un post y que se reparta solo entre la junta
+--   22. tienda.sql                     La tienda: productos, ventas, stock y los asientos que generan
+--   23. tienda-web.sql                 La tienda en la web: reservar por internet y pagar al recoger
+--   24. campanas-y-proyectos.sql       Campañas de recaudación con su barra, y proyectos a largo plazo
+--   25. baja-de-hermano.sql            La baja de un hermano, entera y sin romper el escalafón
+--   26. campana-con-partida.sql        Enlazar una campaña a sus partidas: la barra se llena sola
+--   27. reglas-de-reparto.sql          Gastos porcentuales enlazados a una partida, para pérdidas y ganancias
+--   28. pago-tarjeta.sql               Que el hermano pague su cuota o su papeleta con tarjeta
 --
 -- -----------------------------------------------------------------------------
 -- LO QUE ESTE ARCHIVO NO LLEVA, Y POR QUÉ
@@ -83,6 +85,147 @@
 --
 -- =============================================================================
 
+
+-- =============================================================================
+--   COLUMNAS-QUE-FALTAN.SQL — Columnas que solo llegaban a las bases nuevas (hora de citación, cobros…)
+-- =============================================================================
+
+-- ============================================================================
+--   LAS COLUMNAS QUE SOLO LLEGABAN A LAS BASES NUEVAS
+-- ============================================================================
+--
+-- QUÉ PASABA. En una hermandad ya montada:
+--
+--   · Se ponía la HORA DE CITACIÓN de un tramo, se guardaba, y al recargar
+--     estaba en blanco otra vez.
+--   · Registrar el COBRO DE UNA PAPELETA no dejaba rastro del método ni de la
+--     fecha.
+--   · ANULAR una papeleta no guardaba el motivo.
+--   · El aviso del hermano de «ya lo he pagado por Bizum» no se guardaba en
+--     ninguna parte.
+--   · El COLOR SECUNDARIO de la hermandad volvía al de fábrica.
+--
+-- Todo lo mismo, y sin un solo error en pantalla.
+--
+-- ----------------------------------------------------------------------------
+-- POR QUÉ
+-- ----------------------------------------------------------------------------
+--
+-- Estas nueve columnas se fueron añadiendo con el tiempo, y se añadieron donde
+-- parecía lo natural: en `schema.sql`, al lado de su tabla, como
+-- `alter table … add column if not exists`. El propio fichero lo explica:
+--
+--   «Va como `alter table` y no dentro del `create table` de arriba PARA LAS
+--    BASES QUE YA EXISTEN: el `create table if not exists` no toca una tabla
+--    que ya está, así que a ellas la columna solo les llega por aquí.»
+--
+-- La intención era exactamente la correcta. Lo que falla es el reparto:
+-- `schema.sql` solo va en `TODO-EN-UNO.sql`, el instalador. Una hermandad que
+-- montó su base hace meses y desde entonces solo pega `ACTUALIZAR.sql` NO
+-- VUELVE A EJECUTARLO NUNCA. Así que las columnas «para las bases que ya
+-- existen» son justo las que no llegan a las bases que ya existen.
+--
+-- Y cuando la aplicación escribe en una columna que no está, Postgres rechaza
+-- LA SENTENCIA ENTERA. No se pierde ese dato: no se guarda la fila. El tramo
+-- entero, el cobro entero, la papeleta entera. En pantalla se ve bien —React
+-- ya tiene el dato— y solo al recargar aparece que no se guardó nada.
+--
+-- Es el mismo reparto que dejó fuera `hermano-con-cargo.sql`. `npm test`
+-- comprueba ahora que ninguna columna de `schema.sql` se quede sin camino
+-- hasta aquí.
+--
+-- VA EL PRIMERO de la lista, y tiene que seguir siéndolo: lo que viene detrás
+-- crea políticas y funciones que nombran estas columnas.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Es seguro repetirlo: `if not exists` no toca lo que ya está, y ninguna de
+--   estas líneas borra ni sobrescribe un dato.
+-- ============================================================================
+
+-- Los colores de la hermandad, que se usan en el área del hermano y en la web.
+alter table hermandad_settings add column if not exists color_secundario text not null default '#C5A059';
+
+/*
+ * LA HORA DE CITACIÓN DEL TRAMO. No salen todos a la vez, y es literalmente la
+ * pregunta de la semana antes de la salida — la que satura el teléfono de la
+ * secretaría y el grupo de WhatsApp.
+ *
+ * Sin la columna no se guardaba el tramo ENTERO, ni al crear ni al editar. Y
+ * sin tramos no hay cortejo, y sin cortejo las papeletas no se pueden asignar
+ * a ningún sitio.
+ */
+alter table tramos add column if not exists hora_citacion text;
+
+-- El cobro de la cuota, la propuesta de mora y el aviso de pago del hermano.
+alter table cuotas add column if not exists metodo_cobro text;
+alter table cuotas add column if not exists mora_propuesta_por text;
+alter table cuotas add column if not exists mora_propuesta_nombre text;
+alter table cuotas add column if not exists pago_comunicado jsonb;
+
+/*
+ * Y «En mora» como estado válido. Una base anterior tiene el check viejo, que
+ * lo rechaza: la cuota no se puede marcar y el aviso que sale habla de una
+ * restricción, no de la cuota.
+ *
+ * Entre `exception when others then null` porque en una base donde la
+ * restricción ya esté bien esto no debe cortar el resto del archivo.
+ */
+do $$
+begin
+  alter table cuotas drop constraint if exists cuotas_estado_check;
+  alter table cuotas add constraint cuotas_estado_check
+    check (estado in ('Pagada', 'Pendiente', 'Devuelta', 'En mora'));
+exception when others then null;
+end $$;
+
+-- El cobro que registra la secretaría, y el motivo si la papeleta se anula.
+alter table papeletas add column if not exists metodo_pago text;
+alter table papeletas add column if not exists fecha_pago text;
+alter table papeletas add column if not exists motivo_anulacion text;
+
+/*
+ * DE DÓNDE SALIÓ CADA APUNTE DE TESORERÍA.
+ *
+ * Esta no viene de `schema.sql` sino de `apuntes-automaticos.sql`, que tampoco
+ * va en la lista de actualizar — pero el efecto es peor todavía, porque
+ * `tienda.sql` SÍ va, y su `registrar_venta` escribe en `origen`. En una base
+ * que nunca ejecutó aquel fichero, COBRAR EN LA TIENDA FALLA ENTERO: la venta
+ * se rechaza con «column "origen" of relation "movimientos" does not exist»,
+ * que no le dice nada a nadie.
+ *
+ * Lo mismo vale para el cobro de una cuota y el de una papeleta: los tres
+ * apuntan aquí para no apuntarse dos veces.
+ */
+alter table movimientos add column if not exists origen text;
+
+/*
+ * Y su índice: único POR HERMANDAD —dos hermandades pueden tener cada una su
+ * cuota con el mismo identificador de origen sin pisarse— y solo donde hay
+ * origen, porque los apuntes escritos a mano en Tesorería no llevan ninguno y
+ * son la mayoría.
+ *
+ * VA DENTRO DE UN `if`, y no por prudencia genérica. Este fichero es EL PRIMERO
+ * de los dos repartos, y en el INSTALADOR eso significa que se ejecuta antes que
+ * `multi-hermandad.sql`, que es quien parte la base en hermandades y añade
+ * `movimientos.hermandad_id`. Sin la comprobación, el instalador entero se
+ * detiene aquí con «column "hermandad_id" does not exist» y una base nueva se
+ * queda a medio montar.
+ *
+ * En una base que ya funciona la columna está desde el primer día, así que el
+ * índice se crea; y en una nueva lo crea `apuntes-automaticos.sql`, que va
+ * detrás de `multi-hermandad.sql` y para eso está.
+ */
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'movimientos' and column_name = 'hermandad_id'
+  ) then
+    create unique index if not exists movimientos_origen_por_hermandad
+      on movimientos (hermandad_id, origen) where origen is not null;
+  end if;
+end $$;
 
 -- =============================================================================
 --   AJUSTES-DE-LA-HERMANDAD.SQL — Los ajustes de cuotas y las etiquetas, guardados en la hermandad
@@ -3706,6 +3849,89 @@ create table if not exists descuentos (
 );
 create index if not exists descuentos_hermandad_idx on descuentos (hermandad_id, activo);
 
+/*
+ * A QUIÉN LE TOCA UN DESCUENTO: UNA SOLA DEFINICIÓN DEL CRITERIO.
+ *
+ * Estaba escrito dentro de `registrar_venta`, y con el descuento llegando
+ * también a la web pública habría acabado escrito TRES VECES: aquí, en el
+ * catálogo y en la reserva. Tres sitios donde decidir lo mismo son tres sitios
+ * donde se puede decidir distinto, y entonces la web promete un precio y el
+ * mostrador cobra otro.
+ *
+ * Devuelve el porcentaje, o `null` si no le toca. `null` y no cero a propósito:
+ * son dos cosas distintas —«no le corresponde» y «le corresponde un 0 %»— y de
+ * esa diferencia depende que `registrar_venta` rechace la venta o la deje pasar.
+ */
+create or replace function pct_de_descuento(
+  p_hermandad_id uuid,
+  p_descuento_id uuid,
+  p_hermano_id uuid
+) returns numeric
+language sql stable security definer set search_path = public as $$
+  select d.porcentaje
+    from descuentos d
+   where d.id = p_descuento_id
+     and d.hermandad_id = p_hermandad_id
+     and d.activo
+     and (
+       -- Sin etiqueta vale para cualquier hermano… pero hermano tiene que ser:
+       -- los descuentos son de la hermandad para su gente.
+       (d.etiqueta is null and p_hermano_id is not null)
+       or (p_hermano_id is not null and exists (
+            select 1 from hermanos h
+             where h.id = p_hermano_id
+               and h.hermandad_id = p_hermandad_id
+               and h.estado <> 'Baja'
+               and d.etiqueta = any (coalesce(h.etiquetas, array[]::text[]))
+          ))
+     )
+$$;
+
+comment on function pct_de_descuento(uuid, uuid, uuid) is
+  'El porcentaje de un descuento SI le corresponde a ese hermano, y null si no. Es el único sitio '
+  'donde se decide: lo usan el mostrador, el catálogo de la web y la reserva.';
+
+/*
+ * Y EL MEJOR QUE LE TOCA, cuando no lo elige nadie a mano.
+ *
+ * En el mostrador el descuento lo elige una persona de una lista. En la web no
+ * hay nadie que elija, así que hay que decidirlo: SE APLICA UNO SOLO, EL MAYOR.
+ *
+ * No es una comodidad, es lo único que la factura puede representar: `ventas`
+ * tiene una columna `descuento_id`, no una tabla puente. Prometer en la web una
+ * suma de descuentos que la factura no puede explicar es prometer mal.
+ *
+ * A igualdad de porcentaje, el más antiguo: así el número no baila de un día
+ * para otro por haber creado otro descuento igual.
+ */
+create or replace function mejor_descuento_para(p_hermandad_id uuid, p_hermano_id uuid)
+returns table (id uuid, porcentaje numeric)
+language sql stable security definer set search_path = public as $$
+  select d.id, d.porcentaje
+    from descuentos d
+   where d.hermandad_id = p_hermandad_id
+     and d.activo
+     and pct_de_descuento(p_hermandad_id, d.id, p_hermano_id) is not null
+   order by d.porcentaje desc, d.creado_en
+   limit 1
+$$;
+
+comment on function mejor_descuento_para(uuid, uuid) is
+  'El descuento activo de mayor porcentaje que le corresponde a un hermano. Uno solo: la factura '
+  'guarda un descuento, no una lista.';
+
+/*
+ * Ninguna de las dos se le concede a `anon`. La web pública nunca las llama
+ * directamente: las llaman `catalogo_web` y `crear_reserva_web`, que son
+ * `security definer` y por tanto las ejecutan como su dueño. Concedérselas
+ * sería dejar preguntar «¿qué descuento tiene el hermano tal?» desde la consola
+ * del navegador.
+ */
+revoke all on function pct_de_descuento(uuid, uuid, uuid) from public, anon;
+revoke all on function mejor_descuento_para(uuid, uuid) from public, anon;
+grant execute on function pct_de_descuento(uuid, uuid, uuid) to authenticated;
+grant execute on function mejor_descuento_para(uuid, uuid) to authenticated;
+
 
 -- ----------------------------------------------------------------------------
 -- 3. Las ventas
@@ -3958,6 +4184,7 @@ declare
   v_coste numeric(10, 2) := 0;
   v_base_linea numeric(10, 2);
   v_num_mov int;
+  v_disp int;
 begin
   if not modulo_permitido('inventario') then
     raise exception 'Solo quien lleva el inventario puede registrar ventas.';
@@ -3976,20 +4203,7 @@ begin
    * etiqueta— el comprador tiene que llevarla en su ficha.
    */
   if p_descuento_id is not null then
-    select d.porcentaje into v_pct
-      from descuentos d
-     where d.id = p_descuento_id
-       and d.hermandad_id = v_hermandad
-       and d.activo
-       and (
-         d.etiqueta is null
-         or (p_hermano_id is not null and exists (
-              select 1 from hermanos h
-               where h.id = p_hermano_id
-                 and h.hermandad_id = v_hermandad
-                 and d.etiqueta = any (coalesce(h.etiquetas, array[]::text[]))
-            ))
-       );
+    v_pct := pct_de_descuento(v_hermandad, p_descuento_id, p_hermano_id);
     if v_pct is null then
       raise exception 'Ese descuento no se le puede aplicar a esta venta.';
     end if;
@@ -4031,9 +4245,27 @@ begin
     if not found then
       raise exception 'Ese artículo no está en el catálogo de la hermandad.';
     end if;
-    if v_prod.stock < v_cant then
-      raise exception 'No quedan suficientes «%»: hay % y se piden %.',
-        v_prod.nombre, v_prod.stock, v_cant;
+    /*
+     * SE MIRA LO DISPONIBLE, NO LO QUE HAY EN LA ESTANTERÍA.
+     *
+     * Aquí ponía `v_prod.stock < v_cant`, y con eso el mostrador vendía sin
+     * pestañear las dos camisetas que alguien había apartado por la web para
+     * pasar a recogerlas el sábado. `stock` sigue diciendo 2 hasta que la
+     * reserva se entrega, así que la caja no veía nada raro.
+     *
+     * Pasaban las dos cosas malas a la vez: quien reservó venía el sábado y no
+     * había nada —con su resguardo y su referencia en la mano—, y la reserva se
+     * quedaba IMPOSIBLE DE ENTREGAR, porque al intentarlo esta misma línea
+     * decía que no queda género. Pendiente para siempre, bloqueando existencias
+     * que ya no existen.
+     *
+     * El `for update` de arriba ya serializa: la cuenta que se hace aquí ve lo
+     * que el mostrador de al lado acabe de confirmar, no una foto vieja.
+     */
+    v_disp := disponible_de(v_prod.id);
+    if v_disp < v_cant then
+      raise exception 'De «%» solo quedan % sin apartar: hay % en la estantería y % comprometidas por la web.',
+        v_prod.nombre, greatest(v_disp, 0), v_prod.stock, v_prod.stock - v_disp;
     end if;
 
     /*
@@ -4105,10 +4337,15 @@ begin
    * Si la hermandad no repercute IVA —lo normal en la mayoría— `v_iva` es cero
    * y sale una sola línea por el total, como antes. Un asiento de cero euros
    * solo ensucia el libro.
+   *
+   * Los tres números se cuentan de uno en uno según se van poniendo, y no
+   * `+1 / +2 / +3` de golpe: cuando el IVA es cero, el 2 no se lo lleva nadie y
+   * el libro queda con un hueco que parece un apunte borrado.
    */
+  v_num_mov := v_num_mov + 1;
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
   values (
-    v_hermandad, v_num_mov + 1, to_char(now(), 'YYYY-MM-DD'),
+    v_hermandad, v_num_mov, to_char(now(), 'YYYY-MM-DD'),
     format('Venta en tienda %s-%s', p_serie, v_numero),
     'Otros ingresos', 'Ingreso', v_total - v_iva,
     case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -4116,9 +4353,10 @@ begin
   );
 
   if v_iva > 0 then
+    v_num_mov := v_num_mov + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
     values (
-      v_hermandad, v_num_mov + 2, to_char(now(), 'YYYY-MM-DD'),
+      v_hermandad, v_num_mov, to_char(now(), 'YYYY-MM-DD'),
       format('IVA repercutido en la venta %s-%s', p_serie, v_numero),
       'IVA repercutido', 'Ingreso', v_iva,
       case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -4129,9 +4367,10 @@ begin
   -- El gasto solo si de verdad costó algo: un artículo donado tiene coste 0 y
   -- un asiento de cero euros solo ensucia el libro.
   if v_coste > 0 then
+    v_num_mov := v_num_mov + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
     values (
-      v_hermandad, v_num_mov + 3, to_char(now(), 'YYYY-MM-DD'),
+      v_hermandad, v_num_mov, to_char(now(), 'YYYY-MM-DD'),
       format('Coste del género vendido %s-%s', p_serie, v_numero),
       'Gastos varios menores', 'Gasto', v_coste,
       case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -4225,16 +4464,28 @@ create trigger productos_avisar_si_queda_poco
 -- no por escritura directa para que el stock y su explicación se muevan juntos:
 -- un stock que baja sin una línea que diga por qué es exactamente el agujero
 -- por el que se pierden nueve camisetas al año.
+--
+-- `drop` antes de `create`: el parámetro nuevo lleva valor por defecto, y un
+-- `create or replace` con un parámetro más NO SUSTITUYE a la función vieja
+-- —crea una segunda con otra firma—, y entonces toda llamada de cuatro
+-- argumentos queda ambigua y falla. Sin este `drop`, volver a ejecutar el
+-- fichero rompe la tienda entera.
+drop function if exists mover_stock(uuid, text, int, text);
 create or replace function mover_stock(
   p_producto_id uuid,
   p_tipo text,          -- 'compra' | 'rotura' | 'ajuste' | 'devolucion'
   p_cantidad int,       -- positivo entra, negativo sale
-  p_motivo text default ''
+  p_motivo text default '',
+  -- Una rotura es un hecho, no una petición: si se han roto tres, se han roto
+  -- tres aunque hubiera dos apartadas. Lo que no puede pasar es que se apunten
+  -- sin que nadie se entere de a quién deja colgado.
+  p_aunque_este_apartado boolean default false
 ) returns int
 language plpgsql security definer set search_path = public as $$
 declare
   v_hermandad uuid := hermandad_actual();
   v_prod productos%rowtype;
+  v_apartado int;
 begin
   if not modulo_permitido('inventario') then
     raise exception 'Solo quien lleva el inventario puede mover existencias.';
@@ -4262,6 +4513,23 @@ begin
       abs(p_cantidad), v_prod.nombre, v_prod.stock;
   end if;
 
+  /*
+   * Y TAMPOCO POR DEBAJO DE LO QUE YA ESTÁ PROMETIDO.
+   *
+   * Bajar el stock a mano —una rotura, un ajuste de recuento— dejaba al
+   * descubierto lo que la web tenía apartado sin decir una palabra, y el
+   * descuadre no aparecía hasta que alguien venía a recoger su reserva. Ahora
+   * se para y se dice con quién choca.
+   *
+   * Se puede hacer igualmente, porque a veces hay que hacerlo: se repite
+   * marcando la casilla, y entonces queda apuntado que se hizo sabiéndolo.
+   */
+  v_apartado := v_prod.stock - disponible_de(v_prod.id);
+  if p_cantidad < 0 and v_prod.stock + p_cantidad < v_apartado and not p_aunque_este_apartado then
+    raise exception 'De «%» quedarían % y hay % apartadas por la web. Suelta esas reservas, o repite marcando que se hace igualmente.',
+      v_prod.nombre, v_prod.stock + p_cantidad, v_apartado;
+  end if;
+
   update productos set stock = stock + p_cantidad where id = v_prod.id;
   insert into movimientos_stock (hermandad_id, producto_id, tipo, cantidad, motivo, quien)
     values (v_hermandad, v_prod.id, p_tipo, p_cantidad, p_motivo, hermano_propio_id());
@@ -4269,8 +4537,8 @@ begin
   return v_prod.stock + p_cantidad;
 end $$;
 
-revoke all on function mover_stock(uuid, text, int, text) from public, anon;
-grant execute on function mover_stock(uuid, text, int, text) to authenticated;
+revoke all on function mover_stock(uuid, text, int, text, boolean) from public, anon;
+grant execute on function mover_stock(uuid, text, int, text, boolean) to authenticated;
 
 
 -- ----------------------------------------------------------------------------
@@ -4335,17 +4603,26 @@ begin
    * El contrario del ingreso: un gasto por lo que se devuelve. Y el del IVA
    * aparte, como se apuntó: si se contra-apuntara todo junto, el 303 saldría
    * con el IVA repercutido de una venta que ya no existe.
+   *
+   * `v_num := v_num + 1` DELANTE DE CADA APUNTE, y no `+1 / +2 / +3` escritos a
+   * mano. Aquí ponía `+1`, `+4` y `+2`: los tres apuntes de una misma anulación
+   * salían en el libro desordenados, con un hueco en el 3 que no era de nadie,
+   * y el último —el género que vuelve al almacén— por delante del IVA. Contar
+   * de verdad además cierra el otro agujero, el que tenía también el apunte de
+   * la venta: cuando el IVA es cero, el número que le tocaba no se salta.
    */
+  v_num := v_num + 1;
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
-  values (v_hermandad, v_num + 1, to_char(now(), 'YYYY-MM-DD'),
+  values (v_hermandad, v_num, to_char(now(), 'YYYY-MM-DD'),
           format('Anulada la venta %s-%s', v_venta.serie, v_venta.numero),
           'Gastos varios menores', 'Gasto', v_venta.total - v_venta.iva_total,
           case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
           'Pendiente', 'anula-venta:' || p_venta_id);
 
   if v_venta.iva_total > 0 then
+    v_num := v_num + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
-    values (v_hermandad, v_num + 4, to_char(now(), 'YYYY-MM-DD'),
+    values (v_hermandad, v_num, to_char(now(), 'YYYY-MM-DD'),
             format('IVA de la venta anulada %s-%s', v_venta.serie, v_venta.numero),
             'IVA repercutido', 'Gasto', v_venta.iva_total,
             case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -4354,8 +4631,9 @@ begin
 
   -- Y el contrario del coste, si lo hubo.
   if v_venta.coste_total > 0 then
+    v_num := v_num + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
-    values (v_hermandad, v_num + 2, to_char(now(), 'YYYY-MM-DD'),
+    values (v_hermandad, v_num, to_char(now(), 'YYYY-MM-DD'),
             format('Vuelve al almacén el género de %s-%s', v_venta.serie, v_venta.numero),
             'Otros ingresos', 'Ingreso', v_venta.coste_total,
             case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -4576,6 +4854,22 @@ create table if not exists reservas_tienda (
 create index if not exists reservas_tienda_pendientes_idx
   on reservas_tienda (hermandad_id, estado, creado_en desc);
 
+/*
+ * QUIÉN APARTÓ, SI RESULTÓ SER HERMANO.
+ *
+ * Va como `alter table` para las bases que ya existen. Y NO ES UN CAMPO QUE
+ * MANDE EL NAVEGADOR: lo resuelve `crear_reserva_web` contra la sesión, porque
+ * un `hermano_id` que llegara de fuera sería el 50 % de costaleros para
+ * cualquiera con la consola abierta.
+ *
+ * De saberlo salen dos cosas: el precio de hermano en la web —que hasta ahora
+ * solo existía en el mostrador, así que el hermano que compraba por internet
+ * pagaba tarifa— y poder avisarle cuando lo suyo está listo.
+ */
+alter table reservas_tienda add column if not exists hermano_id uuid references hermanos(id) on delete set null;
+alter table reservas_tienda add column if not exists descuento_id uuid references descuentos(id) on delete set null;
+alter table reservas_tienda add column if not exists descuento_pct numeric(5, 2) not null default 0;
+
 create table if not exists lineas_reserva (
   id uuid primary key default gen_random_uuid(),
   hermandad_id uuid not null references hermandades(id) on delete cascade,
@@ -4588,6 +4882,9 @@ create table if not exists lineas_reserva (
   cantidad int not null check (cantidad > 0),
   precio_unitario numeric(10, 2) not null default 0
 );
+-- Lo que costaba de tarifa, para poder enseñar en el resguardo lo que NO se le
+-- cobró. `precio_unitario` ya viene rebajado si a quien apartó le tocaba.
+alter table lineas_reserva add column if not exists precio_tarifa numeric(10, 2);
 create index if not exists lineas_reserva_reserva_idx on lineas_reserva (reserva_id);
 create index if not exists lineas_reserva_producto_idx on lineas_reserva (producto_id);
 
@@ -4603,6 +4900,45 @@ create index if not exists lineas_reserva_producto_idx on lineas_reserva (produc
 -- Separarlos importa el día del besamanos: si el mostrador vende las tres
 -- últimas camisetas que estaban apartadas para alguien que viene por la tarde,
 -- esa persona se encuentra con que su reserva no vale nada.
+--
+-- Y eso es exactamente lo que pasaba, porque esta vista estaba escrita desde el
+-- primer día y NO LA MIRABA NADIE: ni el mostrador, ni el almacén, ni el
+-- navegador. La web sí descontaba lo apartado, así que el circuito estaba
+-- partido por la mitad — internet contaba una cosa y el mostrador otra, sobre
+-- el mismo estante—. Ahora la cuenta vive en una sola función y la usan los
+-- dos lados.
+
+/*
+ * PUEDE SALIR NEGATIVO, y sale a propósito. Un −2 significa que se ha vendido
+ * género que ya estaba comprometido con alguien: es justo el aviso que hay que
+ * ver, y taparlo con un `greatest(0, …)` sería esconder el descuadre donde más
+ * falta hace mirarlo. En la web sí se enseña topado a cero —a quien compra no
+ * le sirve de nada un número negativo—, pero eso lo hace `catalogo_web`.
+ *
+ * `security definer` porque la llaman tanto la web pública (sin sesión) como el
+ * panel; devuelve UN NÚMERO de un artículo que quien pregunta ya está viendo,
+ * así que no descubre nada que no supiera.
+ */
+create or replace function disponible_de(p_producto_id uuid)
+returns int
+language sql stable security definer set search_path = public as $$
+  select p.stock - coalesce((
+           select sum(l.cantidad)::int
+             from lineas_reserva l
+             join reservas_tienda r on r.id = l.reserva_id
+            where l.producto_id = p.id and r.estado = 'pendiente'
+         ), 0)
+    from productos p
+   where p.id = p_producto_id
+$$;
+
+comment on function disponible_de(uuid) is
+  'Lo que queda sin comprometer de un artículo: el stock de la estantería menos lo apartado por '
+  'reservas de la web todavía sin recoger. Puede ser negativo, y entonces significa que se ha '
+  'vendido en el mostrador algo que ya estaba prometido.';
+
+grant execute on function disponible_de(uuid) to authenticated, anon;
+
 create or replace view existencias_tienda
 with (security_invoker = true) as
   select
@@ -4611,18 +4947,8 @@ with (security_invoker = true) as
     p.codigo,
     p.nombre,
     p.stock,
-    coalesce((
-      select sum(l.cantidad)::int
-        from lineas_reserva l
-        join reservas_tienda r on r.id = l.reserva_id
-       where l.producto_id = p.id and r.estado = 'pendiente'
-    ), 0) as reservado,
-    p.stock - coalesce((
-      select sum(l.cantidad)::int
-        from lineas_reserva l
-        join reservas_tienda r on r.id = l.reserva_id
-       where l.producto_id = p.id and r.estado = 'pendiente'
-    ), 0) as disponible
+    p.stock - disponible_de(p.id) as reservado,
+    disponible_de(p.id) as disponible
   from productos p;
 
 grant select on existencias_tienda to authenticated, anon;
@@ -4673,6 +4999,10 @@ declare
   v_total numeric(10, 2) := 0;
   v_recientes int;
   v_nombre text;
+  v_hermano uuid;
+  v_desc uuid;
+  v_pct numeric(5, 2) := 0;
+  v_precio numeric(10, 2);
 begin
   if p_hermandad_id is null or not exists (select 1 from hermandades where id = p_hermandad_id) then
     raise exception 'No se sabe de qué hermandad es esta reserva.';
@@ -4688,6 +5018,34 @@ begin
   v_nombre := left(trim(coalesce(p_nombre, '')), 120);
   if v_nombre = '' then
     raise exception 'Hace falta un nombre para poder llamarte.';
+  end if;
+
+  /*
+   * ¿ESTÁ APARTANDO UN HERMANO?
+   *
+   * Se resuelve CONTRA LA SESIÓN y NUNCA desde un parámetro. Esta función está
+   * concedida a `anon` —quien reserva desde la web no ha entrado en ningún
+   * sitio—, así que un `p_hermano_id` sería el 50 % de costaleros para
+   * cualquiera que abra la consola del navegador y escriba un uuid.
+   *
+   * `hermano_propio_id()` sale de `auth.uid()`, que aquí es de verdad quien
+   * llama: `security definer` cambia con qué permisos se ejecuta esto, no quién
+   * ha iniciado sesión. Si el hermano entró en su área y desde esa misma pestaña
+   * abre la web de su hermandad, lleva el mismo cliente y el mismo JWT.
+   *
+   * Y se comprueba que sea de ESTA hermandad y no esté de baja: un hermano de
+   * otra hermandad no tiene por qué llevarse el descuento de esta.
+   */
+  select h.id into v_hermano
+    from hermanos h
+   where h.id = hermano_propio_id()
+     and h.hermandad_id = p_hermandad_id
+     and h.estado <> 'Baja';
+
+  if v_hermano is not null then
+    select m.id, m.porcentaje into v_desc, v_pct
+      from mejor_descuento_para(p_hermandad_id, v_hermano) m;
+    v_pct := coalesce(v_pct, 0);
   end if;
 
   /*
@@ -4746,12 +5104,27 @@ begin
       raise exception 'De «%» ya solo quedan % sin apartar.', v_prod.nombre, greatest(0, coalesce(v_disp, 0));
     end if;
 
-    insert into lineas_reserva (hermandad_id, reserva_id, producto_id, codigo, nombre, cantidad, precio_unitario)
-      values (p_hermandad_id, v_reserva, v_prod.id, v_prod.codigo, v_prod.nombre, v_cant, v_prod.precio);
-    v_total := v_total + round(v_prod.precio * v_cant, 2);
+    /*
+     * EL PRECIO, CON LA MISMA FÓRMULA QUE COBRA EL MOSTRADOR.
+     *
+     * `round(precio * (1 - pct/100), 2)`, letra por letra igual que en
+     * `registrar_venta`. No es celo: si la web dijera 0,57 y la caja cobrara
+     * 0,58, el problema no sería el céntimo — sería que la web mintió, y con un
+     * resguardo por escrito de por medio.
+     */
+    v_precio := round(v_prod.precio * (1 - v_pct / 100), 2);
+
+    insert into lineas_reserva (
+      hermandad_id, reserva_id, producto_id, codigo, nombre, cantidad, precio_unitario, precio_tarifa
+    ) values (
+      p_hermandad_id, v_reserva, v_prod.id, v_prod.codigo, v_prod.nombre, v_cant, v_precio, v_prod.precio
+    );
+    v_total := v_total + round(v_precio * v_cant, 2);
   end loop;
 
-  update reservas_tienda set total = v_total where id = v_reserva;
+  update reservas_tienda
+     set total = v_total, hermano_id = v_hermano, descuento_id = v_desc, descuento_pct = v_pct
+   where id = v_reserva;
 
   /*
    * Y SE AVISA A QUIEN LLEVA EL INVENTARIO. Una reserva que nadie mira es
@@ -4805,6 +5178,7 @@ declare
   v_res reservas_tienda%rowtype;
   v_lineas jsonb;
   v_venta jsonb;
+  v_huerfanas int;
 begin
   if not modulo_permitido('inventario') then
     raise exception 'Solo quien lleva el inventario puede entregar una reserva.';
@@ -4817,6 +5191,29 @@ begin
   end if;
   if v_res.estado <> 'pendiente' then
     raise exception 'Esa reserva ya está %.', v_res.estado;
+  end if;
+
+  /*
+   * SI ALGÚN ARTÍCULO DE LA RESERVA YA NO EXISTE, SE PARA.
+   *
+   * El `producto_id is not null` de abajo descartaba en silencio las líneas
+   * huérfanas —las de un artículo borrado del catálogo después de reservarlo—.
+   * Con tres artículos apartados y uno borrado, se facturaban dos y el tercero
+   * desaparecía sin que nadie lo dijera: ni quien cobra ni quien recoge se
+   * enteraban de que la reserva no era la que se firmó.
+   *
+   * Se cuenta primero y se avisa, que es lo que ya hacía la rama de la
+   * demostración. Rehacer la reserva es trabajo de un minuto; descubrir dentro
+   * de un mes que faltó un artículo en una factura, no.
+   */
+  select count(*) into v_huerfanas
+    from lineas_reserva l
+   where l.reserva_id = p_reserva_id and l.producto_id is null;
+  if v_huerfanas > 0 then
+    raise exception 'Esta reserva tiene % % que ya no está% en el catálogo. Suéltala y hazla de nuevo con lo que sí hay.',
+      v_huerfanas,
+      case when v_huerfanas = 1 then 'artículo' else 'artículos' end,
+      case when v_huerfanas = 1 then '' else 'n' end;
   end if;
 
   -- Las líneas, con el precio que se le prometió a quien reservó. Si la
@@ -4834,14 +5231,47 @@ begin
     raise exception 'Esa reserva se ha quedado sin artículos: ya no existen en el catálogo.';
   end if;
 
+  /*
+   * LA RESERVA SE MARCA ENTREGADA **ANTES** DE FACTURARLA, y el orden no es un
+   * capricho: es la trampa entera de este arreglo.
+   *
+   * Desde que `registrar_venta` mira lo disponible y no el stock, las líneas de
+   * esta misma reserva cuentan como apartadas mientras siga «pendiente». Con el
+   * `update` detrás, la reserva se bloqueaba a sí misma: entregar una reserva
+   * perfectamente válida contestaba «de "Camiseta" solo quedan 0 sin apartar».
+   *
+   * Es la misma transacción, así que no se abre ningún hueco: si `registrar_venta`
+   * levanta una excepción, se deshace también este `update` y la reserva sigue
+   * pendiente, igual que antes.
+   */
+  update reservas_tienda set estado = 'entregada' where id = p_reserva_id;
+
+  /*
+   * SE FACTURA A NOMBRE DEL HERMANO Y CON SU DESCUENTO, si lo hubo.
+   *
+   * Las líneas siguen llevando el precio PROMETIDO, y no hay doble descuento:
+   * la regla «precio a mano manda» de `registrar_venta` lo garantiza, y ese
+   * precio ya viene rebajado de cuando se apartó. El `descuento_id` va para que
+   * la factura y los informes puedan decir POR QUÉ costó eso; sin él, una
+   * factura de la web con precios rebajados no tiene explicación en ninguna
+   * parte.
+   *
+   * El `case when` no sobra: si entre la reserva y la entrega alguien apaga ese
+   * descuento —o el hermano pierde la etiqueta—, `registrar_venta` levantaría
+   * excepción y la reserva no se podría entregar. Lo que se le prometió se le
+   * cobra igual; lo único que se pierde es la nota de por qué.
+   */
   v_venta := registrar_venta(
-    v_lineas, 'online', p_forma_pago, null, null,
+    v_lineas, 'online', p_forma_pago,
+    v_res.hermano_id,
+    case when pct_de_descuento(v_hermandad, v_res.descuento_id, v_res.hermano_id) is not null
+         then v_res.descuento_id end,
     v_res.nombre, '', '',
     format('Reserva %s', v_res.referencia)
   );
 
   update reservas_tienda
-     set estado = 'entregada', venta_id = (v_venta ->> 'id')::uuid
+     set venta_id = (v_venta ->> 'id')::uuid
    where id = p_reserva_id;
 
   return v_venta;
@@ -4961,6 +5391,29 @@ end $$;
 -- Va por SLUG, no por identificador: es lo que el navegador tiene en la barra
 -- de direcciones. Y solo responde si la web está publicada — una hermandad que
 -- está preparando la suya no enseña su género todavía.
+/*
+ * EL PRECIO DE HERMANO, TAMBIÉN AQUÍ.
+ *
+ * Hasta ahora el descuento de hermano solo existía en el mostrador: el hermano
+ * que compraba por internet pagaba tarifa, y no había nada en pantalla que le
+ * dijera que entrando en su área le habría costado menos. Un descuento que solo
+ * conoce quien ya lo tenía no es un descuento, es un secreto.
+ *
+ * EL NAVEGADOR NO DICE QUIÉN ES Y NO SE LE CREE NADA. La página se limita a
+ * llamar aquí; quién está navegando lo resuelve la base con `hermano_propio_id()`
+ * a partir de la sesión, y el precio lo calcula ella. Sin sesión, `precio_hermano`
+ * viene `null` —no igual al precio— para que la página pueda distinguir «no le
+ * toca ninguno» de «no ha entrado», que se dicen de forma muy distinta.
+ *
+ * Y NO SE DEVUELVE NI EL NOMBRE NI EL ID DEL HERMANO: solo números. Esta función
+ * la puede llamar cualquiera, y lo que contesta no puede servir para averiguar
+ * quién es nadie.
+ *
+ * `drop` antes de `create`: cambia el tipo devuelto y `create or replace` no lo
+ * permite. Sin esto, volver a ejecutar el fichero falla aquí — es exactamente
+ * lo que ya le pasó a `soltar_reserva`.
+ */
+drop function if exists catalogo_web(text);
 create or replace function catalogo_web(p_slug text)
 returns table (
   id uuid,
@@ -4968,28 +5421,48 @@ returns table (
   nombre text,
   descripcion text,
   precio numeric,
+  precio_hermano numeric,
+  descuento_pct numeric,
   iva numeric,
   foto_url text,
   disponible int
 )
 language sql stable security definer set search_path = public as $$
+  with sitio as (
+    select w.hermandad_id
+      from web_publica w
+     where w.slug = p_slug
+       -- Publicada, o de la gente de esa misma hermandad: es lo que hace que la
+       -- vista previa del panel enseñe el género antes de publicar la web. La
+       -- excepción NO se la cree a nadie por decirlo —no hay ningún parámetro de
+       -- «soy de la casa»—: se comprueba contra la sesión, aquí y en el servidor.
+       and (w.publicada or w.hermandad_id = hermandad_actual())
+  ),
+  -- Quien esté navegando, SI ha entrado en su área y SI es hermano de esta
+  -- hermandad. Para todos los demás esto está vacío y no pasa nada más.
+  quien as (
+    select h.id
+      from hermanos h, sitio s
+     where h.id = hermano_propio_id()
+       and h.hermandad_id = s.hermandad_id
+       and h.estado <> 'Baja'
+  ),
+  suyo as (
+    select m.porcentaje
+      from sitio s, quien q, mejor_descuento_para(s.hermandad_id, q.id) m
+  )
   select
-    p.id, p.codigo, p.nombre, p.descripcion, p.precio, p.iva, p.foto_url,
-    greatest(0, p.stock - coalesce((
-      select sum(l.cantidad)::int
-        from lineas_reserva l
-        join reservas_tienda r on r.id = l.reserva_id
-       where l.producto_id = p.id and r.estado = 'pendiente'
-    ), 0))::int as disponible
-  from web_publica w
-  join productos p on p.hermandad_id = w.hermandad_id
-  where w.slug = p_slug
-    -- Publicada, o de la gente de esa misma hermandad: es lo que hace que la
-    -- vista previa del panel enseñe el género antes de publicar la web. La
-    -- excepción NO se la cree a nadie por decirlo —no hay ningún parámetro de
-    -- «soy de la casa»—: se comprueba contra la sesión, aquí y en el servidor.
-    and (w.publicada or w.hermandad_id = hermandad_actual())
-    and p.activo and p.visible_en_web
+    p.id, p.codigo, p.nombre, p.descripcion, p.precio,
+    -- La misma fórmula, letra por letra, que aplica `registrar_venta` al cobrar.
+    (select round(p.precio * (1 - porcentaje / 100), 2) from suyo) as precio_hermano,
+    (select porcentaje from suyo) as descuento_pct,
+    p.iva, p.foto_url,
+    -- Topado a cero: a quien compra no le sirve de nada un número negativo. En
+    -- el panel sí se enseña tal cual, porque allí es la alarma.
+    greatest(0, disponible_de(p.id))::int as disponible
+  from sitio s
+  join productos p on p.hermandad_id = s.hermandad_id
+  where p.activo and p.visible_en_web
   order by p.nombre
 $$;
 
@@ -5086,6 +5559,158 @@ end $$;
 -- Solo la clave de servicio, que es la que usa `enviar-correo`. Desde el
 -- navegador NO: devuelve el correo y el teléfono de quien reservó.
 revoke all on function resguardo_de_reserva(uuid, text) from public, anon, authenticated;
+
+
+-- ----------------------------------------------------------------------------
+-- 10. «TU RESERVA ESTÁ LISTA»
+-- ----------------------------------------------------------------------------
+--
+-- Lo que faltaba del circuito y lo que más se nota: quien aparta algo por la
+-- web recibe su resguardo y luego NO VUELVE A SABER NADA. Se le dice «pásate
+-- cuando puedas» y ahí acaba. Si el género hay que pedirlo, o hay que grabar la
+-- medalla, la persona se planta un martes por la tarde a por algo que todavía
+-- no está — o no se planta nunca, y el plazo se cumple con la reserva viva y el
+-- género apartado para nadie.
+--
+-- LO DISPARA UNA PERSONA DESDE EL PANEL, no un reloj. Y no por comodidad:
+-- mandar un correo desde la base exigiría guardar dentro de ella la clave del
+-- proveedor de envío, y eso está descartado por escrito en
+-- `tareas-programadas.sql`. Quien prepara la reserva es quien sabe que está
+-- lista, así que es quien lo dice.
+--
+-- LLEGA POR DOS SITIOS, Y LOS DOS HACEN FALTA:
+--
+--   · Un aviso en su área del hermano, si resultó ser hermano de la casa. Ahí
+--     se queda escrito y no depende de que el correo llegue.
+--   · Y un correo, si dejó dirección. Es lo único que llega a quien no es
+--     hermano y a quien no entra nunca en su área.
+
+alter table reservas_tienda add column if not exists lista_en   timestamptz;
+alter table reservas_tienda add column if not exists avisada_en timestamptz;
+
+/*
+ * MARCARLA COMO LISTA. La llama el panel, con sesión y con permiso.
+ *
+ * Devuelve `hermandad_id` y `referencia` porque es lo que el navegador necesita
+ * para pedir el correo después, y no tiene por qué adivinarlo; y `hay_correo`
+ * para poder decir en pantalla si de verdad se va a mandar algo o si a esa
+ * persona hay que llamarla por teléfono.
+ */
+create or replace function avisar_reserva_lista(p_reserva_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_hermandad uuid := hermandad_actual();
+  v_res reservas_tienda%rowtype;
+  v_repetida boolean;
+begin
+  if not modulo_permitido('inventario') then
+    raise exception 'Solo quien lleva el inventario puede avisar de una reserva.';
+  end if;
+
+  select * into v_res from reservas_tienda r
+   where r.id = p_reserva_id and r.hermandad_id = v_hermandad
+   for update;
+  if not found then
+    raise exception 'Esa reserva no es de esta hermandad.';
+  end if;
+  if v_res.estado <> 'pendiente' then
+    raise exception 'Esa reserva ya está %, así que no hay nada que avisar.', v_res.estado;
+  end if;
+
+  -- Avisar dos veces el mismo día no es insistir, es molestar. Se dice que ya
+  -- estaba avisada en vez de callarse: la pantalla tiene que poder contarlo.
+  v_repetida := v_res.avisada_en is not null and v_res.avisada_en > now() - interval '1 day';
+
+  update reservas_tienda set lista_en = coalesce(lista_en, now()) where id = p_reserva_id;
+
+  /*
+   * EL AVISO EN SU ÁREA, si es hermano. Va aquí y no en el correo porque es lo
+   * único que no se pierde: un correo puede acabar en la carpeta de spam, y
+   * entonces no queda rastro de que se le avisó.
+   */
+  if v_res.hermano_id is not null and not v_repetida then
+    insert into avisos_hermano (hermandad_id, hermano_id, texto, tipo, titulo)
+    values (
+      v_hermandad, v_res.hermano_id,
+      format('Ya puedes pasar a recoger lo que apartaste (%s). Son %s€, que se pagan al recogerlo%s.',
+             v_res.referencia,
+             to_char(v_res.total, 'FM999999990.00'),
+             case when v_res.recoger_antes_de is null then ''
+                  else format(', y te lo guardamos hasta el %s',
+                              to_char(v_res.recoger_antes_de, 'DD/MM/YYYY')) end),
+      'tienda', 'Tu reserva está lista'
+    );
+  end if;
+
+  return jsonb_build_object(
+    'hermandad_id', v_hermandad,
+    'referencia', v_res.referencia,
+    'hay_correo', v_res.email <> '',
+    'es_hermano', v_res.hermano_id is not null,
+    'ya_avisada', v_repetida
+  );
+end $$;
+
+revoke all on function avisar_reserva_lista(uuid) from public, anon;
+grant execute on function avisar_reserva_lista(uuid) to authenticated;
+
+/*
+ * Y LO QUE LEE `enviar-correo` PARA MANDARLO, con los mismos cierres que el
+ * resguardo. Calcada de `resguardo_de_reserva` a propósito: es la misma clase
+ * de función —devuelve un correo y un nombre— y los mismos cierres tienen que
+ * seguir puestos.
+ *
+ *   · Solo si alguien la ha marcado lista. Sin eso, esto sería una forma de
+ *     sacar el correo de cualquiera que haya reservado, probando referencias.
+ *   · Solo una vez al día. Sin ese freno, el botón del panel sería una manera
+ *     de mandarle veinte correos a alguien.
+ *   · Y sin fila, NADA, sin decir por qué: distinguir «no existe» de «ya se
+ *     mandó» desde fuera vuelve a ser una forma de preguntar quién ha
+ *     reservado.
+ */
+create or replace function datos_para_avisar_reserva(p_hermandad_id uuid, p_referencia text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_res reservas_tienda%rowtype;
+  v_lineas jsonb;
+  v_hermandad text;
+begin
+  select * into v_res from reservas_tienda r
+   where r.hermandad_id = p_hermandad_id
+     and r.referencia = p_referencia
+     and r.estado = 'pendiente'
+     and r.lista_en is not null
+     and (r.avisada_en is null or r.avisada_en < now() - interval '1 day')
+   for update;
+  if not found then return null; end if;
+  if v_res.email = '' then return null; end if;
+
+  select jsonb_agg(jsonb_build_object(
+           'nombre', l.nombre, 'cantidad', l.cantidad, 'importe', l.precio_unitario * l.cantidad)
+         order by l.nombre)
+    into v_lineas
+    from lineas_reserva l where l.reserva_id = v_res.id;
+
+  select h.nombre into v_hermandad from hermandades h where h.id = p_hermandad_id;
+
+  update reservas_tienda set avisada_en = now() where id = v_res.id;
+
+  return jsonb_build_object(
+    'email', v_res.email,
+    'nombre', v_res.nombre,
+    'referencia', v_res.referencia,
+    'total', v_res.total,
+    'recoger_antes_de', v_res.recoger_antes_de,
+    'hermandad', coalesce(v_hermandad, ''),
+    'lineas', coalesce(v_lineas, '[]'::jsonb)
+  );
+end $$;
+
+-- Solo la clave de servicio, igual que el resguardo: desde el navegador NO,
+-- porque devuelve el correo de quien reservó.
+revoke all on function datos_para_avisar_reserva(uuid, text) from public, anon, authenticated;
 
 -- =============================================================================
 --   CAMPANAS-Y-PROYECTOS.SQL — Campañas de recaudación con su barra, y proyectos a largo plazo
@@ -5412,6 +6037,123 @@ grant execute on function campanas_de_la_web(text) to anon, authenticated;
 -- devuelve». Con un `select` suelto por el medio salen dos, y quien lo ejecuta
 -- —que no es informático— se queda mirando una tabla de tres números sin
 -- título preguntándose si eso es un error.
+
+-- =============================================================================
+--   BAJA-DE-HERMANO.SQL — La baja de un hermano, entera y sin romper el escalafón
+-- =============================================================================
+
+-- ============================================================================
+--   LA BAJA DE UN HERMANO, EN UN SOLO PASO Y SIN ROMPER EL ESCALAFÓN
+-- ============================================================================
+--
+-- QUÉ PASABA. Al tramitar una baja saltaba esto, veinte veces seguidas:
+--
+--   guardar 660b6973-…: duplicate key value violates unique constraint
+--   "hermanos_numero_por_hermandad"
+--
+-- Y la baja NO se guardaba. En la pantalla salía tramitada; en la base seguía
+-- todo igual. Los dos lados diciendo cosas distintas sobre el censo, que es de
+-- lo peor que puede pasar aquí.
+--
+-- ----------------------------------------------------------------------------
+-- POR QUÉ
+-- ----------------------------------------------------------------------------
+--
+-- Dar de baja no toca una ficha: toca TODO EL ESCALAFÓN. El que se va sale de
+-- la numeración (número 0) y todos los de detrás suben un puesto, que es como
+-- funciona un escalafón — el hueco se cierra.
+--
+-- En una hermandad de mil, dar de baja al nº 8 son novecientas noventa y dos
+-- fichas cambiadas. La aplicación las mandaba de seis en seis Y EN PARALELO, y
+-- ahí está el fallo: el nº 9 intenta ponerse el 8 mientras el 8 todavía es el
+-- 8, porque su petición va en el mismo lote y nadie garantiza el orden. El
+-- índice único `(hermandad_id, numero)` lo rechaza, y lo rechaza casi todo.
+--
+-- No se arregla mandándolas de una en una y en orden: son cientos de viajes, y
+-- si se corta a la mitad —se cierra el portátil, se cae la conexión— queda un
+-- escalafón con la mitad corrida y la otra mitad no. Eso no hay quien lo
+-- deshaga después.
+--
+-- ----------------------------------------------------------------------------
+-- CÓMO SE ARREGLA
+-- ----------------------------------------------------------------------------
+--
+-- Aquí, en una sola llamada y dentro de una transacción: o se hace entero o no
+-- se hace nada.
+--
+-- Y el hueco se cierra EN DOS PASOS, con las fichas pasando por números
+-- negativos. No es un truco caprichoso: el índice único es PARCIAL, solo mira
+-- `where numero > 0`. En negativo las fichas quedan FUERA del índice, así que
+-- se pueden mover todas sin que ninguna choque con ninguna; y al volver a
+-- positivo, los huecos ya están libres.
+--
+-- Un solo `update numero = numero - 1` no valdría: Postgres comprueba la
+-- unicidad fila a fila, no al final de la instrucción, así que la primera que
+-- se mueve ya choca con la siguiente.
+--
+-- SECURITY INVOKER a propósito: la baja la tiene que poder hacer quien tenga
+-- permiso para tocar el censo, y no más. Con DEFINER, cualquiera con la clave
+-- pública podría dar de baja a quien quisiera.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Es seguro repetirlo: no borra ni sobrescribe datos.
+-- ============================================================================
+
+create or replace function dar_de_baja_hermano(p_hermano uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_hermandad uuid;
+  v_numero int;
+begin
+  select hermandad_id, numero into v_hermandad, v_numero
+    from hermanos where id = p_hermano;
+
+  -- Sin ficha (o sin permiso para verla) no hay nada que hacer. No se lanza
+  -- error: quien no la ve tampoco tiene por qué enterarse de que existe.
+  if v_hermandad is null then return; end if;
+
+  /*
+   * LA BAJA QUITA EL CARGO, y no es limpieza.
+   *
+   * La única forma que tiene la base de revocarle los permisos a alguien es su
+   * `estado`: `auth_es_hermano()` y `modulo_permitido()` preguntan por
+   * `estado <> 'Baja'`. Dejarle el cargo escrito al tesorero destituido es
+   * dejar la puerta apoyada: basta con que su estado vuelva a «Activo» —un
+   * error de secretaría, una reincorporación— para que recupere Tesorería sin
+   * que nadie lo haya decidido.
+   */
+  update hermanos
+     set estado = 'Baja',
+         numero = 0,
+         cargo = null,
+         baja_solicitada = false
+   where id = p_hermano;
+
+  -- Quien no ocupaba sitio no deja hueco al irse: el hermano civil y la ficha
+  -- recién importada llevan número 0 a propósito.
+  if v_numero > 0 then
+    update hermanos
+       set numero = -numero
+     where hermandad_id = v_hermandad and numero > v_numero;
+
+    update hermanos
+       set numero = (-numero) - 1
+     where hermandad_id = v_hermandad and numero < 0;
+  end if;
+end $$;
+
+comment on function dar_de_baja_hermano(uuid) is
+  'Da de baja a un hermano y cierra el hueco que deja en el escalafón, entero y de una vez. '
+  'Los de detrás suben un puesto pasando por números negativos, que quedan fuera del índice '
+  'único parcial (numero > 0) y por eso no chocan entre ellos. Hacerlo desde el navegador, '
+  'ficha a ficha, chocaba con ese índice y dejaba la baja sin guardar.';
+
+grant execute on function dar_de_baja_hermano(uuid) to authenticated;
 
 -- =============================================================================
 --   CAMPANA-CON-PARTIDA.SQL — Enlazar una campaña a sus partidas: la barra se llena sola

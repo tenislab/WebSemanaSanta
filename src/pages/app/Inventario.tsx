@@ -16,6 +16,7 @@ import { enserToRow, rowToEnser } from '../../lib/db/enseres'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
 import ImportarTabla from '../../components/ImportarTabla'
+import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { useContextoDeImportacion } from '../../lib/contextoImportacion'
 import { TABLA_ENSERES } from '../../lib/tablasImportables'
 
@@ -44,6 +45,16 @@ export default function Inventario() {
   const [filter, setFilter] = useState<'Todos' | CategoriaEnser>('Todos')
   const [selected, setSelected] = useState<Enser | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  /*
+   * EL FORMULARIO NO SE PUEDE CALLAR CUANDO ALGO ESTÁ MAL.
+   *
+   * Aquí había un `if (!nombre || !categoria) return`: se pulsaba «Guardar
+   * pieza», no pasaba nada, y no se decía por qué. Y el valor asegurado mal
+   * escrito —una coma de más, una letra— se tiraba en silencio y la pieza se
+   * guardaba como si no estuviera asegurada. Eso es peor que no guardarla: el
+   * día del parte al seguro, la pieza aparece a cero.
+   */
+  const [formError, setFormError] = useState<string | null>(null)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
   const [importarOpen, setImportarOpen] = useState(false)
   const ctxImportacion = useContextoDeImportacion()
@@ -102,7 +113,15 @@ export default function Inventario() {
     const valorRaw = String(data.get('valorAsegurado') ?? '').trim()
     const valorAsegurado = valorRaw ? Number(valorRaw.replace(',', '.')) : null
     const notas = String(data.get('notas') ?? '').trim()
-    if (!nombre || !categoria) return
+    setFormError(null)
+    if (!nombre) { setFormError('Ponle un nombre a la pieza: es por lo que se busca.'); return }
+    if (!categoria) { setFormError('Elige una categoría.'); return }
+    // Escrito pero ilegible: se dice, no se descarta. Vacío sí vale — hay
+    // piezas sin asegurar, y es un caso normal.
+    if (valorRaw && !(Number.isFinite(valorAsegurado) && (valorAsegurado ?? 0) >= 0)) {
+      setFormError('El valor asegurado tiene que ser una cantidad en euros, o quedarse vacío.')
+      return
+    }
 
     const nuevo: Enser = {
       id: nuevoId(),
@@ -116,7 +135,7 @@ export default function Inventario() {
       categoria,
       ubicacion: ubicacion || 'Sin ubicar',
       estadoConservacion,
-      valorAsegurado: valorAsegurado && Number.isFinite(valorAsegurado) ? valorAsegurado : null,
+      valorAsegurado: valorRaw ? valorAsegurado : null,
       prestadoA: null,
       fechaAlta: hoy(),
       notas,
@@ -124,6 +143,7 @@ export default function Inventario() {
     setEnseres((prev) => [{ ...nuevo, numero: Math.max(0, ...prev.map((x) => x.numero)) + 1 }, ...prev])
     setJustAddedId(nuevo.id)
     setFormOpen(false)
+    setFormError(null)
     setFilter('Todos')
     setQuery('')
     form.reset()
@@ -145,7 +165,7 @@ export default function Inventario() {
               —meter piezas— pero de golpe, y es lo primero que hace una
               hermandad que ya tenía el inventario en un Excel. */}
           <button className="btn btn-outline" onClick={() => setImportarOpen(true)}>
-            Traer vuestro inventario
+            Traer vuestro inventario (Excel o CSV)
           </button>
           <button className="btn btn-primary" onClick={() => setFormOpen(true)}>
             + Nueva pieza
@@ -343,9 +363,10 @@ export default function Inventario() {
         }
       >
         <form id="enser-form" className="app-form" onSubmit={handleCreate}>
+          <AvisoDeCampo texto={formError} />
           <div className="form-row">
             <label htmlFor="nombre">Nombre de la pieza</label>
-            <input id="nombre" name="nombre" type="text" placeholder="Ej. Ciriales de plata" required />
+            <input id="nombre" name="nombre" type="text" placeholder="Ej. Ciriales de plata" />
           </div>
           <div className="form-grid-2">
             <div className="form-row">

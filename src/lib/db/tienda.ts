@@ -155,6 +155,11 @@ export function rowToReserva(r: Record<string, unknown>): Reserva {
     total: num(r.total),
     ventaId: (r.venta_id as string | null) ?? undefined,
     creadoEn: (r.creado_en as string) ?? '',
+    hermanoId: (r.hermano_id as string | null) ?? undefined,
+    descuentoId: (r.descuento_id as string | null) ?? undefined,
+    descuentoPct: num(r.descuento_pct),
+    listaEn: (r.lista_en as string | null) ?? undefined,
+    avisadaEn: (r.avisada_en as string | null) ?? undefined,
   }
 }
 
@@ -181,5 +186,10 @@ export function rowToArticuloWeb(r: Record<string, unknown>): ArticuloWeb {
     iva: num(r.iva),
     fotoUrl: (r.foto_url as string | null) ?? undefined,
     disponible: num(r.disponible),
+    // `null` cuando no le toca ninguno, y se conserva como `undefined`: no se
+    // rellena con el precio, porque «no le toca» y «le toca lo mismo» son
+    // cosas distintas y la página las dice distinto.
+    precioHermano: r.precio_hermano == null ? undefined : num(r.precio_hermano),
+    descuentoPct: r.descuento_pct == null ? undefined : num(r.descuento_pct),
   }
 }

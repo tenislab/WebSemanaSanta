@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react'
 import { useSupabaseTable } from './supabaseSync'
 import { CLAVES_DATOS, leerPersistido } from './persistencia'
+import { diaLocalDe, hoyIso } from './hoy'
 import { isSupabaseConfigured, supabase } from './supabase'
 import {
   descuentoToRow, productoToRow, rowToArticuloWeb, rowToDescuento, rowToLineaReserva,
@@ -30,9 +31,11 @@ import type {
 } from '../data/tienda'
 import { DESCUENTOS_INICIALES, PRODUCTOS_INICIALES, precioDeLineaCent } from '../data/tienda'
 import {
-  anularVentaLocal, apartadoDe, datosTiendaLocales, entregarReservaLocal, historialLocalDe,
+  anularVentaLocal, apartadoDe, avisarReservaListaLocal, datosTiendaLocales, descuentoDelHermanoLocal,
+  entregarReservaLocal, historialLocalDe,
   lineasDeReservaLocal, lineasLocalesDe, moverStockLocal, registrarVentaLocal,
-  reservarEnLaWebLocal, reservasLocales, soltarReservaLocal, tiendaEnLocal, ventasLocales,
+  reservarEnLaWebLocal, reservasLocales, soltarReservaLocal, tiendaEnLocal, ventaLocalPorId,
+  ventasLocales,
 } from './tiendaLocal'
 
 /**
@@ -130,6 +133,7 @@ export function useVentas(): { ventas: Venta[]; cargando: boolean; recargar: () 
  * no que la pantalla tape el descuadre enseñando su propia cuenta.
  */
 export async function traerVenta(ventaId: string): Promise<Venta | null> {
+  if (tiendaEnLocal()) return ventaLocalPorId(ventaId)
   if (!isSupabaseConfigured || !supabase) return null
   const { data, error } = await supabase.from('ventas').select('*').eq('id', ventaId).maybeSingle()
   if (error || !data) {
@@ -290,19 +294,30 @@ export async function moverStock(
   motivo = '',
   /** Hace falta solo en la demostración, para el nombre en los mensajes. */
   producto?: Producto,
+  /**
+   * Bajar el género por debajo de lo que la web ya tiene apartado. Se pide
+   * expresamente y en un segundo intento: la primera vez se para y se dice con
+   * quién choca, para que quien apunta la rotura sepa a quién va a dejar sin
+   * su reserva.
+   */
+  aunqueEsteApartado = false,
 ): Promise<{ ok: true; stock: number } | { ok: false; error: string }> {
   if (tiendaEnLocal()) {
     const p = producto ?? leerPersistido<Producto[]>(CLAVES_DATOS.productos, PRODUCTOS_INICIALES)
       .find((x) => x.id === productoId)
     if (!p) return { ok: false, error: 'Ese artículo ya no está en el catálogo.' }
-    return moverStockLocal(p, tipo, cantidad, motivo)
+    return moverStockLocal(p, tipo, cantidad, motivo, aunqueEsteApartado)
   }
   if (!isSupabaseConfigured || !supabase) {
     return { ok: false, error: 'Sin base de datos conectada no se puede mover el almacén.' }
   }
   try {
     const { data, error } = await supabase.rpc('mover_stock', {
-      p_producto_id: productoId, p_tipo: tipo, p_cantidad: cantidad, p_motivo: motivo,
+      p_producto_id: productoId,
+      p_tipo: tipo,
+      p_cantidad: cantidad,
+      p_motivo: motivo,
+      p_aunque_este_apartado: aunqueEsteApartado,
     })
     if (error) return { ok: false, error: error.message }
     return { ok: true, stock: Number(data ?? 0) }
@@ -374,6 +389,10 @@ export function useCatalogoWeb(slug: string): { articulos: ArticuloWeb[]; cargan
      * descontar, porque tampoco se puede reservar.
      */
     if (!isSupabaseConfigured || !supabase) {
+      // Y el descuento del hermano que esté navegando, igual que hace
+      // `catalogo_web` con la sesión: sin esto, la demostración enseñaría una
+      // tienda que no se parece a la de verdad justo en lo que se ve.
+      const suyo = descuentoDelHermanoLocal()
       setArticulos(
         // Con los de ejemplo por defecto, igual que `useProductos`: si no, la
         // tienda de la web salía vacía en la demostración aunque el panel
@@ -392,6 +411,10 @@ export function useCatalogoWeb(slug: string): { articulos: ArticuloWeb[]; cargan
             // stock menos lo ya apartado y sin recoger. Es lo mismo que
             // devuelve `catalogo_web()`.
             disponible: Math.max(0, p.stock - apartadoDe(p.id)),
+            // Con `precioDeLineaCent`, que es la misma cuenta que aplica la
+            // caja: si aquí saliera un céntimo distinto, la web habría mentido.
+            precioHermano: suyo ? precioDeLineaCent(p, suyo.porcentaje, null) / 100 : undefined,
+            descuentoPct: suyo?.porcentaje,
           })),
       )
       setCargando(false)
@@ -496,6 +519,108 @@ export async function reservarEnLaWeb(d: DatosDeReserva): Promise<
   }
 }
 
+/**
+ * LO QUE DE VERDAD SE PUEDE VENDER DE CADA ARTÍCULO.
+ *
+ * `productos.stock` es lo que hay en la estantería. Eso no es lo que se puede
+ * prometer: hay que descontar lo que la web ya tiene apartado y sin recoger.
+ *
+ * La vista `existencias_tienda` calcula justamente eso y estaba escrita desde
+ * el primer día SIN QUE LA MIRARA NADIE — ni el mostrador, ni el almacén—. Este
+ * hook es lo que la pone a trabajar.
+ *
+ * `disponible` PUEDE SER NEGATIVO, y entonces no es un error de cuentas: es que
+ * se ha vendido algo que ya estaba prometido. En el panel se enseña tal cual,
+ * en rojo, porque es exactamente lo que hay que ver.
+ */
+export type Existencia = { id: string; stock: number; reservado: number; disponible: number }
+
+export function useExistencias(): { existencias: Map<string, Existencia>; recargar: () => void } {
+  const [existencias, setExistencias] = useState<Map<string, Existencia>>(new Map())
+  const [vez, setVez] = useState(0)
+
+  useEffect(() => {
+    if (tiendaEnLocal()) {
+      const mapa = new Map<string, Existencia>()
+      for (const p of leerPersistido<Producto[]>(CLAVES_DATOS.productos, PRODUCTOS_INICIALES)) {
+        const reservado = apartadoDe(p.id)
+        mapa.set(p.id, { id: p.id, stock: p.stock, reservado, disponible: p.stock - reservado })
+      }
+      setExistencias(mapa)
+      return
+    }
+    if (!isSupabaseConfigured || !supabase) return
+    let cancelado = false
+    void supabase.from('existencias_tienda').select('id, stock, reservado, disponible')
+      .then(({ data, error }) => {
+        if (cancelado) return
+        if (error) { avisarDeFallo('existencias', error.message); return }
+        const mapa = new Map<string, Existencia>()
+        for (const f of (data ?? []) as Record<string, unknown>[]) {
+          mapa.set(String(f.id), {
+            id: String(f.id),
+            stock: Number(f.stock ?? 0),
+            reservado: Number(f.reservado ?? 0),
+            disponible: Number(f.disponible ?? 0),
+          })
+        }
+        setExistencias(mapa)
+      })
+    return () => { cancelado = true }
+  }, [vez])
+
+  return { existencias, recargar: () => setVez((v) => v + 1) }
+}
+
+/**
+ * LO QUE HA ENTRADO HOY EN LA TIENDA.
+ *
+ * Va aparte de `useVentas()` a propósito. Ese pide `ventas` ENTERA y sin tope:
+ * una hermandad con cinco años de besamanos son miles de filas, y traerlas
+ * todas para poner un número en la cabecera —que se ve nada más abrir la
+ * tienda, antes de cobrar nada— es hacer esperar a quien tiene la cola delante.
+ *
+ * Aquí se pregunta solo por las de hoy, y con la hora de aquí: `fecha` es un
+ * `timestamptz`, así que el corte del día tiene que ser la medianoche LOCAL. Con
+ * la medianoche UTC, en verano las ventas de después de las diez de la noche
+ * contarían como del día siguiente y la caja de hoy saldría corta.
+ */
+export function useCajaDeHoy(): { total: number; ventas: number; recargar: () => void } {
+  const [caja, setCaja] = useState({ total: 0, ventas: 0 })
+  const [vez, setVez] = useState(0)
+
+  useEffect(() => {
+    const hoy = hoyIso()
+    const cuentan = (v: Venta) => v.estado !== 'Anulada' && diaLocalDe(v.fecha) >= hoy
+
+    if (tiendaEnLocal()) {
+      const suyas = ventasLocales().filter(cuentan)
+      setCaja({ total: suyas.reduce((n, v) => n + v.total, 0), ventas: suyas.length })
+      return
+    }
+    if (!isSupabaseConfigured || !supabase) return
+    let cancelado = false
+    const [a, m, d] = hoy.split('-').map(Number)
+    const desde = new Date(a, m - 1, d).toISOString()
+    void supabase.from('ventas').select('total, estado').gte('fecha', desde)
+      .then(({ data, error }) => {
+        if (cancelado) return
+        // Un fallo aquí NO se pinta como «hoy no se ha cobrado nada»: se deja
+        // lo que hubiera y se avisa por el canal de siempre, que es el que
+        // enciende la banda roja del marco.
+        if (error) { avisarDeFallo('la caja de hoy', error.message); return }
+        const suyas = (data ?? []).filter((f) => (f as { estado?: string }).estado !== 'Anulada')
+        setCaja({
+          total: suyas.reduce((n, f) => n + Number((f as { total?: unknown }).total ?? 0), 0),
+          ventas: suyas.length,
+        })
+      })
+    return () => { cancelado = true }
+  }, [vez])
+
+  return { ...caja, recargar: () => setVez((v) => v + 1) }
+}
+
 /** Lo que ha apartado la gente. Solo lectura, como las ventas y por lo mismo. */
 export function useReservas(): { reservas: Reserva[]; cargando: boolean; recargar: () => void } {
   const [reservas, setReservas] = useState<Reserva[]>([])
@@ -579,6 +704,50 @@ export async function entregarReserva(reservaId: string, formaPago: string): Pro
  * error: llega como un `false` que, sin mirarlo, la pantalla enseñaría como
  * «anulada, el género vuelve a estar disponible».
  */
+/**
+ * «TU RESERVA ESTÁ LISTA».
+ *
+ * Lo que faltaba del circuito y lo que más se nota: quien aparta algo por la web
+ * recibe su resguardo y luego NO VUELVE A SABER NADA. Si el género hay que
+ * pedirlo, o hay que grabar la medalla, la persona se planta un martes por la
+ * tarde a por algo que todavía no está.
+ *
+ * Lo dispara una persona desde el panel y no un reloj: quien prepara la reserva
+ * es quien sabe que está lista. Y llega por dos sitios porque los dos hacen
+ * falta — el aviso en su área del hermano queda escrito aunque el correo se
+ * pierda, y el correo es lo único que le llega a quien no es hermano.
+ *
+ * EL CORREO SE MANDA «A VER SI SUENA», sin esperarlo y sin que su fallo estropee
+ * nada: la reserva ya ha quedado marcada como lista y el aviso del área ya está
+ * puesto. Es lo mismo que hace `reservarEnLaWeb` con el resguardo.
+ */
+export async function avisarReservaLista(reservaId: string): Promise<
+  { ok: true; hayCorreo: boolean; esHermano: boolean; yaAvisada: boolean } | { ok: false; error: string }
+> {
+  if (tiendaEnLocal()) return avisarReservaListaLocal(reservaId)
+  if (!isSupabaseConfigured || !supabase) {
+    return { ok: false, error: 'Sin base de datos conectada no se puede avisar.' }
+  }
+  try {
+    const { data, error } = await supabase.rpc('avisar_reserva_lista', { p_reserva_id: reservaId })
+    if (error) return { ok: false, error: error.message }
+    const r = (data ?? {}) as Record<string, unknown>
+    const yaAvisada = r.ya_avisada === true
+    const hayCorreo = r.hay_correo === true
+
+    if (hayCorreo && !yaAvisada) {
+      void supabase.functions
+        .invoke('enviar-correo', {
+          body: { reservaLista: { hermandadId: r.hermandad_id, referencia: r.referencia } },
+        })
+        .catch(() => {})
+    }
+    return { ok: true, hayCorreo, esHermano: r.es_hermano === true, yaAvisada }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se ha podido avisar.' }
+  }
+}
+
 export async function soltarReserva(
   reservaId: string, motivo = '', estado: 'anulada' | 'caducada' = 'anulada',
 ): Promise<{ ok: boolean; error?: string }> {

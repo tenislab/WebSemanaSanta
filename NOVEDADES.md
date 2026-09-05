@@ -1,11 +1,81 @@
 # Qué lleva esta entrega
 
-Quince bloques, todos probados: `tsc`, `lint`, `build` y **4.130 pruebas** que
-pasan con y sin zona horaria de Madrid. El SQL se instala sobre un Postgres de
-verdad, no solo se lee.
+Todo probado: `tsc`, `lint`, `build` y **4.209 pruebas** que pasan con y sin
+zona horaria de Madrid. El SQL se instala sobre un Postgres de verdad, no solo
+se lee.
 
-**El bloque 12 es urgente** — es un fallo que ya está pasando ahora mismo en
-una hermandad real. Hay que ejecutar `ACTUALIZAR.sql` en cuanto se pueda.
+**Hay que ejecutar `ACTUALIZAR.sql`, y esta vez no es opcional**: sin él, en
+una hermandad ya montada COBRAR EN LA TIENDA FALLA ENTERO. Ver el bloque 0.
+
+---
+
+## 0. LA TIENDA
+
+### Lo que no dejaba cobrar
+
+`movimientos.origen` —la columna que dice de dónde salió cada apunte de
+Tesorería— nunca llegaba a `ACTUALIZAR.sql`: la crea un fichero que solo va en
+el instalador. Sola no molestaba a nadie. Lo que la volvió urgente es que la
+tienda SÍ va en la actualización, y al cobrar escribe en ella: en una hermandad
+ya montada, la venta se rechazaba con «column "origen" does not exist», que no
+le dice nada a quien está detrás del mostrador con la cola delante.
+
+Está arreglado, y con un guardián automático para que no vuelva a pasar con
+ninguna otra columna: `ACTUALIZAR.sql` ya no puede escribir en una columna que
+no garantice.
+
+De paso: el botón «Ver la factura» que sale al cobrar no enseñaba nada en la
+demostración, y los tres apuntes de una anulación se numeraban desordenados y
+con un hueco.
+
+### Un solo género
+
+Quedaban dos camisetas, alguien las apartaba por la web, y por la tarde el
+mostrador se las vendía a otro. Quien reservó venía el sábado con su resguardo
+y no había nada — y encima su reserva se quedaba **imposible de entregar**.
+
+Ahora el mostrador mira lo que de verdad se puede vender, no lo que hay en la
+estantería. La tabla de artículos lo enseña, la caja no deja meter en la cesta
+más de lo que queda, y bajar el género por debajo de lo prometido avisa de con
+quién choca (y deja hacerlo igualmente, porque una rotura es un hecho).
+
+Las reservas a las que se les pasa el plazo se sueltan solas de madrugada.
+
+### Una sola pantalla
+
+La tienda ocupaba **cinco entradas** del menú lateral para lo que son cinco
+caras del mismo mostrador. Ahora es una pantalla con cinco pestañas —Vender,
+Artículos, Reservas, Ventas y facturas, Cómo va— y una cabecera con las tres
+cifras que dicen si hay algo que hacer hoy: la caja del día, lo que está sin
+recoger y lo que hay bajo mínimo. Las tres son botones y llevan a donde se
+arregla lo que dicen.
+
+Los cinco enlaces de siempre siguen funcionando: cada uno abre su pestaña.
+
+Y hay por fin **pantalla de descuentos**, que no existía: se creaban dos de
+ejemplo y en una hermandad de verdad el selector de la caja estaba vacío para
+siempre, sin nada que explicara por qué.
+
+### El precio de hermano, también en la web
+
+El descuento de hermano existía **solo en el mostrador**. Quien compraba por
+internet pagaba tarifa y nada le decía que entrando en su área le habría
+costado menos.
+
+Ahora la tienda de la web le hace su precio —con la tarifa tachada al lado, que
+es la única forma de que se entienda— y a quien no ha entrado le dice que ese
+precio existe. La reserva se guarda a ese importe y al recogerlo se le cobra
+eso mismo, con la factura a su nombre.
+
+El navegador no dice quién es y no se le cree nada: quién está mirando lo
+resuelve la base contra la sesión.
+
+### «Tu reserva está lista»
+
+Faltaba la otra punta: quien apartaba algo recibía su resguardo y luego no
+volvía a saber nada. Ahora, desde la pestaña de Reservas, un botón por fila
+avisa a esa persona —por correo si dejó dirección, y en su área del hermano si
+lo es—. No se avisa dos veces el mismo día.
 
 ---
 

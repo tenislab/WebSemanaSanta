@@ -112,6 +112,89 @@ create table if not exists descuentos (
 );
 create index if not exists descuentos_hermandad_idx on descuentos (hermandad_id, activo);
 
+/*
+ * A QUIÉN LE TOCA UN DESCUENTO: UNA SOLA DEFINICIÓN DEL CRITERIO.
+ *
+ * Estaba escrito dentro de `registrar_venta`, y con el descuento llegando
+ * también a la web pública habría acabado escrito TRES VECES: aquí, en el
+ * catálogo y en la reserva. Tres sitios donde decidir lo mismo son tres sitios
+ * donde se puede decidir distinto, y entonces la web promete un precio y el
+ * mostrador cobra otro.
+ *
+ * Devuelve el porcentaje, o `null` si no le toca. `null` y no cero a propósito:
+ * son dos cosas distintas —«no le corresponde» y «le corresponde un 0 %»— y de
+ * esa diferencia depende que `registrar_venta` rechace la venta o la deje pasar.
+ */
+create or replace function pct_de_descuento(
+  p_hermandad_id uuid,
+  p_descuento_id uuid,
+  p_hermano_id uuid
+) returns numeric
+language sql stable security definer set search_path = public as $$
+  select d.porcentaje
+    from descuentos d
+   where d.id = p_descuento_id
+     and d.hermandad_id = p_hermandad_id
+     and d.activo
+     and (
+       -- Sin etiqueta vale para cualquier hermano… pero hermano tiene que ser:
+       -- los descuentos son de la hermandad para su gente.
+       (d.etiqueta is null and p_hermano_id is not null)
+       or (p_hermano_id is not null and exists (
+            select 1 from hermanos h
+             where h.id = p_hermano_id
+               and h.hermandad_id = p_hermandad_id
+               and h.estado <> 'Baja'
+               and d.etiqueta = any (coalesce(h.etiquetas, array[]::text[]))
+          ))
+     )
+$$;
+
+comment on function pct_de_descuento(uuid, uuid, uuid) is
+  'El porcentaje de un descuento SI le corresponde a ese hermano, y null si no. Es el único sitio '
+  'donde se decide: lo usan el mostrador, el catálogo de la web y la reserva.';
+
+/*
+ * Y EL MEJOR QUE LE TOCA, cuando no lo elige nadie a mano.
+ *
+ * En el mostrador el descuento lo elige una persona de una lista. En la web no
+ * hay nadie que elija, así que hay que decidirlo: SE APLICA UNO SOLO, EL MAYOR.
+ *
+ * No es una comodidad, es lo único que la factura puede representar: `ventas`
+ * tiene una columna `descuento_id`, no una tabla puente. Prometer en la web una
+ * suma de descuentos que la factura no puede explicar es prometer mal.
+ *
+ * A igualdad de porcentaje, el más antiguo: así el número no baila de un día
+ * para otro por haber creado otro descuento igual.
+ */
+create or replace function mejor_descuento_para(p_hermandad_id uuid, p_hermano_id uuid)
+returns table (id uuid, porcentaje numeric)
+language sql stable security definer set search_path = public as $$
+  select d.id, d.porcentaje
+    from descuentos d
+   where d.hermandad_id = p_hermandad_id
+     and d.activo
+     and pct_de_descuento(p_hermandad_id, d.id, p_hermano_id) is not null
+   order by d.porcentaje desc, d.creado_en
+   limit 1
+$$;
+
+comment on function mejor_descuento_para(uuid, uuid) is
+  'El descuento activo de mayor porcentaje que le corresponde a un hermano. Uno solo: la factura '
+  'guarda un descuento, no una lista.';
+
+/*
+ * Ninguna de las dos se le concede a `anon`. La web pública nunca las llama
+ * directamente: las llaman `catalogo_web` y `crear_reserva_web`, que son
+ * `security definer` y por tanto las ejecutan como su dueño. Concedérselas
+ * sería dejar preguntar «¿qué descuento tiene el hermano tal?» desde la consola
+ * del navegador.
+ */
+revoke all on function pct_de_descuento(uuid, uuid, uuid) from public, anon;
+revoke all on function mejor_descuento_para(uuid, uuid) from public, anon;
+grant execute on function pct_de_descuento(uuid, uuid, uuid) to authenticated;
+grant execute on function mejor_descuento_para(uuid, uuid) to authenticated;
+
 
 -- ----------------------------------------------------------------------------
 -- 3. Las ventas
@@ -364,6 +447,7 @@ declare
   v_coste numeric(10, 2) := 0;
   v_base_linea numeric(10, 2);
   v_num_mov int;
+  v_disp int;
 begin
   if not modulo_permitido('inventario') then
     raise exception 'Solo quien lleva el inventario puede registrar ventas.';
@@ -382,20 +466,7 @@ begin
    * etiqueta— el comprador tiene que llevarla en su ficha.
    */
   if p_descuento_id is not null then
-    select d.porcentaje into v_pct
-      from descuentos d
-     where d.id = p_descuento_id
-       and d.hermandad_id = v_hermandad
-       and d.activo
-       and (
-         d.etiqueta is null
-         or (p_hermano_id is not null and exists (
-              select 1 from hermanos h
-               where h.id = p_hermano_id
-                 and h.hermandad_id = v_hermandad
-                 and d.etiqueta = any (coalesce(h.etiquetas, array[]::text[]))
-            ))
-       );
+    v_pct := pct_de_descuento(v_hermandad, p_descuento_id, p_hermano_id);
     if v_pct is null then
       raise exception 'Ese descuento no se le puede aplicar a esta venta.';
     end if;
@@ -437,9 +508,27 @@ begin
     if not found then
       raise exception 'Ese artículo no está en el catálogo de la hermandad.';
     end if;
-    if v_prod.stock < v_cant then
-      raise exception 'No quedan suficientes «%»: hay % y se piden %.',
-        v_prod.nombre, v_prod.stock, v_cant;
+    /*
+     * SE MIRA LO DISPONIBLE, NO LO QUE HAY EN LA ESTANTERÍA.
+     *
+     * Aquí ponía `v_prod.stock < v_cant`, y con eso el mostrador vendía sin
+     * pestañear las dos camisetas que alguien había apartado por la web para
+     * pasar a recogerlas el sábado. `stock` sigue diciendo 2 hasta que la
+     * reserva se entrega, así que la caja no veía nada raro.
+     *
+     * Pasaban las dos cosas malas a la vez: quien reservó venía el sábado y no
+     * había nada —con su resguardo y su referencia en la mano—, y la reserva se
+     * quedaba IMPOSIBLE DE ENTREGAR, porque al intentarlo esta misma línea
+     * decía que no queda género. Pendiente para siempre, bloqueando existencias
+     * que ya no existen.
+     *
+     * El `for update` de arriba ya serializa: la cuenta que se hace aquí ve lo
+     * que el mostrador de al lado acabe de confirmar, no una foto vieja.
+     */
+    v_disp := disponible_de(v_prod.id);
+    if v_disp < v_cant then
+      raise exception 'De «%» solo quedan % sin apartar: hay % en la estantería y % comprometidas por la web.',
+        v_prod.nombre, greatest(v_disp, 0), v_prod.stock, v_prod.stock - v_disp;
     end if;
 
     /*
@@ -511,10 +600,15 @@ begin
    * Si la hermandad no repercute IVA —lo normal en la mayoría— `v_iva` es cero
    * y sale una sola línea por el total, como antes. Un asiento de cero euros
    * solo ensucia el libro.
+   *
+   * Los tres números se cuentan de uno en uno según se van poniendo, y no
+   * `+1 / +2 / +3` de golpe: cuando el IVA es cero, el 2 no se lo lleva nadie y
+   * el libro queda con un hueco que parece un apunte borrado.
    */
+  v_num_mov := v_num_mov + 1;
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
   values (
-    v_hermandad, v_num_mov + 1, to_char(now(), 'YYYY-MM-DD'),
+    v_hermandad, v_num_mov, to_char(now(), 'YYYY-MM-DD'),
     format('Venta en tienda %s-%s', p_serie, v_numero),
     'Otros ingresos', 'Ingreso', v_total - v_iva,
     case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -522,9 +616,10 @@ begin
   );
 
   if v_iva > 0 then
+    v_num_mov := v_num_mov + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
     values (
-      v_hermandad, v_num_mov + 2, to_char(now(), 'YYYY-MM-DD'),
+      v_hermandad, v_num_mov, to_char(now(), 'YYYY-MM-DD'),
       format('IVA repercutido en la venta %s-%s', p_serie, v_numero),
       'IVA repercutido', 'Ingreso', v_iva,
       case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -535,9 +630,10 @@ begin
   -- El gasto solo si de verdad costó algo: un artículo donado tiene coste 0 y
   -- un asiento de cero euros solo ensucia el libro.
   if v_coste > 0 then
+    v_num_mov := v_num_mov + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
     values (
-      v_hermandad, v_num_mov + 3, to_char(now(), 'YYYY-MM-DD'),
+      v_hermandad, v_num_mov, to_char(now(), 'YYYY-MM-DD'),
       format('Coste del género vendido %s-%s', p_serie, v_numero),
       'Gastos varios menores', 'Gasto', v_coste,
       case when lower(p_forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -631,16 +727,28 @@ create trigger productos_avisar_si_queda_poco
 -- no por escritura directa para que el stock y su explicación se muevan juntos:
 -- un stock que baja sin una línea que diga por qué es exactamente el agujero
 -- por el que se pierden nueve camisetas al año.
+--
+-- `drop` antes de `create`: el parámetro nuevo lleva valor por defecto, y un
+-- `create or replace` con un parámetro más NO SUSTITUYE a la función vieja
+-- —crea una segunda con otra firma—, y entonces toda llamada de cuatro
+-- argumentos queda ambigua y falla. Sin este `drop`, volver a ejecutar el
+-- fichero rompe la tienda entera.
+drop function if exists mover_stock(uuid, text, int, text);
 create or replace function mover_stock(
   p_producto_id uuid,
   p_tipo text,          -- 'compra' | 'rotura' | 'ajuste' | 'devolucion'
   p_cantidad int,       -- positivo entra, negativo sale
-  p_motivo text default ''
+  p_motivo text default '',
+  -- Una rotura es un hecho, no una petición: si se han roto tres, se han roto
+  -- tres aunque hubiera dos apartadas. Lo que no puede pasar es que se apunten
+  -- sin que nadie se entere de a quién deja colgado.
+  p_aunque_este_apartado boolean default false
 ) returns int
 language plpgsql security definer set search_path = public as $$
 declare
   v_hermandad uuid := hermandad_actual();
   v_prod productos%rowtype;
+  v_apartado int;
 begin
   if not modulo_permitido('inventario') then
     raise exception 'Solo quien lleva el inventario puede mover existencias.';
@@ -668,6 +776,23 @@ begin
       abs(p_cantidad), v_prod.nombre, v_prod.stock;
   end if;
 
+  /*
+   * Y TAMPOCO POR DEBAJO DE LO QUE YA ESTÁ PROMETIDO.
+   *
+   * Bajar el stock a mano —una rotura, un ajuste de recuento— dejaba al
+   * descubierto lo que la web tenía apartado sin decir una palabra, y el
+   * descuadre no aparecía hasta que alguien venía a recoger su reserva. Ahora
+   * se para y se dice con quién choca.
+   *
+   * Se puede hacer igualmente, porque a veces hay que hacerlo: se repite
+   * marcando la casilla, y entonces queda apuntado que se hizo sabiéndolo.
+   */
+  v_apartado := v_prod.stock - disponible_de(v_prod.id);
+  if p_cantidad < 0 and v_prod.stock + p_cantidad < v_apartado and not p_aunque_este_apartado then
+    raise exception 'De «%» quedarían % y hay % apartadas por la web. Suelta esas reservas, o repite marcando que se hace igualmente.',
+      v_prod.nombre, v_prod.stock + p_cantidad, v_apartado;
+  end if;
+
   update productos set stock = stock + p_cantidad where id = v_prod.id;
   insert into movimientos_stock (hermandad_id, producto_id, tipo, cantidad, motivo, quien)
     values (v_hermandad, v_prod.id, p_tipo, p_cantidad, p_motivo, hermano_propio_id());
@@ -675,8 +800,8 @@ begin
   return v_prod.stock + p_cantidad;
 end $$;
 
-revoke all on function mover_stock(uuid, text, int, text) from public, anon;
-grant execute on function mover_stock(uuid, text, int, text) to authenticated;
+revoke all on function mover_stock(uuid, text, int, text, boolean) from public, anon;
+grant execute on function mover_stock(uuid, text, int, text, boolean) to authenticated;
 
 
 -- ----------------------------------------------------------------------------
@@ -741,17 +866,26 @@ begin
    * El contrario del ingreso: un gasto por lo que se devuelve. Y el del IVA
    * aparte, como se apuntó: si se contra-apuntara todo junto, el 303 saldría
    * con el IVA repercutido de una venta que ya no existe.
+   *
+   * `v_num := v_num + 1` DELANTE DE CADA APUNTE, y no `+1 / +2 / +3` escritos a
+   * mano. Aquí ponía `+1`, `+4` y `+2`: los tres apuntes de una misma anulación
+   * salían en el libro desordenados, con un hueco en el 3 que no era de nadie,
+   * y el último —el género que vuelve al almacén— por delante del IVA. Contar
+   * de verdad además cierra el otro agujero, el que tenía también el apunte de
+   * la venta: cuando el IVA es cero, el número que le tocaba no se salta.
    */
+  v_num := v_num + 1;
   insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
-  values (v_hermandad, v_num + 1, to_char(now(), 'YYYY-MM-DD'),
+  values (v_hermandad, v_num, to_char(now(), 'YYYY-MM-DD'),
           format('Anulada la venta %s-%s', v_venta.serie, v_venta.numero),
           'Gastos varios menores', 'Gasto', v_venta.total - v_venta.iva_total,
           case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
           'Pendiente', 'anula-venta:' || p_venta_id);
 
   if v_venta.iva_total > 0 then
+    v_num := v_num + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
-    values (v_hermandad, v_num + 4, to_char(now(), 'YYYY-MM-DD'),
+    values (v_hermandad, v_num, to_char(now(), 'YYYY-MM-DD'),
             format('IVA de la venta anulada %s-%s', v_venta.serie, v_venta.numero),
             'IVA repercutido', 'Gasto', v_venta.iva_total,
             case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,
@@ -760,8 +894,9 @@ begin
 
   -- Y el contrario del coste, si lo hubo.
   if v_venta.coste_total > 0 then
+    v_num := v_num + 1;
     insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
-    values (v_hermandad, v_num + 2, to_char(now(), 'YYYY-MM-DD'),
+    values (v_hermandad, v_num, to_char(now(), 'YYYY-MM-DD'),
             format('Vuelve al almacén el género de %s-%s', v_venta.serie, v_venta.numero),
             'Otros ingresos', 'Ingreso', v_venta.coste_total,
             case when lower(v_venta.forma_pago) like '%efectivo%' then 'Caja' else 'Cuenta bancaria' end,

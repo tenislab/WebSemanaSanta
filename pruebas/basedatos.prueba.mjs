@@ -259,6 +259,7 @@ export default async function ({ caso }) {
   await elCargoMalEscrito({ sql, caso })
   await actualizarUnaBaseQueYaFunciona({ sql, caso })
   await elTesoreroQueEsHermanoNoSeQuedaFuera({ sql, caso })
+  await laBajaNoRompeElEscalafon({ sql, caso })
   await elRegistroNoCrecePorSiempre({ sql, caso })
   await elBarridoDeDniSeCorta({ sql, caso })
   await laSegundaHermandadGuardaSusCatalogos({ sql, caso })
@@ -273,6 +274,7 @@ export default async function ({ caso }) {
   await elEncargoDeRedesSeReparte({ sql, caso })
   await laTiendaVendeYCuadra({ sql, caso })
   await laTiendaDeLaWebApartaYNoCobra({ sql, caso })
+  await elPrecioDeHermanoLlegaALaWeb({ sql, caso })
   await laFacturaCuadraConLaBase({ sql, caso })
   await elPrecioRebajadoEsElMismoEnLosDosSitios({ sql, caso })
   await losDatosDeLaTiendaCuadran({ sql, caso })
@@ -612,6 +614,125 @@ async function elTesoreroQueEsHermanoNoSeQuedaFuera({ sql, caso }) {
     'lo ha dejado', despuesDelArreglo)
 
   await sql(`delete from avisos_hermano where hermano_id in (${SECRETARIO}, ${DESTINO});`)
+}
+
+/**
+ * DAR DE BAJA NO PUEDE ROMPER EL ESCALAFÓN.
+ *
+ * Reportado con veinte errores seguidos en pantalla:
+ *
+ *   guardar 660b6973-…: duplicate key value violates unique constraint
+ *   "hermanos_numero_por_hermandad"
+ *
+ * Y la baja no se guardaba. En la pantalla salía tramitada; en la base seguía
+ * todo igual.
+ *
+ * La causa: dar de baja al nº 3 sube un puesto a TODOS los de detrás, y eso se
+ * mandaba ficha a ficha, de seis en seis y en paralelo. El nº 4 intentaba
+ * ponerse el 3 mientras el 3 todavía era el 3, y el índice único lo rechazaba.
+ *
+ * Aquí se comprueba lo que importa: que la función de la base lo haga ENTERO,
+ * que el escalafón quede seguido y sin huecos, y que quien no ocupaba número
+ * —el hermano civil— no arrastre a nadie al irse.
+ */
+async function laBajaNoRompeElEscalafon({ sql, caso }) {
+  const HD = "'d0000000-0000-0000-0000-0000000000b1'"
+  const nuevo = (n, numero, nombre, extra = '') =>
+    `('f0000000-0000-0000-0000-00000000b${String(n).padStart(3, '0')}', ${HD}, '${nombre}', `
+    + `'${String(10000000 + n).padStart(8, '0')}Z', ${numero}, 'Activo', 'h${n}@ejemplo.com'${extra})`
+
+  await sql(`
+    insert into hermandades (id, nombre) values (${HD}, 'Hdad. del escalafón')
+      on conflict (id) do nothing;
+    delete from hermanos where hermandad_id = ${HD};
+    -- AL REVÉS A PROPÓSITO: del 6 al 1. El orden en que Postgres barre la
+    -- tabla es el orden físico, y con las fichas escritas de mayor a menor el
+    -- nº 6 se mira ANTES que el 5. Un renumerado ingenuo —«a todos los de
+    -- detrás, uno menos», de una tacada— choca justo ahí: el 6 intenta ponerse
+    -- el 5 cuando el 5 todavía es el 5. Escritas de menor a mayor no chocaba
+    -- nunca, y la prueba se ponía verde con el fallo puesto.
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, email) values
+      ${[6, 5, 4, 3, 2, 1].map((n) => nuevo(n, n, `Hermano ${n}`)).join(',\n      ')};
+  `)
+
+  const escalafon = async () => (await sql(`
+    select string_agg(numero::text, ',' order by numero) from hermanos
+      where hermandad_id = ${HD} and numero > 0;
+  `)).trim()
+
+  caso('el escalafón de partida va del 1 al 6', '1,2,3,4,5,6', await escalafon())
+
+  // La baja del nº 3: los de detrás suben un puesto.
+  await sql(`select dar_de_baja_hermano('f0000000-0000-0000-0000-00000000b003');`)
+
+  caso('tras la baja del 3, el escalafón queda seguido', '1,2,3,4,5', await escalafon())
+  caso('y no hay ningún número repetido', '1,2,3,4,5', await escalafon())
+  caso('el que se va queda sin número', '0', (await sql(`
+    select numero::text from hermanos where id = 'f0000000-0000-0000-0000-00000000b003';
+  `)).trim())
+  caso('y en estado Baja', 'Baja', (await sql(`
+    select estado from hermanos where id = 'f0000000-0000-0000-0000-00000000b003';
+  `)).trim())
+
+  /*
+   * Y CADA UNO EN SU SITIO, no solo «hay cinco números seguidos». Un
+   * renumerado que corriera al que no toca dejaría el mismo recuento y el
+   * escalafón cambiado: el 4 tiene que ser el que era el 5.
+   */
+  caso('cada uno sube exactamente un puesto', 'Hermano 1:1 · Hermano 2:2 · Hermano 4:3 · Hermano 5:4 · Hermano 6:5',
+    (await sql(`
+      select string_agg(nombre || ':' || numero::text, ' · ' order by numero)
+        from hermanos where hermandad_id = ${HD} and numero > 0;
+    `)).trim())
+
+  /*
+   * EL QUE NO OCUPABA NÚMERO NO DEJA HUECO.
+   *
+   * El hermano civil —un administrativo contratado, un asesor— lleva número 0
+   * a propósito. Al tramitarle la baja no se puede correr a nadie: si se
+   * corriera «a todos los de número mayor que el suyo», con número 0 eso es el
+   * censo entero, y el hermano nº 1 se iría al 0. No se nota el día que pasa;
+   * se nota el día de la salida.
+   */
+  await sql(`
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, email, civil) values
+      ${nuevo(9, 0, 'El Administrativo', ", true")};
+  `)
+  await sql(`select dar_de_baja_hermano('f0000000-0000-0000-0000-00000000b009');`)
+  caso('la baja de quien no tenía número no mueve a nadie', '1,2,3,4,5', await escalafon())
+
+  /*
+   * Y POR QUÉ LA FUNCIÓN PASA POR NÚMEROS NEGATIVOS, QUE PARECE UN RODEO.
+   *
+   * Porque el atajo —«a todos los de detrás, uno menos», en una sola
+   * instrucción— NO ES CORRECTO, y encima falla de forma intermitente: solo
+   * revienta cuando Postgres barre la tabla de mayor a menor, que es lo que
+   * hace sin índice. Con índice va en orden ascendente y cuela.
+   *
+   * O sea: funciona en la hermandad grande y falla en la pequeña, o al revés
+   * según el día. Aquí se fuerza el barrido secuencial para que el atajo
+   * enseñe lo que es, y así nadie lo «simplifica» dentro de seis meses.
+   */
+  await sql(`
+    delete from hermanos where hermandad_id = ${HD};
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, email) values
+      ${[6, 5, 4, 3, 2, 1].map((n) => nuevo(n, n, `Hermano ${n}`)).join(',\n      ')};
+  `)
+  let elAtajo = ''
+  try {
+    await sql(`
+      set enable_indexscan = off;
+      set enable_bitmapscan = off;
+      update hermanos set numero = 0 where id = 'f0000000-0000-0000-0000-00000000b003';
+      update hermanos set numero = numero - 1 where hermandad_id = ${HD} and numero > 3;
+    `)
+    elAtajo = 'ha colado'
+  } catch (e) {
+    elAtajo = /duplicate key/.test(String(e?.stderr ?? e)) ? 'choca con el índice' : String(e)
+  }
+  caso('el atajo de una sola instrucción choca con el índice', 'choca con el índice', elAtajo)
+
+  await sql(`delete from hermanos where hermandad_id = ${HD};`)
 }
 
 /**
@@ -2787,22 +2908,83 @@ async function laTiendaDeLaWebApartaYNoCobra({ sql, caso }) {
       and tipo = 'existencias'`)))
 
   /*
+   * 6 bis. EL MOSTRADOR NO VENDE LO QUE LA WEB YA TIENE APARTADO.
+   *
+   * Es la mitad que faltaba del circuito y la que rompía cosas de verdad. La
+   * web sí descontaba lo apartado —`catalogo_web` lo hace desde el primer
+   * día—, pero `registrar_venta` miraba `productos.stock` a secas. Con diez
+   * medallas en la estantería y cuatro apartadas, el mostrador vendía las diez
+   * sin decir nada: quien había reservado venía con su resguardo y no había
+   * nada, y encima su reserva se quedaba IMPOSIBLE DE ENTREGAR.
+   *
+   * La vista que evita justamente esto —`existencias_tienda`, con su columna
+   * `disponible`— estaba escrita desde el principio y no la miraba nadie.
+   */
+  {
+    const stock = numero(await sql(`select stock from productos where id = ${PROD}`))
+    const disp = numero(await sql(`select disponible_de(${PROD})::text`))
+    caso('hay más en la estantería que disponible, porque hay apartado', true,
+      Number(stock) > Number(disp))
+
+    const todas = await comoJefa(
+      `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":${stock}}]'::jsonb);`)
+    caso('el mostrador NO vende las que hay si algunas están apartadas', 'no', todas.deja)
+    caso('y lo dice con los dos números', true,
+      /comprometidas por la web/.test(todas.motivo))
+    caso('sin tocar el almacén', stock, numero(await sql(
+      `select stock from productos where id = ${PROD}`)))
+
+    const justas = await comoJefa(
+      `select registrar_venta('[{"producto_id":"${PROD.slice(1, -1)}","cantidad":${disp}}]'::jsonb);`)
+    caso('pero sí las que quedan sin apartar', 'sí', justas.deja)
+    caso('y entonces quedan justo las apartadas', String(Number(stock) - Number(disp)),
+      numero(await sql(`select stock from productos where id = ${PROD}`)))
+    caso('sin disponible ninguno', '0', numero(await sql(`select disponible_de(${PROD})::text`)))
+
+    /*
+     * Y ESTA VENTA SE QUEDA PUESTA A PROPÓSITO. Deja el almacén con lo justo
+     * para las reservas y ni una unidad más, que es el escenario que hace falta
+     * para probar lo de abajo: una reserva que se entrega cuando NO QUEDA NADA
+     * disponible, porque todo lo que queda es suyo.
+     */
+  }
+
+  /*
    * 7. Y AL RECOGER: ahí sí nace la factura, ahí sí bajan las tres medallas
    * del almacén y ahí sí entran los dos asientos.
+   *
+   * AQUÍ ESTÁ LA TRAMPA DE TODO ESTO: con el freno de arriba puesto, las
+   * líneas de esta misma reserva cuentan como apartadas mientras siga
+   * «pendiente», así que la reserva SE BLOQUEARÍA A SÍ MISMA si no se marcara
+   * entregada ANTES de facturarla. El síntoma era «de "Medalla" solo quedan 0
+   * sin apartar» al entregar una reserva perfectamente válida.
    */
   const entrega = await comoJefa(
     `select entregar_reserva((select id from reservas_tienda where nombre = 'María del Carmen'), 'Efectivo');`)
   caso('quien lleva inventario entrega la reserva', 'sí', entrega.deja)
-  caso('ahora sí baja el almacén', '7', numero(await sql(`select stock from productos where id = ${PROD}`)))
+  /*
+   * Y ESTO ES LO QUE HABÍA QUE PROBAR: se ha entregado sin que quedara UNA SOLA
+   * unidad disponible, porque las cuatro que quedaban en la estantería eran
+   * justo las apartadas. Con el marcado detrás de la factura, la reserva se
+   * bloqueaba a sí misma y contestaba «solo quedan 0 sin apartar».
+   */
+  caso('ahora sí baja el almacén', '1', numero(await sql(`select stock from productos where id = ${PROD}`)))
+  // Las consultas van acotadas al canal de internet: en la estantería hay ahora
+  // también la venta de mostrador de arriba, y sin acotar se mezclarían.
   caso('y nace la factura, con el canal de internet', 'online', solo(await sql(
-    `select canal from ventas where hermandad_id = ${H}`)))
+    `select canal from ventas where hermandad_id = ${H} and canal = 'online'`)))
   caso('por los ciento veinte euros', '120.00', solo(await sql(
-    `select total::text from ventas where hermandad_id = ${H}`)))
+    `select total::text from ventas where hermandad_id = ${H} and canal = 'online'`)))
   caso('con su ingreso en tesorería', '120.00', solo(await sql(
-    `select sum(importe)::text from movimientos where hermandad_id = ${H}
-      and (origen like 'venta:%' or origen like 'iva-venta:%') and tipo = 'Ingreso'`)))
+    `select sum(m.importe)::text from movimientos m
+       join ventas v on v.canal = 'online' and v.hermandad_id = ${H}
+      where m.hermandad_id = ${H}
+        and m.origen in ('venta:' || v.id::text, 'iva-venta:' || v.id::text)
+        and m.tipo = 'Ingreso'`)))
   caso('y el gasto de lo que costó', '36.00', solo(await sql(
-    `select importe::text from movimientos where hermandad_id = ${H} and origen like 'coste-venta:%'`)))
+    `select m.importe::text from movimientos m
+       join ventas v on v.canal = 'online' and v.hermandad_id = ${H}
+      where m.hermandad_id = ${H} and m.origen = 'coste-venta:' || v.id::text`)))
   caso('la reserva queda entregada', 'entregada', solo(await sql(
     `select r.estado from reservas_tienda r where r.nombre = 'María del Carmen'`)))
 
@@ -3186,4 +3368,270 @@ async function losDatosDeLaTiendaCuadran({ sql, caso }) {
   // Y que el mayordomo no lo vea por ser titular, que invalidaría lo anterior.
   caso('y el mayordomo no es titular', '0',
     numero(await sql(`select count(*) from titulares where auth_user_id = ${U}`)))
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *   EL PRECIO DE HERMANO, TAMBIÉN EN LA WEB
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * El descuento de hermano existía SOLO en el mostrador. Quien compraba por
+ * internet pagaba tarifa —fuera hermano o no— y nada en pantalla le decía que
+ * entrando en su área le habría costado menos. Un descuento que solo conoce
+ * quien ya lo tenía no es un descuento.
+ *
+ * LO QUE SE COMPRUEBA AQUÍ, y ninguna de las seis sobra:
+ *
+ *   1. Que sin sesión el catálogo NO da precio de hermano, y que da `null` en
+ *      vez del precio: la web tiene que poder distinguir «no le toca» de «no ha
+ *      entrado» para decidir si le ofrece entrar.
+ *   2. Que con sesión sí, y CON LA MISMA CUENTA que aplica el mostrador.
+ *   3. Que quien no lleva la etiqueta no se lleva ese descuento.
+ *   4. Que la reserva se guarda con el precio rebajado, y por tanto que el
+ *      resguardo dice la verdad.
+ *   5. Que al recogerla se le cobra eso mismo y la factura sale a su nombre.
+ *   6. Y que un `hermano_id` mandado desde fuera NO EXISTE: no hay parámetro
+ *      por donde colarlo, que es lo único que impide que cualquiera con la
+ *      consola abierta se ponga el 50 % de costaleros.
+ */
+async function elPrecioDeHermanoLlegaALaWeb({ sql, caso }) {
+  const H = "'da000000-0000-0000-0000-0000000000da'"
+  const UCOST = "'db000000-0000-0000-0000-0000000000db'"
+  const COST = "'dc000000-0000-0000-0000-0000000000dc'"
+  const UPEON = "'dd000000-0000-0000-0000-0000000000dd'"
+  const PEON = "'de000000-0000-0000-0000-0000000000de'"
+  const UJEFE = "'df000000-0000-0000-0000-0000000000df'"
+  const JEFE = "'d0000000-0000-0000-0000-0000000000d0'"
+  const PROD = "'d1000000-0000-0000-0000-0000000000d1'"
+  const DESC = "'d2000000-0000-0000-0000-0000000000d2'"
+  const TODOS = "'d3000000-0000-0000-0000-0000000000d3'"
+
+  await sql(`
+    delete from hermandades where id = ${H};
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. del descuento');
+    insert into auth.users (id, email) values
+      (${UCOST}, 'costalero@da.es'), (${UPEON}, 'peon@da.es'), (${UJEFE}, 'jefa@da.es')
+      on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id, email, cargo, etiquetas) values
+      (${COST}, ${H}, 'El costalero', '77000001A', 1, 'Activo', ${UCOST}, 'costalero@da.es', null, array['Costalero']),
+      (${PEON}, ${H}, 'El de a pie',  '77000002B', 2, 'Activo', ${UPEON}, 'peon@da.es', null, array[]::text[]),
+      (${JEFE}, ${H}, 'La mayordoma', '77000003C', 3, 'Activo', ${UJEFE}, 'jefa@da.es', 'Mayordomo/Prioste', array[]::text[]);
+    insert into web_publica (hermandad_id, slug, publicada) values (${H}, 'hdad-del-descuento', true);
+    insert into productos (id, hermandad_id, codigo, nombre, precio, coste, iva, stock, activo, visible_en_web)
+      values (${PROD}, ${H}, 'CAM-01', 'Camiseta', 15.00, 6.00, 21, 20, true, true);
+    -- Dos descuentos a propósito: uno por etiqueta y otro para cualquier
+    -- hermano. Se aplica UNO SOLO, EL MAYOR, y hay que verlo elegir.
+    insert into descuentos (id, hermandad_id, nombre, porcentaje, etiqueta, activo) values
+      (${DESC}, ${H}, 'Costaleros', 50, 'Costalero', true),
+      (${TODOS}, ${H}, 'Hermanos', 10, null, true);
+    select sembrar_permisos_de_fabrica(${H});
+  `)
+  const solo = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean).pop() ?? ''
+  const numero = (t) => t.split('\n').map((x) => x.trim()).filter((x) => /^-?[\d.]+$/.test(x)).pop() ?? ''
+
+  caso('el fixture existe (si no, esto no probaría nada)', '2',
+    numero(await sql(`select count(*) from descuentos where hermandad_id = ${H}`)))
+
+  /*
+   * El catálogo tal y como lo pide un navegador, con o sin sesión detrás.
+   *
+   * Se busca la línea con la barra y no la última: `psql` termina la salida con
+   * «ROLLBACK», y quedarse con la última línea a secas comparaba eso.
+   */
+  const laDelPrecio = (t) => t.split('\n').map((x) => x.trim()).filter((x) => x.includes('|')).pop() ?? ''
+  const catalogo = async (usuario) => laDelPrecio(await sql(
+    usuario
+      ? `begin; set local role authenticated; set local "request.jwt.claim.sub" = ${usuario};
+           select coalesce(precio_hermano::text, 'nada') || '|' || coalesce(descuento_pct::text, 'nada')
+             from catalogo_web('hdad-del-descuento'); rollback;`
+      : `begin; set local role anon;
+           select coalesce(precio_hermano::text, 'nada') || '|' || coalesce(descuento_pct::text, 'nada')
+             from catalogo_web('hdad-del-descuento'); rollback;`))
+
+  /*
+   * 1. SIN SESIÓN: nada. Y «nada» de verdad, no el precio repetido: la página
+   * tiene que poder decir «¿eres hermano? entra y verás tu precio», y eso solo
+   * lo puede decidir si distingue las dos cosas.
+   */
+  caso('sin sesión no hay precio de hermano', 'nada|nada', await catalogo(null))
+
+  /*
+   * 2. CON SESIÓN DE COSTALERO: el 50 %, no el 10 %. Uno solo y el mayor,
+   * porque la factura guarda un descuento y no una lista.
+   */
+  caso('el costalero ve su precio, y el mayor de los dos', '7.50|50.00', await catalogo(UCOST))
+
+  /*
+   * 3. Y QUIEN NO LLEVA LA ETIQUETA se lleva el de todos, no el de costaleros.
+   * Si esto fallara, el descuento por colectivo no serviría para nada.
+   */
+  caso('el hermano de a pie ve el suyo, no el de costaleros', '13.50|10.00', await catalogo(UPEON))
+
+  /*
+   * 4. LA RESERVA SE GUARDA CON EL PRECIO REBAJADO. Es lo que va escrito en el
+   * resguardo que se le manda por correo: si aquí se guardara la tarifa, la web
+   * habría prometido una cosa y el mostrador cobraría otra, con un papel de por
+   * medio.
+   */
+  const linea = `'[{"producto_id":"${PROD.slice(1, -1)}","cantidad":2}]'::jsonb`
+  await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UCOST};
+    select crear_reserva_web(${H}, ${linea}, 'El costalero', 'costalero@da.es'); commit;`)
+  caso('la reserva del costalero se guarda a su precio', '15.00', solo(await sql(
+    `select total::text from reservas_tienda where hermandad_id = ${H}`)))
+  caso('con el precio de línea rebajado', '7.50', solo(await sql(
+    `select l.precio_unitario::text from lineas_reserva l
+       join reservas_tienda r on r.id = l.reserva_id where r.hermandad_id = ${H}`)))
+  // Y la tarifa guardada al lado, para poder enseñar lo que NO se le cobró.
+  caso('y la tarifa apuntada al lado', '15.00', solo(await sql(
+    `select l.precio_tarifa::text from lineas_reserva l
+       join reservas_tienda r on r.id = l.reserva_id where r.hermandad_id = ${H}`)))
+  caso('la reserva sabe de quién es', 'El costalero', solo(await sql(
+    `select h.nombre from reservas_tienda r join hermanos h on h.id = r.hermano_id
+      where r.hermandad_id = ${H}`)))
+  caso('y con qué descuento', '50.00', solo(await sql(
+    `select descuento_pct::text from reservas_tienda where hermandad_id = ${H}`)))
+
+  /*
+   * 5. Y AL RECOGERLA se le cobra eso mismo, y la factura sale a su nombre y
+   * con su descuento apuntado — que es lo que permite explicar, tres meses
+   * después, por qué aquella camiseta costó siete euros y medio.
+   */
+  await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UJEFE};
+    select entregar_reserva((select id from reservas_tienda where hermandad_id = ${H}), 'Efectivo');
+    commit;`)
+  caso('se le cobra lo prometido, ni un céntimo más', '15.00', solo(await sql(
+    `select total::text from ventas where hermandad_id = ${H}`)))
+  caso('la factura sale a su nombre', 'El costalero', solo(await sql(
+    `select h.nombre from ventas v join hermanos h on h.id = v.hermano_id where v.hermandad_id = ${H}`)))
+  caso('y dice por qué costó eso', '50.00', solo(await sql(
+    `select descuento_pct::text from ventas where hermandad_id = ${H}`)))
+
+  /*
+   * 6. Y NO HAY POR DÓNDE COLAR UN HERMANO.
+   *
+   * Es la comprobación que sostiene todo lo demás. `crear_reserva_web` está
+   * concedida a `anon` —quien reserva desde la web no ha entrado en ningún
+   * sitio—, así que si aceptara un `p_hermano_id`, cualquiera con la consola
+   * del navegador abierta se pondría el 50 % de costaleros escribiendo un uuid.
+   *
+   * Se comprueba por la FIRMA de la función, que es lo que no se puede
+   * saltar: si algún día alguien le añade ese parámetro «por comodidad», esto
+   * salta.
+   */
+  caso('crear_reserva_web no acepta ningún hermano por parámetro', '0', numero(await sql(
+    `select count(*) from pg_proc p
+      where p.proname = 'crear_reserva_web'
+        and pg_get_function_arguments(p.oid) like '%hermano%'`)))
+  // Y sin sesión se aparta a tarifa, que es lo que tiene que pasar.
+  await sql(`begin; set local role anon;
+    select crear_reserva_web(${H}, ${linea}, 'Alguien de fuera'); commit;`)
+  caso('quien no ha entrado aparta a tarifa', '30.00', solo(await sql(
+    `select total::text from reservas_tienda where hermandad_id = ${H} and nombre = 'Alguien de fuera'`)))
+  caso('y su reserva no es de ningún hermano', '0', numero(await sql(
+    `select count(*) from reservas_tienda where hermandad_id = ${H} and hermano_id is not null
+       and nombre = 'Alguien de fuera'`)))
+
+  /*
+   * Y el criterio se decide EN UN SOLO SITIO. Tres definiciones del mismo
+   * criterio —el mostrador, el catálogo y la reserva— son tres sitios donde se
+   * puede decidir distinto, y entonces la web promete un precio y la caja cobra
+   * otro. `pct_de_descuento` es ese sitio.
+   */
+  caso('el descuento de costaleros no le toca a quien no lo es', 'nada', solo(await sql(
+    `select coalesce(pct_de_descuento(${H}, ${DESC}, ${PEON})::text, 'nada')`)))
+  caso('ni a quien no es hermano de nadie', 'nada', solo(await sql(
+    `select coalesce(pct_de_descuento(${H}, ${DESC}, null)::text, 'nada')`)))
+  caso('y el de todos tampoco vale para quien no es hermano', 'nada', solo(await sql(
+    `select coalesce(pct_de_descuento(${H}, ${TODOS}, null)::text, 'nada')`)))
+  // Un descuento apagado deja de contar en el acto, sin tocar nada más.
+  await sql(`update descuentos set activo = false where id = ${DESC};`)
+  caso('y uno apagado deja de contar', '13.50|10.00', await catalogo(UCOST))
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   *   «TU RESERVA ESTÁ LISTA»
+   * ═════════════════════════════════════════════════════════════════════════
+   *
+   * Lo que faltaba del circuito: quien aparta algo recibe su resguardo y luego
+   * NO VUELVE A SABER NADA. Si el género hay que pedirlo, esa persona se planta
+   * un martes por la tarde a por algo que todavía no está — o no se planta
+   * nunca, y el plazo se cumple con el género apartado para nadie.
+   */
+  await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UPEON};
+    select crear_reserva_web(${H}, ${linea}, 'El de a pie', 'peon@da.es'); commit;`)
+  const REF = solo(await sql(
+    `select referencia from reservas_tienda where hermandad_id = ${H} and hermano_id = ${PEON}`))
+
+  const avisarComo = async (usuario) => {
+    try {
+      await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${usuario};
+        select avisar_reserva_lista((select id from reservas_tienda
+          where hermandad_id = ${H} and referencia = '${REF}')); commit;`)
+      return 'sí'
+    } catch { return 'no' }
+  }
+
+  /*
+   * 1. NO LO AVISA CUALQUIERA. Es un correo que sale a nombre de la hermandad
+   * y un aviso en el área de una persona: lo manda quien lleva el inventario.
+   */
+  caso('un hermano de a pie no avisa de una reserva', 'no', await avisarComo(UPEON))
+  caso('quien lleva el inventario sí', 'sí', await avisarComo(UJEFE))
+
+  /*
+   * 2. Y LE LLEGA POR SU ÁREA, que es lo que queda escrito aunque el correo se
+   * pierda por el camino.
+   */
+  caso('le llega el aviso a su área', '1', numero(await sql(
+    `select count(*) from avisos_hermano where hermandad_id = ${H} and hermano_id = ${PEON}
+       and tipo = 'tienda'`)))
+  caso('y la reserva queda marcada como lista', '1', numero(await sql(
+    `select count(*) from reservas_tienda where hermandad_id = ${H} and referencia = '${REF}'
+       and lista_en is not null`)))
+
+  /*
+   * 3. AVISAR DOS VECES NO ES INSISTIR, ES MOLESTAR. Sin este freno, el botón
+   * del panel sería una forma de mandarle veinte correos a alguien.
+   */
+  caso('los datos del correo salen la primera vez', 'peon@da.es', solo(await sql(
+    `select coalesce(datos_para_avisar_reserva(${H}, '${REF}') ->> 'email', 'nada')`)))
+  caso('y la segunda ya no', 'nada', solo(await sql(
+    `select coalesce(datos_para_avisar_reserva(${H}, '${REF}') ->> 'email', 'nada')`)))
+  caso('ni se le repite el aviso del área', '1', numero(await sql(
+    `select count(*) from avisos_hermano where hermandad_id = ${H} and hermano_id = ${PEON}
+       and tipo = 'tienda'`)))
+
+  /*
+   * 4. Y SIN QUE NADIE LA HAYA MARCADO LISTA, NO SE DAN DATOS DE NADIE.
+   *
+   * Sin ese cierre, esta función sería una forma de sacar el correo de
+   * cualquiera que haya reservado: se prueban referencias —R-2027-1,
+   * R-2027-2…— hasta que una conteste.
+   */
+  await sql(`begin; set local role anon;
+    select crear_reserva_web(${H}, ${linea}, 'Sin marcar', 'sinmarcar@da.es'); commit;`)
+  const SIN = solo(await sql(
+    `select referencia from reservas_tienda where hermandad_id = ${H} and nombre = 'Sin marcar'`))
+  caso('de una reserva que nadie ha marcado lista no se saca nada', 'nada', solo(await sql(
+    `select coalesce(datos_para_avisar_reserva(${H}, '${SIN}') ->> 'email', 'nada')`)))
+
+  // Y la función que la lee no se le concede a nadie desde el navegador:
+  // devuelve el correo de quien reservó.
+  caso('y esos datos no se piden desde el navegador', '0', numero(await sql(
+    `select count(*) from information_schema.role_routine_grants
+      where routine_name = 'datos_para_avisar_reserva' and grantee in ('anon', 'authenticated', 'PUBLIC')`)))
+
+  /*
+   * 5. Y UNA RESERVA QUE YA NO ESTÁ PENDIENTE NO SE AVISA. Decirle a alguien
+   * que pase a recoger algo que ya se llevó —o que se anuló— es peor que no
+   * decirle nada.
+   */
+  await sql(`update reservas_tienda set estado = 'caducada' where hermandad_id = ${H} and referencia = '${SIN}';`)
+  let sobreCaducada = 'sí'
+  try {
+    await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UJEFE};
+      select avisar_reserva_lista((select id from reservas_tienda
+        where hermandad_id = ${H} and referencia = '${SIN}')); commit;`)
+  } catch { sobreCaducada = 'no' }
+  caso('una reserva caducada no se avisa', 'no', sobreCaducada)
 }

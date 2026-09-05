@@ -128,7 +128,57 @@ select cron.schedule(
 );
 
 -- ---------------------------------------------------------------------------
--- 4. QUÉ TAREAS HAY, PARA PODER MIRARLO
+-- 4. LAS RESERVAS DE LA TIENDA QUE NADIE VINO A RECOGER
+-- ---------------------------------------------------------------------------
+--
+-- Una reserva de la web aparta género de verdad: mientras siga «pendiente», ni
+-- el mostrador ni la propia web pueden vender esas unidades. Eso está bien —es
+-- lo que hace que una reserva valga algo—, pero convierte a la que caducó y
+-- nadie soltó en un problema con el tiempo: cinco camisetas apartadas en marzo
+-- que en octubre siguen sin poderse vender, y nada en pantalla explica por qué
+-- «quedan 12 y solo puedo vender 7».
+--
+-- La reserva NO SE BORRA: se marca caducada. Sigue estando, con su referencia y
+-- su fecha, para cuando alguien aparezca en enero diciendo que él apartó algo.
+-- Lo único que cambia es que deja de apartar género.
+--
+-- Se puede soltar a mano desde la pestaña Reservas, y así hay que hacerlo con
+-- las que uno sabe que no van a venir. Esto es solo la red de abajo.
+create or replace function caducar_reservas_pasadas()
+returns int
+language sql security definer set search_path = public as $$
+  with sueltas as (
+    update reservas_tienda
+       set estado = 'caducada'
+     where estado = 'pendiente'
+       and recoger_antes_de < current_date
+    returning 1
+  )
+  select count(*)::int from sueltas
+$$;
+
+comment on function caducar_reservas_pasadas() is
+  'Marca caducadas las reservas de la tienda cuyo plazo de recogida ya pasó, para que dejen de '
+  'apartar género. No borra nada: la reserva sigue ahí con su referencia.';
+
+revoke execute on function caducar_reservas_pasadas() from public, anon;
+grant execute on function caducar_reservas_pasadas() to authenticated;
+
+select cron.unschedule('gobergo-caducar-reservas')
+  where exists (select 1 from cron.job where jobname = 'gobergo-caducar-reservas');
+
+select cron.schedule(
+  'gobergo-caducar-reservas',
+  -- Todos los días a las 5:20. Diario y no semanal porque aquí un día de más
+  -- es un día de género bloqueado en plena Cuaresma, que es cuando la tienda
+  -- de verdad importa.
+  '20 5 * * *',
+  $$ select caducar_reservas_pasadas() $$
+);
+
+
+-- ---------------------------------------------------------------------------
+-- 5. QUÉ TAREAS HAY, PARA PODER MIRARLO
 -- ---------------------------------------------------------------------------
 --
 -- Una tarea programada que falla lo hace en silencio y de madrugada. Con esto

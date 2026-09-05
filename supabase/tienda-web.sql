@@ -62,6 +62,22 @@ create table if not exists reservas_tienda (
 create index if not exists reservas_tienda_pendientes_idx
   on reservas_tienda (hermandad_id, estado, creado_en desc);
 
+/*
+ * QUIÉN APARTÓ, SI RESULTÓ SER HERMANO.
+ *
+ * Va como `alter table` para las bases que ya existen. Y NO ES UN CAMPO QUE
+ * MANDE EL NAVEGADOR: lo resuelve `crear_reserva_web` contra la sesión, porque
+ * un `hermano_id` que llegara de fuera sería el 50 % de costaleros para
+ * cualquiera con la consola abierta.
+ *
+ * De saberlo salen dos cosas: el precio de hermano en la web —que hasta ahora
+ * solo existía en el mostrador, así que el hermano que compraba por internet
+ * pagaba tarifa— y poder avisarle cuando lo suyo está listo.
+ */
+alter table reservas_tienda add column if not exists hermano_id uuid references hermanos(id) on delete set null;
+alter table reservas_tienda add column if not exists descuento_id uuid references descuentos(id) on delete set null;
+alter table reservas_tienda add column if not exists descuento_pct numeric(5, 2) not null default 0;
+
 create table if not exists lineas_reserva (
   id uuid primary key default gen_random_uuid(),
   hermandad_id uuid not null references hermandades(id) on delete cascade,
@@ -74,6 +90,9 @@ create table if not exists lineas_reserva (
   cantidad int not null check (cantidad > 0),
   precio_unitario numeric(10, 2) not null default 0
 );
+-- Lo que costaba de tarifa, para poder enseñar en el resguardo lo que NO se le
+-- cobró. `precio_unitario` ya viene rebajado si a quien apartó le tocaba.
+alter table lineas_reserva add column if not exists precio_tarifa numeric(10, 2);
 create index if not exists lineas_reserva_reserva_idx on lineas_reserva (reserva_id);
 create index if not exists lineas_reserva_producto_idx on lineas_reserva (producto_id);
 
@@ -89,6 +108,45 @@ create index if not exists lineas_reserva_producto_idx on lineas_reserva (produc
 -- Separarlos importa el día del besamanos: si el mostrador vende las tres
 -- últimas camisetas que estaban apartadas para alguien que viene por la tarde,
 -- esa persona se encuentra con que su reserva no vale nada.
+--
+-- Y eso es exactamente lo que pasaba, porque esta vista estaba escrita desde el
+-- primer día y NO LA MIRABA NADIE: ni el mostrador, ni el almacén, ni el
+-- navegador. La web sí descontaba lo apartado, así que el circuito estaba
+-- partido por la mitad — internet contaba una cosa y el mostrador otra, sobre
+-- el mismo estante—. Ahora la cuenta vive en una sola función y la usan los
+-- dos lados.
+
+/*
+ * PUEDE SALIR NEGATIVO, y sale a propósito. Un −2 significa que se ha vendido
+ * género que ya estaba comprometido con alguien: es justo el aviso que hay que
+ * ver, y taparlo con un `greatest(0, …)` sería esconder el descuadre donde más
+ * falta hace mirarlo. En la web sí se enseña topado a cero —a quien compra no
+ * le sirve de nada un número negativo—, pero eso lo hace `catalogo_web`.
+ *
+ * `security definer` porque la llaman tanto la web pública (sin sesión) como el
+ * panel; devuelve UN NÚMERO de un artículo que quien pregunta ya está viendo,
+ * así que no descubre nada que no supiera.
+ */
+create or replace function disponible_de(p_producto_id uuid)
+returns int
+language sql stable security definer set search_path = public as $$
+  select p.stock - coalesce((
+           select sum(l.cantidad)::int
+             from lineas_reserva l
+             join reservas_tienda r on r.id = l.reserva_id
+            where l.producto_id = p.id and r.estado = 'pendiente'
+         ), 0)
+    from productos p
+   where p.id = p_producto_id
+$$;
+
+comment on function disponible_de(uuid) is
+  'Lo que queda sin comprometer de un artículo: el stock de la estantería menos lo apartado por '
+  'reservas de la web todavía sin recoger. Puede ser negativo, y entonces significa que se ha '
+  'vendido en el mostrador algo que ya estaba prometido.';
+
+grant execute on function disponible_de(uuid) to authenticated, anon;
+
 create or replace view existencias_tienda
 with (security_invoker = true) as
   select
@@ -97,18 +155,8 @@ with (security_invoker = true) as
     p.codigo,
     p.nombre,
     p.stock,
-    coalesce((
-      select sum(l.cantidad)::int
-        from lineas_reserva l
-        join reservas_tienda r on r.id = l.reserva_id
-       where l.producto_id = p.id and r.estado = 'pendiente'
-    ), 0) as reservado,
-    p.stock - coalesce((
-      select sum(l.cantidad)::int
-        from lineas_reserva l
-        join reservas_tienda r on r.id = l.reserva_id
-       where l.producto_id = p.id and r.estado = 'pendiente'
-    ), 0) as disponible
+    p.stock - disponible_de(p.id) as reservado,
+    disponible_de(p.id) as disponible
   from productos p;
 
 grant select on existencias_tienda to authenticated, anon;
@@ -159,6 +207,10 @@ declare
   v_total numeric(10, 2) := 0;
   v_recientes int;
   v_nombre text;
+  v_hermano uuid;
+  v_desc uuid;
+  v_pct numeric(5, 2) := 0;
+  v_precio numeric(10, 2);
 begin
   if p_hermandad_id is null or not exists (select 1 from hermandades where id = p_hermandad_id) then
     raise exception 'No se sabe de qué hermandad es esta reserva.';
@@ -174,6 +226,34 @@ begin
   v_nombre := left(trim(coalesce(p_nombre, '')), 120);
   if v_nombre = '' then
     raise exception 'Hace falta un nombre para poder llamarte.';
+  end if;
+
+  /*
+   * ¿ESTÁ APARTANDO UN HERMANO?
+   *
+   * Se resuelve CONTRA LA SESIÓN y NUNCA desde un parámetro. Esta función está
+   * concedida a `anon` —quien reserva desde la web no ha entrado en ningún
+   * sitio—, así que un `p_hermano_id` sería el 50 % de costaleros para
+   * cualquiera que abra la consola del navegador y escriba un uuid.
+   *
+   * `hermano_propio_id()` sale de `auth.uid()`, que aquí es de verdad quien
+   * llama: `security definer` cambia con qué permisos se ejecuta esto, no quién
+   * ha iniciado sesión. Si el hermano entró en su área y desde esa misma pestaña
+   * abre la web de su hermandad, lleva el mismo cliente y el mismo JWT.
+   *
+   * Y se comprueba que sea de ESTA hermandad y no esté de baja: un hermano de
+   * otra hermandad no tiene por qué llevarse el descuento de esta.
+   */
+  select h.id into v_hermano
+    from hermanos h
+   where h.id = hermano_propio_id()
+     and h.hermandad_id = p_hermandad_id
+     and h.estado <> 'Baja';
+
+  if v_hermano is not null then
+    select m.id, m.porcentaje into v_desc, v_pct
+      from mejor_descuento_para(p_hermandad_id, v_hermano) m;
+    v_pct := coalesce(v_pct, 0);
   end if;
 
   /*
@@ -232,12 +312,27 @@ begin
       raise exception 'De «%» ya solo quedan % sin apartar.', v_prod.nombre, greatest(0, coalesce(v_disp, 0));
     end if;
 
-    insert into lineas_reserva (hermandad_id, reserva_id, producto_id, codigo, nombre, cantidad, precio_unitario)
-      values (p_hermandad_id, v_reserva, v_prod.id, v_prod.codigo, v_prod.nombre, v_cant, v_prod.precio);
-    v_total := v_total + round(v_prod.precio * v_cant, 2);
+    /*
+     * EL PRECIO, CON LA MISMA FÓRMULA QUE COBRA EL MOSTRADOR.
+     *
+     * `round(precio * (1 - pct/100), 2)`, letra por letra igual que en
+     * `registrar_venta`. No es celo: si la web dijera 0,57 y la caja cobrara
+     * 0,58, el problema no sería el céntimo — sería que la web mintió, y con un
+     * resguardo por escrito de por medio.
+     */
+    v_precio := round(v_prod.precio * (1 - v_pct / 100), 2);
+
+    insert into lineas_reserva (
+      hermandad_id, reserva_id, producto_id, codigo, nombre, cantidad, precio_unitario, precio_tarifa
+    ) values (
+      p_hermandad_id, v_reserva, v_prod.id, v_prod.codigo, v_prod.nombre, v_cant, v_precio, v_prod.precio
+    );
+    v_total := v_total + round(v_precio * v_cant, 2);
   end loop;
 
-  update reservas_tienda set total = v_total where id = v_reserva;
+  update reservas_tienda
+     set total = v_total, hermano_id = v_hermano, descuento_id = v_desc, descuento_pct = v_pct
+   where id = v_reserva;
 
   /*
    * Y SE AVISA A QUIEN LLEVA EL INVENTARIO. Una reserva que nadie mira es
@@ -291,6 +386,7 @@ declare
   v_res reservas_tienda%rowtype;
   v_lineas jsonb;
   v_venta jsonb;
+  v_huerfanas int;
 begin
   if not modulo_permitido('inventario') then
     raise exception 'Solo quien lleva el inventario puede entregar una reserva.';
@@ -303,6 +399,29 @@ begin
   end if;
   if v_res.estado <> 'pendiente' then
     raise exception 'Esa reserva ya está %.', v_res.estado;
+  end if;
+
+  /*
+   * SI ALGÚN ARTÍCULO DE LA RESERVA YA NO EXISTE, SE PARA.
+   *
+   * El `producto_id is not null` de abajo descartaba en silencio las líneas
+   * huérfanas —las de un artículo borrado del catálogo después de reservarlo—.
+   * Con tres artículos apartados y uno borrado, se facturaban dos y el tercero
+   * desaparecía sin que nadie lo dijera: ni quien cobra ni quien recoge se
+   * enteraban de que la reserva no era la que se firmó.
+   *
+   * Se cuenta primero y se avisa, que es lo que ya hacía la rama de la
+   * demostración. Rehacer la reserva es trabajo de un minuto; descubrir dentro
+   * de un mes que faltó un artículo en una factura, no.
+   */
+  select count(*) into v_huerfanas
+    from lineas_reserva l
+   where l.reserva_id = p_reserva_id and l.producto_id is null;
+  if v_huerfanas > 0 then
+    raise exception 'Esta reserva tiene % % que ya no está% en el catálogo. Suéltala y hazla de nuevo con lo que sí hay.',
+      v_huerfanas,
+      case when v_huerfanas = 1 then 'artículo' else 'artículos' end,
+      case when v_huerfanas = 1 then '' else 'n' end;
   end if;
 
   -- Las líneas, con el precio que se le prometió a quien reservó. Si la
@@ -320,14 +439,47 @@ begin
     raise exception 'Esa reserva se ha quedado sin artículos: ya no existen en el catálogo.';
   end if;
 
+  /*
+   * LA RESERVA SE MARCA ENTREGADA **ANTES** DE FACTURARLA, y el orden no es un
+   * capricho: es la trampa entera de este arreglo.
+   *
+   * Desde que `registrar_venta` mira lo disponible y no el stock, las líneas de
+   * esta misma reserva cuentan como apartadas mientras siga «pendiente». Con el
+   * `update` detrás, la reserva se bloqueaba a sí misma: entregar una reserva
+   * perfectamente válida contestaba «de "Camiseta" solo quedan 0 sin apartar».
+   *
+   * Es la misma transacción, así que no se abre ningún hueco: si `registrar_venta`
+   * levanta una excepción, se deshace también este `update` y la reserva sigue
+   * pendiente, igual que antes.
+   */
+  update reservas_tienda set estado = 'entregada' where id = p_reserva_id;
+
+  /*
+   * SE FACTURA A NOMBRE DEL HERMANO Y CON SU DESCUENTO, si lo hubo.
+   *
+   * Las líneas siguen llevando el precio PROMETIDO, y no hay doble descuento:
+   * la regla «precio a mano manda» de `registrar_venta` lo garantiza, y ese
+   * precio ya viene rebajado de cuando se apartó. El `descuento_id` va para que
+   * la factura y los informes puedan decir POR QUÉ costó eso; sin él, una
+   * factura de la web con precios rebajados no tiene explicación en ninguna
+   * parte.
+   *
+   * El `case when` no sobra: si entre la reserva y la entrega alguien apaga ese
+   * descuento —o el hermano pierde la etiqueta—, `registrar_venta` levantaría
+   * excepción y la reserva no se podría entregar. Lo que se le prometió se le
+   * cobra igual; lo único que se pierde es la nota de por qué.
+   */
   v_venta := registrar_venta(
-    v_lineas, 'online', p_forma_pago, null, null,
+    v_lineas, 'online', p_forma_pago,
+    v_res.hermano_id,
+    case when pct_de_descuento(v_hermandad, v_res.descuento_id, v_res.hermano_id) is not null
+         then v_res.descuento_id end,
     v_res.nombre, '', '',
     format('Reserva %s', v_res.referencia)
   );
 
   update reservas_tienda
-     set estado = 'entregada', venta_id = (v_venta ->> 'id')::uuid
+     set venta_id = (v_venta ->> 'id')::uuid
    where id = p_reserva_id;
 
   return v_venta;
@@ -447,6 +599,29 @@ end $$;
 -- Va por SLUG, no por identificador: es lo que el navegador tiene en la barra
 -- de direcciones. Y solo responde si la web está publicada — una hermandad que
 -- está preparando la suya no enseña su género todavía.
+/*
+ * EL PRECIO DE HERMANO, TAMBIÉN AQUÍ.
+ *
+ * Hasta ahora el descuento de hermano solo existía en el mostrador: el hermano
+ * que compraba por internet pagaba tarifa, y no había nada en pantalla que le
+ * dijera que entrando en su área le habría costado menos. Un descuento que solo
+ * conoce quien ya lo tenía no es un descuento, es un secreto.
+ *
+ * EL NAVEGADOR NO DICE QUIÉN ES Y NO SE LE CREE NADA. La página se limita a
+ * llamar aquí; quién está navegando lo resuelve la base con `hermano_propio_id()`
+ * a partir de la sesión, y el precio lo calcula ella. Sin sesión, `precio_hermano`
+ * viene `null` —no igual al precio— para que la página pueda distinguir «no le
+ * toca ninguno» de «no ha entrado», que se dicen de forma muy distinta.
+ *
+ * Y NO SE DEVUELVE NI EL NOMBRE NI EL ID DEL HERMANO: solo números. Esta función
+ * la puede llamar cualquiera, y lo que contesta no puede servir para averiguar
+ * quién es nadie.
+ *
+ * `drop` antes de `create`: cambia el tipo devuelto y `create or replace` no lo
+ * permite. Sin esto, volver a ejecutar el fichero falla aquí — es exactamente
+ * lo que ya le pasó a `soltar_reserva`.
+ */
+drop function if exists catalogo_web(text);
 create or replace function catalogo_web(p_slug text)
 returns table (
   id uuid,
@@ -454,28 +629,48 @@ returns table (
   nombre text,
   descripcion text,
   precio numeric,
+  precio_hermano numeric,
+  descuento_pct numeric,
   iva numeric,
   foto_url text,
   disponible int
 )
 language sql stable security definer set search_path = public as $$
+  with sitio as (
+    select w.hermandad_id
+      from web_publica w
+     where w.slug = p_slug
+       -- Publicada, o de la gente de esa misma hermandad: es lo que hace que la
+       -- vista previa del panel enseñe el género antes de publicar la web. La
+       -- excepción NO se la cree a nadie por decirlo —no hay ningún parámetro de
+       -- «soy de la casa»—: se comprueba contra la sesión, aquí y en el servidor.
+       and (w.publicada or w.hermandad_id = hermandad_actual())
+  ),
+  -- Quien esté navegando, SI ha entrado en su área y SI es hermano de esta
+  -- hermandad. Para todos los demás esto está vacío y no pasa nada más.
+  quien as (
+    select h.id
+      from hermanos h, sitio s
+     where h.id = hermano_propio_id()
+       and h.hermandad_id = s.hermandad_id
+       and h.estado <> 'Baja'
+  ),
+  suyo as (
+    select m.porcentaje
+      from sitio s, quien q, mejor_descuento_para(s.hermandad_id, q.id) m
+  )
   select
-    p.id, p.codigo, p.nombre, p.descripcion, p.precio, p.iva, p.foto_url,
-    greatest(0, p.stock - coalesce((
-      select sum(l.cantidad)::int
-        from lineas_reserva l
-        join reservas_tienda r on r.id = l.reserva_id
-       where l.producto_id = p.id and r.estado = 'pendiente'
-    ), 0))::int as disponible
-  from web_publica w
-  join productos p on p.hermandad_id = w.hermandad_id
-  where w.slug = p_slug
-    -- Publicada, o de la gente de esa misma hermandad: es lo que hace que la
-    -- vista previa del panel enseñe el género antes de publicar la web. La
-    -- excepción NO se la cree a nadie por decirlo —no hay ningún parámetro de
-    -- «soy de la casa»—: se comprueba contra la sesión, aquí y en el servidor.
-    and (w.publicada or w.hermandad_id = hermandad_actual())
-    and p.activo and p.visible_en_web
+    p.id, p.codigo, p.nombre, p.descripcion, p.precio,
+    -- La misma fórmula, letra por letra, que aplica `registrar_venta` al cobrar.
+    (select round(p.precio * (1 - porcentaje / 100), 2) from suyo) as precio_hermano,
+    (select porcentaje from suyo) as descuento_pct,
+    p.iva, p.foto_url,
+    -- Topado a cero: a quien compra no le sirve de nada un número negativo. En
+    -- el panel sí se enseña tal cual, porque allí es la alarma.
+    greatest(0, disponible_de(p.id))::int as disponible
+  from sitio s
+  join productos p on p.hermandad_id = s.hermandad_id
+  where p.activo and p.visible_en_web
   order by p.nombre
 $$;
 
@@ -572,3 +767,155 @@ end $$;
 -- Solo la clave de servicio, que es la que usa `enviar-correo`. Desde el
 -- navegador NO: devuelve el correo y el teléfono de quien reservó.
 revoke all on function resguardo_de_reserva(uuid, text) from public, anon, authenticated;
+
+
+-- ----------------------------------------------------------------------------
+-- 10. «TU RESERVA ESTÁ LISTA»
+-- ----------------------------------------------------------------------------
+--
+-- Lo que faltaba del circuito y lo que más se nota: quien aparta algo por la
+-- web recibe su resguardo y luego NO VUELVE A SABER NADA. Se le dice «pásate
+-- cuando puedas» y ahí acaba. Si el género hay que pedirlo, o hay que grabar la
+-- medalla, la persona se planta un martes por la tarde a por algo que todavía
+-- no está — o no se planta nunca, y el plazo se cumple con la reserva viva y el
+-- género apartado para nadie.
+--
+-- LO DISPARA UNA PERSONA DESDE EL PANEL, no un reloj. Y no por comodidad:
+-- mandar un correo desde la base exigiría guardar dentro de ella la clave del
+-- proveedor de envío, y eso está descartado por escrito en
+-- `tareas-programadas.sql`. Quien prepara la reserva es quien sabe que está
+-- lista, así que es quien lo dice.
+--
+-- LLEGA POR DOS SITIOS, Y LOS DOS HACEN FALTA:
+--
+--   · Un aviso en su área del hermano, si resultó ser hermano de la casa. Ahí
+--     se queda escrito y no depende de que el correo llegue.
+--   · Y un correo, si dejó dirección. Es lo único que llega a quien no es
+--     hermano y a quien no entra nunca en su área.
+
+alter table reservas_tienda add column if not exists lista_en   timestamptz;
+alter table reservas_tienda add column if not exists avisada_en timestamptz;
+
+/*
+ * MARCARLA COMO LISTA. La llama el panel, con sesión y con permiso.
+ *
+ * Devuelve `hermandad_id` y `referencia` porque es lo que el navegador necesita
+ * para pedir el correo después, y no tiene por qué adivinarlo; y `hay_correo`
+ * para poder decir en pantalla si de verdad se va a mandar algo o si a esa
+ * persona hay que llamarla por teléfono.
+ */
+create or replace function avisar_reserva_lista(p_reserva_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_hermandad uuid := hermandad_actual();
+  v_res reservas_tienda%rowtype;
+  v_repetida boolean;
+begin
+  if not modulo_permitido('inventario') then
+    raise exception 'Solo quien lleva el inventario puede avisar de una reserva.';
+  end if;
+
+  select * into v_res from reservas_tienda r
+   where r.id = p_reserva_id and r.hermandad_id = v_hermandad
+   for update;
+  if not found then
+    raise exception 'Esa reserva no es de esta hermandad.';
+  end if;
+  if v_res.estado <> 'pendiente' then
+    raise exception 'Esa reserva ya está %, así que no hay nada que avisar.', v_res.estado;
+  end if;
+
+  -- Avisar dos veces el mismo día no es insistir, es molestar. Se dice que ya
+  -- estaba avisada en vez de callarse: la pantalla tiene que poder contarlo.
+  v_repetida := v_res.avisada_en is not null and v_res.avisada_en > now() - interval '1 day';
+
+  update reservas_tienda set lista_en = coalesce(lista_en, now()) where id = p_reserva_id;
+
+  /*
+   * EL AVISO EN SU ÁREA, si es hermano. Va aquí y no en el correo porque es lo
+   * único que no se pierde: un correo puede acabar en la carpeta de spam, y
+   * entonces no queda rastro de que se le avisó.
+   */
+  if v_res.hermano_id is not null and not v_repetida then
+    insert into avisos_hermano (hermandad_id, hermano_id, texto, tipo, titulo)
+    values (
+      v_hermandad, v_res.hermano_id,
+      format('Ya puedes pasar a recoger lo que apartaste (%s). Son %s€, que se pagan al recogerlo%s.',
+             v_res.referencia,
+             to_char(v_res.total, 'FM999999990.00'),
+             case when v_res.recoger_antes_de is null then ''
+                  else format(', y te lo guardamos hasta el %s',
+                              to_char(v_res.recoger_antes_de, 'DD/MM/YYYY')) end),
+      'tienda', 'Tu reserva está lista'
+    );
+  end if;
+
+  return jsonb_build_object(
+    'hermandad_id', v_hermandad,
+    'referencia', v_res.referencia,
+    'hay_correo', v_res.email <> '',
+    'es_hermano', v_res.hermano_id is not null,
+    'ya_avisada', v_repetida
+  );
+end $$;
+
+revoke all on function avisar_reserva_lista(uuid) from public, anon;
+grant execute on function avisar_reserva_lista(uuid) to authenticated;
+
+/*
+ * Y LO QUE LEE `enviar-correo` PARA MANDARLO, con los mismos cierres que el
+ * resguardo. Calcada de `resguardo_de_reserva` a propósito: es la misma clase
+ * de función —devuelve un correo y un nombre— y los mismos cierres tienen que
+ * seguir puestos.
+ *
+ *   · Solo si alguien la ha marcado lista. Sin eso, esto sería una forma de
+ *     sacar el correo de cualquiera que haya reservado, probando referencias.
+ *   · Solo una vez al día. Sin ese freno, el botón del panel sería una manera
+ *     de mandarle veinte correos a alguien.
+ *   · Y sin fila, NADA, sin decir por qué: distinguir «no existe» de «ya se
+ *     mandó» desde fuera vuelve a ser una forma de preguntar quién ha
+ *     reservado.
+ */
+create or replace function datos_para_avisar_reserva(p_hermandad_id uuid, p_referencia text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_res reservas_tienda%rowtype;
+  v_lineas jsonb;
+  v_hermandad text;
+begin
+  select * into v_res from reservas_tienda r
+   where r.hermandad_id = p_hermandad_id
+     and r.referencia = p_referencia
+     and r.estado = 'pendiente'
+     and r.lista_en is not null
+     and (r.avisada_en is null or r.avisada_en < now() - interval '1 day')
+   for update;
+  if not found then return null; end if;
+  if v_res.email = '' then return null; end if;
+
+  select jsonb_agg(jsonb_build_object(
+           'nombre', l.nombre, 'cantidad', l.cantidad, 'importe', l.precio_unitario * l.cantidad)
+         order by l.nombre)
+    into v_lineas
+    from lineas_reserva l where l.reserva_id = v_res.id;
+
+  select h.nombre into v_hermandad from hermandades h where h.id = p_hermandad_id;
+
+  update reservas_tienda set avisada_en = now() where id = v_res.id;
+
+  return jsonb_build_object(
+    'email', v_res.email,
+    'nombre', v_res.nombre,
+    'referencia', v_res.referencia,
+    'total', v_res.total,
+    'recoger_antes_de', v_res.recoger_antes_de,
+    'hermandad', coalesce(v_hermandad, ''),
+    'lineas', coalesce(v_lineas, '[]'::jsonb)
+  );
+end $$;
+
+-- Solo la clave de servicio, igual que el resguardo: desde el navegador NO,
+-- porque devuelve el correo de quien reservó.
+revoke all on function datos_para_avisar_reserva(uuid, text) from public, anon, authenticated;

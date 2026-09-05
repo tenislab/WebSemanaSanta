@@ -2006,11 +2006,17 @@ function TiendaTab() {
       </p>
       <p className="form-hint">
         <b>No se paga por internet.</b> Quien entra aparta lo que quiere y lo paga al recogerlo en
-        la casa de hermandad. Lo apartado se ve en <b>Tienda → Reservas de la web</b>, y ahí es
-        donde se cobra y se entrega: hasta ese momento no hay factura ni apunte en Tesorería.
+        la casa de hermandad. Lo apartado se ve en <b>Tienda → Reservas</b>, y ahí es donde se
+        cobra y se entrega: hasta ese momento no hay factura ni apunte en Tesorería.
+      </p>
+      <p className="form-hint">
+        <b>Al hermano se le hace su precio, también aquí.</b> Si ha entrado en su área en esa misma
+        pestaña, ve el precio con su descuento —tachada la tarifa al lado— y se le cobra ese al
+        recogerlo. Quien no entra paga tarifa, y lo lee en la propia tienda: «¿eres hermano? entra
+        y verás tu precio». Los descuentos se crean en <b>Tienda → Artículos → Descuentos</b>.
       </p>
       <div className="fila-botones">
-        <Link className="btn btn-outline" to="/app/tienda/almacen">Ir al almacén</Link>
+        <Link className="btn btn-outline" to="/app/tienda/almacen">Ir a los artículos</Link>
         <Link className="btn btn-ghost" to="/app/tienda/reservas">Ver las reservas</Link>
       </div>
       <p className="form-hint">

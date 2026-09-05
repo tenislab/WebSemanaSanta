@@ -199,6 +199,25 @@ export function cargoDeCuenta(
   // eso las políticas de la base no pueden saber quién eres.
   if (!authUserId) return esTitular ? null : ('__desconocido__' as Cargo)
 
+  /*
+   * EL TITULAR MANDA SOBRE TODO LO DEMÁS, Y VA EL PRIMERO.
+   *
+   * Estaba el último, de red de seguridad, y eso dejaba fuera el caso normal:
+   * la cuenta de la hermandad es casi siempre la del Hermano Mayor, y él TIENE
+   * ficha de hermano con su cargo escrito. Así que ganaba la 2ª vía, la
+   * aplicación le aplicaba los permisos de «Hermano Mayor» y la cuenta de la
+   * hermandad dejaba de verlo todo.
+   *
+   * Y quedaba en desacuerdo con la base, que sí lo tiene bien:
+   * `modulo_permitido()` empieza por `es_titular() or …`. O sea que la base le
+   * dejaba escribir en un módulo que la pantalla no le enseñaba — de las
+   * discrepancias más difíciles de diagnosticar que hay.
+   *
+   * La regla, dicha por la hermandad: la cuenta de la hermandad lo ve todo;
+   * los cargos son para cuando cada uno entra desde SU cuenta.
+   */
+  if (esTitular) return null
+
   // 1ª vía: la tabla `personal`, que es como entraba la junta hasta ahora.
   // Solo si está ACTIVA: una fila desactivada no manda.
   const miembro = personal.find((m) => m.authUserId === authUserId)
