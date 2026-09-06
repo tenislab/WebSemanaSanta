@@ -25,8 +25,9 @@ import { formatCurrency } from '../../../lib/format'
 import { fechaEs } from '../../../lib/leerTabla'
 import { hoyIso } from '../../../lib/hoy'
 import { llano } from '../../../lib/buscar'
+import { filaQueAbre } from '../../../lib/foco'
 import { avisarReservaLista, entregarReserva, lineasDeReserva, soltarReserva } from '../../../lib/tienda'
-import { useTienda } from '../../../context/TiendaContext'
+import { apartadasDe, disponibleDe, useTienda } from '../../../context/TiendaContext'
 import {
   FORMAS_PAGO, sePuedeEntregar, seLePasoElPlazo,
   type EstadoReserva, type LineaReserva, type Reserva,
@@ -54,7 +55,7 @@ export default function PanelReservas({ avisar, reservas, cargando, recargar }: 
   cargando: boolean
   recargar: () => void
 }) {
-  const { recargarExistencias } = useTienda()
+  const { productos, existencias, recargarExistencias } = useTienda()
   const [query, setQuery] = useState('')
   const [filtro, setFiltro] = useState<FiltroReservas>('pendientes')
   const [abierta, setAbierta] = useState<Reserva | null>(null)
@@ -89,6 +90,37 @@ export default function PanelReservas({ avisar, reservas, cargando, recargar }: 
     if (!q) return true
     return llano(r.nombre).includes(q) || llano(r.referencia).includes(q)
       || llano(r.telefono).includes(q) || llano(r.email).includes(q)
+  })
+
+  /*
+   * LO QUE FALTA PARA PODER ENTREGAR ESTA RESERVA, dicho ANTES de tener a la
+   * persona delante.
+   *
+   * La base rechaza la entrega si algún artículo está prometido de más —se ha
+   * vendido en el mostrador género que estaba apartado—, y lo rechaza bien,
+   * con su mensaje. Pero lo rechaza al pulsar «Cobrar y entregar», con la
+   * persona esperando con el dinero en la mano. Aquí se mira lo mismo al abrir
+   * el cajón, para que quien atiende se entere primero y pueda decidir qué
+   * hacer con calma: soltar otra reserva, o pedir el género.
+   *
+   * La cuenta es la de `disponible_de`: si lo disponible es negativo, entregar
+   * esta reserva dejaría a otra sin lo suyo, y la base no lo va a permitir.
+   */
+  type Falta =
+    | { nombre: string; motivo: 'sin-genero'; estanteria: number; apartadas: number; faltan: number }
+    | { nombre: string; motivo: 'sin-articulo' }
+  const faltan: Falta[] = (lineas ?? []).flatMap((l): Falta[] => {
+    const p = productos.find((x) => x.id === l.productoId)
+    // Un artículo borrado del catálogo después de apartarlo: la base se niega a
+    // entregar la reserva con esa línea, y aquí hay que decirlo con la misma
+    // antelación que la falta de género. Se calla igual de mal.
+    if (!p) return [{ nombre: l.nombre, motivo: 'sin-articulo' }]
+    const disp = disponibleDe(existencias, p)
+    if (disp >= 0) return []
+    return [{
+      nombre: l.nombre, motivo: 'sin-genero',
+      estanteria: p.stock, apartadas: apartadasDe(existencias, p), faltan: -disp,
+    }]
   })
 
   function cerrar() {
@@ -198,7 +230,11 @@ export default function PanelReservas({ avisar, reservas, cargando, recargar }: 
           </thead>
           <tbody>
             {visibles.map((r) => (
-              <tr key={r.id} className={r.estado === 'pendiente' ? undefined : 'fila--apagada'}>
+              <tr
+                key={r.id}
+                className={r.estado === 'pendiente' ? undefined : 'fila--apagada'}
+                {...filaQueAbre(() => { setAbierta(r); setError('') })}
+              >
                 <td><code>{r.referencia}</code></td>
                 <td>
                   <b>{r.nombre}</b>
@@ -214,7 +250,7 @@ export default function PanelReservas({ avisar, reservas, cargando, recargar }: 
                   {seLePasoElPlazo(r, hoy) && <span className="pill pill--warn">Vencida</span>}
                 </td>
                 <td className="num">{formatCurrency(r.total)}</td>
-                <td className="num">
+                <td className="num" onClick={(e) => e.stopPropagation()}>
                   {/* El aviso va en la fila y no solo en el cajón: cuando llega
                       el pedido de la imprenta hay quince reservas que avisar
                       seguidas, y abrir y cerrar quince cajones para eso es
@@ -304,6 +340,31 @@ export default function PanelReservas({ avisar, reservas, cargando, recargar }: 
 
             {error && <div className="banner-inline banner-inline--warn" role="alert">{error}</div>}
 
+            {sePuedeEntregar(abierta) && faltan.length > 0 && (
+              <div className="banner-inline banner-inline--warn banner-inline--alerta" role="alert">
+                <div>
+                  <p><b>Esta reserva no se puede entregar tal como está.</b></p>
+                  <ul className="lista-limpia">
+                    {faltan.map((f) => (
+                      <li key={f.nombre}>
+                        {f.motivo === 'sin-articulo'
+                          ? <>«{f.nombre}» ya no está en el catálogo.</>
+                          : <>De «{f.nombre}» hay {f.estanteria} en la estantería y {f.apartadas} apartadas
+                              entre todas las reservas: {f.faltan === 1 ? 'falta 1' : `faltan ${f.faltan}`}.</>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="form-hint">
+                    {faltan.some((f) => f.motivo === 'sin-genero')
+                      && 'Se ha vendido en el mostrador algo que ya estaba prometido: mete género desde «Artículos» o suelta otra reserva que no vaya a venir. '}
+                    {faltan.some((f) => f.motivo === 'sin-articulo')
+                      && 'Con un artículo que ya no existe, lo único que se puede hacer es soltar la reserva y hacerla de nuevo con lo que sí hay. '}
+                    Hasta entonces, el botón de cobrar se queda apagado.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {sePuedeEntregar(abierta) ? (
               soltando ? (
                 /*
@@ -352,7 +413,12 @@ export default function PanelReservas({ avisar, reservas, cargando, recargar }: 
                     </select>
                   </div>
                   <div className="fila-botones">
-                    <button className="btn btn-primary" onClick={() => void cobrar()} disabled={trabajando}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => void cobrar()}
+                      disabled={trabajando || faltan.length > 0}
+                      title={faltan.length > 0 ? 'Falta género: mira el aviso de arriba' : undefined}
+                    >
                       {trabajando ? 'Cobrando…' : `Cobrar y entregar ${formatCurrency(abierta.total)}`}
                     </button>
                     <button className="btn btn-ghost" onClick={() => setSoltando('caducada')} disabled={trabajando}>

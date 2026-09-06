@@ -645,6 +645,70 @@ export function useReservas(): { reservas: Reserva[]; cargando: boolean; recarga
   return { reservas, cargando, recargar: () => setVez((v) => v + 1) }
 }
 
+/**
+ * LO QUE ESTE HERMANO TIENE APARTADO, para su área.
+ *
+ * Es lo que cierra el circuito: el aviso de «tu reserva está lista» tiene que
+ * llevar a algún sitio donde se vea la reserva, con lo que lleva, si está
+ * lista y hasta cuándo se la guardan. Sin esto, el aviso era una frase suelta
+ * y el hermano tenía que fiarse de memoria.
+ *
+ * Con base, la lista sale de `reservas_tienda` con la política `mis_reservas`:
+ * la base solo le devuelve las suyas, y aquí no se filtra nada más que por
+ * costumbre. Sin base, de la copia del navegador por `hermanoId`.
+ *
+ * Las líneas van dentro de cada reserva, y se piden de una vez para todas: en
+ * un área que se abre en el móvil, una consulta por reserva es lo que hace que
+ * la página se quede en «cargando» diez segundos.
+ */
+export type ReservaConLineas = Reserva & { lineas: LineaReserva[] }
+
+export function useMisReservas(hermanoId: string | null): { reservas: ReservaConLineas[]; cargando: boolean } {
+  const [reservas, setReservas] = useState<ReservaConLineas[]>([])
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => {
+    if (!hermanoId) { setReservas([]); setCargando(false); return }
+    if (tiendaEnLocal()) {
+      setReservas(
+        reservasLocales()
+          .filter((r) => r.hermanoId === hermanoId)
+          .map((r) => ({ ...r, lineas: lineasDeReservaLocal(r.id) })),
+      )
+      setCargando(false)
+      return
+    }
+    if (!isSupabaseConfigured || !supabase) { setCargando(false); return }
+    let cancelado = false
+    setCargando(true)
+    void (async () => {
+      const { data, error } = await supabase
+        .from('reservas_tienda').select('*').eq('hermano_id', hermanoId)
+        .order('creado_en', { ascending: false })
+      if (cancelado) return
+      if (error || !data) {
+        if (error) avisarDeFallo('mis reservas', error.message)
+        setReservas([]); setCargando(false); return
+      }
+      const mias = (data as Record<string, unknown>[]).map(rowToReserva)
+      if (mias.length === 0) { setReservas([]); setCargando(false); return }
+      const { data: lineas } = await supabase
+        .from('lineas_reserva').select('*').in('reserva_id', mias.map((r) => r.id))
+      if (cancelado) return
+      const porReserva = new Map<string, LineaReserva[]>()
+      for (const f of (lineas ?? []) as Record<string, unknown>[]) {
+        const l = rowToLineaReserva(f)
+        porReserva.set(l.reservaId, [...(porReserva.get(l.reservaId) ?? []), l])
+      }
+      setReservas(mias.map((r) => ({ ...r, lineas: porReserva.get(r.id) ?? [] })))
+      setCargando(false)
+    })()
+    return () => { cancelado = true }
+  }, [hermanoId])
+
+  return { reservas, cargando }
+}
+
 /** Lo que lleva dentro una reserva. `null` = no se ha podido preguntar. */
 export async function lineasDeReserva(reservaId: string): Promise<LineaReserva[] | null> {
   if (tiendaEnLocal()) return lineasDeReservaLocal(reservaId)

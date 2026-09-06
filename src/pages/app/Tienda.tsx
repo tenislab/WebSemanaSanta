@@ -203,8 +203,32 @@ function Pantalla() {
       </section>
 
       {/* Las pestañas van separadas de los filtros de cada panel con una línea:
-          no son un filtro más, cambian lo que se está mirando. */}
-      <div className="filters filters--vista filters--tienda" role="tablist" aria-label="Qué parte de la tienda">
+          no son un filtro más, cambian lo que se está mirando.
+
+          Y SE RECORREN CON LAS FLECHAS, que es lo que espera cualquiera de una
+          fila de pestañas con `role="tablist"`: sin esto, quien navega con
+          teclado tenía que tabular cinco veces para llegar a «Cómo va», y el
+          lector de pantalla anunciaba pestañas que no se comportaban como tal. */}
+      <div
+        className="filters filters--vista filters--tienda"
+        role="tablist"
+        aria-label="Qué parte de la tienda"
+        onKeyDown={(e) => {
+          const ids = PESTANAS.map((t) => t.id)
+          const i = ids.indexOf(pestana)
+          const a = e.key === 'ArrowRight' ? ids[(i + 1) % ids.length]
+            : e.key === 'ArrowLeft' ? ids[(i - 1 + ids.length) % ids.length]
+            : e.key === 'Home' ? ids[0]
+            : e.key === 'End' ? ids[ids.length - 1]
+            : null
+          if (!a) return
+          e.preventDefault()
+          irA(a)
+          // El foco sigue a la pestaña: si se queda en la de antes, la siguiente
+          // flecha parte del sitio equivocado.
+          document.getElementById(`tab-${a}`)?.focus()
+        }}
+      >
         {PESTANAS.map(({ id, texto, cuenta }) => (
           <button
             key={id}
@@ -214,6 +238,7 @@ function Pantalla() {
             aria-controls={`panel-${id}`}
             aria-selected={pestana === id}
             className={`chip${pestana === id ? ' chip--active' : ''}`}
+            tabIndex={pestana === id ? 0 : -1}
             onClick={() => irA(id)}
           >
             {texto}
@@ -223,7 +248,7 @@ function Pantalla() {
       </div>
 
       <Panel id="vender" activa={pestana} vistas={vistas}>
-        <PanelVender avisar={avisar} acciones={ponerAcciones} alCobrar={caja.recargar} />
+        <PanelVender avisar={avisar} acciones={ponerAcciones} alCobrar={caja.recargar} activa={pestana === 'vender'} />
       </Panel>
       <Panel id="articulos" activa={pestana} vistas={vistas}>
         <PanelArticulos avisar={avisar} acciones={ponerAcciones} />

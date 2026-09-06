@@ -23,6 +23,7 @@ import { formatCurrency } from '../../../lib/format'
 import { fechaEs } from '../../../lib/leerTabla'
 import { diaLocalDe } from '../../../lib/hoy'
 import { llano } from '../../../lib/buscar'
+import { filaQueAbre } from '../../../lib/foco'
 import { anularVenta, lineasDeVenta, useVentas } from '../../../lib/tienda'
 import { useTienda } from '../../../context/TiendaContext'
 import { referenciaFactura, type LineaVenta, type Venta } from '../../../data/tienda'
@@ -166,7 +167,11 @@ export default function PanelFacturas({ avisar }: { avisar: (t: string) => void 
           </thead>
           <tbody>
             {visibles.map((v) => (
-              <tr key={v.id} className={v.estado === 'Anulada' ? 'fila--apagada' : undefined}>
+              <tr
+                key={v.id}
+                className={v.estado === 'Anulada' ? 'fila--apagada' : undefined}
+                {...filaQueAbre(() => { setAbierta(v); setError(''); setPideMotivo(false); setMotivo('') })}
+              >
                 <td><code>{referenciaFactura(v)}</code></td>
                 <td>{diaLocalDe(v.fecha) ? fechaEs(diaLocalDe(v.fecha)) : '—'}</td>
                 <td>
@@ -181,7 +186,7 @@ export default function PanelFacturas({ avisar }: { avisar: (t: string) => void 
                 <td className="num">{formatCurrency(v.base)}</td>
                 <td className="num">{formatCurrency(v.ivaTotal)}</td>
                 <td className="num"><b>{formatCurrency(v.total)}</b></td>
-                <td className="num">
+                <td className="num" onClick={(e) => e.stopPropagation()}>
                   <button
                     className="btn btn-outline btn-sm"
                     onClick={() => { setAbierta(v); setError(''); setPideMotivo(false); setMotivo('') }}

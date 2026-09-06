@@ -19,6 +19,7 @@ import ToolbarTienda from '../../../components/tienda/ToolbarTienda'
 import { formatCurrency } from '../../../lib/format'
 import { llano } from '../../../lib/buscar'
 import { nuevoId } from '../../../lib/supabaseSync'
+import { filaQueAbre } from '../../../lib/foco'
 import { moverStock, historialDeStock } from '../../../lib/tienda'
 import { apartadasDe, disponibleDe, useTienda } from '../../../context/TiendaContext'
 import {
@@ -356,7 +357,11 @@ export default function PanelArticulos({ avisar, acciones }: {
               const apartadas = apartadasDe(existencias, p)
               const sePuede = disponibleDe(existencias, p)
               return (
-                <tr key={p.id} className={p.activo ? undefined : 'fila--apagada'}>
+                <tr
+                  key={p.id}
+                  className={p.activo ? undefined : 'fila--apagada'}
+                  {...filaQueAbre(() => abrirFicha(p))}
+                >
                   <td><code>{p.codigo}</code></td>
                   <td>
                     <b>{p.nombre}</b>
@@ -397,7 +402,9 @@ export default function PanelArticulos({ avisar, acciones }: {
                       ) : null}
                     </span>
                   </td>
-                  <td className="num">
+                  {/* Los botones son suyos: sin parar el clic aquí, «Movimientos»
+                      abriría además la ficha, uno encima del otro. */}
+                  <td className="num" onClick={(e) => e.stopPropagation()}>
                     <button className="btn btn-ghost btn-sm" onClick={() => void abrirMovimientos(p)}>
                       Movimientos
                     </button>

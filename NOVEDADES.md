@@ -77,6 +77,21 @@ volvía a saber nada. Ahora, desde la pestaña de Reservas, un botón por fila
 avisa a esa persona —por correo si dejó dirección, y en su área del hermano si
 lo es—. No se avisa dos veces el mismo día.
 
+### Y cinco mejoras más, después de mirarla en móvil y en oscuro
+
+- **El hermano ve sus reservas en su área**: qué apartó, si ya está lista y
+  hasta cuándo se lo guardan. Solo las suyas, y solo lectura.
+- **Falta género, dicho antes de tener a la persona delante**: si una reserva
+  no se puede entregar —se vendió en el mostrador lo que estaba apartado, o un
+  artículo ya no existe— el cajón lo dice al abrirlo y el botón de cobrar se
+  queda apagado, en vez de fallar al pulsarlo.
+- **Tema oscuro**: los campos de la cesta salían blancos con texto negro sobre
+  la tarjeta negra. Y los desplegables ya no se salen de su hueco.
+- **Las filas se abren con el teclado** en las tres tablas de la tienda, como
+  en el resto del panel. Y las pestañas se recorren con las flechas.
+- **El foco vuelve al buscador** cada vez que se vuelve a «Vender»: quien mira
+  una reserva un segundo sigue tecleando códigos sin tocar el ratón.
+
 ---
 
 ## 1. La introducción de datos, capada

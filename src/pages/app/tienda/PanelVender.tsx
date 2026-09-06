@@ -35,9 +35,11 @@ type Props = {
   acciones: (p: Pestana, nodo: React.ReactNode) => void
   /** Para que la caja de hoy de la cabecera suba en el momento de cobrar. */
   alCobrar: () => void
+  /** Si es la pestaña que se está mirando. El foco del buscador depende de esto. */
+  activa: boolean
 }
 
-export default function PanelVender({ avisar, acciones, alCobrar }: Props) {
+export default function PanelVender({ avisar, acciones, alCobrar, activa }: Props) {
   const {
     productos: productosDeLaBase, descuentos, hermanos, hermandad,
     existencias, recargarExistencias,
@@ -136,10 +138,18 @@ export default function PanelVender({ avisar, acciones, alCobrar }: Props) {
     setFactura({ venta, lineas })
   }
 
-  // El foco en el buscador desde el principio y después de cada cobro: con la
-  // cola esperando, tener que pinchar en el campo antes de teclear es lo que
-  // hace que la gente acabe apuntando en un papel.
-  useEffect(() => { buscador.current?.focus() }, [])
+  /*
+   * El foco en el buscador desde el principio, después de cada cobro Y CADA VEZ
+   * QUE SE VUELVE A ESTA PESTAÑA: con la cola esperando, tener que pinchar en
+   * el campo antes de teclear es lo que hace que la gente acabe apuntando en
+   * un papel. Quien mira «Reservas» un segundo y vuelve tiene que poder seguir
+   * tecleando códigos sin tocar el ratón.
+   *
+   * Y SOLO SI ESTÁ A LA VISTA. El panel se queda montado aunque se esté en otra
+   * pestaña, y enfocar un campo escondido hace que el navegador intente
+   * desplazarse hasta él: la página daba un salto al abrir «Cómo va».
+   */
+  useEffect(() => { if (activa) buscador.current?.focus() }, [activa])
 
   const hermano = hermanos.find((h) => h.id === hermanoId) ?? null
 
@@ -608,7 +618,9 @@ export default function PanelVender({ avisar, acciones, alCobrar }: Props) {
               <span className="stat-tile__label">A cobrar</span>
               <span className="stat-tile__value">{formatCurrency(totales.total)}</span>
               <span className="stat-tile__trend stat-tile__trend--neutral">
-                {descuentoPct > 0 ? `Con el ${descuentoPct} % aplicado` : `${totales.unidades} unidades`}
+                {descuentoPct > 0
+                  ? `Con el ${descuentoPct} % aplicado`
+                  : `${totales.unidades} ${totales.unidades === 1 ? 'unidad' : 'unidades'}`}
               </span>
             </div>
           </div>

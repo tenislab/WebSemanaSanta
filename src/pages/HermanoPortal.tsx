@@ -36,6 +36,7 @@ import AsistenciaTramo from '../components/AsistenciaTramo'
 import HistorialHermano from '../components/HistorialHermano'
 import MiSitioCortejo from '../components/MiSitioCortejo'
 import BuzonHermano from '../components/BuzonHermano'
+import MisReservasTienda from '../components/MisReservasTienda'
 import CarneHermano from '../components/CarneHermano'
 import MiFamilia from '../components/MiFamilia'
 import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../lib/modeloPapeleta'
@@ -2023,6 +2024,11 @@ export default function HermanoPortal() {
           cambiarPreferencia={cambiarPreferenciaAviso}
           errorPreferencias={errorPreferenciasAvisos}
         />
+
+        {/* Lo que tiene apartado en la tienda de la web, si algo. Va detrás del
+            buzón porque el aviso de «tu reserva está lista» llega ahí, y esto es
+            a donde tiene que llevar. */}
+        <MisReservasTienda hermanoId={hermanoActivo?.id ?? null} />
 
         {/* Calendario de la hermandad: lo que viene, con las repeticiones ya
             desplegadas. El hermano ve los actos abiertos, no los cabildos

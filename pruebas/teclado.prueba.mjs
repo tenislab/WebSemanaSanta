@@ -37,7 +37,12 @@ export default async function ({ caso }) {
   // dejaría de decir «fila 12 de 50» y de leer los encabezados con cada dato.
   caso('no se disfraza de botón', false, /filaQueAbre[\s\S]{0,400}role: 'button'/.test(foco))
 
-  const MODULOS = ['Hermanos', 'Cuotas', 'Papeletas', 'Tesoreria', 'Inventario', 'Archivo', 'Comunicados', 'Informes']
+  // Y las tres tablas de la tienda: al unificarla en una pantalla era el
+  // momento de que sus filas se abrieran como las de todos los demás.
+  const MODULOS = [
+    'Hermanos', 'Cuotas', 'Papeletas', 'Tesoreria', 'Inventario', 'Archivo', 'Comunicados', 'Informes',
+    'tienda/PanelArticulos', 'tienda/PanelReservas', 'tienda/PanelFacturas',
+  ]
   for (const m of MODULOS) {
     const t = await readFile(`src/pages/app/${m}.tsx`, 'utf8')
     caso(`${m}: sus filas se abren con el teclado`, true, /\{\.\.\.filaQueAbre\(/.test(t))

@@ -3634,4 +3634,34 @@ async function elPrecioDeHermanoLlegaALaWeb({ sql, caso }) {
         where hermandad_id = ${H} and referencia = '${SIN}')); commit;`)
   } catch { sobreCaducada = 'no' }
   caso('una reserva caducada no se avisa', 'no', sobreCaducada)
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   *   Y EL HERMANO VE LAS SUYAS EN SU ÁREA. SOLO LAS SUYAS.
+   * ═════════════════════════════════════════════════════════════════════════
+   *
+   * A estas alturas hay cuatro reservas en esta hermandad: la del costalero, la
+   * del de a pie, la de «Alguien de fuera» y la de «Sin marcar». Cada hermano
+   * tiene que ver exactamente una, y las otras tres —con sus nombres, correos y
+   * teléfonos— no tienen que existir para él.
+   */
+  const veo = async (usuario, tabla) => numero(await sql(
+    `begin; set local role authenticated; set local "request.jwt.claim.sub" = ${usuario};
+       select count(*) from ${tabla}; rollback;`))
+  caso('el costalero ve su reserva', '1', await veo(UCOST, 'reservas_tienda'))
+  caso('y sus líneas', '1', await veo(UCOST, 'lineas_reserva'))
+  caso('el de a pie ve la suya', '1', await veo(UPEON, 'reservas_tienda'))
+  caso('y ninguno ve las de nadie más', 'El de a pie', solo(await sql(
+    `begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UPEON};
+       select nombre from reservas_tienda; rollback;`)).replace('ROLLBACK', '').trim() || 'El de a pie')
+  // Y solo lectura: lo suyo lo ve, pero no lo toca. Anular es cosa del mostrador.
+  let toca = 'sí'
+  try {
+    await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${UCOST};
+      update reservas_tienda set estado = 'anulada' where hermano_id = ${COST};
+      commit;`)
+    // Un `update` sobre cero filas no falla: hay que mirar si cambió algo.
+    if (solo(await sql(`select estado from reservas_tienda where hermano_id = ${COST}`)) !== 'anulada') toca = 'no'
+  } catch { toca = 'no' }
+  caso('pero no puede tocarla', 'no', toca)
 }

@@ -1857,7 +1857,16 @@ span.logo-mark img { width: 100%; height: 100%; }
 .form-row input, .form-row select, .form-row textarea {
   padding: 0.68rem 0.85rem; font: inherit; font-size: 0.9rem;
   color: var(--text); background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  /*
+   * Y NUNCA MÁS ANCHOS QUE SU HUECO. Un `<select>` mide lo que mide su opción
+   * más larga, y en una celda de rejilla —media cesta, medio cajón— «Sin
+   * descuento» se salía por la derecha con el borde cortado. `min-width: 0`
+   * es lo que permite que una celda de grid encoja por debajo del ancho natural
+   * de lo que lleva dentro.
+   */
+  max-width: 100%; min-width: 0; box-sizing: border-box;
 }
+.form-grid-2 > * { min-width: 0; }
 .form-row input:focus, .form-row select:focus, .form-row textarea:focus {
   outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring);
 }
@@ -4049,7 +4058,14 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .stat-grid--compact .stat-tile__value { font-size: 1.3rem; }
 
 .table-card--in-drawer { overflow-x: auto; max-width: 100%; }
-.table-card--in-drawer table { font-size: 0.82rem; }
+/*
+ * SIN EL MÍNIMO DE LAS TABLAS GRANDES. `.table-card table` pide 720 px porque
+ * las del censo tienen doce columnas y ahí el scroll lateral tiene sentido. En
+ * un cajón de 440 px, una tabla de tres columnas —artículo, unidades, precio—
+ * con ese mínimo dejaba «Uds.» y «Precio» fuera de la vista, sin nada que
+ * dijera que había más a la derecha: la reserva parecía no tener cantidades.
+ */
+.table-card--in-drawer table { font-size: 0.82rem; min-width: 0; }
 
 .informe-doc__resumen { display: flex; flex-wrap: wrap; gap: 1.3rem; padding: 0.2rem 0; }
 .informe-doc__resumen > div { display: flex; flex-direction: column; gap: 0.2rem; }
@@ -4647,7 +4663,19 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .caja__linea-cabeza > b:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .caja__linea-mandos { display: flex; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap; }
 .caja__linea-mandos label { display: flex; flex-direction: column; gap: 0.15rem; }
-.caja__linea-mandos input { width: 5.5rem; }
+/*
+ * LOS CAMPOS DE LA CESTA SE VISTEN COMO LOS DEMÁS. No están dentro de un
+ * `.form-row` —una línea de cesta no es un formulario— y por eso salían con el
+ * aspecto que trae el navegador: blancos con texto negro. Sobre el marfil casi
+ * no se notaba; en el tema oscuro eran dos cuadros blancos en medio de una
+ * tarjeta negra, lo primero que se veía de la pantalla.
+ */
+.caja__linea-mandos input {
+  width: 5.5rem; padding: 0.42rem 0.6rem; font: inherit; font-size: 0.88rem;
+  color: var(--text); background: var(--bg); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); font-variant-numeric: tabular-nums;
+}
+.caja__linea-mandos input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--ring); }
 .caja__linea-mandos .icon-btn { margin-left: auto; }
 /* ---- Reservas de la web ---- */
 .reserva__total {
@@ -4771,6 +4799,18 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
  * web. Es la única cifra de esta pantalla que pide levantar el teléfono.
  */
 .tienda-sobrevendido { color: var(--err-fg); }
+
+/* ---- Mis reservas de la tienda, en el área del hermano ---- */
+.mis-reservas__item { margin-bottom: 0.6rem; }
+.mis-reservas__item code { font-size: 0.85rem; }
+.mis-reservas__lineas { list-style: none; margin: 0.5rem 0 0.3rem; padding: 0; }
+.mis-reservas__lineas li {
+  display: flex; justify-content: space-between; gap: 1rem;
+  padding: 0.25rem 0; font-size: 0.9rem; border-bottom: 1px dashed var(--line);
+}
+.mis-reservas__lineas li span { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mis-reservas__total { margin: 0.4rem 0 0; font-variant-numeric: tabular-nums; }
+.mis-reservas__total small { color: var(--text-muted); font-weight: 500; }
 
 /* El nombre del artículo, con sitio para no partirse en tres líneas. Es por lo
    que se busca en la tabla; el código de al lado ocupa cinco letras. */

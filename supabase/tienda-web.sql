@@ -563,13 +563,33 @@ begin
 end $$;
 
 /*
- * QUIEN RESERVA NO PUEDE LEER NADA, ni siquiera lo suyo.
+ * QUIEN RESERVA SIN ENTRAR NO PUEDE LEER NADA, ni siquiera lo suyo.
  *
  * No hay política para `anon`, y es a propósito: con una lectura abierta,
  * cualquiera se baja los nombres, correos y teléfonos de todo el que ha
  * reservado. El resguardo se le enseña en pantalla al terminar y se le manda
  * por correo; para lo demás está el teléfono de la hermandad.
+ *
+ * EL HERMANO SÍ VE LAS SUYAS, y solo las suyas. Desde que la reserva sabe de
+ * qué hermano es —lo resuelve la base contra la sesión, nunca el navegador— se
+ * le puede enseñar en su área lo que tiene apartado, si está listo y hasta
+ * cuándo se lo guardan. Es lo que cierra el circuito: el aviso de «tu reserva
+ * está lista» tiene que llevar a algún sitio donde se vea la reserva.
+ *
+ * Solo lectura. Las reservas se crean por `crear_reserva_web` y se tocan desde
+ * el mostrador; el hermano no anula ni edita nada desde aquí.
  */
+drop policy if exists "mis_reservas" on reservas_tienda;
+create policy "mis_reservas" on reservas_tienda for select to authenticated
+  using (auth_es_hermano() and hermano_id = hermano_propio_id());
+
+drop policy if exists "mis_lineas_de_reserva" on lineas_reserva;
+create policy "mis_lineas_de_reserva" on lineas_reserva for select to authenticated
+  using (exists (
+    select 1 from reservas_tienda r
+     where r.id = lineas_reserva.reserva_id
+       and r.hermano_id = hermano_propio_id()
+  ) and auth_es_hermano());
 
 
 -- ----------------------------------------------------------------------------
