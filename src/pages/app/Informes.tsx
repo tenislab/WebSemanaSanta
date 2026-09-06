@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import InformeImpreso from '../../components/InformeImpreso'
 import EstadoCuentas from '../../components/EstadoCuentas'
 import CuentaResultados from '../../components/CuentaResultados'
+import MemoriaEjercicio from '../../components/MemoriaEjercicio'
 import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { anioDelMovimiento, cuentaDeResultados } from '../../lib/perdidasYGanancias'
 import {
@@ -13,8 +14,10 @@ import { nuevoId } from '../../lib/supabaseSync'
 import Drawer from '../../components/Drawer'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
-import { sumaEuros, formatCurrency, formatDate } from '../../lib/format'
+import { sumaEuros, formatCurrency, formatDate, importeDeTexto } from '../../lib/format'
 import { toCsv, descargarArchivo } from '../../lib/csv'
+import { descargarExcel, type HojaExcel, type ValorCelda } from '../../lib/escribirExcel'
+import { construirMemoria, aniosConMemoria } from '../../lib/memoria'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
@@ -339,6 +342,25 @@ export default function Informes() {
     [movimientosEstado, anioEstado],
   )
   const [repartos, setRepartos] = useRepartos()
+
+  /* ══════════════════════════════════════════════════════════════════════
+     LA MEMORIA DEL EJERCICIO
+
+     Las cuentas están en `lib/memoria.ts` —función pura, con pruebas—, y
+     aquí solo se elige el año y se enseña. Es el mismo reparto que el estado
+     de cuentas: lo que se lee en voz alta delante de la hermandad se
+     comprueba en el banco de pruebas, no mirando la pantalla.
+     ══════════════════════════════════════════════════════════════════════ */
+  const datosMemoria = useMemo(
+    () => ({ hermanos, cuotas, papeletas, movimientos, tramos, enseres }),
+    [hermanos, cuotas, papeletas, movimientos, tramos, enseres],
+  )
+  const aniosMemoria = useMemo(() => aniosConMemoria(datosMemoria), [datosMemoria])
+  const [anioMemoria, setAnioMemoria] = useState(() => new Date().getFullYear())
+  const memoria = useMemo(
+    () => construirMemoria(anioMemoria, datosMemoria),
+    [anioMemoria, datosMemoria],
+  )
   const cuentaPyG = useMemo(
     () => cuentaDeResultados(movimientos, anioEstado, repartos),
     [movimientos, anioEstado, repartos],
@@ -351,7 +373,7 @@ export default function Informes() {
    * está imprimiendo. El manejo de `afterprint` de abajo se comparte: escribir
    * esa trampa dos veces es cómo se arregla en una y se queda rota en la otra.
    */
-  const [imprimiendo, setImprimiendo] = useState<null | 'estado' | 'pyg'>(null)
+  const [imprimiendo, setImprimiendo] = useState<null | 'estado' | 'pyg' | 'memoria'>(null)
   const imprimiendoEstado = imprimiendo !== null
   const setImprimiendoEstado = (v: boolean) => setImprimiendo(v ? 'estado' : null)
   useEffect(() => {
@@ -429,6 +451,107 @@ export default function Informes() {
     descargarArchivo(`${informe.id}.csv`, csv)
   }
 
+  /*
+   * DE UN INFORME A UNA PESTAÑA DE EXCEL.
+   *
+   * Los informes se arman con los importes YA ESCRITOS —«3.600,50 €»—, porque
+   * así se ven en pantalla, así se imprimen y así salen en el CSV. Pero una
+   * columna de dinero en TEXTO no se puede sumar, y sumar la columna es lo
+   * primero que hace quien abre esto.
+   *
+   * Así que cada celda pasa por `importeDeTexto`, que es la inversa exacta de
+   * `formatCurrency` y devuelve `null` en cuanto lo que hay no tiene esa
+   * forma. Lo que no es un importe se queda como texto: prefiero una columna
+   * sin sumar a un número inventado dentro de unas cuentas que se presentan.
+   *
+   * Va aquí y no en `construirInformes` a propósito: cualquier informe que se
+   * añada mañana exporta bien sin tocar nada.
+   */
+  function hojaDeInforme(informe: Informe): HojaExcel {
+    return {
+      nombre: informe.titulo,
+      columnas: informe.columnas,
+      filas: informe.filas.map((fila) => fila.map((v): ValorCelda => {
+        if (typeof v === 'number') return v
+        const euros = importeDeTexto(String(v))
+        return euros === null ? v : { euros }
+      })),
+    }
+  }
+
+  /**
+   * TODOS LOS INFORMES EN UN SOLO ARCHIVO, con sus pestañas.
+   *
+   * Antes se bajaban de uno en uno: seis CSV sueltos que quien se lleva las
+   * cuentas al cabildo tenía que volver a juntar a mano. Delante va una
+   * pestaña de resumen con las cifras de cabecera de cada informe, que es lo
+   * que se mira primero y lo que hasta ahora solo estaba en la pantalla.
+   */
+  function exportarTodoExcel() {
+    const resumen: HojaExcel = {
+      nombre: 'Resumen',
+      columnas: ['Informe', 'Concepto', 'Valor'],
+      filas: informes.flatMap((inf) => inf.resumen.map((r): ValorCelda[] => {
+        const euros = importeDeTexto(r.valor)
+        if (euros !== null) return [inf.titulo, r.etiqueta, { euros }]
+        /*
+         * Y las cuentas de cosas —«50» hermanos, «10» recibos— también como
+         * número. Aquí solo se tiene el texto ya escrito, así que se admite
+         * únicamente el entero pelado: en cuanto lleva algo más («9 de 10»,
+         * «55 %») es una frase, no una cifra que se pueda sumar.
+         */
+        const entero = /^-?\d+$/.test(r.valor.trim()) ? Number(r.valor.trim()) : null
+        return [inf.titulo, r.etiqueta, entero === null ? r.valor : entero]
+      })),
+    }
+    descargarExcel(
+      `informes-${new Date().getFullYear()}.xlsx`,
+      [resumen, ...informes.map(hojaDeInforme)],
+    )
+  }
+
+  /**
+   * LA MEMORIA EN EXCEL: las cifras y, detrás, quién entró y quién se fue.
+   *
+   * Las cifras van en una sola pestaña con su bloque delante —no una pestaña
+   * por bloque— porque así se leen seguidas, que es como se leen en el papel.
+   * Las advertencias del documento viajan con ellas: si en la hoja impresa se
+   * dice que el censo es el de hoy y no el del cierre, en la hoja de cálculo
+   * también, o el aviso se pierde justo en la copia que se reenvía por correo.
+   */
+  function exportarMemoriaExcel() {
+    const cifras: HojaExcel = {
+      nombre: `Memoria ${memoria.anio}`,
+      columnas: ['Apartado', 'Concepto', 'Valor'],
+      filas: memoria.bloques.flatMap((b): ValorCelda[][] => [
+        ...b.cifras.map((c): ValorCelda[] => [
+          b.titulo,
+          c.etiqueta,
+          /*
+           * Cada cifra dice ella misma qué es (ver `CifraMemoria`), así que
+           * aquí no hay que adivinar nada mirando el texto: el dinero va con
+           * formato de moneda, la cuenta de hermanos va como número pelado, y
+           * lo que no es ninguna de las dos —un porcentaje, un «+2», una
+           * raya— va tal cual se lee en el papel.
+           */
+          c.numero === undefined ? c.valor : c.esDinero ? { euros: c.numero } : c.numero,
+        ]),
+        ...(b.nota ? [[b.titulo, 'Advertencia', b.nota] as ValorCelda[]] : []),
+      ]),
+    }
+    const altas: HojaExcel = {
+      nombre: `Altas ${memoria.anio}`,
+      columnas: ['Nº', 'Hermano', 'Estado'],
+      filas: memoria.altas.map((a) => [a.numero > 0 ? a.numero : '—', a.nombre, a.estado]),
+    }
+    const bajas: HojaExcel = {
+      nombre: `Bajas ${memoria.anio}`,
+      columnas: ['Fecha', 'Hermano', 'Motivo'],
+      filas: memoria.bajas.map((b) => [b.fecha, b.nombre, b.motivo]),
+    }
+    descargarExcel(`memoria-${memoria.anio}.xlsx`, [cifras, altas, bajas])
+  }
+
   return (
     <div className="dash">
       <div className="dash-head dash-head--row">
@@ -470,6 +593,56 @@ export default function Informes() {
         </div>
       </section>
 
+      {/* ------------------------------------------------------------------
+          LA MEMORIA DEL EJERCICIO, delante del estado de cuentas.
+
+          Va primero porque es el documento que abre el cabildo general: el
+          estado de cuentas es una de sus partes, y quien prepara la carpeta
+          empieza por aquí.
+          ------------------------------------------------------------------ */}
+      <section className="settings-card">
+        <h2 className="settings-card__title">Memoria del ejercicio</h2>
+        <p className="form-hint">
+          Todo lo del año en un solo documento: el censo con sus altas y bajas, las cuotas, la
+          tesorería, la estación de penitencia y el patrimonio. Es el papel que se lleva al cabildo
+          general, y se puede llevar también en hoja de cálculo.
+        </p>
+        <div className="assign-box__row">
+          <select
+            value={anioMemoria}
+            onChange={(e) => setAnioMemoria(Number(e.target.value))}
+            aria-label="Ejercicio de la memoria"
+            style={{ maxWidth: '9rem' }}
+          >
+            {aniosMemoria.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => { setSelected(null); setImprimiendo('memoria') }}
+          >
+            Imprimir la memoria
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={exportarMemoriaExcel}>
+            Descargar en Excel
+          </button>
+        </div>
+        {/* Lo mismo que va impreso dentro del documento, dicho también aquí:
+            quien elige el año tiene que saber qué está pidiendo ANTES de
+            mandarlo a imprimir, no al leer el papel. */}
+        {!memoria.esElAnioEnCurso && (
+          <p className="form-hint form-hint--aviso">
+            De {anioMemoria} son exactas las altas, las bajas y la tesorería. Los hermanos que
+            figuran en el censo son los de HOY: quien se dio de baja después ya no está en la
+            lista. El documento lo advierte también impreso.
+          </p>
+        )}
+      </section>
+
       <section className="settings-card">
         <h2 className="settings-card__title">Estado de cuentas anual</h2>
         <p className="form-hint">
@@ -509,6 +682,16 @@ export default function Informes() {
         onRepartos={setRepartos}
         onImprimir={() => { setSelected(null); setImprimiendo('pyg') }}
       />
+
+      <div className="dash-head dash-head--row informes-lista__head">
+        <p className="form-hint" style={{ margin: 0 }}>
+          Cada informe se abre, se imprime o se exporta por separado. O todos de una vez, cada
+          uno en su pestaña y con el resumen delante.
+        </p>
+        <button type="button" className="btn btn-ghost" onClick={exportarTodoExcel}>
+          Descargar todo en Excel
+        </button>
+      </div>
 
       <div className="table-card">
         <table>
@@ -556,6 +739,12 @@ export default function Informes() {
             <>
               <button className="btn btn-ghost" onClick={() => exportarCsv(selected)}>
                 Exportar CSV
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => descargarExcel(`${selected.id}.xlsx`, [hojaDeInforme(selected)])}
+              >
+                Exportar Excel
               </button>
               <button className="btn btn-primary" onClick={() => window.print()}>
                 Imprimir / PDF
@@ -618,6 +807,15 @@ export default function Informes() {
           anio={anioEstado}
           movimientos={movimientosEstado}
           saldoInicial={saldoInicialEstado}
+          generadoEl={generadoEl}
+        />
+      )}
+
+      {imprimiendo === 'memoria' && (
+        <MemoriaEjercicio
+          className="screen-hidden"
+          hermandad={hermandad}
+          memoria={memoria}
           generadoEl={generadoEl}
         />
       )}

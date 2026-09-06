@@ -260,4 +260,33 @@ export default async function ({ caso }) {
     /alter table movimientos add column if not exists origen text;/.test(enDisco))
   caso('y su índice único por hermandad', true,
     /create unique index if not exists movimientos_origen_por_hermandad/.test(enDisco))
+
+  /*
+   * --- Y LA CUARTA FORMA, que es la que se escapó a las otras tres ---
+   *
+   * `guardarPlantilla()` escribe en `hermandad_settings` una columna por
+   * plantilla, y el nombre de la columna VIAJA COMO DATO: es el propio tipo
+   * `PlantillaGuardable`. Ninguna de las comprobaciones de arriba lo ve, porque
+   * en el SQL no aparece ningún `insert into hermandad_settings (asistencia…)`
+   * — aparece un `upsert` desde TypeScript con la columna en una variable.
+   *
+   * Y por ahí se colaron tres: `asistencia`, `modelo_papeleta` y
+   * `modelo_recibo`. La primera es el historial de quién salió cada año: sin la
+   * columna, marcar la asistencia el Viernes Santo no guardaba nada, la
+   * pantalla lo enseñaba marcado y al año siguiente no constaba ninguna
+   * edición. Llegó reportado como «no se cargan los años que han salido».
+   *
+   * Se lee la lista del propio código, no una copia: el día que se añada una
+   * plantilla nueva, esta prueba la exige sin que nadie se acuerde.
+   */
+  const plantillas = await readFile('src/lib/plantillasHermandad.ts', 'utf8')
+  const declaradas = plantillas
+    .slice(plantillas.indexOf('export type PlantillaGuardable'), plantillas.indexOf('export async function'))
+    .match(/^\s*\|\s*'([a-z_]+)'/gm)
+    ?.map((l) => l.replace(/[^a-z_]/g, '')) ?? []
+  caso('se leen las plantillas del código, no de una copia', true, declaradas.length >= 4)
+  const sinLlegar = declaradas.filter(
+    (c) => !new RegExp(`alter table hermandad_settings add column if not exists ${c}\\b`).test(enDisco),
+  )
+  caso('todas las plantillas que guarda la aplicación llegan a ACTUALIZAR.sql', '', sinLlegar.join(', '))
 }

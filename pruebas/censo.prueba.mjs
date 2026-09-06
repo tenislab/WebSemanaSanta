@@ -170,4 +170,35 @@ export default async function ({ cargar, caso }) {
   caso('y no empuja a nadie', 'a1 b2 c3 z0', nums(civilVuelve))
   const civilAlFinal = m.reactivarEnCenso(civilDeBaja, 'z', false)
   caso('mandarlo «al final» tampoco le da número', 'a1 b2 c3 z0', nums(civilAlFinal))
+
+  /* ------------------------------------------------------------------
+     LA FECHA DE LA BAJA
+
+     Es la que contesta, una vez al año en el cabildo general, cuántos
+     hermanos se fueron en el ejercicio. Sin ella solo se podía dar el total
+     acumulado desde que existe la hermandad, que no dice nada.
+
+     Va como parámetro y no leyendo el reloj dentro de la función: una baja
+     tramitada el 31 de diciembre entra en un ejercicio y la del día
+     siguiente en otro, y eso no se puede comprobar con una prueba que
+     dependa de cuándo se ejecuta.
+     ------------------------------------------------------------------ */
+  const paraBaja = [
+    { id: 'a', numero: 1, estado: 'Activo', antiguedad: 1980 },
+    { id: 'b', numero: 2, estado: 'Activo', antiguedad: 1990 },
+  ]
+  const tramitada = m.darDeBajaEnCenso(paraBaja, 'b', '2025-12-31')
+  caso('la baja queda fechada', '2025-12-31', tramitada.find((h) => h.id === 'b').fechaBaja)
+  caso('y a los demás no se les toca', undefined, tramitada.find((h) => h.id === 'a').fechaBaja)
+
+  /*
+   * Y AL VOLVER SE BORRA. Quien se reincorpora no está de baja; dejarle la
+   * fecha puesta lo contaría como baja de aquel ejercicio Y como hermano
+   * activo hoy, en el mismo documento.
+   */
+  const vuelve = m.reactivarEnCenso(tramitada, 'b', true)
+  caso('quien vuelve deja de tener fecha de baja', undefined,
+    vuelve.find((h) => h.id === 'b').fechaBaja)
+  caso('y al final del escalafón, igual', undefined,
+    m.reactivarEnCenso(tramitada, 'b', false).find((h) => h.id === 'b').fechaBaja)
 }

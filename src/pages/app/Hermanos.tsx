@@ -37,6 +37,9 @@ import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/s
 import { useEtiquetas } from '../../lib/etiquetas'
 import { useCamposPropios, valorLegible } from '../../lib/camposPropios'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
+import CertificadoAntiguedad from '../../components/CertificadoAntiguedad'
+import { emitirCertificado, useCertificadosDe } from '../../lib/certificados'
+import { referenciaCertificado, type Certificado } from '../../data/certificados'
 import EditorSegmento from '../../components/EditorSegmento'
 import InformeImpreso from '../../components/InformeImpreso'
 import { etiquetaSegmento, filtrarSegmento, limpiarCriterios, mismosCriterios, type CriteriosSegmento } from '../../lib/segmentacion'
@@ -389,6 +392,44 @@ export default function Hermanos() {
    * decía «busca la que ya está y edítala» — mandando a hacer justo lo único
    * que no se podía hacer.
    */
+  /*
+   * EL CERTIFICADO DE ANTIGÜEDAD que se está expidiendo, o el que se acaba de
+   * expedir para poder imprimirlo. `null` = no hay ninguno abierto.
+   */
+  const [certificado, setCertificado] = useState<Certificado | null>(null)
+  const [motivoCert, setMotivoCert] = useState('')
+  const [expidiendo, setExpidiendo] = useState(false)
+  const [errorCert, setErrorCert] = useState<string | null>(null)
+  const { certificados, recargar: recargarCertificados } = useCertificadosDe(selected?.id ?? null)
+
+  /*
+   * Los cargos que firman el certificado y están vacantes. Se mira sobre el
+   * censo, que es de donde los saca la base al expedirlo.
+   */
+  const sinFirmantes = useMemo(
+    () => (['Hermano Mayor', 'Secretario/a'] as const)
+      .filter((cargo) => !hermanos.some((h) => h.cargo === cargo && h.estado !== 'Baja')),
+    [hermanos],
+  )
+
+  async function expedirCertificado() {
+    if (!selected || expidiendo) return
+    setExpidiendo(true)
+    setErrorCert(null)
+    const r = await emitirCertificado(selected.id, motivoCert.trim())
+    setExpidiendo(false)
+    if (!r.ok) {
+      // El mensaje de la base va TAL CUAL: los suyos están escritos para
+      // leerlos en pantalla, y cambiarlos por un «no se ha podido» le quita a
+      // quien está en secretaría la única pista de qué pasa.
+      setErrorCert(r.error)
+      return
+    }
+    setCertificado(r.certificado)
+    setMotivoCert('')
+    recargarCertificados()
+  }
+
   const [ident, setIdent] = useState({ nombre: '', dni: '', numero: '', antiguedad: '', fechaNacimiento: '' })
   const [identError, setIdentError] = useState<string | null>(null)
   const [identSaved, setIdentSaved] = useState(false)
@@ -1854,6 +1895,96 @@ export default function Hermanos() {
               )}
             </section>
 
+            {/*
+              EL CERTIFICADO DE ANTIGÜEDAD.
+
+              Lo prometía la portada —dos veces— y no existía en ninguna parte.
+              Es el papel que pide un hermano cuando tiene que acreditar ANTE
+              ALGUIEN que lo es y desde cuándo: para entrar en otra hermandad,
+              para el consejo, para una bolsa de caridad, para el varal que va
+              por antigüedad.
+
+              Va aquí, en su ficha, y no en una pantalla aparte: se pide de uno
+              en uno, mirando a la persona que lo está pidiendo.
+            */}
+            <section className="ficha-bloque">
+              <h4>Certificado de antigüedad</h4>
+              {selected.estado === 'Baja' ? (
+                /* De quien causó baja se puede certificar que LO FUE, y eso es
+                   otro papel con otro texto. Este dice, en presente, que figura
+                   inscrito; dárselo sería firmar algo que no es verdad. */
+                <p className="table-subtle">
+                  Figura de baja, así que no se le puede certificar que está inscrito. Ese sería
+                  otro documento, con otro texto.
+                </p>
+              ) : (
+                <>
+                  <p className="table-subtle">
+                    Acredita que es hermano/a desde <b>{selected.antiguedad}</b> y con qué número.
+                    Queda registrado con su número de orden, para poder responder por él si se lo
+                    piden a la hermandad.
+                  </p>
+                  {/*
+                    SI NO HAY QUIÉN FIRME, SE DICE ANTES DE EXPEDIRLO.
+                    El papel sale igual —con la línea y el título, como en
+                    papel— pero quien lo expide tiene que saber que va a salir
+                    sin nombres, y dónde se arregla. Enterarse al imprimirlo,
+                    con la persona esperando, es enterarse tarde.
+                  */}
+                  {sinFirmantes.length > 0 && (
+                    <p className="form-hint">
+                      Nadie figura como{' '}
+                      {sinFirmantes.map((cargo, i) => (
+                        <span key={cargo}>
+                          {i > 0 && ' ni como '}<b>{cargo}</b>
+                        </span>
+                      ))}
+                      {' '}en el censo, así que{' '}
+                      {sinFirmantes.length === 1 ? 'esa línea saldrá' : 'esas líneas saldrán'} sin nombre.
+                      Se pone en la ficha de quien lleve el cargo.
+                    </p>
+                  )}
+                  {errorCert && <div className="banner-inline banner-inline--warn" role="alert">{errorCert}</div>}
+                  <div className="form-row">
+                    <label htmlFor="motivoCert">Para qué lo pide</label>
+                    <input
+                      id="motivoCert"
+                      value={motivoCert}
+                      onChange={(e) => setMotivoCert(e.target.value)}
+                      placeholder="Solicitar el ingreso en otra hermandad, bolsa de caridad…"
+                    />
+                    <p className="form-hint">
+                      Sale escrito en el certificado y queda en el registro. Puedes dejarlo en
+                      blanco: entonces dice «para que conste donde proceda».
+                    </p>
+                  </div>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => void expedirCertificado()}
+                    disabled={expidiendo}
+                  >
+                    {expidiendo ? 'Expidiendo…' : 'Expedir certificado'}
+                  </button>
+
+                  {/* Lo primero que hace la secretaría cuando le piden uno es
+                      mirar si ya se lo dio, y con qué número. */}
+                  {certificados.length > 0 && (
+                    <ul className="ficha-bloque__filas">
+                      {certificados.map((c) => (
+                        <li key={c.id}>
+                          <b>Nº {referenciaCertificado(c)}</b>
+                          <span>{c.fecha}{c.motivo ? ` · ${c.motivo}` : ''}</span>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setCertificado(c)}>
+                            Ver
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </section>
+
             <dl className="ficha__list ficha__list--dos">
               <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>
               {selected.fechaNacimiento && (
@@ -2352,6 +2483,31 @@ export default function Hermanos() {
       {/* Solicitudes de alta pedidas desde el área del hermano */}
       {/* Documento imprimible: solo aparece en el papel (ver .screen-hidden). */}
       {informeImpreso}
+
+      {/*
+        EL CERTIFICADO, para verlo antes de imprimirlo.
+
+        Se enseña ENTERO en pantalla y no se manda directo a la impresora: es un
+        papel que sale de la hermandad con dos firmas, y quien lo expide tiene
+        que poder leerlo antes de dárselo a nadie. Ancho, porque es un A4.
+      */}
+      <Drawer
+        open={certificado !== null}
+        onClose={() => { setCertificado(null); setErrorCert(null) }}
+        title={certificado ? `Certificado nº ${referenciaCertificado(certificado)}` : 'Certificado'}
+        subtitle={certificado?.hermanoNombre}
+        ancho="ancho"
+        footer={
+          <>
+            <button className="btn btn-ghost" onClick={() => setCertificado(null)}>Cerrar</button>
+            <button className="btn btn-primary" onClick={() => window.print()}>
+              Imprimir / Descargar
+            </button>
+          </>
+        }
+      >
+        {certificado && <CertificadoAntiguedad certificado={certificado} hermandad={hermandad} />}
+      </Drawer>
 
       <Drawer
         open={bajasOpen}

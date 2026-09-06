@@ -149,6 +149,16 @@ export interface EstacionPenitencia {
   fechaSalida?: string
 }
 
+/**
+ * Si hay itinerario que enseñar. Vive aquí, junto al dato que mira, y no en el
+ * componente que lo pinta: lo pregunta también Cortejo para avisar de que está
+ * vacío, y un componente que además exporta funciones se recarga entero en
+ * cada guardado.
+ */
+export function hayItinerario(e: EstacionPenitencia): boolean {
+  return e.itinerario.some((p) => p.lugar.trim() || p.hora.trim())
+}
+
 /** Un cargo de la junta de gobierno. */
 export interface MiembroJunta {
   id: string

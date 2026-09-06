@@ -185,7 +185,15 @@ Para papeletas, donativos y lotería: **Redsys** (lo da el propio banco) o
 - Repaso a fondo de móvil y accesibilidad: **hecho** (fase P10). Las 19
   pantallas comprobadas a 390 px, sin desbordes, con el foco del teclado
   visible y sin texto ilegible.
-- Memoria anual y exportación a Excel: pendiente.
+- Memoria anual y exportación a Excel: **hecho**. La memoria del ejercicio
+  —censo con sus altas y bajas, cuotas, tesorería, estación de penitencia y
+  patrimonio— se imprime desde Informes y se descarga en `.xlsx`, igual que
+  los seis informes juntos, cada uno en su pestaña. El escritor de Excel es
+  propio (`lib/escribirExcel.ts`): los importes van como números con formato
+  de moneda, así que la columna se puede sumar. Para poder contar las bajas
+  DEL AÑO hizo falta guardar cuándo se tramita cada una (`hermanos.fecha_baja`);
+  las anteriores constan sin fecha y la memoria lo dice en vez de repartirlas
+  por ejercicios.
 - Verificación en dos pasos: la pantalla está; falta Supabase.
 - Manual de uso: pendiente.
 

@@ -1,151 +1,224 @@
 /**
- * LEER UN .XLSX DE VERDAD.
+ * EL .XLSX QUE ESCRIBIMOS, ¿LO ABRE ALGUIEN?
  *
- * Lo que había: la hermandad subía su censo en Excel y la aplicación
- * contestaba «ábrelo en Excel y guárdalo como CSV (delimitado por punto y
- * coma)». O sea, el primer paso de la puesta en marcha era mandarles a hacer a
- * mano una conversión que el programa puede hacer solo — y con tres opciones
- * de CSV en el desplegable de Excel, dos de las cuales rompen los acentos.
+ * Un Excel mal escrito no falla a medias. No se pierde una columna ni sale una
+ * celda rara: Excel dice «el archivo está dañado» y no abre NADA. Por un byte.
+ * Y quien se lo encuentra es el hermano mayor la mañana del cabildo, con la
+ * memoria del ejercicio dentro y sin manera de sacarla.
  *
- * Estas pruebas van contra un .xlsx GENERADO AQUÍ (`scripts/censo-de-prueba.mjs`,
- * que es el mismo que se le entrega a la hermandad para probar), no contra un
- * archivo fijo que podría haberse quedado viejo.
+ * Por eso esto no se prueba «a ojo abriendo el archivo». Se prueba de dos
+ * maneras, y las dos hacen falta:
+ *
+ *   · IDA Y VUELTA. Lo que escribe `escribirExcel.ts` se lee con
+ *     `leerExcel.ts`, que ya estaba y se escribió por separado, para importar
+ *     los censos que traen las hermandades de su programa viejo. Son dos
+ *     códigos distintos, escritos en momentos distintos y para cosas opuestas:
+ *     si el escritor se inventa el formato, el lector no lo entiende.
+ *
+ *   · EL CRC DE CADA ENTRADA, contra el de Node. El ZIP obliga a poner una
+ *     suma de comprobación por cada archivo de dentro; si no cuadra, el libro
+ *     se abre «dañado». Aquí se compara la que escribimos con la que calcula
+ *     `zlib.crc32`, que no es nuestra. Un CRC mal calculado pasa la ida y
+ *     vuelta —nuestro lector no lo mira— y luego Excel lo rechaza.
  */
-export default async function ({ cargar, caso }) {
-  const m = await cargar('src/lib/leerExcel.ts')
-  const { construirXlsx, construirCsv, CABECERAS, FILAS } = await import('../scripts/censo-de-prueba.mjs')
+import { crc32 as crc32DeNode } from 'node:zlib'
 
-  // --- Las referencias de celda ---
-  caso('la columna A es la 0', 0, m.columnaDeReferencia('A1'))
-  caso('la B es la 1', 1, m.columnaDeReferencia('B7'))
-  caso('la Z es la 25', 25, m.columnaDeReferencia('Z100'))
-  // Una hoja con más de 26 columnas pasa a dos letras. Un censo con campos
-  // propios las tiene.
-  caso('la AA es la 26', 26, m.columnaDeReferencia('AA1'))
-  caso('la BC es la 54', 54, m.columnaDeReferencia('BC12'))
-
-  // --- Reconocer el archivo ---
-  const xlsx = new Uint8Array(construirXlsx([CABECERAS, ...FILAS]))
-  caso('un .xlsx se reconoce', true, m.pareceXlsx(xlsx))
-  caso('un CSV no', false, m.pareceXlsx(new TextEncoder().encode('nombre;dni\nAna;123')))
-
-  // --- Leerlo ---
-  const filas = await m.leerXlsx(xlsx)
-  caso('salen todas las filas', FILAS.length + 1, filas.length)
-  caso('la primera es la cabecera', CABECERAS, filas[0])
-  caso('y la segunda, el primer hermano', FILAS[0], filas[1])
-  /*
-   * Los acentos y las eñes son la mitad del motivo de existir de esto: es lo
-   * que se rompe al guardar como CSV con la opción equivocada, y sale
-   * «MarÃ­a» en la ficha de una hermana.
-   */
-  caso('los acentos llegan enteros', 'Aguilar Ponce, María del Carmen', filas[1][1])
-  caso('las eñes también', true, filas.some((f) => f[1] === 'Ibáñez Muñoz, Nuria'))
-  caso('y la ñ de la cabecera', 'Nº Hermano', filas[0][0])
-
-  /*
-   * LO QUE MÁS DUELE SI SE HACE MAL: Excel se salta las celdas vacías. Una
-   * fila con la primera y la cuarta columna trae DOS celdas, no cuatro. Leerlas
-   * en orden correría los datos a la izquierda y los teléfonos acabarían en la
-   * casilla del DNI — y nadie lo notaría hasta llamar a alguien.
-   */
-  const conHuecos = new Uint8Array(construirXlsx([
-    ['A', 'B', 'C', 'D'],
-    ['uno', '', '', 'cuatro'],
-  ]))
-  const leidas = await m.leerXlsx(conHuecos)
-  caso('las celdas vacías no corren las columnas', 'cuatro', leidas[1][3])
-  caso('y el hueco queda vacío, no borrado', '', leidas[1][1])
-  caso('la fila mantiene su ancho', 4, leidas[1].length)
-
-  // Filas del todo vacías al final: Excel las guarda si alguien pinchó ahí, y
-  // llegarían al importador como «falta el nombre» una por una.
-  const conColas = new Uint8Array(construirXlsx([['A'], ['dato'], [''], ['']]))
-  caso('las filas vacías del final se caen', 2, (await m.leerXlsx(conColas)).length)
-
-  // --- Cuando no se puede ---
-  let motivo = ''
-  try {
-    await m.leerXlsx(new TextEncoder().encode('esto no es un zip ni de lejos'))
-  } catch (e) {
-    motivo = e.message
+/**
+ * Recorre el índice del ZIP y devuelve cada entrada con el CRC que lleva
+ * escrito y sus bytes. Se lee desde el final, que es como lo lee un programa
+ * de verdad, y no hacia delante como se escribió.
+ */
+function entradasDelZip(datos) {
+  const v = new DataView(datos.buffer, datos.byteOffset, datos.byteLength)
+  let fin = -1
+  for (let i = datos.length - 22; i >= 0; i--) if (v.getUint32(i, true) === 0x06054b50) { fin = i; break }
+  if (fin < 0) throw new Error('no hay final de ZIP')
+  const cuantas = v.getUint16(fin + 10, true)
+  let p = v.getUint32(fin + 16, true)
+  const salida = []
+  for (let i = 0; i < cuantas; i++) {
+    if (v.getUint32(p, true) !== 0x02014b50) throw new Error('índice del ZIP roto')
+    const crc = v.getUint32(p + 16, true)
+    const comprimido = v.getUint32(p + 20, true)
+    const largoNombre = v.getUint16(p + 28, true)
+    const extra = v.getUint16(p + 30, true)
+    const comentario = v.getUint16(p + 32, true)
+    const desplazamiento = v.getUint32(p + 42, true)
+    const nombre = new TextDecoder().decode(datos.subarray(p + 46, p + 46 + largoNombre))
+    p += 46 + largoNombre + extra + comentario
+    const desde = desplazamiento + 30
+      + v.getUint16(desplazamiento + 26, true) + v.getUint16(desplazamiento + 28, true)
+    salida.push({ nombre, crc, datos: datos.subarray(desde, desde + comprimido) })
   }
-  // El .xls de Excel 97 NO es un ZIP. Hay que decirlo con esas palabras, que
-  // es un paso mucho más fácil de dar que el del CSV.
-  caso('un archivo que no es Excel se dice claro', true, /\.xls de los antiguos/.test(motivo))
-  caso('y se dice qué hacer', true, /Guardar como/.test(motivo))
-
-  // --- El censo de prueba que se le entrega a la hermandad ---
-  caso('trae treinta hermanos', 30, FILAS.length)
-  caso('con un DNI repetido a propósito', 2, FILAS.filter((f) => f[2] === '12345678Z').length)
-  caso('una fila sin DNI', 1, FILAS.filter((f) => !f[2]).length)
-  caso('una fila sin nombre', 1, FILAS.filter((f) => !f[1]).length)
-  caso('dos de baja', 2, FILAS.filter((f) => f[9] === 'Sí').length)
-  caso('y un IBAN con espacios, como se copia de la libreta', true,
-    FILAS.some((f) => /^ES\d\d /.test(f[8])))
-
-  // El CSV gemelo, para quien prefiera ese camino.
-  const csv = construirCsv(FILAS)
-  caso('el CSV lleva BOM', true, csv.charCodeAt(0) === 0xfeff)
-  caso('y punto y coma, que es lo que suelta Excel en España', true, csv.includes(';'))
-
-  await elImportadorLoUsa({ cargar, caso, xlsx })
+  return salida
 }
 
-/** Y que el importador lo use de verdad, no solo que exista el lector. */
-async function elImportadorLoUsa({ cargar, caso, xlsx }) {
-  const { readFile } = await import('node:fs/promises')
-  const comp = (await readFile('src/components/ImportarCenso.tsx', 'utf8'))
-    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
-
-  /*
-   * Lee el LIBRO ENTERO, no la primera hoja.
-   *
-   * Una hermandad exporta su programa viejo en un solo libro con una pestaña
-   * por cosa. Con `leerXlsx` —que da la primera— el asistente del censo cogía
-   * la que hubiera delante (el inventario, o una portada sin datos) y decía
-   * «faltan columnas obligatorias» sobre un archivo que era el bueno.
-   */
-  caso('el importador lee el libro entero', true, /leerLibro\(/.test(comp))
-  caso('y elige la pestaña que es', true, /hojaDelCenso\(libro\)/.test(comp))
-  caso('lo reconoce por el contenido', true, /pareceXlsx\(/.test(comp))
-  /*
-   * SIN filtro de tipos en el selector.
-   *
-   * Con `accept` puesto, el cuadro de «abrir archivo» del sistema GRISEA todo
-   * lo demás: se ve el archivo, se pincha y no pasa nada, sin ningún mensaje.
-   * Llegó reportado como «no me deja seleccionar el archivo», y en el peor
-   * momento: el primer paso de la puesta en marcha. Basta con que el ordenador
-   * tenga el .xlsx registrado con otro tipo para que el filtro lo tape.
-   */
-  caso('el selector no filtra por tipo', false, /accept=/.test(comp))
-  caso('y lo decide la aplicación mirando el contenido', true, /pareceXlsx\(bytes\)/.test(comp))
-  // El mensaje de «conviértelo a CSV a mano» ya no tiene sentido.
-  caso('ya no manda convertir a CSV a mano', false, /usa Archivo → Guardar como → CSV/.test(comp))
-
-  /*
-   * Y lo importante: que lo leído por el lector encaje con lo que espera el
-   * emparejador de columnas. Un lector que funciona pero entrega cabeceras que
-   * nadie reconoce no sirve de nada — habría que emparejar las diez a mano.
-   */
+export default async function ({ cargar, caso }) {
+  const m = await cargar('src/lib/escribirExcel.ts')
   const leer = await cargar('src/lib/leerExcel.ts')
-  const imp = await cargar('src/lib/importar.ts')
-  const filas = await leer.leerXlsx(xlsx)
-  const propuesta = imp.proponerEmparejado(filas[0])
-  caso('reconoce «Apellidos y nombre»', 1, propuesta.nombre)
-  caso('reconoce «D.N.I.»', 2, propuesta.dni)
-  caso('reconoce «Nº Hermano»', 0, propuesta.numero)
-  caso('reconoce «Correo»', 5, propuesta.email)
-  caso('reconoce «Teléfono móvil»', 6, propuesta.telefono)
-  caso('reconoce «Nº de cuenta»', 8, propuesta.iban)
-  caso('reconoce «Fecha nacimiento»', 4, propuesta.fechaNacimiento)
 
-  /*
-   * «¿Está de baja?» con Sí/No significa lo CONTRARIO que una columna
-   * «Situación» con Sí/No. Si se lee al derecho, los 28 hermanos activos entran
-   * de baja y los dos de baja entran activos.
-   */
-  caso('y sabe que «¿Está de baja?» pregunta al revés', true, imp.cabeceraEsNegativa('¿Está de baja?'))
-  caso('«No» en esa columna es activo', 'Activo', imp.estadoDe('No', true))
-  caso('y «Sí» es baja', 'Baja', imp.estadoDe('Sí', true))
+  /* ------------------------------------------------------------------
+     El nombre de la pestaña
+
+     Sale de un título escrito por una persona («Cuotas 2025/26»), y esa
+     barra basta para que el libro entero se abra dañado.
+     ------------------------------------------------------------------ */
+  caso('nombre normal, tal cual', 'Censo', m.nombreDeHoja('Censo'))
+  caso('la barra fuera', 'Cuotas 2025 26', m.nombreDeHoja('Cuotas 2025/26'))
+  caso('corchetes y dos puntos fuera', 'Caja x del 1 al 31', m.nombreDeHoja('Caja [x]: del 1 al 31'))
+  caso('sin espacios de sobra al juntar', 'Cuotas 25 26', m.nombreDeHoja('Cuotas 25 / 26'))
+  caso('ni apóstrofo al principio o al final', 'Ntra Sra', m.nombreDeHoja("'Ntra Sra'"))
+  caso('el recorte no deja un espacio colgando', 'z'.repeat(31), m.nombreDeHoja('z'.repeat(31) + '   y'))
+  caso('máximo 31 caracteres', 31, m.nombreDeHoja('x'.repeat(60)).length)
+  caso('vacío no deja la pestaña sin nombre', 'Hoja', m.nombreDeHoja('   '))
+  caso('repetido se numera', 'Censo 2', m.nombreDeHoja('Censo', ['Censo']))
+  caso('repetido dos veces', 'Censo 3', m.nombreDeHoja('Censo', ['Censo', 'Censo 2']))
+  caso(
+    'el sufijo cabe dentro de los 31',
+    true,
+    m.nombreDeHoja('y'.repeat(31), ['y'.repeat(31)]).length <= 31,
+  )
+
+  /* --- La referencia de la celda, que es lo que numera las columnas --- */
+  caso('primera celda', 'A1', m.celda(0, 1))
+  caso('la 26 es la Z', 'Z1', m.celda(25, 1))
+  caso('la 27 es AA, no BA', 'AA1', m.celda(26, 1))
+  caso('la 28', 'AB7', m.celda(27, 7))
+
+  /* ------------------------------------------------------------------
+     IDA Y VUELTA con el lector que ya existía
+     ------------------------------------------------------------------ */
+  const CENSO = {
+    nombre: 'Censo',
+    columnas: ['Nº', 'Nombre', 'Cuota'],
+    filas: [
+      [1, 'Ruiz & Cía <hermanos>', 3600],
+      [2, 'María "la del Rocío"', 0],
+    ],
+  }
+  const CAJA = { nombre: 'Caja', columnas: ['Concepto', 'Importe'], filas: [['Cera', -12050]] }
+  const bytes = m.libroExcel([CENSO, CAJA])
+
+  caso('empieza por PK, como todo ZIP', true, bytes[0] === 0x50 && bytes[1] === 0x4b)
+  caso('nuestro propio lector lo reconoce', true, leer.pareceXlsx(bytes))
+
+  const libro = await leer.leerLibro(bytes)
+  caso('vuelven las dos pestañas', ['Censo', 'Caja'], libro.map((h) => h.nombre))
+  caso('la cabecera está', ['Nº', 'Nombre', 'Cuota'], libro[0].filas[0])
+  caso(
+    'el ampersand y los signos vuelven enteros',
+    ['1', 'Ruiz & Cía <hermanos>', '3600'],
+    libro[0].filas[1],
+  )
+  caso('y las comillas dobles también', 'María "la del Rocío"', libro[0].filas[2][1])
+  caso('los negativos no se pierden', ['Cera', '-12050'], libro[1].filas[1])
+
+  /* ------------------------------------------------------------------
+     LOS NÚMEROS, COMO NÚMEROS
+
+     Es toda la diferencia entre un Excel que suma la columna de importes y
+     uno que no. La ida y vuelta no lo distingue —el lector devuelve texto en
+     los dos casos—, así que hay que mirar el XML por dentro.
+     ------------------------------------------------------------------ */
+  const dentro = Object.fromEntries(
+    entradasDelZip(bytes).map((e) => [e.nombre, new TextDecoder().decode(e.datos)]),
+  )
+  const hoja1 = dentro['xl/worksheets/sheet1.xml']
+  caso('el importe va como número', true, hoja1.includes('<c r="C2"><v>3600</v></c>'))
+  caso('el cero también, y no como celda vacía', true, hoja1.includes('<c r="C3"><v>0</v></c>'))
+  caso('el nombre va como texto', true, hoja1.includes('<c r="B2" t="inlineStr">'))
+  caso('la cabecera nunca va como número', true, hoja1.includes('<c r="A1" s="2" t="inlineStr">'))
+
+  /* --- Las piezas que Excel exige. Sin una sola, «archivo dañado». --- */
+  caso('están las piezas del libro y sus dos hojas', [
+    '[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml',
+    'xl/_rels/workbook.xml.rels', 'xl/styles.xml',
+    'xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml',
+  ], entradasDelZip(bytes).map((e) => e.nombre))
+  // `styles.xml` no basta con que exista: si no está declarado en los dos
+  // sitios, Excel lo ignora o se queja del libro entero.
+  caso(
+    'y styles.xml está declarado en el índice de tipos',
+    true,
+    dentro['[Content_Types].xml'].includes('/xl/styles.xml'),
+  )
+  caso(
+    'y colgado del libro como relación',
+    true,
+    dentro['xl/_rels/workbook.xml.rels'].includes('Target="styles.xml"'),
+  )
+
+  /* ------------------------------------------------------------------
+     UN IMPORTE ES UN NÚMERO CON FORMATO, no un texto.
+
+     Que se pueda sumar la columna y que se lea «3.600,50 €» son las dos
+     mitades de lo mismo. Con el importe en texto no hay total; con el
+     número pelado, unas cuentas que ponen «3600,5».
+     ------------------------------------------------------------------ */
+  const conDinero = m.libroExcel([{
+    nombre: 'Cuotas',
+    columnas: ['Hermano', 'Importe'],
+    filas: [['Ana Sánchez', { euros: 3600.5 }], ['Juan Cabrera', { euros: -12.05 }]],
+  }])
+  const hojaDinero = new TextDecoder().decode(
+    entradasDelZip(conDinero).find((e) => e.nombre === 'xl/worksheets/sheet1.xml').datos,
+  )
+  caso('el importe va como número con formato', true, hojaDinero.includes('<c r="B2" s="1"><v>3600.5</v></c>'))
+  caso('y el negativo con su signo', true, hojaDinero.includes('<c r="B3" s="1"><v>-12.05</v></c>'))
+  caso(
+    'el formato de euros está definido',
+    true,
+    new TextDecoder().decode(entradasDelZip(conDinero).find((e) => e.nombre === 'xl/styles.xml').datos)
+      .includes('numFmtId="164"'),
+  )
+  const leidoDinero = await leer.leerLibro(conDinero)
+  caso('y el libro con importes se sigue abriendo', ['3600.5', '-12.05'],
+    leidoDinero[0].filas.slice(1).map((f) => f[1]))
+
+  /* ------------------------------------------------------------------
+     EL CRC, contra el de Node
+     ------------------------------------------------------------------ */
+  caso(
+    'cada entrada lleva su CRC bien calculado',
+    [],
+    entradasDelZip(bytes)
+      .filter((e) => e.crc !== crc32DeNode(Buffer.from(e.datos)))
+      .map((e) => e.nombre),
+  )
+
+  /* ------------------------------------------------------------------
+     EL BYTE DE CONTROL de un censo importado de un Access viejo (aquí se
+     mete a propósito, con su código, para que se vea cuál es). XML 1.0 no
+     lo admite: con uno solo, el libro entero se abre dañado.
+     ------------------------------------------------------------------ */
+  const VT = String.fromCharCode(11)
+  const sucio = m.libroExcel([{
+    nombre: 'Censo',
+    columnas: ['Domicilio'],
+    filas: [[`Calle Feria 3${VT}, 2º`]],
+  }])
+  const leido = await leer.leerLibro(sucio)
+  caso('el archivo con bytes de control sigue abriéndose', 1, leido.length)
+  caso('y el dato llega entero, solo sin el byte', 'Calle Feria 3, 2º', leido[0].filas[1][0])
+
+  /* --- Un libro sin hojas no lo abre Excel: se pone una vacía. --- */
+  caso('un libro sin datos también se abre', 1, (await leer.leerLibro(m.libroExcel([]))).length)
+
+  /* --- Dos pestañas con el mismo nombre rompen el archivo. --- */
+  const repes = m.libroExcel([
+    { nombre: 'Cuotas', columnas: ['a'], filas: [['x']] },
+    { nombre: 'Cuotas', columnas: ['b'], filas: [['y']] },
+  ])
+  caso(
+    'dos pestañas iguales se distinguen',
+    ['Cuotas', 'Cuotas 2'],
+    (await leer.leerLibro(repes)).map((h) => h.nombre),
+  )
+
+  /* --- Mismo dato, mismos bytes: si no, esto no se puede comprobar. --- */
+  caso(
+    'generado dos veces sale igual',
+    true,
+    Buffer.from(bytes).equals(Buffer.from(m.libroExcel([CENSO, CAJA]))),
+  )
 }

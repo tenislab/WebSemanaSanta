@@ -1,4 +1,5 @@
 import type { Hermano } from '../data/hermanos'
+import { hoyIso } from './hoy'
 
 /**
  * El escalafón: quién va delante de quién. Es lo más delicado de toda la
@@ -34,10 +35,18 @@ function enElEscalafon(h: { estado: string; numero: number; civil?: boolean }): 
  * todos los de número mayor descienden uno.
  */
 export function darDeBajaEnCenso<
-  T extends Pick<Hermano, 'id' | 'estado' | 'numero'> & { civil?: boolean; cargo?: unknown },
+  T extends Pick<Hermano, 'id' | 'estado' | 'numero'>
+    & { civil?: boolean; cargo?: unknown; fechaBaja?: string },
 >(
   censo: T[],
   hermanoId: string,
+  /**
+   * El día en que se tramita. Va como parámetro y no leyendo el reloj aquí
+   * dentro para que se pueda probar: es la fecha con la que esta baja entra en
+   * la memoria de un ejercicio y no del siguiente, y una prueba que dependa de
+   * cuándo se ejecuta no comprueba eso.
+   */
+  cuando: string = hoyIso(),
 ): T[] {
   const actual = censo.find((h) => h.id === hermanoId)
   if (!actual || actual.estado === 'Baja') return censo
@@ -73,7 +82,7 @@ export function darDeBajaEnCenso<
      * decida.
      */
     if (h.id === hermanoId) {
-      return { ...h, estado: 'Baja' as const, numero: 0, bajaSolicitada: false, cargo: null }
+      return { ...h, estado: 'Baja' as const, numero: 0, bajaSolicitada: false, cargo: null, fechaBaja: cuando }
     }
     // Solo descienden los que están DENTRO de la numeración activa: los de
     // baja ya están fuera (número 0) y no se tocan.
@@ -95,7 +104,8 @@ export function darDeBajaEnCenso<
  * en todos estos años no debe caer por debajo de quien vuelve.
  */
 export function reactivarEnCenso<
-  T extends Pick<Hermano, 'id' | 'estado' | 'numero' | 'antiguedad'> & { civil?: boolean },
+  T extends Pick<Hermano, 'id' | 'estado' | 'numero' | 'antiguedad'>
+    & { civil?: boolean; fechaBaja?: string },
 >(
   censo: T[],
   hermanoId: string,
@@ -115,12 +125,12 @@ export function reactivarEnCenso<
    * pedido nadie: lo único que se está diciendo es que el contratado vuelve.
    */
   if (actual.civil) {
-    return censo.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo' as const, numero: 0 } : h))
+    return censo.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo' as const, numero: 0, fechaBaja: undefined } : h))
   }
 
   if (!recuperarAntiguedad) {
     const siguiente = Math.max(0, ...censo.map((h) => h.numero)) + 1
-    return censo.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo' as const, numero: siguiente } : h))
+    return censo.map((h) => (h.id === hermanoId ? { ...h, estado: 'Activo' as const, numero: siguiente, fechaBaja: undefined } : h))
   }
 
   const activos = censo.filter(enElEscalafon).sort((a, b) => a.numero - b.numero)
@@ -140,7 +150,7 @@ export function reactivarEnCenso<
    */
   const suNumero = detras ? detras.numero : Math.max(0, ...activos.map((h) => h.numero)) + 1
   return censo.map((h) => {
-    if (h.id === hermanoId) return { ...h, estado: 'Activo' as const, numero: suNumero }
+    if (h.id === hermanoId) return { ...h, estado: 'Activo' as const, numero: suNumero, fechaBaja: undefined }
     if (enElEscalafon(h) && h.numero >= suNumero) return { ...h, numero: h.numero + 1 }
     return h
   })

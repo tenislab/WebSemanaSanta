@@ -17,18 +17,45 @@ interface DrawerProps {
  * Panel deslizante lateral reutilizable: ficha de hermano, alta de
  * hermano, y en próximas fases también papeletas y cuotas.
  */
+/*
+ * LOS CAJONES ABIERTOS, EN ORDEN, Y POR QUÉ HACE FALTA LLEVAR LA CUENTA.
+ *
+ * Cada cajón se apuntaba a `keydown` del documento por su cuenta, así que con
+ * DOS abiertos —el certificado encima de la ficha del hermano, la factura
+ * encima de la venta— Escape los cerraba LOS DOS a la vez: se cerraba el que se
+ * quería cerrar y, de propina, el de debajo, con lo que la persona volvía al
+ * listado sin haberlo pedido.
+ *
+ * Con la pila, solo el de arriba escucha. Vive fuera del componente a
+ * propósito: es una sola cosa compartida por todos los cajones de la
+ * aplicación, no una por cajón.
+ */
+const abiertos: symbol[] = []
+
 export default function Drawer({ open, onClose, title, subtitle, children, footer, ancho = 'normal' }: DrawerProps) {
   const panel = useRef<HTMLElement>(null)
+  // Una identidad por cajón, estable entre pintados: es lo que permite sacarlo
+  // de la pila exactamente a él y no al que ocupe su sitio.
+  const yo = useRef<symbol>(Symbol('cajón'))
   // El foco entra al abrir, no se escapa mientras está abierto y vuelve a la
   // fila desde la que se abrió al cerrar (ver el comentario largo de foco.ts).
   useFocoDeDialogo(open, panel)
   useEffect(() => {
     if (!open) return
+    const mio = yo.current
+    abiertos.push(mio)
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      // Solo el de arriba. Sin esto, el de debajo se cierra también.
+      if (abiertos[abiertos.length - 1] !== mio) return
+      onClose()
     }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      const i = abiertos.lastIndexOf(mio)
+      if (i !== -1) abiertos.splice(i, 1)
+    }
   }, [open, onClose])
 
   if (!open) return null

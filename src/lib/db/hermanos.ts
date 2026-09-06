@@ -43,6 +43,7 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
     baja_solicitada: h.bajaSolicitada ?? false,
     baja_solicitada_el: h.bajaSolicitadaEl ?? null,
     motivo_baja: h.motivoBaja ?? null,
+    fecha_baja: h.fechaBaja ?? null,
     /* El cargo va EN LA FICHA: es lo que hace que una persona sea una sola
        persona y no dos (hermano nº 47 por un lado, «personal» por otro).
        Quien manda esto no decide nada: en la base hay un disparador que
@@ -106,6 +107,7 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     bajaSolicitada: Boolean(r.baja_solicitada),
     bajaSolicitadaEl: (r.baja_solicitada_el as string | null) ?? undefined,
     motivoBaja: (r.motivo_baja as string | null) ?? undefined,
+    fechaBaja: (r.fecha_baja as string | null) ?? undefined,
     cargo: (r.cargo as Cargo | null) ?? null,
     civil: Boolean(r.civil),
   }

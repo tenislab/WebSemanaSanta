@@ -1768,6 +1768,32 @@ span.logo-mark img { width: 100%; height: 100%; }
 .dash-head__link:hover { text-decoration: underline; }
 
 .form-hint { font-size: 0.8rem; color: var(--text-muted); margin: 0; line-height: 1.5; }
+/* La misma pista, pero cuando avisa de una limitación de lo que se está a
+   punto de generar. Con filete a la izquierda para que no se lea como una
+   explicación más: es lo único de la tarjeta que hay que leer entero. */
+.form-hint--aviso {
+  margin-top: 0.7rem;
+  padding: 0.55rem 0.75rem;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 0 6px 6px 0;
+}
+/* La fila que encabeza la lista de informes: la explicación a la izquierda y
+   el botón de bajarlos todos a la derecha. El texto lleva `flex: 1 1 22rem`
+   —no un ancho suelto— porque el contenedor envuelve: sin base mínima, el
+   párrafo ocupaba la fila entera y tiraba el botón a una segunda línea aunque
+   sobrara sitio a su lado. Por debajo de esas 22rem sí baja, que es cuando
+   ponerlos en fila deja el texto en una columna de tres palabras. */
+.informes-lista__head {
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+.informes-lista__head p { flex: 1 1 22rem; }
+.informes-lista__head .btn { flex: none; }
+@media (max-width: 640px) {
+  .informes-lista__head { align-items: stretch; }
+}
 .form-hint--error { color: var(--err-fg); }
 .form-hint--ok { color: var(--ok-fg); }
 /* El aviso que no es un error: «esto ya lo has empezado», «espera un momento». */
@@ -2290,6 +2316,60 @@ span.logo-mark img { width: 100%; height: 100%; }
 .estado-cuentas__table td { padding: 0.4rem 0; font-size: 0.88rem; border-bottom: 1px dashed var(--line); }
 .estado-cuentas__importe { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .estado-cuentas__total td { font-weight: 700; border-bottom: none; border-top: 1px solid var(--line-strong); padding-top: 0.6rem; }
+
+/* ── LA MEMORIA DEL EJERCICIO ──────────────────────────────────────────────
+   Hereda del estado de cuentas: es el mismo papel, con la misma caja y la
+   misma tipografía, y las dos se leen seguidas en el mismo cabildo. Aquí
+   solo va lo que la memoria tiene y aquel no: la línea de ayuda debajo de
+   cada concepto, las advertencias y el pie de firmas.                        */
+.memoria-doc__bloque { break-inside: avoid; }
+/* Lo que explica de dónde sale una cifra, debajo de su nombre y en pequeño:
+   quien lee la memoria seis meses después no tiene a quién preguntarle. */
+.memoria-doc__ayuda {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin-top: 0.1rem;
+}
+/* La advertencia va IMPRESA, no solo en la pantalla de quien lo genera. Con
+   filete a la izquierda para que se distinga de una nota al pie cualquiera. */
+.memoria-doc__nota {
+  margin: 0 0 0.7rem;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  break-inside: avoid;
+}
+.memoria-doc__vacio { margin: -0.4rem 0 0.9rem; font-size: 0.82rem; color: var(--text-muted); }
+.memoria-doc__num { font-variant-numeric: tabular-nums; white-space: nowrap; width: 1%; padding-right: 1rem !important; }
+/* Las firmas, al pie y sin partirse entre dos hojas. */
+.memoria-doc__firmas {
+  display: flex;
+  gap: 2.5rem;
+  margin: 2.2rem 0 1.2rem;
+  break-inside: avoid;
+}
+.memoria-doc__firmas > div { flex: 1; text-align: center; }
+.memoria-doc__firmas b { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+.memoria-doc__linea {
+  display: block;
+  height: 2.4rem;
+  border-bottom: 1px solid var(--line-strong);
+  margin-bottom: 0.4rem;
+}
+@media print {
+  /* En papel el filete de color no se ve, así que la advertencia se marca
+     con un borde de verdad: es la parte del documento que más importa que
+     no pase desapercibida. */
+  .memoria-doc__nota {
+    border: 0.6pt solid #999 !important;
+    border-left: 2pt solid #000 !important;
+  }
+}
 
 /* =========================================================================
    Selector de hermano con búsqueda (Cuotas, Papeletas…)
@@ -4799,6 +4879,80 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
  * web. Es la única cifra de esta pantalla que pide levantar el teléfono.
  */
 .tienda-sobrevendido { color: var(--err-fg); }
+
+/* =========================================================================
+   El certificado de antigüedad
+   -------------------------------------------------------------------------
+   Un papel que sale de la hermandad y lo lee alguien de fuera. Va con la
+   caja del recibo —misma cabecera, mismo pie— y solo cambia lo de dentro:
+   el cuerpo se lee como una carta, no como una tabla.
+   ========================================================================= */
+.certificado-doc__titulo {
+  margin: 0; text-align: center; font-size: 1.15rem; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text);
+}
+/* Interlineado de documento y sangría en los párrafos: es lo que hace que se
+   lea como un certificado y no como una pantalla. */
+.certificado-doc__cuerpo { display: flex; flex-direction: column; gap: 0.9rem; line-height: 1.75; }
+.certificado-doc__cuerpo p { margin: 0; text-align: justify; }
+.certificado-doc__cuerpo p + p { text-indent: 1.5rem; }
+/* «CERTIFICA:» va solo, centrado y sin sangría: es la bisagra del documento. */
+.certificado-doc__certifica {
+  text-align: center !important; text-indent: 0 !important;
+  font-weight: 700; letter-spacing: 0.12em; margin: 0.4rem 0 !important;
+}
+.certificado-doc__lugar { text-indent: 0 !important; margin-top: 0.8rem !important; }
+
+/* LAS DOS FIRMAS. El hueco entre la línea y el nombre es para firmar y sellar
+   a mano, que es como se termina este papel; sin él, el sello tapa el nombre. */
+.certificado-doc__firmas {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+  margin-top: 2.5rem; text-align: center; font-size: 0.88rem;
+}
+.certificado-doc__firmas > div { display: flex; flex-direction: column; align-items: center; }
+.certificado-doc__vb { font-weight: 700; letter-spacing: 0.08em; margin-bottom: 3.2rem; }
+.certificado-doc__linea { width: 100%; border-top: 1px solid var(--text); margin-bottom: 0.4rem; }
+.certificado-doc__firmas span:last-child { color: var(--text-muted); }
+
+/* =========================================================================
+   El itinerario, en la hoja que se lleva a la calle
+   ========================================================================= */
+.itinerario-doc { margin-bottom: 1.4rem; }
+.itinerario-doc h3 { margin: 0 0 0.2rem; font-size: 1rem; }
+.itinerario-doc__cabecera { margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--text-muted); }
+/*
+ * A DOS COLUMNAS: un recorrido de treinta calles a una columna se come una hoja
+ * entera antes de empezar los tramos, y la hoja del cortejo tiene que caber en
+ * lo que cabe. `break-inside: avoid` para que una parada no se parta por la
+ * mitad entre columna y columna.
+ */
+.itinerario-doc__lista {
+  list-style: none; margin: 0; padding: 0;
+  columns: 2; column-gap: 1.6rem; font-size: 0.86rem;
+}
+.itinerario-doc__lista li {
+  display: flex; gap: 0.6rem; padding: 0.18rem 0;
+  break-inside: avoid; -webkit-column-break-inside: avoid;
+}
+/* La hora con cifras de ancho fijo: la columna se lee bajando el dedo. */
+.itinerario-doc__hora {
+  font-variant-numeric: tabular-nums; color: var(--text-muted);
+  min-width: 3.1rem; flex: none;
+}
+/* Los hitos —salida, carrera oficial, entrada— en negrita y con su hora en el
+   color del texto: son los tres momentos que se miran de verdad. */
+.itinerario-doc__hito { font-weight: 700; }
+.itinerario-doc__hito .itinerario-doc__hora { color: var(--text); }
+.itinerario-doc__nota {
+  margin: 0.6rem 0 0; font-size: 0.82rem; color: var(--text-muted);
+  padding-top: 0.5rem; border-top: 1px solid var(--line);
+}
+@media (max-width: 560px) {
+  .itinerario-doc__lista { columns: 1; }
+}
+@media (max-width: 560px) {
+  .certificado-doc__firmas { grid-template-columns: 1fr; gap: 2.5rem; }
+}
 
 /* ---- Mis reservas de la tienda, en el área del hermano ---- */
 .mis-reservas__item { margin-bottom: 0.6rem; }

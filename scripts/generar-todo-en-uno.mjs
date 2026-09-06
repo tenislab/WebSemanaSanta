@@ -83,6 +83,7 @@ export const PIEZAS = [
   ['campanas-y-proyectos.sql', 'Campañas de recaudación con su barra, y proyectos a largo plazo'],
   ['baja-de-hermano.sql', 'La baja de un hermano, entera y sin romper el escalafón'],
   ['campana-con-partida.sql', 'Enlazar una campaña a sus partidas: la barra se llena sola'],
+  ['certificados.sql', 'El certificado de antigüedad que pide un hermano para acreditarlo fuera'],
   ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
   ['pago-tarjeta.sql', 'Que el hermano pague su cuota o su papeleta con tarjeta'],
 ]

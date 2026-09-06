@@ -50,6 +50,44 @@ export function formatCurrency(value: number) {
   return currency.format(value)
 }
 
+/**
+ * EL CAMINO DE VUELTA: de «3.600,50 €» al número 3600,5.
+ *
+ * Hace falta para exportar a Excel. Los informes se arman con los importes YA
+ * ESCRITOS —así se ven en pantalla, así se imprimen y así salen en el CSV—, y
+ * un Excel donde la columna de importes es texto no se puede sumar. Que es lo
+ * primero que hace quien lo abre: seleccionar la columna y mirar el total.
+ *
+ * Es la inversa EXACTA de `formatCurrency`, y hay una prueba que las cruza en
+ * los dos sentidos para que no se separen. Por eso es estricta: si lo que
+ * llega no tiene la forma que escribe esa función, devuelve `null` y la celda
+ * se queda como texto. Prefiero una columna sin sumar a un número inventado
+ * dentro de unas cuentas.
+ *
+ * Los dos detalles que la dejarían coja:
+ *
+ *   · `Intl` en español separa el importe del € con un ESPACIO FINO —no un
+ *     espacio normal—, y el punto de los miles no es el decimal: en «1.234»,
+ *     ese punto son los miles, no 1,234.
+ *   · Tesorería antepone el menos tipográfico «−» (U+2212), que no es el guion
+ *     del teclado. Sin contemplarlo, todos los gastos se exportarían en
+ *     positivo: un Excel que suma la caja al revés.
+ */
+export function importeDeTexto(texto: string): number | null {
+  const t = texto.trim()
+  // El símbolo es obligatorio: sin él esto no es un importe nuestro, y hay
+  // columnas de números que no son dinero (el número de hermano, el aforo).
+  if (!t.endsWith('€')) return null
+  const cuerpo = t.slice(0, -1).replace(/[\s\u00a0\u202f]/g, '')
+  const negativo = cuerpo.startsWith('-') || cuerpo.startsWith('\u2212')
+  const cifras = negativo ? cuerpo.slice(1) : cuerpo
+  if (!/^\d{1,3}(\.\d{3})*(,\d+)?$|^\d+(,\d+)?$/.test(cifras)) return null
+  const n = Number(cifras.replace(/\./g, '').replace(',', '.'))
+  if (!Number.isFinite(n)) return null
+  // El cero no lleva signo, y «-0» en una hoja de cálculo se lee raro.
+  return negativo && n !== 0 ? -n : n
+}
+
 export function formatDate(date: Date) {
   return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }

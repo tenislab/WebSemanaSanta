@@ -108,6 +108,19 @@ export interface Hermano {
    * pagar se resuelve hablando; enterarse un año después, no).
    */
   motivoBaja?: string
+  /**
+   * CUÁNDO SE TRAMITÓ LA BAJA (ISO aaaa-mm-dd). No es `bajaSolicitadaEl`: esa
+   * es cuándo la PIDIÓ él, y entre pedirla y tramitarla pueden pasar meses —o
+   * puede no haberla pedido nadie, porque la da la secretaría.
+   *
+   * Es la fecha que cuenta para la memoria del ejercicio: cuántos hermanos
+   * entraron y cuántos salieron este año. Sin ella solo se podía dar el total
+   * acumulado de bajas desde que existe la hermandad, que no responde a nada.
+   *
+   * Vacía en las bajas anteriores a este campo, y la memoria lo dice así en
+   * vez de colocarlas en un ejercicio cualquiera.
+   */
+  fechaBaja?: string
   /** Fecha de nacimiento (ISO yyyy-mm-dd), para segmentar por edad (mayores/menores). Opcional. */
   fechaNacimiento?: string
   /**

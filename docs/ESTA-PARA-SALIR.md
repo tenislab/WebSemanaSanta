@@ -78,7 +78,7 @@ Están dichos también dentro de la aplicación, no solo aquí.
 | **La importación no crea las cuentas de acceso** de los hermanos. Entran al censo y la hermandad trabaja con ellos, pero para entrar en *su* área hay que darles acceso desde su ficha. Y quien no tiene correo no puede tener cuenta | Medio, y en parte no tiene arreglo: una cuenta necesita un correo |
 | **Sin correo saliente**, los avisos al hermano solo se ven si entra | Alto mientras no se conecte |
 | **La numeración del escalafón no se ha validado con una hermandad real.** La lógica está probada (30 casos) pero cada casa tiene sus costumbres | Alto: es lo que más duele si sale mal |
-| **Memoria anual y exportación completa a Excel**: no están | Bajo |
+| **Las bajas anteriores a septiembre de 2026 no tienen fecha.** La memoria del ejercicio cuenta las altas y las bajas del año; las bajas de antes de que se guardara la fecha no se pueden atribuir a ningún año, y salen contadas aparte y dichas | Bajo, y va a menos: solo afecta al histórico ya cargado |
 | **Verificación en dos pasos**: la pantalla está, falta conectarla | Bajo |
 
 ---

@@ -134,3 +134,48 @@ begin
       on movimientos (hermandad_id, origen) where origen is not null;
   end if;
 end $$;
+
+/*
+ * LOS MODELOS DE DOCUMENTO Y EL HISTORIAL DE ASISTENCIA.
+ *
+ * Tres más de la misma clase, y las tres las escribe `guardarPlantilla()`:
+ *
+ *   · `asistencia` — quién salió cada año. Es el HISTORIAL del hermano, el que
+ *     se mira en su ficha para saber cuántas veces ha hecho estación. Sin la
+ *     columna, marcar la asistencia el Viernes Santo no guardaba NADA: la
+ *     pantalla lo enseñaba marcado —React ya tenía el dato— y al año siguiente
+ *     no constaba ninguna edición. Se reportó como «no se cargan los años que
+ *     han salido», y era literalmente cierto.
+ *
+ *   · `modelo_papeleta` y `modelo_recibo` — el diseño con el que se imprimen.
+ *     Se editaban, se veían bien en la vista previa, y al recargar volvía el de
+ *     fábrica.
+ *
+ * Las crea `plantillas-hermandad.sql`, que solo va en el instalador. Mismo
+ * reparto torcido que dejó fuera `hora_citacion` y `movimientos.origen`: la
+ * intención era la correcta —`alter table` para las bases que ya existen— y lo
+ * que falla es que ese fichero no llega a ninguna base que ya exista.
+ */
+alter table hermandad_settings add column if not exists asistencia jsonb;
+alter table hermandad_settings add column if not exists modelo_papeleta jsonb;
+alter table hermandad_settings add column if not exists modelo_recibo jsonb;
+
+/*
+ * CUÁNDO SE FUE CADA UNO.
+ *
+ * La ficha guardaba el estado («Baja») y, si la pidió él desde su área, la
+ * fecha en que la PIDIÓ. Lo que no había en ninguna parte es cuándo se
+ * tramitó. Y sin esa fecha no existe una pregunta que se hace una vez al año,
+ * en el cabildo general de cuentas: cuántos hermanos entraron y cuántos
+ * salieron en el ejercicio.
+ *
+ * Las altas sí se podían contar —el año de entrada está en `antiguedad`—, así
+ * que la memoria salía coja por un lado nada más: tantas altas, y de bajas
+ * solo el total acumulado desde que existe la hermandad, que no dice nada.
+ *
+ * Se queda NULA en las bajas de antes de esta columna, y así lo dice la
+ * memoria: «sin fecha registrada». Inventarles una fecha —la de hoy, la del
+ * día de la migración— sería peor que no tenerla: metería en el ejercicio
+ * bajas de hace veinte años.
+ */
+alter table hermanos add column if not exists fecha_baja date;

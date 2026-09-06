@@ -11,6 +11,7 @@ import { isSupabaseConfigured } from './supabase'
  */
 export const CLAVES_DATOS = {
   hermanos: 'cabildo-hermanos',
+  certificados: 'cabildo-certificados',
   cuotas: 'cabildo-cuotas',
   papeletas: 'cabildo-papeletas',
   incidencias: 'cabildo-incidencias',

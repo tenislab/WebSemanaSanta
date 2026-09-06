@@ -6,6 +6,8 @@ import Drawer from '../../components/Drawer'
 import HermanoPicker from '../../components/HermanoPicker'
 import { hermanosAsignables } from '../../lib/asignables'
 import { LogoMark } from '../../components/Logo'
+import ItinerarioCortejo from '../../components/ItinerarioCortejo'
+import { useWebPublica, hayItinerario, type EstacionPenitencia } from '../../lib/webPublica'
 import AsistenciaTramo from '../../components/AsistenciaTramo'
 import { useAsistencias, registroDe } from '../../lib/asistencia'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
@@ -78,6 +80,12 @@ export default function Cortejo() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const registrador = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Secretaría'
   const hermandad = useHermandadSettings(fallbackNombre)
+  /*
+   * EL ITINERARIO SE LEE DE LA WEB, que es donde ya estaba y donde se edita.
+   * No hay un segundo recorrido que mantener: dos copias del itinerario son
+   * dos horarios distintos el Viernes Santo.
+   */
+  const [web] = useWebPublica()
   const tramos = useTramos()
   const campana = useCampana()
   const edicionActual = campana.anio
@@ -739,6 +747,7 @@ export default function Cortejo() {
             tramo={tramoAbierto}
             reparto={repartoAbierto}
             hermandad={hermandad}
+            estacion={web.estacion}
             diaDeSalida={diaDeSalida}
             onPresente={marcarPresente}
             onIncidencia={setIncidenciaPara}
@@ -843,6 +852,21 @@ export default function Cortejo() {
           </>
         }
       >
+        {/*
+          SI NO HAY ITINERARIO, SE DICE AQUÍ Y NO EN EL PAPEL.
+
+          El recorrido se escribe en Web pública, y quien organiza el cortejo no
+          tiene por qué saberlo. Sin este aviso, se imprimían cuarenta hojas y el
+          hueco del itinerario se descubría al repartirlas.
+        */}
+        {!hayItinerario(web.estacion) && (
+          <p className="form-hint no-print">
+            Todavía no hay itinerario, así que la hoja saldrá solo con los tramos. El recorrido
+            con sus horas de paso se escribe en{' '}
+            <Link to="/app/web" className="dash-head__link">Web pública → Estación de penitencia</Link>,
+            y desde ahí sale a la vez en la web y en este papel.
+          </p>
+        )}
         <div className="cortejo-orden print-doc">
           {/* Se repite en cada hoja: un cortejo largo se reparte por tramos y
               la hoja suelta tiene que decir de qué documento es. */}
@@ -858,6 +882,10 @@ export default function Cortejo() {
               <p className="eyebrow">Orden del cortejo · Edición {edicionActual}</p>
             </div>
           </div>
+          {/* EL ITINERARIO, ANTES DE LOS TRAMOS. Faltaba entero: se podía
+              imprimir el orden del cortejo y no el recorrido, que es la mitad
+              de lo que se lleva a la calle. */}
+          <ItinerarioCortejo estacion={web.estacion} />
           {tramos.map((t) => {
             const reparto = (repartos.get(t.id) ?? []).filter((a) => a.estado !== 'Excede aforo')
             return (
@@ -1031,6 +1059,7 @@ function TramoFicha({
   tramo,
   reparto,
   hermandad,
+  estacion,
   diaDeSalida,
   onPresente,
   onIncidencia,
@@ -1040,6 +1069,8 @@ function TramoFicha({
   tramo: Tramo
   reparto: Asignacion[]
   hermandad: HermandadSettings
+  /** El recorrido con sus horas: va en la hoja que el diputado lleva encima. */
+  estacion: EstacionPenitencia
   diaDeSalida: boolean
   onPresente: (papeletaId: string) => void
   onIncidencia: (papeletaId: string) => void
@@ -1163,6 +1194,10 @@ function TramoFicha({
             <p className="eyebrow">Listado de tramo · Edición {edicionActual}</p>
           </div>
         </div>
+        {/* EL RECORRIDO, en la hoja que el diputado lleva por la calle: la
+            pregunta que le hacen cada diez minutos es a qué hora se pasa por
+            tal sitio. */}
+        <ItinerarioCortejo estacion={estacion} />
         <div className="cortejo-orden__tramo">
           <h3>
             {etiquetaTramo(tramo)}

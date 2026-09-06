@@ -275,6 +275,7 @@ export default async function ({ caso }) {
   await laTiendaVendeYCuadra({ sql, caso })
   await laTiendaDeLaWebApartaYNoCobra({ sql, caso })
   await elPrecioDeHermanoLlegaALaWeb({ sql, caso })
+  await elCertificadoDeAntiguedad({ sql, caso })
   await laFacturaCuadraConLaBase({ sql, caso })
   await elPrecioRebajadoEsElMismoEnLosDosSitios({ sql, caso })
   await losDatosDeLaTiendaCuadran({ sql, caso })
@@ -449,6 +450,20 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
     drop table if exists suscriptores_web cascade;
     alter table hermandad_settings drop column if exists ajustes_cuotas;
     alter table hermandad_settings drop column if exists etiquetas;
+    /*
+     * Y LAS COLUMNAS QUE SE QUEDABAN FUERA, que es de donde salían cuatro de
+     * los fallos que se reportaron y ninguno daba un error entendible: cuando
+     * la aplicación escribe en una columna que no está, Postgres rechaza LA
+     * FILA ENTERA. En pantalla se ve bien —React ya tiene el dato— y solo al
+     * recargar aparece que no se guardó nada.
+     */
+    alter table tramos drop column if exists hora_citacion;
+    alter table cuotas drop column if exists metodo_cobro;
+    alter table papeletas drop column if exists motivo_anulacion;
+    alter table movimientos drop column if exists origen;
+    alter table hermandad_settings drop column if exists asistencia;
+    alter table hermandad_settings drop column if exists modelo_papeleta;
+    alter table hermandad_settings drop column if exists modelo_recibo;
     delete from storage.buckets where id in ('imagenes', 'copias');
     insert into hermandades (id, nombre) values ('${HDAD}', 'Hermandad de antes') on conflict do nothing;
     select sembrar_permisos_de_fabrica('${HDAD}');
@@ -467,6 +482,60 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
     return
   }
   caso('ACTUALIZAR.sql se ejecuta sin un solo error', 'ok', 'ok')
+
+  /*
+   * Y AHORA LO QUE DE VERDAD IMPORTA: que los cuatro fallos reportados dejen de
+   * pasar. No basta con que la columna exista — hay que ESCRIBIR en ella, que
+   * es lo que la aplicación hace y lo que fallaba.
+   *
+   * Los cuatro se reportaron por separado y sin relación aparente:
+   *   «la hora se borra al recargar» · «ver recibos falla» ·
+   *   «mejorar el botón de anular» · «no se cargan los años que han salido».
+   * Y los cuatro eran lo mismo: una columna que no llegaba.
+   */
+  // Un hermano de verdad: `cuotas.hermano_id` y `papeletas.hermano_id` son
+  // obligatorios y con clave ajena, así que sin él no se puede probar nada.
+  await sql(`
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, email)
+    values ('${HDAD}'::uuid, ${"'" + 'aaaaaaaa-0000-0000-0000-0000000000f1' + "'"}, 'x', 'x', 0, 'Activo', 'x')
+    on conflict do nothing;`).catch(() => {})
+  const HNO = 'aaaaaaaa-0000-0000-0000-0000000000f1'
+  await sql(`
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, email)
+    values ('${HNO}', '${HDAD}', 'Quien sea', '79000001A', 9001, 'Activo', 'quiensea@ejemplo.es')
+    on conflict (id) do nothing;`)
+
+  const seGuarda = async (que, sentencia) => {
+    try { await sql(sentencia); return 'sí' } catch (e) {
+      if (process.env.GOBERGO_VERBOSO) console.log(`   [${que}]`, String(e?.stderr ?? e).split('\n')[0])
+      return 'no'
+    }
+  }
+  caso('ya se puede guardar la hora de citación de un tramo', 'sí', await seGuarda('tramo', `
+    insert into tramos (id, nombre, cuerpo, capacidad, tipo, reparto, precio, hora_citacion, etiqueta, orden, hermandad_id)
+    values (gen_random_uuid(), 'Tramo de prueba', 'Cruz de guía', 10, 'Cirio', 'numero', 0,
+            '17:45', 'A', 1, '${HDAD}');`))
+  caso('y el cobro de una cuota con su método', 'sí', await seGuarda('cuota', `
+    insert into cuotas (id, hermano_id, concepto, importe, estado, numero, metodo_cobro, hermandad_id)
+    values (gen_random_uuid(), '${HNO}', 'Cuota 2027', 30, 'Pagada', 9001, 'Bizum', '${HDAD}');`))
+  caso('y el motivo por el que se anula una papeleta', 'sí', await seGuarda('papeleta', `
+    insert into papeletas (id, hermano_id, numero, anio, importe, estado, motivo_anulacion, hermandad_id)
+    values (gen_random_uuid(), '${HNO}', 9001, 2027, 20, 'Anulada', 'se equivocó de tramo', '${HDAD}');`))
+  caso('y un apunte de tesorería con su origen', 'sí', await seGuarda('movimiento', `
+    insert into movimientos (hermandad_id, numero, fecha, concepto, categoria, tipo, importe, cuenta, estado, origen)
+    values ('${HDAD}', 9001, '2027-01-01', 'Prueba', 'Otros ingresos', 'Ingreso', 10, 'Caja', 'Pendiente', 'prueba:1');`))
+  /*
+   * Y EL HISTORIAL DE ASISTENCIA, que es el que más se notaba: sin la columna,
+   * marcar quién salió el Viernes Santo no guardaba nada y al año siguiente no
+   * constaba ninguna edición.
+   */
+  caso('y el historial de quién salió cada año', 'sí', await seGuarda('asistencia', `
+    insert into hermandad_settings (hermandad_id, asistencia, modelo_papeleta, modelo_recibo)
+    values ('${HDAD}', '{"2026": ["h1"]}'::jsonb, '{}'::jsonb, '{}'::jsonb)
+    on conflict (hermandad_id) do update set asistencia = excluded.asistencia;`))
+  caso('y se puede volver a leer', '{"2026": ["h1"]}', (await sql(
+    `select asistencia::text from hermandad_settings where hermandad_id = '${HDAD}'`))
+    .split('\n').map((x) => x.trim()).filter((x) => x.startsWith('{')).pop() ?? '')
 
   /*
    * EL INFORME DEL FINAL tiene que decir que sí a todo, menos a `pg_cron` —que
@@ -3664,4 +3733,124 @@ async function elPrecioDeHermanoLlegaALaWeb({ sql, caso }) {
     if (solo(await sql(`select estado from reservas_tienda where hermano_id = ${COST}`)) !== 'anulada') toca = 'no'
   } catch { toca = 'no' }
   caso('pero no puede tocarla', 'no', toca)
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *   EL CERTIFICADO DE ANTIGÜEDAD
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Es de los pocos papeles que la hermandad emite HACIA FUERA: lo lee alguien
+ * que no puede comprobar nada de lo que dice. Eso manda sobre todo lo demás.
+ *
+ * LO QUE SE COMPRUEBA, y ninguna de las seis sobra:
+ *
+ *   1. Que lo expide la secretaría y no cualquiera con cuenta.
+ *   2. Que TODO lo que se imprime lo resuelve la base. Si el nombre o la
+ *      antigüedad viajaran desde el navegador, cualquiera se expediría un
+ *      certificado de 1950 — y este papel se enseña donde nadie lo comprueba.
+ *   3. Que los datos quedan COPIADOS: corregir la ficha después no reescribe
+ *      un papel que ya está firmado y en manos de alguien.
+ *   4. Que el número no se repite ni deja huecos dentro del año.
+ *   5. Que a un hermano de baja NO se le certifica que está inscrito.
+ *   6. Y que el propio hermano ve el suyo, y solo el suyo.
+ */
+async function elCertificadoDeAntiguedad({ sql, caso }) {
+  const H = "'ea000000-0000-0000-0000-0000000000ea'"
+  const USECRE = "'eb000000-0000-0000-0000-0000000000eb'"
+  const SECRE = "'ec000000-0000-0000-0000-0000000000ec'"
+  const UPEON = "'ed000000-0000-0000-0000-0000000000ed'"
+  const PEON = "'ee000000-0000-0000-0000-0000000000ee'"
+  const UOTRO = "'ef000000-0000-0000-0000-0000000000ef'"
+  const OTRO = "'e0000000-0000-0000-0000-0000000000e0'"
+  const BAJA = "'e1000000-0000-0000-0000-0000000000e1'"
+
+  await sql(`
+    delete from hermandades where id = ${H};
+    insert into hermandades (id, nombre) values (${H}, 'Hdad. del certificado');
+    insert into auth.users (id, email) values
+      (${USECRE}, 'secre@ea.es'), (${UPEON}, 'peon@ea.es'), (${UOTRO}, 'otro@ea.es')
+      on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, antiguedad, estado, auth_user_id, email, cargo) values
+      (${SECRE}, ${H}, 'Rocío Delgado',   '78000001A',  1, 1998, 'Activo', ${USECRE}, 'secre@ea.es', 'Secretario/a'),
+      (${PEON},  ${H}, 'Antonio Ruiz',    '78000002B', 42, 2005, 'Activo', ${UPEON},  'peon@ea.es',  null),
+      (${OTRO},  ${H}, 'Otro cualquiera', '78000003C', 43, 2010, 'Activo', ${UOTRO},  'otro@ea.es',  null),
+      (${BAJA},  ${H}, 'El que se fue',   '78000004D',  0, 2001, 'Baja',   null,      'baja@ea.es',  null);
+    select sembrar_permisos_de_fabrica(${H});
+  `)
+  const solo = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean).pop() ?? ''
+  const numero = (t) => t.split('\n').map((x) => x.trim()).filter((x) => /^-?\d+$/.test(x)).pop() ?? ''
+
+  caso('el fixture existe (si no, esto no probaría nada)', '4',
+    numero(await sql(`select count(*) from hermanos where hermandad_id = ${H}`)))
+
+  const expedir = async (usuario, hermano, motivo = '') => {
+    try {
+      await sql(`begin; set local role authenticated; set local "request.jwt.claim.sub" = ${usuario};
+        select emitir_certificado(${hermano}, '${motivo}'); commit;`)
+      return { deja: 'sí', motivo: '' }
+    } catch (e) { return { deja: 'no', motivo: String(e?.stderr ?? e) } }
+  }
+
+  /* 1. NO LO EXPIDE CUALQUIERA. Sale con dos firmas y el nombre de la casa. */
+  caso('un hermano de a pie no expide certificados', 'no', (await expedir(UPEON, PEON)).deja)
+  caso('la secretaría sí', 'sí', (await expedir(USECRE, PEON, 'ingreso en otra hermandad')).deja)
+
+  /*
+   * 2 y 3. TODO SALE DE LA BASE Y QUEDA COPIADO. El nombre, el DNI, el número y
+   * la antigüedad se guardan tal como estaban; y los años se guardan HECHOS,
+   * porque dentro de tres años la resta daría otro número.
+   */
+  const anio = new Date().getFullYear()
+  caso('copia el nombre', 'Antonio Ruiz', solo(await sql(
+    `select hermano_nombre from certificados where hermandad_id = ${H}`)))
+  caso('el DNI', '78000002B', solo(await sql(
+    `select hermano_dni from certificados where hermandad_id = ${H}`)))
+  caso('el número de hermano', '42', numero(await sql(
+    `select hermano_numero from certificados where hermandad_id = ${H}`)))
+  caso('el año desde el que es hermano', '2005', numero(await sql(
+    `select antiguedad from certificados where hermandad_id = ${H}`)))
+  caso('y los años que lleva, ya contados', String(anio - 2005), numero(await sql(
+    `select anios_de_antiguedad from certificados where hermandad_id = ${H}`)))
+  caso('con el motivo que se pidió', 'ingreso en otra hermandad', solo(await sql(
+    `select motivo from certificados where hermandad_id = ${H}`)))
+  // Y quién firma, del censo y copiado: la junta cambia, el papel no.
+  caso('y quién lo firma, copiado del censo', 'Rocío Delgado', solo(await sql(
+    `select firma_secretario from certificados where hermandad_id = ${H}`)))
+
+  /*
+   * LA COMPROBACIÓN QUE DE VERDAD IMPORTA: corregir la ficha después NO
+   * reescribe un papel que ya está firmado y en manos de alguien.
+   */
+  await sql(`update hermanos set nombre = 'Antonio Ruiz Corregido', antiguedad = 1975 where id = ${PEON};`)
+  caso('corregir la ficha no reescribe el certificado ya expedido', 'Antonio Ruiz', solo(await sql(
+    `select hermano_nombre from certificados where hermandad_id = ${H}`)))
+  caso('ni su antigüedad', '2005', numero(await sql(
+    `select antiguedad from certificados where hermandad_id = ${H}`)))
+
+  /* 4. EL NÚMERO, correlativo y sin repetirse dentro del año. */
+  await expedir(USECRE, OTRO, 'bolsa de caridad')
+  await expedir(USECRE, PEON, 'segundo')
+  caso('los números van del 1 al 3 sin repetirse', '1,2,3', solo(await sql(
+    `select string_agg(numero::text, ',' order by numero) from certificados where hermandad_id = ${H}`)))
+  caso('todos del año en curso', String(anio), numero(await sql(
+    `select distinct anio from certificados where hermandad_id = ${H}`)))
+
+  /*
+   * 5. A UN HERMANO DE BAJA NO SE LE CERTIFICA QUE LO ES.
+   *
+   * De quien causó baja se puede certificar que LO FUE, y ese es otro papel con
+   * otro texto. Darle este sería firmar algo que no es verdad.
+   */
+  const deBaja = await expedir(USECRE, BAJA)
+  caso('a un hermano de baja no se le certifica que está inscrito', 'no', deBaja.deja)
+  caso('y se dice por qué', true, /figura de baja/.test(deBaja.motivo))
+
+  /* 6. Y EL HERMANO VE EL SUYO, y solo el suyo: es su papel. */
+  const ve = async (usuario) => numero(await sql(
+    `begin; set local role authenticated; set local "request.jwt.claim.sub" = ${usuario};
+       select count(*) from certificados; rollback;`))
+  caso('el hermano ve sus dos certificados', '2', await ve(UPEON))
+  caso('y el otro solo el suyo', '1', await ve(UOTRO))
+  caso('la secretaría los ve todos', '3', await ve(USECRE))
 }
