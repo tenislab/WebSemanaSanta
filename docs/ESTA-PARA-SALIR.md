@@ -75,6 +75,7 @@ Están dichos también dentro de la aplicación, no solo aquí.
 | Qué | Cuánto pesa |
 |---|---|
 | **El almacén de imágenes hay que encenderlo**: ejecutar `supabase/imagenes.sql` una vez. Sin eso, las fotos se siguen guardando dentro del contenido (`data:`): la web pesa de más y la tarjeta al compartir sale sin imagen. Con él encendido, todo lo que se sube va al almacén y lo que ya estuviera dentro se muda solo | Bajo: es una pantalla de SQL, no código |
+| **Lo que vive en el navegador se trae de la base al arrancar** (asistencia, campos propios, etiquetas, ajustes de cuotas y campaña). Antes se guardaba y no lo leía nadie: el diputado marcaba la asistencia en su móvil y la secretaria veía el historial vacío en su portátil. Hay dos pruebas que vigilan que ninguna plantilla vuelva a quedarse a medias | Resuelto |
 | **La importación no crea las cuentas de acceso** de los hermanos. Entran al censo y la hermandad trabaja con ellos, pero para entrar en *su* área hay que darles acceso desde su ficha. Y quien no tiene correo no puede tener cuenta | Medio, y en parte no tiene arreglo: una cuenta necesita un correo |
 | **Sin correo saliente**, los avisos al hermano solo se ven si entra | Alto mientras no se conecte |
 | **La numeración del escalafón no se ha validado con una hermandad real.** La lógica está probada (30 casos) pero cada casa tiene sus costumbres | Alto: es lo que más duele si sale mal |

@@ -1,7 +1,7 @@
 import type { ErrorTraducido } from '../lib/errorDeBaseDeDatos'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { copiaSemanalSiTocaba } from '../lib/copiaAutomatica'
-import { cargarCampanaDeLaBase } from '../lib/campana'
+import { hidratarPlantillas } from '../lib/hidratar'
 import { NavLink, Outlet, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import BarraDeshacer from './BarraDeshacer'
 import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
@@ -241,15 +241,20 @@ export default function AppShell() {
     void copiaSemanalSiTocaba()
   }, [])
   /*
-   * LA CAMPAÑA DE PAPELETAS, DE LA BASE, AL ARRANCAR.
+   * LO DE LA HERMANDAD QUE VIVE EN EL NAVEGADOR, TRAÍDO DE LA BASE AL ARRANCAR.
    *
-   * `getCampana()` es síncrona y la leen quince pantallas —el cortejo, los
-   * informes, los comunicados por tramo, el censo—. Traerla aquí una vez deja
-   * la copia de este navegador al día para todas ellas antes de que ninguna se
-   * pinte, en vez de que cada una tire de lo que hubiera guardado.
+   * Eran cinco cosas y solo se traía UNA: la campaña. Las otras cuatro —la
+   * asistencia, los campos propios, las etiquetas y los ajustes de cuotas— se
+   * guardaban en la base correctamente y no las iba a buscar nadie. El detalle
+   * de qué se rompía con cada una está en `lib/hidratar.ts`; el resumen es que
+   * el dato subía y no volvía, así que desde un segundo dispositivo no existía.
+   *
+   * Todas se leen con funciones SÍNCRONAS que miran `localStorage`, y las leen
+   * quince pantallas. Traerlas aquí una vez deja la copia de este navegador al
+   * día para todas ellas antes de que ninguna se pinte.
    */
   useEffect(() => {
-    void cargarCampanaDeLaBase()
+    void hidratarPlantillas()
   }, [])
   const navigate = useNavigate()
   const location = useLocation()

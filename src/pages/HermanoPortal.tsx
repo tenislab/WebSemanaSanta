@@ -60,6 +60,7 @@ import { CLAVES_DATOS, leerPersistido, useEscuchaOtrasPestanas } from '../lib/pe
 import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
 import { useAvisosHermano } from '../lib/avisosHermano'
 import { useAjustesCuotas } from '../lib/ajustesCuotas'
+import { hidratarPlantillas } from '../lib/hidratar'
 import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
 import { conRenovacion } from '../lib/renovarPapeleta'
 import { contactoDelHermanoToRow } from '../lib/db/hermanos'
@@ -302,6 +303,24 @@ export default function HermanoPortal() {
     void cargarModeloPapeletaDeLaBase().then((m) => {
       if (m) setModeloPapeleta(m)
     })
+  }, [])
+
+  /*
+   * Y LO DEMÁS DE LA HERMANDAD, IGUAL. El área del hermano va por su propia
+   * ruta, fuera del panel, así que no pasa por el `AppShell` que lo trae.
+   *
+   * Aquí es donde más se notaba, y estaba escrito de antes: la secretaría abre
+   * la campaña de 2026 desde su ordenador, y el hermano, en su móvil, ve la de
+   * fábrica —otro año, otro plazo, otra fecha de salida— y pide sitio para una
+   * Semana Santa que no toca, sin que ninguno de los dos vea nada raro. Con los
+   * ajustes de cuotas pasa lo mismo: el bloqueo de papeleta a los morosos no se
+   * aplicaba aquí porque este móvil no sabía que existía.
+   *
+   * Los hooks se enteran solos —`useAjustesCuotas` escucha su evento—, así que
+   * no hace falta recoger nada.
+   */
+  useEffect(() => {
+    void hidratarPlantillas()
   }, [])
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
