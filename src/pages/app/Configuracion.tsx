@@ -1,9 +1,12 @@
 import { aCentimos } from '../../lib/format'
+import { hayAlmacen, mudarImagenes, recibirImagen, sustituirImagenes } from '../../lib/almacenImagenes'
+import { leerArchivo } from '../../lib/imagen'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { LogoMark } from '../../components/Logo'
 import { useAuth } from '../../context/AuthContext'
 import {
   useHermandadSettings,
+  getHermandadSettings,
   saveHermandadSettings,
   type HermandadSettings,
 } from '../../lib/hermandadSettings'
@@ -132,6 +135,9 @@ export default function Configuracion() {
   const [tocado, setTocado] = useState(false)
   const [saved, setSaved] = useState(false)
   const [logoError, setLogoError] = useState<string | null>(null)
+  // Subir tarda: encoger la foto y mandarla al almacén no es instantáneo, y sin
+  // esto el botón se puede pulsar tres veces y suben tres escudos.
+  const [subiendoLogo, setSubiendoLogo] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Mientras no se haya tocado el formulario, refleja lo que traiga Supabase
@@ -140,24 +146,99 @@ export default function Configuracion() {
     if (!tocado) setSettings(settingsRemotas)
   }, [settingsRemotas, tocado])
 
+  /*
+   * LA MUDANZA DE LO QUE YA ESTÁ DENTRO.
+   *
+   * Arreglar el camino de subida solo arregla lo que se suba a partir de hoy.
+   * La hermandad que lleva meses con su escudo de 700 KB metido en los ajustes
+   * —y el modelo de papeleta escaneado al lado— lo seguiría arrastrando para
+   * siempre, en cada carga del panel y de la web pública.
+   *
+   * Así que al abrir esta pantalla se recorren los ajustes enteros y se sube
+   * lo que haya escrito dentro. Va a ciegas, sin conocer los campos: el
+   * escudo, el modelo de papeleta y el del recibo salen los tres, y también
+   * saldrá lo que se añada mañana.
+   *
+   * Solo al montar, y es idempotente: la segunda vez no encuentra ninguna
+   * porque ya son direcciones. Si falla no se toca nada — los ajustes se
+   * quedan como estaban, funcionando igual que ayer.
+   */
+  useEffect(() => {
+    if (!hayAlmacen()) return
+    let vivo = true
+    void (async () => {
+      const { subidas, mapa } = await mudarImagenes(getHermandadSettings(), 'web')
+      if (!vivo || subidas === 0) return
+      /*
+       * Sobre lo que hay AHORA y no sobre la copia con la que empezó: subir
+       * tarda segundos, y en esos segundos se está escribiendo en el
+       * formulario. Guardar el resultado tal cual borraría lo tecleado
+       * mientras tanto, delante de sus ojos y sin aviso.
+       */
+      setSettings((actual) => {
+        const mudado = sustituirImagenes(actual, mapa)
+        // Y se guarda, que si no la mudanza se repite en cada visita: las
+        // imágenes estarían subidas pero los ajustes seguirían apuntando al
+        // texto de dentro.
+        void saveHermandadSettings(mudado)
+        return mudado
+      })
+    })()
+    return () => { vivo = false }
+  }, [])
+
   function update<K extends keyof HermandadSettings>(key: K, value: HermandadSettings[K]) {
     setSettings((s) => ({ ...s, [key]: value }))
     setSaved(false)
     setTocado(true)
   }
 
-  function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
+  /*
+   * EL ESCUDO, ENCOGIDO Y SUBIDO AL ALMACÉN.
+   *
+   * Antes se guardaba el archivo TAL CUAL salió del móvil, en base64, dentro
+   * de `hermandad_settings`. Y esa fila no es una más: se lee entera en cada
+   * carga del panel Y de la web pública, y el escudo se imprime en todos los
+   * documentos. Un escudo de 700 KB son 700 KB que viajan en cada visita de
+   * cada persona, para siempre.
+   *
+   * Lo llamativo es que el asistente de alta SÍ lo hacía bien desde el primer
+   * día. O sea que la hermandad que lo subía al darse de alta quedaba bien, y
+   * la misma hermandad cambiándolo después por esta pantalla lo estropeaba,
+   * sin que nada lo dijera. Ahora las dos pasan por `recibirImagen`.
+   *
+   * Y EL TOPE SE MIRA DESPUÉS, NO ANTES. Rechazar por tamaño antes de encoger
+   * era el orden justo al revés: una foto de móvil son cuatro megas y encogida
+   * a 512 px son cuarenta kilos, así que se estaba rechazando por pesada
+   * precisamente la que iba a quedar ligera. Lo que se comprueba ahora es lo
+   * que se va a guardar de verdad, y solo importa si no hubo almacén.
+   */
+  async function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    if (file.size > MAX_LOGO_BYTES) {
-      setLogoError('Elige una imagen más ligera (máx. 800 KB).')
-      return
-    }
     setLogoError(null)
-    const reader = new FileReader()
-    reader.onload = () => update('logoDataUrl', String(reader.result))
-    reader.readAsDataURL(file)
+    setSubiendoLogo(true)
+    try {
+      const crudo = await leerArchivo(file)
+      if (!crudo) {
+        setLogoError('No se ha podido leer ese archivo. Prueba con otra imagen.')
+        return
+      }
+      const guardado = await recibirImagen(crudo, { carpeta: 'web', maxLado: 512, calidad: 0.9 })
+      /*
+       * Si sigue siendo una imagen escrita dentro del texto es que no se pudo
+       * subir —modo demostración, o falta ejecutar `supabase/imagenes.sql`—, y
+       * entonces sí manda el tope: lo que se guarde va dentro de los ajustes.
+       */
+      if (guardado.startsWith('data:') && guardado.length > MAX_LOGO_BYTES) {
+        setLogoError('Esa imagen pesa demasiado para guardarla aquí. Prueba con una más pequeña.')
+        return
+      }
+      update('logoDataUrl', guardado)
+    } finally {
+      setSubiendoLogo(false)
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -624,8 +705,9 @@ export default function Configuracion() {
                   type="button"
                   className="btn btn-outline btn-sm"
                   onClick={() => fileRef.current?.click()}
+                  disabled={subiendoLogo}
                 >
-                  Subir imagen
+                  {subiendoLogo ? 'Subiendo…' : 'Subir imagen'}
                 </button>
                 {settings.logoDataUrl && (
                   <button
@@ -638,7 +720,8 @@ export default function Configuracion() {
                 )}
               </div>
               <p className="form-hint">
-                PNG, JPG o SVG · máx. 800 KB. Se usará en la cabecera de los recibos.
+                PNG, JPG o SVG. Se encoge sola, así que puedes subir la foto tal cual. Se usará
+                en la cabecera de los recibos, en las papeletas y en la web.
               </p>
               {logoError && <p className="form-hint form-hint--error">{logoError}</p>}
             </div>

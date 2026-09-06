@@ -8,6 +8,8 @@ import {
   type ModeloPapeleta,
 } from '../lib/modeloPapeleta'
 import { nuevoId } from '../lib/supabaseSync'
+import { recibirImagen } from '../lib/almacenImagenes'
+import { leerArchivo } from '../lib/imagen'
 
 /** Definición de un dato colocable (etiqueta que se ve en el selector + ejemplo para la vista previa). */
 interface ClaveDefinicion {
@@ -29,32 +31,6 @@ interface Props {
 }
 
 const COLOR_DEFECTO = '#1a1a1a'
-
-/** Reduce una imagen grande para que quepa holgadamente en localStorage. */
-function comprimirImagen(dataUrl: string, maxLado = 1400): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => {
-      const escala = Math.min(1, maxLado / Math.max(img.width, img.height))
-      if (escala >= 1) {
-        resolve(dataUrl)
-        return
-      }
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(img.width * escala)
-      canvas.height = Math.round(img.height * escala)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        resolve(dataUrl)
-        return
-      }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      resolve(canvas.toDataURL('image/jpeg', 0.85))
-    }
-    img.onerror = () => resolve(dataUrl)
-    img.src = dataUrl
-  })
-}
 
 export default function ModeloPapeletaEditor({
   modelo,
@@ -89,20 +65,29 @@ export default function ModeloPapeletaEditor({
     }
     setError(null)
     try {
-      if (esPdf) {
-        // Un PDF: se rasteriza su primera página y se usa como imagen del modelo.
-        setCargando(true)
-        const { pdfPrimeraPaginaAImagen } = await import('../lib/pdfAImagen')
-        const imagen = await pdfPrimeraPaginaAImagen(file)
-        actualizar({ imagenDataUrl: imagen, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
-      } else {
-        const lector = new FileReader()
-        lector.onload = async () => {
-          const comprimida = await comprimirImagen(String(lector.result))
-          actualizar({ imagenDataUrl: comprimida, campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId) })
-        }
-        lector.readAsDataURL(file)
+      setCargando(true)
+      /*
+       * De PDF a imagen si hace falta, y de ahí al camino común: encoger y
+       * subir al almacén (`recibirImagen`).
+       *
+       * Antes esto tenía su PROPIA copia del compresor y no subía nada, así
+       * que el modelo escaneado de la papeleta se quedaba en base64 dentro de
+       * `hermandad_settings` —la misma fila que se lee entera en cada carga
+       * del panel y de la web—. Un escaneo a 1400 px son varios cientos de
+       * kilos viajando en cada visita de cada persona.
+       */
+      const crudo = esPdf
+        ? await (await import('../lib/pdfAImagen')).pdfPrimeraPaginaAImagen(file)
+        : await leerArchivo(file)
+      if (!crudo) {
+        setError('No se ha podido leer ese archivo. Prueba con otro.')
+        return
       }
+      const imagen = await recibirImagen(crudo, { carpeta: 'modelos', maxLado: 1400, calidad: 0.85 })
+      actualizar({
+        imagenDataUrl: imagen,
+        campos: modelo?.campos?.length ? modelo.campos : camposPorDefecto(nuevoId),
+      })
     } catch (err) {
       console.error('No se pudo procesar el archivo del modelo:', err)
       setError('No se pudo leer el PDF. Prueba con otro archivo o sube una imagen.')

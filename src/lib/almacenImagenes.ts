@@ -264,3 +264,58 @@ export async function recorrerImagenes<T>(
   for (const [antes, ahora] of yaSubidas) if (antes === ahora) yaSubidas.delete(antes)
   return { valor: salida, subidas, mapa: yaSubidas }
 }
+
+/**
+ * UNA IMAGEN QUE ENTRA: comprimir y subir, en un solo paso.
+ *
+ * Existe porque las dos mitades se estaban separando. `guardarImagen` sube, y
+ * `comprimirImagen` encoge, pero eran dos llamadas sueltas que cada pantalla
+ * hacía por su cuenta —y tres pantallas subían el mismo tipo de imagen de tres
+ * maneras distintas:
+ *
+ *   · El asistente de alta hacía las dos cosas.
+ *   · CONFIGURACIÓN NO HACÍA NINGUNA. El escudo se guardaba tal como salió del
+ *     móvil, hasta 800 KB en base64, DENTRO de `hermandad_settings`. Y esa fila
+ *     no es una más: se lee entera en cada carga del panel y de la web
+ *     pública, y el escudo sale en todos los documentos que se imprimen. O sea
+ *     que el asistente lo dejaba bien y la pantalla donde se cambia después lo
+ *     estropeaba, sin que nada lo dijera.
+ *   · El editor del modelo de papeleta comprimía —con su propia copia del
+ *     código— pero no subía.
+ *
+ * Que las dos vayan juntas y en un solo sitio es lo que impide que vuelvan a
+ * separarse. Y el orden importa: primero encoger y luego subir, porque lo que
+ * se sube es lo que se paga en almacén y en descarga.
+ *
+ * NUNCA FALLA. Si no hay almacén —modo demostración, o falta ejecutar
+ * `supabase/imagenes.sql`— devuelve la imagen comprimida, que es exactamente
+ * lo que se guardaba antes. Y si tampoco se puede comprimir, la de partida.
+ * Una imagen no se pierde por pasar por aquí.
+ */
+export async function recibirImagen(
+  dataUrl: string,
+  opciones: { carpeta?: string; maxLado?: number; calidad?: number } = {},
+): Promise<string> {
+  const { carpeta = 'web', maxLado = 1600, calidad = 0.82 } = opciones
+  if (!esDataUrl(dataUrl)) return dataUrl
+  /*
+   * En diferido: `imagen.ts` trabaja con `canvas` y `Image`, que son del
+   * navegador. Cargarlo arriba dejaría este módulo sin poder importarse en el
+   * banco de pruebas, y es justo el módulo del que depende que no se pierda
+   * una foto.
+   */
+  const { comprimirImagen } = await import('./imagen')
+  /*
+   * DOS COSAS NO SE COMPRIMEN, y no es un caso raro:
+   *
+   *   · El PDF, que no es una imagen.
+   *   · EL SVG. Comprimir pasa por un `canvas`, o sea que rasteriza: un escudo
+   *     vectorial —que pesa cuatro kilos y se ve nítido a cualquier tamaño—
+   *     saldría convertido en un mapa de bits de 512 px, borroso en cuanto se
+   *     imprime un recibo. Y la propia pantalla dice «PNG, JPG o SVG», así que
+   *     es un formato que la hermandad va a traer.
+   */
+  const intacto = /^data:(application\/pdf|image\/svg\+xml)/i.test(dataUrl)
+  const lista = intacto ? dataUrl : await comprimirImagen(dataUrl, maxLado, calidad)
+  return guardarImagen(lista, carpeta)
+}

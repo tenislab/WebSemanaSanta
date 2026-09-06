@@ -2,8 +2,8 @@ import { useState, useRef } from 'react'
 import { useFocoDeDialogo } from '../lib/foco'
 import { Link } from 'react-router-dom'
 import { saveHermandadSettings, type HermandadSettings } from '../lib/hermandadSettings'
-import { comprimirImagen, leerArchivo } from '../lib/imagen'
-import { guardarImagen } from '../lib/almacenImagenes'
+import { leerArchivo } from '../lib/imagen'
+import { recibirImagen } from '../lib/almacenImagenes'
 import { getCampana, saveCampana } from '../lib/campana'
 import { CLAVE_ALTA_HECHA } from '../lib/altaHermandad'
 import AvisoDeCampo from './AvisoDeCampo'
@@ -70,7 +70,7 @@ export default function AltaHermandad({
      * exista la carpeta donde iría. En ese caso se queda dentro de los ajustes
      * —son 512 px, no pesa— y se muda solo al abrir el editor de la web.
      */
-    set({ logoDataUrl: await guardarImagen(await comprimirImagen(crudo, 512, 0.9), 'web') })
+    set({ logoDataUrl: await recibirImagen(crudo, { carpeta: 'web', maxLado: 512, calidad: 0.9 }) })
   }
 
   return (
