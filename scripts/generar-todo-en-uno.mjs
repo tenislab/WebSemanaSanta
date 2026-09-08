@@ -86,6 +86,50 @@ export const PIEZAS = [
   ['certificados.sql', 'El certificado de antigüedad que pide un hermano para acreditarlo fuera'],
   ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
   ['pago-tarjeta.sql', 'Que el hermano pague su cuota o su papeleta con tarjeta'],
+  /*
+   * ESTE FICHERO NO ESTABA EN NINGUNA DE LAS DOS LISTAS, Y ERA UN FALLO VIVO.
+   *
+   * Añade `opciones_papeleta.tramo_id`. Y `src/lib/opcionesPapeleta.ts` ESCRIBE
+   * en esa columna al guardar las papeletas personalizadas de la hermandad.
+   *
+   * O sea que en TODAS las bases —nuevas incluidas, porque tampoco iba en el
+   * instalador— guardar una papeleta personalizada fallaba entera: Postgres no
+   * ignora la columna que no existe, rechaza la sentencia. No se perdía ese
+   * dato, se perdía la fila. Y en pantalla no pasaba nada raro.
+   *
+   * Lo cazó la prueba que comprueba que ningún .sql se queda fuera de las
+   * listas (`pruebas/sql-en-uno.prueba.mjs`), que llevaba tiempo en rojo. Es
+   * exactamente la clase de fallo que el sello de versión existe para hacer
+   * visible, y de hecho apareció montándolo.
+   *
+   * Va aquí, al final, porque necesita que existan `opciones_papeleta` y
+   * `tramos`, y a estas alturas están las dos. Solo añade una columna con
+   * `if not exists` y un comentario: no define ninguna función y se puede
+   * repetir sin que pase nada.
+   */
+  ['papeleta-personalizada-en-el-cortejo.sql', 'Que una papeleta propia de la hermandad ocupe puesto en el cortejo'],
+  /*
+   * --- LO QUE HACE FALTA PARA CRECER SIN ROMPER NADA ---
+   *
+   * Las cinco piezas de abajo no añaden ninguna pantalla: son las que hacen
+   * que se pueda seguir actualizando esto cuando haya cincuenta hermandades en
+   * vez de tres. Cada fichero explica en su cabecera qué problema resuelve.
+   *
+   * EL ORDEN DE LAS CINCO NO ES CASUAL:
+   *
+   *   · `soporte.sql` REDEFINE `hermandad_actual()`, que es la frontera entre
+   *     hermandades. Va después de `multi-hermandad.sql` (que la define) y
+   *     nada de lo que viene detrás puede volver a tocarla. Hay una prueba que
+   *     lo comprueba (`sql-actualizar.prueba.mjs`).
+   *   · `version-del-esquema.sql` VA LA ÚLTIMA, siempre. El sello de la
+   *     versión se pone después de ella, cuando ya ha pasado todo lo demás:
+   *     sellar antes sería prometer que está puesto algo que igual no llegó.
+   */
+  ['vigilancia.sql', 'Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie'],
+  ['canal-de-actualizacion.sql', 'Sacar una novedad a una hermandad piloto antes que a todas'],
+  ['restaurar-copia.sql', 'Poder volcar la copia de UNA hermandad sin tocar a las demás'],
+  ['soporte.sql', 'Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito'],
+  ['version-del-esquema.sql', 'Que la aplicación avise cuando la base se ha quedado atrás'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -135,6 +179,31 @@ ${PIEZAS.map(([f, q], i) => `--   ${String(i + 1).padStart(2, ' ')}. ${f.padEnd(
 
 `
 
+/**
+ * EL SELLO DE LA VERSIÓN.
+ *
+ * Va al FINAL, cuando ya han pasado todas las piezas: sellar antes sería
+ * prometer que está puesto algo que igual no llegó a ejecutarse.
+ *
+ * LA VERSIÓN ES EL NÚMERO DE PIEZAS DEL INSTALADOR. No hay que acordarse de
+ * subirla: sube sola al añadir un fichero a la lista, que es exactamente el
+ * momento en que las bases existentes se quedan atrasadas. Lo único que hay
+ * que hacer a mano es poner el mismo número en `src/lib/versionEsquema.ts`, y
+ * si se olvida, `npm test` lo dice. Ver `supabase/version-del-esquema.sql`.
+ */
+export function selloDeVersion(cuantasPiezas) {
+  return `
+-- =============================================================================
+--   SELLO DE LA VERSIÓN — que la aplicación sepa que esta base está al día
+-- =============================================================================
+--
+-- Generado. Es el número de piezas de esta instalación. La aplicación lo lee al
+-- arrancar y avisa si va por detrás; ver \`src/lib/versionEsquema.ts\`.
+
+select sellar_esquema(${cuantasPiezas});
+`
+}
+
 export async function generar() {
   const trozos = [CABECERA]
   for (const [fichero, queHace] of PIEZAS) {
@@ -146,6 +215,7 @@ export async function generar() {
       cuerpo.trimEnd() + '\n',
     )
   }
+  trozos.push(selloDeVersion(PIEZAS.length))
   return trozos.join('')
 }
 

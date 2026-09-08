@@ -52,6 +52,46 @@ function espejarEnLocal(claveLocal: string, items: unknown[]) {
 }
 
 /**
+ * EL ESPEJO CUANDO SOLO SE HA TRAÍDO UNA PARTE DE LA TABLA.
+ *
+ * Aquí está el peligro de la ventana, y es de los que no dan error.
+ *
+ * `cabildo-cuotas` no lo lee solo la pantalla de Cuotas: lo leen Papeletas
+ * (para la deuda de cada hermano), Comunicados (para segmentar por morosos) y
+ * el borrado de datos del RGPD. Todos ellos con `leerDatos`, o sea, de golpe y
+ * sin preguntarle a nadie.
+ *
+ * Si la pantalla de Cuotas, que solo se ha traído dos ejercicios, machacara esa
+ * clave con lo suyo, esas tres pantallas se quedarían viendo dos años de
+ * historia y ni se enterarían. Papeletas diría que un hermano no debe nada.
+ *
+ * Así que se MEZCLA en vez de sustituir: lo traído manda, y lo que ya había
+ * guardado y cae FUERA de la ventana se conserva. El espejo sigue siendo la
+ * foto más completa que este navegador ha llegado a ver.
+ *
+ * LO QUE SE ACEPTA A CAMBIO: una fila que se borre desde otro ordenador y que
+ * caiga fuera de la ventana se queda en este espejo hasta que alguien abra la
+ * pantalla sin ventana. Es un caché, no la verdad —la verdad está en la base—,
+ * y el caso es borrar un recibo cobrado de hace cinco años, que no pasa.
+ */
+function espejarParteEnLocal<T extends { id: string }>(
+  claveLocal: string,
+  traidos: T[],
+  dentro: (item: T) => boolean,
+) {
+  try {
+    const guardado = leerPersistido<T[]>(claveLocal, [])
+    const traidosIds = new Set(traidos.map((t) => t.id))
+    const viejosQueSeQuedan = guardado.filter((g) => g && !traidosIds.has(g.id) && !dentro(g))
+    espejarEnLocal(claveLocal, [...traidos, ...viejosQueSeQuedan])
+  } catch {
+    // Si lo guardado no se puede leer, se escribe lo traído y ya está: es más
+    // que nada, y es exactamente lo que había antes de existir la ventana.
+    espejarEnLocal(claveLocal, traidos)
+  }
+}
+
+/**
  * Como `usePersistentState`, pero cuando Supabase está conectado sincroniza
  * la colección con una tabla real en vez de con localStorage: compara el
  * array anterior con el nuevo y manda solo los inserts/updates/deletes que
@@ -87,9 +127,41 @@ export function useSupabaseTable<T extends { id: string }>(
      * quedaba así aunque cerrara la pestaña.
      */
     sinEspejo?: boolean
+    /**
+     * TRAERSE SOLO UNA PARTE DE LA TABLA, NO TODA.
+     *
+     * Para qué sirve y por qué hace falta está contado entero en
+     * `lib/ventanaHistorico.ts`; el resumen es que Cuotas enseña un ejercicio y
+     * se estaba trayendo diez, y que eso deja de caber en el navegador solo con
+     * que pase el tiempo.
+     *
+     * Son DOS MITADES que tienen que decir exactamente lo mismo:
+     *
+     *   · `filtroOr` va a la base (sintaxis `or` de PostgREST).
+     *   · `dentro()` responde a la misma pregunta sobre un objeto de memoria, y
+     *     la usa el espejo para saber qué filas viejas conserva.
+     *
+     * NO LA CONSTRUYAS AQUÍ A MANO: usa las de `ventanaHistorico.ts`, que las
+     * tiene juntas y con una prueba que las compara. Dos mitades que discrepan
+     * no dan error, dan totales que no cuadran.
+     *
+     * Sin esta opción todo funciona como siempre: se trae la tabla entera.
+     */
+    ventana?: { filtroOr: string; dentro: (item: T) => boolean }
   },
 ) {
   const sinEspejo = opciones?.sinEspejo ?? false
+  /*
+   * LA VENTANA, EN UNA REFERENCIA.
+   *
+   * `opciones` es un objeto literal que se crea nuevo en cada pintado, y el
+   * efecto que carga solo depende de `[tabla]`: la que se vea ahí dentro es la
+   * del montaje para siempre. Con una referencia, `dentro()` es siempre la
+   * última —importa cuando la ventana se calcula a partir del ejercicio en
+   * curso, que puede llegar después de montar—.
+   */
+  const ventanaRef = useRef(opciones?.ventana)
+  ventanaRef.current = opciones?.ventana
   // Modo local efectivo: sin Supabase configurado, o en modo demostración
   // (aunque Supabase esté configurado pero en pausa). En demo leemos siempre
   // los datos de ejemplo del navegador, sin consultar Supabase, para que el
@@ -126,6 +198,20 @@ export function useSupabaseTable<T extends { id: string }>(
   const itemsRef = useRef(items)
   itemsRef.current = items
 
+  /*
+   * TODO LO QUE ESCRIBE EN EL ESPEJO PASA POR AQUÍ.
+   *
+   * Con ventana se MEZCLA con lo que ya hubiera guardado (ver
+   * `espejarParteEnLocal`); sin ventana se sustituye, que es lo de siempre.
+   * Un solo sitio para no acabar con tres formas distintas de escribir la
+   * misma clave, que es exactamente como se rompe un espejo compartido.
+   */
+  function espejar(lista: T[]) {
+    const v = ventanaRef.current
+    if (v) espejarParteEnLocal(claveLocal, lista, v.dentro)
+    else espejarEnLocal(claveLocal, lista)
+  }
+
   useEffect(() => {
     if (local || !supabase) return
     let cancelado = false
@@ -142,8 +228,16 @@ export function useSupabaseTable<T extends { id: string }>(
        * y saltarse otras, porque Postgres no promete ningún orden si no se le
        * pide. Por `id` cuando no hay otro criterio, que es único y estable.
        */
+      /*
+       * Y CON LA VENTANA PUESTA, SI LA HAY. El filtro va ANTES del orden y del
+       * rango, y ese orden importa: PostgREST pagina sobre el resultado YA
+       * filtrado. Al revés se paginarían las diez mil filas para tirar nueve
+       * mil después. Ver `lib/ventanaHistorico.ts`.
+       */
+      const ventana = ventanaRef.current
       traerTodasLasFilas<Record<string, unknown>>((desde, hasta) => {
-        const q = supabase!.from(tabla).select('*')
+        const base = supabase!.from(tabla).select('*')
+        const q = ventana ? base.or(ventana.filtroOr) : base
         return (orderBy ? q.order(orderBy) : q.order('id')).range(desde, hasta)
       }).then(({ data, error }) => {
         if (cancelado) return
@@ -197,8 +291,20 @@ export function useSupabaseTable<T extends { id: string }>(
            * tiene copia local, y sus consultas SÍ vienen vacías de verdad
            * mientras no ha entrado.
            */
+          /*
+           * DEL ESPEJO SE MIRA SOLO LO QUE CAE DENTRO DE LA VENTANA.
+           *
+           * `itemsRef.current` no hace falta filtrarlo: con ventana, en memoria
+           * solo hay filas de dentro. El ESPEJO no —guarda además lo viejo de
+           * fuera de la ventana, a propósito, para las pantallas que lo leen
+           * entero—, así que sin este filtro «había datos» sería siempre cierto
+           * y una tabla que de verdad se ha quedado vacía no se daría por buena
+           * nunca: se reintentaría una vez por carga, para siempre.
+           */
+          const guardado = leerPersistido<T[]>(claveLocal, [])
+          const enElEspejo = ventana ? guardado.filter(ventana.dentro) : guardado
           const teniamos = !sinEspejo
-            && (itemsRef.current.length > 0 || leerPersistido<T[]>(claveLocal, []).length > 0)
+            && (itemsRef.current.length > 0 || enElEspejo.length > 0)
           if (traidos.length === 0 && teniamos && !reintentado.current) {
             reintentado.current = true
             console.warn(
@@ -210,7 +316,7 @@ export function useSupabaseTable<T extends { id: string }>(
           }
           reintentado.current = false
           setItemsState(traidos)
-          if (!sinEspejo) espejarEnLocal(claveLocal, traidos)
+          if (!sinEspejo) espejar(traidos)
           cargado.current = true
         }
       }, (err) => {
@@ -246,7 +352,20 @@ export function useSupabaseTable<T extends { id: string }>(
     if (sinEspejo) return
     setItemsState((actual) => {
       try {
-        return JSON.stringify(actual) === crudo ? actual : (JSON.parse(crudo) as T[])
+        if (JSON.stringify(actual) === crudo) return actual
+        const llegado = JSON.parse(crudo) as T[]
+        /*
+         * CON VENTANA, DE LO QUE MANDA LA OTRA PESTAÑA SOLO SE COGE LO DE
+         * DENTRO.
+         *
+         * El espejo lo comparten pantallas con ventana y sin ella: si Informes
+         * está abierto en otra pestaña, escribe los diez ejercicios. Sin este
+         * filtro, Cuotas se los tragaría enteros y la ventana no habría servido
+         * de nada justo en el caso que más memoria gasta —dos pantallas
+         * abiertas a la vez—.
+         */
+        const v = ventanaRef.current
+        return v ? llegado.filter(v.dentro) : llegado
       } catch {
         return actual
       }
@@ -258,9 +377,9 @@ export function useSupabaseTable<T extends { id: string }>(
       const next = typeof actualizador === 'function' ? (actualizador as (p: T[]) => T[])(prev) : actualizador
       if (!local && supabase) {
         if (cargado.current) sincronizar(tabla, prev, next, toRow)
-        if (!sinEspejo) espejarEnLocal(claveLocal, next)
+        if (!sinEspejo) espejar(next)
       } else if (!sinEspejo) {
-        espejarEnLocal(claveLocal, next)
+        espejar(next)
       }
       return next
     })

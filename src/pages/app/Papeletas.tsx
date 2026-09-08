@@ -40,6 +40,8 @@ import {
 } from '../../lib/campana'
 import { CLAVES_DATOS, leerPersistido, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { esNovedad, NOVEDADES } from '../../lib/novedades'
+import { desdeQueEjercicio, ventanaDePapeletas } from '../../lib/ventanaHistorico'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
@@ -128,12 +130,40 @@ export default function Papeletas() {
   // Registro de pago de la papeleta abierta (método elegido en la ficha).
   const [metodoPagoSel, setMetodoPagoSel] = useState<MetodoPagoPapeleta>('Efectivo')
 
+  /*
+   * LA VENTANA DE HISTÓRICO. El porqué está en `lib/ventanaHistorico.ts`.
+   *
+   * Esta pantalla trabaja ENTERA sobre `campana.anio`: las activas, el
+   * siguiente número, los avisos, todo. Las papeletas de hace cinco años se
+   * traían para no mirarlas ni una vez.
+   *
+   * EL AÑO SE MIRA DOS VECES —el de la campaña y el del calendario— y se coge
+   * el menor. `campana.anio` es la Semana Santa QUE VIENE, así que en otoño va
+   * un año por delante del calendario; y una hermandad puede haberlo dejado
+   * puesto en un año raro. Cogiendo el menor de los dos, y restando uno, la
+   * ventana no puede quedarse corta por ninguno de los dos lados.
+   *
+   * `getCampana()` y no el estado `campana`: ese se declara más abajo, y aquí
+   * hace falta el valor ANTES de montar el hook. Es una lectura síncrona de
+   * `localStorage`, no cuesta nada.
+   *
+   * Va detrás de la misma bandera que las cuotas y nace apagada.
+   */
+  const desdeAnioPapeleta = desdeQueEjercicio(
+    Math.min(getCampana().anio || new Date().getFullYear(), new Date().getFullYear()),
+  )
+  const ventanaPapeletas = useMemo(
+    () => (esNovedad(NOVEDADES.cuotasVentana) ? ventanaDePapeletas<Papeleta>(desdeAnioPapeleta) : undefined),
+    [desdeAnioPapeleta],
+  )
   const [papeletas, setPapeletas] = useSupabaseTable<Papeleta>(
     'papeletas',
     CLAVES_DATOS.papeletas,
     PAPELETAS_INICIALES,
     papeletaToRow,
     rowToPapeleta,
+    undefined,
+    { ventana: ventanaPapeletas },
   )
   const [campana, setCampanaState] = useState<Campana>(() => getCampana())
   /*

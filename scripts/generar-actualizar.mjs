@@ -25,6 +25,7 @@
  * Se regenera con:  node scripts/generar-actualizar.mjs
  */
 import { readFile, writeFile } from 'node:fs/promises'
+import { PIEZAS as PIEZAS_DEL_INSTALADOR, selloDeVersion } from './generar-todo-en-uno.mjs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -101,6 +102,50 @@ export const PIEZAS_ACTUALIZACION = [
   ['certificados.sql', 'El certificado de antigüedad que pide un hermano para acreditarlo fuera'],
   ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
   ['pago-tarjeta.sql', 'Que el hermano pague su cuota o su papeleta con tarjeta'],
+  /*
+   * ESTE FICHERO NO ESTABA EN NINGUNA DE LAS DOS LISTAS, Y ERA UN FALLO VIVO.
+   *
+   * Añade `opciones_papeleta.tramo_id`. Y `src/lib/opcionesPapeleta.ts` ESCRIBE
+   * en esa columna al guardar las papeletas personalizadas de la hermandad.
+   *
+   * O sea que en TODAS las bases —nuevas incluidas, porque tampoco iba en el
+   * instalador— guardar una papeleta personalizada fallaba entera: Postgres no
+   * ignora la columna que no existe, rechaza la sentencia. No se perdía ese
+   * dato, se perdía la fila. Y en pantalla no pasaba nada raro.
+   *
+   * Lo cazó la prueba que comprueba que ningún .sql se queda fuera de las
+   * listas (`pruebas/sql-en-uno.prueba.mjs`), que llevaba tiempo en rojo. Es
+   * exactamente la clase de fallo que el sello de versión existe para hacer
+   * visible, y de hecho apareció montándolo.
+   *
+   * Va aquí, al final, porque necesita que existan `opciones_papeleta` y
+   * `tramos`, y a estas alturas están las dos. Solo añade una columna con
+   * `if not exists` y un comentario: no define ninguna función y se puede
+   * repetir sin que pase nada.
+   */
+  ['papeleta-personalizada-en-el-cortejo.sql', 'Que una papeleta propia de la hermandad ocupe puesto en el cortejo'],
+  /*
+   * --- LO QUE HACE FALTA PARA CRECER SIN ROMPER NADA ---
+   *
+   * Las cinco piezas de abajo no añaden ninguna pantalla: son las que hacen
+   * que se pueda seguir actualizando esto cuando haya cincuenta hermandades en
+   * vez de tres. Cada fichero explica en su cabecera qué problema resuelve.
+   *
+   * EL ORDEN DE LAS CINCO NO ES CASUAL:
+   *
+   *   · `soporte.sql` REDEFINE `hermandad_actual()`, que es la frontera entre
+   *     hermandades. Va después de `multi-hermandad.sql` (que la define) y
+   *     nada de lo que viene detrás puede volver a tocarla. Hay una prueba que
+   *     lo comprueba (`sql-actualizar.prueba.mjs`).
+   *   · `version-del-esquema.sql` VA LA ÚLTIMA, siempre. El sello de la
+   *     versión se pone después de ella, cuando ya ha pasado todo lo demás:
+   *     sellar antes sería prometer que está puesto algo que igual no llegó.
+   */
+  ['vigilancia.sql', 'Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie'],
+  ['canal-de-actualizacion.sql', 'Sacar una novedad a una hermandad piloto antes que a todas'],
+  ['restaurar-copia.sql', 'Poder volcar la copia de UNA hermandad sin tocar a las demás'],
+  ['soporte.sql', 'Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito'],
+  ['version-del-esquema.sql', 'Que la aplicación avise cuando la base se ha quedado atrás'],
 ]
 
 const CABECERA = `-- =============================================================================
@@ -260,7 +305,18 @@ select * from (values
   ('Gastos porcentuales para pérdidas y ganancias',
    (select to_regclass('public.reglas_reparto') is not null)),
   ('Pago con tarjeta del hermano',
-   (select to_regclass('public.pagos_tarjeta') is not null))
+   (select to_regclass('public.pagos_tarjeta') is not null)),
+  -- Las cinco de crecer sin romper nada. Ver el bloque de piezas del generador.
+  ('Los fallos se apuntan solos (vigilancia)',
+   (select to_regclass('public.errores_cliente') is not null)),
+  ('Novedades por canal (despliegue por fases)',
+   (select to_regclass('public.novedades') is not null)),
+  ('Se puede volcar una copia en la base',
+   (select count(*) > 0 from pg_proc where proname = 'vaciar_hermandad_para_restaurar')),
+  ('Acceso de soporte (nace apagado: sin cuentas dadas de alta)',
+   (select count(*) > 0 from pg_proc where proname = 'soporte_entrar')),
+  ('La base dice por qué versión va',
+   (select to_regclass('public.esquema_gobergo') is not null))
 ) as t(que, esta)
 order by esta, que;
 `
@@ -276,6 +332,19 @@ export async function generar() {
       cuerpo.trimEnd() + '\n',
     )
   }
+  /*
+   * EL SELLO ANTES DEL INFORME, y no al revés: el informe tiene que ser la
+   * ÚLTIMA consulta del archivo porque en el editor de Supabase solo se ve el
+   * resultado de la última, y ese informe es lo único que distingue «se ha
+   * hecho todo» de «se ha hecho la mitad». Hay una prueba que lo exige.
+   *
+   * Se sella con el número de piezas DEL INSTALADOR, no con las de esta lista:
+   * una base que acaba de pasar por aquí queda igual de completa que una recién
+   * instalada, y por tanto tiene que decir el mismo número. Sellar con las 34
+   * de la actualización haría que la aplicación avisara para siempre de que la
+   * base va atrasada justo después de actualizarla.
+   */
+  trozos.push(selloDeVersion(PIEZAS_DEL_INSTALADOR.length))
   trozos.push(INFORME)
   return trozos.join('')
 }

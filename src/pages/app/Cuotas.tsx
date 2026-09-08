@@ -47,6 +47,8 @@ import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { esNovedad, NOVEDADES } from '../../lib/novedades'
+import { desdeQueEjercicio, ventanaDeCuotas } from '../../lib/ventanaHistorico'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { descargarArchivo, toCsv } from '../../lib/csv'
 import {
@@ -145,12 +147,39 @@ export default function Cuotas() {
   const fallbackNombre = (user?.user_metadata?.hermandad as string | undefined) ?? ''
   const hermandad = useHermandadSettings(fallbackNombre)
 
+  /*
+   * LA VENTANA DE HISTÓRICO.
+   *
+   * Se traían TODOS los ejercicios para enseñar uno. El porqué de cortarlo y
+   * por qué no cambia ninguna cifra está entero en `lib/ventanaHistorico.ts`;
+   * el resumen es que una hermandad de 800 hermanos acumula 32.000 recibos en
+   * diez años y eso deja de caber en el navegador, sola, sin que nadie toque
+   * nada.
+   *
+   * VA DETRÁS DE BANDERA y nace apagada: con `cuotas-ventana` sin encender,
+   * `ventana` es `undefined` y se trae todo, exactamente igual que siempre.
+   * Ver `lib/novedades.ts`.
+   *
+   * EL AÑO SALE DEL CALENDARIO Y NO DE `ejercicioVigente(ajustes.renovacion)`,
+   * y es a propósito: los ajustes se resuelven MÁS ABAJO en este mismo
+   * componente, así que aquí todavía no existen. La diferencia entre los dos
+   * es como mucho un año, la ventana ya se lleva dos, y todo lo que siga sin
+   * cobrar entra igual de cualquier ejercicio. O sea que el desfase no puede
+   * dejar fuera nada que se mire.
+   */
+  const desdeEjercicio = desdeQueEjercicio(new Date().getFullYear())
+  const ventanaCuotas = useMemo(
+    () => (esNovedad(NOVEDADES.cuotasVentana) ? ventanaDeCuotas<Cuota>(desdeEjercicio) : undefined),
+    [desdeEjercicio],
+  )
   const [cuotas, setCuotas] = useSupabaseTable<Cuota>(
     'cuotas',
     CLAVES_DATOS.cuotas,
     CUOTAS_INICIALES,
     cuotaToRow,
     rowToCuota,
+    undefined,
+    { ventana: ventanaCuotas },
   )
   const [query, setQuery] = useState('')
   /* La letra se pinta antes que la tabla: ver el comentario en Hermanos.tsx. */
@@ -288,7 +317,24 @@ export default function Cuotas() {
   }, [conceptosCuota, conceptoEmision])
   const [metodoEmision, setMetodoEmision] = useState<MetodoCobro>('Domiciliación')
   // Un año a medio teclear («2», «202») emitiría cuotas de un ejercicio absurdo.
-  const ejercicioValido = ejercicioEmision >= 2000 && ejercicioEmision <= 2100
+  const ejercicioEnRango = ejercicioEmision >= 2000 && ejercicioEmision <= 2100
+  /*
+   * NO SE PUEDE EMITIR UN EJERCICIO QUE NO SE HA TRAÍDO. ESTO ES IMPORTANTE.
+   *
+   * `pendientesDeEmitir` sale de `hermanosSinCuota(cuotas, …)`, o sea, de la
+   * lista que hay EN MEMORIA. Con la ventana puesta, los recibos ya cobrados de
+   * 2019 no están en esa lista — y no porque no existan, sino porque no se han
+   * traído.
+   *
+   * Sin este freno, escribir «2019» en el cajón de emisión diría «se emitirá a
+   * 800 hermanos» y emitiría 800 recibos duplicados encima de los que ya hay en
+   * la base. Sin un solo error: los números salen, son plausibles, y están mal.
+   *
+   * Con la bandera apagada esto no aplica nunca (`ventanaCuotas` es
+   * `undefined`) y se puede emitir cualquier año, como siempre.
+   */
+  const ejercicioFueraDeVentana = !!ventanaCuotas && ejercicioEmision < desdeEjercicio
+  const ejercicioValido = ejercicioEnRango && !ejercicioFueraDeVentana
 
   /**
    * EL CONCEPTO QUE SE VA A EMITIR, como objeto del catálogo y no como texto.
@@ -1877,6 +1923,19 @@ export default function Cuotas() {
                 max={2100}
                 onChange={(e) => setEjercicioEmision(Number(e.target.value))}
               />
+              {/*
+                Ver `ejercicioFueraDeVentana`: de ese ejercicio no están
+                cargados los recibos ya cobrados, así que emitir crearía
+                duplicados. Se dice por qué, no se deja el botón apagado sin
+                explicación.
+              */}
+              {ejercicioFueraDeVentana && (
+                <p className="form-hint form-hint--alerta">
+                  De {ejercicioEmision} no están cargados los recibos ya cobrados (se traen los
+                  ejercicios desde {desdeEjercicio}), así que emitir aquí crearía recibos repetidos.
+                  Para reabrir un ejercicio antiguo, avísanos.
+                </p>
+              )}
             </div>
             <div className="form-row">
               <label htmlFor="conceptoEmision">Concepto</label>

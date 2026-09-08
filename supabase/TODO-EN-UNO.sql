@@ -79,6 +79,12 @@
 --   54. certificados.sql           El certificado de antigüedad que pide un hermano para acreditarlo fuera
 --   55. reglas-de-reparto.sql      Gastos porcentuales enlazados a una partida, para pérdidas y ganancias
 --   56. pago-tarjeta.sql           Que el hermano pague su cuota o su papeleta con tarjeta
+--   57. papeleta-personalizada-en-el-cortejo.sql Que una papeleta propia de la hermandad ocupe puesto en el cortejo
+--   58. vigilancia.sql             Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
+--   59. canal-de-actualizacion.sql Sacar una novedad a una hermandad piloto antes que a todas
+--   60. restaurar-copia.sql        Poder volcar la copia de UNA hermandad sin tocar a las demás
+--   61. soporte.sql                Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
+--   62. version-del-esquema.sql    Que la aplicación avise cuando la base se ha quedado atrás
 --
 -- -----------------------------------------------------------------------------
 -- LO ÚNICO QUE HAY QUE LEER ANTES
@@ -10211,3 +10217,899 @@ language sql volatile security definer set search_path = public, extensions as $
 $$;
 
 revoke all on function fijar_sesion_pago(uuid, text) from public, anon, authenticated;
+
+-- =============================================================================
+--   PAPELETA-PERSONALIZADA-EN-EL-CORTEJO.SQL — Que una papeleta propia de la hermandad ocupe puesto en el cortejo
+-- =============================================================================
+
+-- =============================================================================
+--   QUE UNA PAPELETA PROPIA DE LA HERMANDAD PUEDA IR EN EL CORTEJO
+-- =============================================================================
+--
+-- EL PROBLEMA. Las papeletas personalizadas nacieron para lo que NO sale en el
+-- cortejo: la papeleta simbólica de quien no procesiona, un recuerdo, un
+-- donativo. Por eso no llevaban tramo.
+--
+-- Pero en cuanto una hermandad las usa de verdad, les pone nombres como
+-- «nazareno cirio» o «mantilla», que sí son puestos: gente que camina, ocupa
+-- sitio y tiene que salir en la lista del diputado de tramo. Y no salía. Se
+-- emitía la papeleta, se cobraba, y el cortejo seguía diciendo 0/40 sin que
+-- nada avisara de por qué.
+--
+-- LA SOLUCIÓN. La papeleta personalizada puede apuntar a un tramo. Si apunta,
+-- quien la saca ocupa su puesto como cualquier otro. Si no, se queda como
+-- estaba, que para la simbólica es lo correcto.
+--
+-- `on delete set null` y no `cascade`: si se borra el tramo, la hermandad no
+-- puede perder de golpe su lista de precios. Se queda sin puesto y ya está.
+alter table opciones_papeleta
+  add column if not exists tramo_id uuid references tramos(id) on delete set null;
+
+comment on column opciones_papeleta.tramo_id is
+  'Puesto del cortejo que ocupa quien saca esta papeleta. Nulo = no sale en el '
+  'cortejo (la papeleta simbólica, un recuerdo, un donativo).';
+
+-- =============================================================================
+--   VIGILANCIA.SQL — Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
+-- =============================================================================
+
+-- =============================================================================
+--   VIGILANCIA: ENTERARSE DE LOS FALLOS SIN QUE NADIE LOS CUENTE
+-- =============================================================================
+--
+-- Con tres hermandades, de los fallos te enteras por WhatsApp. Con cincuenta no
+-- te enteras: el primer aviso es que alguien se da de baja, y para entonces
+-- llevaba tres meses sin poder imprimir las papeletas.
+--
+-- Esto es una tabla donde el navegador deja lo que se ha roto. Nada más.
+--
+-- -----------------------------------------------------------------------------
+-- POR QUÉ AQUÍ Y NO EN SENTRY (O SIMILAR)
+-- -----------------------------------------------------------------------------
+--
+-- Porque un fallo de Gobergo lleva dentro el nombre de la hermandad, la
+-- pantalla donde estaba y, a veces, trozos de mensajes de la base con datos
+-- reales. Mandar eso a un tercero es una cesión de datos que habría que poner
+-- en el registro de tratamientos, contarle al hermano y firmar con el
+-- proveedor. Por un contador de errores.
+--
+-- La base ya la tienes, ya es la que guarda el censo, y ya está en el registro.
+-- Guardar los fallos aquí no añade ni un solo tratamiento nuevo.
+--
+-- Lo que se pierde es lo que hace bien un Sentry —agrupar, avisar por correo,
+-- enseñar el fallo con el código al lado—. Lo que se gana es que puedes mirar
+-- esta tabla en el panel de Supabase, ordenada por fecha, y ver lo que se está
+-- rompiendo hoy en todas las hermandades a la vez. Que es el 90 % del valor.
+--
+-- -----------------------------------------------------------------------------
+-- QUÉ MIRAR, EN EL SQL EDITOR
+-- -----------------------------------------------------------------------------
+--
+--   -- Lo que más se rompe esta semana, agrupado:
+--   select mensaje, count(*), max(ocurrido_el)
+--     from errores_cliente
+--    where ocurrido_el > now() - interval '7 days'
+--    group by mensaje order by count(*) desc;
+--
+--   -- Y a qué hermandades les pasa:
+--   select h.nombre, e.mensaje, e.ruta, e.ocurrido_el
+--     from errores_cliente e left join hermandades h on h.id = e.hermandad_id
+--    order by e.ocurrido_el desc limit 50;
+--
+-- Ejecútalo después de `multi-hermandad.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+create table if not exists errores_cliente (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid references hermandades(id) on delete cascade,
+  ocurrido_el timestamptz not null default now(),
+  /*
+   * DÓNDE ESTABA. Es el primer dato que se pregunta siempre y el que menos se
+   * acuerda quien lo sufre. `/app/papeletas`, `/app/cuotas`…
+   */
+  ruta text not null default '',
+  /*
+   * QUÉ FALLÓ, en una línea. Es la clave por la que se agrupa, así que se
+   * guarda tal cual llega, sin fecha ni números dentro (eso lo limpia el
+   * navegador antes de mandarlo, ver `src/lib/vigilancia.ts`): si cada fallo
+   * trae un identificador distinto, agrupar no sirve de nada.
+   */
+  mensaje text not null,
+  /*
+   * LA PILA. Es lo único que dice EN QUÉ LÍNEA, y en producción viene con los
+   * nombres del paquete comprimido, así que hace falta el mapa de fuentes para
+   * leerla. Aun así, comparar dos pilas distingue dos fallos que traen el
+   * mismo mensaje.
+   */
+  pila text not null default '',
+  /*
+   * DE QUÉ TIPO. 'js' (algo se rompió en el navegador), 'promesa' (un `await`
+   * que nadie recogió) o 'base' (la base de datos rechazó una escritura).
+   * Los tres se cuentan igual pero no se arreglan igual.
+   */
+  clase text not null default 'js',
+  navegador text not null default '',
+  /*
+   * QUÉ VERSIÓN DE LA APLICACIÓN. Sin esto no se puede decir «esto se arregló
+   * el martes» ni saber si quien lo sufre tiene el arreglo. Es la fecha de
+   * compilación, que la pone Vite.
+   */
+  version_app text not null default '',
+  /* Su cargo. Casi todo lo que falla depende de los permisos. */
+  cargo text not null default ''
+);
+
+alter table errores_cliente enable row level security;
+alter table errores_cliente alter column hermandad_id set default hermandad_actual();
+
+create index if not exists errores_cliente_cuando_idx on errores_cliente (ocurrido_el desc);
+create index if not exists errores_cliente_hermandad_idx on errores_cliente (hermandad_id);
+
+/*
+ * ESCRIBE CUALQUIERA QUE HAYA ENTRADO, EN SU HERMANDAD Y SOLO EN LA SUYA.
+ *
+ * El hermano incluido, y hace falta: la mitad de lo que se rompe se rompe en
+ * el área del hermano, desde un móvil, y esa persona no va a escribir un
+ * reporte.
+ *
+ * NO ENTRA `anon`. La web pública se pinta sin sesión, así que sus fallos no
+ * se recogen — es una pérdida real y se acepta a cambio de no dejar una tabla
+ * de la base abierta a que cualquiera de internet la llene. Un formulario
+ * anónimo que escribe sin límite es un problema mayor que el que resuelve.
+ */
+drop policy if exists "errores_escribir" on errores_cliente;
+create policy "errores_escribir" on errores_cliente
+  for insert to authenticated
+  with check (hermandad_id = hermandad_actual());
+
+/*
+ * Y NO LO LEE NADIE DESDE LA APLICACIÓN.
+ *
+ * Sin política de select, RLS deniega. Se mira desde el panel de Supabase, que
+ * entra con la clave de servicio y se salta RLS.
+ *
+ * POR QUÉ NO DEJAR QUE LA HERMANDAD VEA LOS SUYOS. Porque no le sirve de nada
+ * —«TypeError: Cannot read properties of undefined» no es información para una
+ * secretaria— y porque sí le sirve para preocuparse. Los fallos son para quien
+ * los puede arreglar.
+ */
+
+/**
+ * Tirar lo viejo. Sesenta días es más que de sobra: un fallo que lleva dos
+ * meses sin repetirse o está arreglado o no le importa a nadie.
+ *
+ * Se llama sola si tienes `pg_cron` activado (Database → Extensions), y si no,
+ * a mano de vez en cuando. No pasa nada por no llamarla: son filas de texto,
+ * no fotos.
+ *
+ *   select cron.schedule('limpiar-errores', '0 4 * * 0', 'select limpiar_errores_cliente()');
+ */
+create or replace function limpiar_errores_cliente() returns integer
+language plpgsql security definer set search_path = public as $$
+declare borradas integer;
+begin
+  delete from errores_cliente where ocurrido_el < now() - interval '60 days';
+  get diagnostics borradas = row_count;
+  return borradas;
+end $$;
+
+-- =============================================================================
+--   CANAL-DE-ACTUALIZACION.SQL — Sacar una novedad a una hermandad piloto antes que a todas
+-- =============================================================================
+
+-- =============================================================================
+--   SACAR UNA NOVEDAD A UNA HERMANDAD ANTES QUE A TODAS
+-- =============================================================================
+--
+-- Gobergo es una sola página que se despliega de golpe: subes el paquete y a
+-- los cinco minutos TODAS las hermandades tienen la versión nueva. No hay
+-- vuelta atrás gradual, no hay «solo el 5 %», no hay nada.
+--
+-- Eso significa que un despliegue malo rompe a todo el mundo a la vez. En
+-- octubre eso es un mal día. En Semana Santa es una catástrofe: es la semana en
+-- que se imprimen las papeletas y se monta el cortejo, y no hay margen para
+-- «lo miramos el lunes».
+--
+-- -----------------------------------------------------------------------------
+-- QUÉ HACE ESTO, Y QUÉ NO
+-- -----------------------------------------------------------------------------
+--
+-- NO hace despliegue gradual del paquete: eso se arregla en el alojamiento, no
+-- aquí, y la nota de cómo hacerlo está en `docs/DESPLIEGUE.md`.
+--
+-- Lo que hace es lo otro, que es lo que de verdad se necesita el 90 % de las
+-- veces: que el CÓDIGO NUEVO SE DESPLIEGUE A TODOS PERO SOLO SE ENCIENDA PARA
+-- QUIEN TÚ DIGAS.
+--
+--   1. Escribes la función nueva detrás de una bandera.
+--   2. La despliegas. Todo el mundo tiene el código; nadie lo ve.
+--   3. La enciendes para el canal «piloto», que son una o dos hermandades
+--      tuyas de confianza.
+--   4. Pasa una semana. Si no ha explotado, la enciendes para «estable».
+--   5. Si explota, la apagas. SIN DESPLEGAR NADA: es una línea de SQL, tarda
+--      diez segundos, y no depende de que el alojamiento reconstruya el
+--      paquete.
+--
+-- Ese punto 5 es todo el valor. Hoy la única marcha atrás es volver a
+-- desplegar la versión anterior, con lo que se lleva por delante todo lo demás
+-- que hubiera entrado en medio.
+--
+-- -----------------------------------------------------------------------------
+-- CÓMO SE USA
+-- -----------------------------------------------------------------------------
+--
+--   -- Poner a una hermandad de piloto:
+--   update hermandades set canal = 'piloto' where nombre ilike '%Nazareno%';
+--
+--   -- Encender una novedad solo para los pilotos:
+--   insert into novedades (clave, descripcion, desde_canal)
+--   values ('cuotas-ventana', 'Cuotas solo trae los dos últimos ejercicios', 'piloto');
+--
+--   -- Y una semana después, para todas:
+--   update novedades set desde_canal = 'estable' where clave = 'cuotas-ventana';
+--
+--   -- O apagarla del todo, si ha salido mal:
+--   update novedades set desde_canal = 'apagado' where clave = 'cuotas-ventana';
+--
+-- -----------------------------------------------------------------------------
+-- LA REGLA QUE NO SE PUEDE SALTAR
+-- -----------------------------------------------------------------------------
+--
+-- UNA BANDERA QUE NO ESTÁ EN LA TABLA ESTÁ **APAGADA**, no encendida. Es lo
+-- contrario de lo que parece cómodo y es lo único seguro: si la consulta falla,
+-- si la base está atrasada, si alguien borra la fila sin querer, la aplicación
+-- se comporta como se comportaba antes de existir la novedad. El camino que
+-- lleva años funcionando es el que gana cuando hay dudas.
+--
+-- Y de ahí sale la otra regla, la que de verdad hay que respetar al programar:
+-- LA BANDERA SOLO PUEDE ENVOLVER CÓDIGO NUEVO, nunca sustituir el viejo. El
+-- camino de siempre tiene que seguir ahí, entero, funcionando. Ver
+-- `src/lib/novedades.ts`.
+--
+-- Ejecútalo después de `multi-hermandad.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 1. EL CANAL DE CADA HERMANDAD
+-- -----------------------------------------------------------------------------
+
+/*
+ * Por defecto TODAS son 'estable'. Ser piloto se pide, no se sortea: una
+ * hermandad que no sabe que está probando cosas no está probando, está
+ * sufriéndolas.
+ */
+alter table hermandades add column if not exists canal text not null default 'estable';
+
+do $$
+begin
+  alter table hermandades add constraint hermandades_canal_valido
+    check (canal in ('estable', 'piloto'));
+exception
+  when duplicate_object then null;
+end $$;
+
+-- -----------------------------------------------------------------------------
+-- 2. LAS NOVEDADES
+-- -----------------------------------------------------------------------------
+
+create table if not exists novedades (
+  /* Cómo la nombra el código. Ver `NOVEDADES` en `src/lib/novedades.ts`. */
+  clave text primary key,
+  /* Para acordarte dentro de seis meses de qué era esto. */
+  descripcion text not null default '',
+  /*
+   * DESDE QUÉ CANAL ESTÁ ENCENDIDA:
+   *
+   *   'apagado' — nadie. Es el valor para dar marcha atrás.
+   *   'piloto'  — solo las hermandades marcadas como piloto.
+   *   'estable' — todas.
+   *
+   * Va como escalera y no como tres banderas sueltas porque el camino real es
+   * siempre el mismo: apagado → piloto → estable. Y hacia atrás.
+   */
+  desde_canal text not null default 'apagado'
+    check (desde_canal in ('apagado', 'piloto', 'estable')),
+  cambiada_el timestamptz not null default now()
+);
+
+alter table novedades enable row level security;
+
+/*
+ * La lista la lee cualquiera que haya entrado. No es dato de nadie: son los
+ * nombres de las funciones que están en pruebas.
+ *
+ * ESCRIBIRLA NO PUEDE NADIE desde la aplicación —sin política de insert ni de
+ * update, RLS deniega—. Se cambia desde el SQL Editor. Una bandera que la
+ * hermandad pudiera encenderse sola no es un despliegue por fases, es un menú
+ * de opciones a medio hacer.
+ */
+drop policy if exists "novedades_leer" on novedades;
+create policy "novedades_leer" on novedades
+  for select to authenticated using (true);
+
+-- -----------------------------------------------------------------------------
+-- 3. QUÉ LE TOCA A QUIEN PREGUNTA
+-- -----------------------------------------------------------------------------
+
+/**
+ * Las novedades encendidas para la hermandad de quien pregunta. Una sola
+ * llamada, una sola lista de claves: la aplicación no tiene que saber nada de
+ * canales ni de escaleras.
+ *
+ * Que la cuenta sirva la lógica y no el navegador importa: el día que se añada
+ * un tercer canal, o un porcentaje, o una fecha de caducidad, se cambia aquí y
+ * las hermandades que no hayan recargado siguen funcionando.
+ */
+create or replace function mis_novedades() returns setof text
+language sql stable security definer set search_path = public as $$
+  select n.clave from novedades n
+   where n.desde_canal = 'estable'
+      or (n.desde_canal = 'piloto'
+          and exists (select 1 from hermandades h
+                       where h.id = hermandad_actual() and h.canal = 'piloto'))
+$$;
+grant execute on function mis_novedades() to authenticated;
+
+-- =============================================================================
+--   RESTAURAR-COPIA.SQL — Poder volcar la copia de UNA hermandad sin tocar a las demás
+-- =============================================================================
+
+-- =============================================================================
+--   RESTAURAR LA COPIA DE UNA HERMANDAD, SIN TOCAR A LAS DEMÁS
+-- =============================================================================
+--
+-- ESTE ES EL FICHERO MÁS PELIGROSO DEL PROYECTO. Léelo entero antes de tocarlo.
+--
+-- -----------------------------------------------------------------------------
+-- DE DÓNDE SALE
+-- -----------------------------------------------------------------------------
+--
+-- Gobergo lleva desde el principio un botón de «Descargar copia» que funciona,
+-- y una copia automática semanal en el cubo `copias` que también funciona. Lo
+-- que no había era manera de VOLVER A METERLA.
+--
+-- Está dicho con todas las letras en `src/lib/backup.ts`, en `sePuedeRestaurar()`:
+-- con la base de datos conectada, restaurar estaba PROHIBIDO. Y con razón: lo
+-- que hacía era escribir en el navegador, y el navegador es un espejo — al
+-- recargar, cada pantalla volvía a leer de la base y lo machacaba. Salía
+-- «Copia restaurada. Recargando…», recargaba, y estaba todo igual que antes.
+-- Se prefirió un botón desactivado que dice la verdad a uno que miente.
+--
+-- Pero eso deja a una hermandad de verdad con copias que no se pueden usar. Y
+-- la copia que no se puede restaurar no es una copia: es un archivo.
+--
+-- Supabase hace copia del PROYECTO ENTERO, con las cincuenta hermandades
+-- dentro. Restaurarla para deshacer el error de una sola sería tirar hacia
+-- atrás el trabajo de las otras cuarenta y nueve. Nadie va a hacer eso, así que
+-- en la práctica esa copia tampoco existe para este caso.
+--
+-- Esto es lo que faltaba: vaciar UNA hermandad para que la aplicación vuelva a
+-- meter sus filas.
+--
+-- -----------------------------------------------------------------------------
+-- LAS CUATRO CERRADURAS
+-- -----------------------------------------------------------------------------
+--
+-- Una función que borra el censo entero de una hermandad no puede llamarse por
+-- accidente. Lleva cuatro cerraduras, y las cuatro tienen que abrirse:
+--
+--   1. SOLO EL TITULAR. Ni el tesorero, ni el secretario, ni un hermano. El
+--      titular es quien responde de los datos.
+--   2. HAY QUE DECIR A QUIÉN. Se le pasa el identificador de la hermandad y
+--      tiene que coincidir con la del que llama. Sin esto, una llamada suelta
+--      sin argumentos borraría lo que hubiera al otro lado.
+--   3. BORRA POR `hermandad_id = hermandad_actual()`, siempre, en cada tabla.
+--      Aunque el argumento viniera mal, no puede alcanzar a otra hermandad.
+--   4. QUEDA ESCRITO ANTES DE BORRAR, en `registro_actividad` — que NO está en
+--      la lista de tablas que se vacían, así que el apunte sobrevive a la
+--      propia restauración. Es la caja negra.
+--
+-- -----------------------------------------------------------------------------
+-- LO QUE ESTO **NO** HACE, Y HAY QUE SABERLO
+-- -----------------------------------------------------------------------------
+--
+-- No mete las filas: solo vacía. Las mete la aplicación después, tabla por
+-- tabla, desde el archivo (ver `src/lib/restaurar.ts`). O sea que entre el
+-- vaciado y el llenado hay unos segundos en que la hermandad no tiene datos.
+--
+-- Es una ventana real y no se puede cerrar desde el navegador: haría falta que
+-- todo —vaciar y llenar— ocurriera dentro de una sola transacción en el
+-- servidor, y para eso habría que mandarle el archivo entero, que pesa megas.
+--
+-- Lo que sí se hace es lo importante: `src/lib/restaurar.ts` DESCARGA UNA COPIA
+-- DE SEGURIDAD DE LO QUE HAY AHORA antes de vaciar nada, y no sigue si esa
+-- descarga falla. Si la restauración se corta a la mitad, lo que había está en
+-- un archivo en el disco de quien la lanzó.
+--
+-- Ejecútalo después de `multi-hermandad.sql` y de `registro-actividad.sql`.
+-- Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+/**
+ * Vacía las tablas de datos de la hermandad de quien llama, para que se pueda
+ * volcar encima una copia. Devuelve cuántas filas ha borrado de cada tabla.
+ *
+ * `security invoker` A PROPÓSITO, y es una decisión, no un descuido: así las
+ * políticas de RLS siguen aplicándose sobre el que llama. La cerradura número 3
+ * (`where hermandad_id = hermandad_actual()`) y RLS dicen lo mismo, y eso es
+ * exactamente lo que se quiere: dos cerraduras independientes que tienen que
+ * fallar las dos a la vez para que esto alcance a otra hermandad.
+ *
+ * Con `security definer` se saltaría RLS y quedaría UNA sola cerradura entre
+ * este `delete` y el censo de las otras cuarenta y nueve hermandades. No.
+ */
+create or replace function vaciar_hermandad_para_restaurar(confirmacion uuid)
+returns table (tabla text, borradas bigint)
+language plpgsql security invoker set search_path = public as $$
+declare
+  mia uuid;
+  quien text;
+  t text;
+  n bigint;
+  /*
+   * LAS MISMAS TABLAS QUE ENTRAN EN LA COPIA, y en el mismo orden que
+   * `TABLAS_COPIA` en `src/lib/backup.ts`. Si tocas una lista, toca la otra:
+   * hay una prueba que las compara (`pruebas/restaurar.prueba.mjs`), porque
+   * una tabla que se copia y no se vacía se queda con las filas viejas
+   * MEZCLADAS con las de la copia, y eso no da ningún error — da un censo con
+   * hermanos duplicados que nadie sabe de dónde salen.
+   *
+   * Se vacía en ORDEN INVERSO por si algún día alguna clave ajena deja de ser
+   * `on delete cascade`. Hoy lo son todas y daría igual; el día que no, esto
+   * ya está bien puesto.
+   */
+  tablas text[] := array[
+    'hermanos', 'tramos', 'cuotas', 'papeletas', 'movimientos', 'incidencias',
+    'enseres', 'documentos', 'comunicados', 'cuentas_sociales', 'permisos_cargo',
+    'solicitudes_alta', 'conceptos_cuota', 'opciones_papeleta', 'catalogos',
+    'eventos', 'personal', 'hermandad_settings', 'web_publica', 'mensajes_web'
+  ];
+begin
+  mia := hermandad_actual();
+  if mia is null then
+    raise exception 'No se sabe de qué hermandad eres.';
+  end if;
+
+  -- Cerradura 2: hay que decir a quién, y tiene que ser la tuya.
+  if confirmacion is distinct from mia then
+    raise exception 'El identificador de confirmación no es el de tu hermandad.';
+  end if;
+
+  -- Cerradura 1: solo el titular.
+  if not exists (select 1 from titulares x
+                  where x.auth_user_id = auth.uid() and x.hermandad_id = mia) then
+    raise exception 'Solo quien figura como titular de la hermandad puede restaurar una copia.';
+  end if;
+
+  -- Cerradura 4: la caja negra, ANTES de tocar nada.
+  select coalesce(email, '') into quien from auth.users where id = auth.uid();
+  insert into registro_actividad (hermandad_id, autor_id, autor_nombre, accion, sobre_tipo, detalle)
+  values (mia, auth.uid(), quien, 'restaurar_copia', 'hermandad',
+          'Se han vaciado los datos de la hermandad para volcar encima una copia de seguridad.');
+
+  for i in reverse array_length(tablas, 1) .. 1 loop
+    t := tablas[i];
+    -- Una tabla que todavía no existe en esta base (base atrasada) se salta en
+    -- vez de reventar la restauración entera a la mitad.
+    continue when to_regclass('public.' || t) is null;
+    continue when not exists (
+      select 1 from information_schema.columns c
+       where c.table_schema = 'public' and c.table_name = t and c.column_name = 'hermandad_id');
+
+    -- Cerradura 3. `mia` y no `hermandad_actual()` dentro del bucle: se resuelve
+    -- una vez, así no puede cambiar a media faena.
+    execute format('delete from %I where hermandad_id = $1', t) using mia;
+    get diagnostics n = row_count;
+    tabla := t; borradas := n; return next;
+  end loop;
+end $$;
+
+grant execute on function vaciar_hermandad_para_restaurar(uuid) to authenticated;
+
+/**
+ * Con qué hermandad estoy trabajando ahora mismo. La aplicación la necesita
+ * para poder pasar la confirmación de arriba: sin esto tendría que adivinar su
+ * propio identificador, y adivinar es justo lo que no queremos aquí.
+ */
+create or replace function mi_hermandad_id() returns uuid
+language sql stable security definer set search_path = public as $$
+  select hermandad_actual()
+$$;
+grant execute on function mi_hermandad_id() to authenticated;
+
+-- =============================================================================
+--   SOPORTE.SQL — Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
+-- =============================================================================
+
+-- =============================================================================
+--   VER LO QUE VE ESA HERMANDAD, PARA PODER AYUDARLA
+-- =============================================================================
+--
+-- Una incidencia de soporte hoy son tres correos: «no me deja imprimir» →
+-- «¿me mandas una captura?» → una foto de una pantalla hecha con el móvil →
+-- «¿y qué pone si le das a Ajustes?». Con tres hermandades se aguanta. Con
+-- cincuenta es la jornada entera.
+--
+-- Esto deja entrar a UNA cuenta de soporte en la hermandad que pida ayuda, ver
+-- exactamente lo que ella ve, y salir.
+--
+-- -----------------------------------------------------------------------------
+-- LO PRIMERO: ESTO NO HACE NADA HASTA QUE TÚ LO ENCIENDES
+-- -----------------------------------------------------------------------------
+--
+-- La tabla `soporte_cuentas` nace VACÍA y se queda vacía. Mientras no metas a
+-- mano una fila en el SQL Editor, `hermandad_actual()` se comporta EXACTAMENTE
+-- como antes para todo el mundo: mismos tres caminos, mismo resultado.
+--
+-- No hay pantalla para darse de alta como soporte. No hay botón. La única
+-- manera de que exista una cuenta de soporte es que alguien con la contraseña
+-- del proyecto de Supabase escriba la fila.
+--
+-- -----------------------------------------------------------------------------
+-- CÓMO SE USA (todo desde el SQL Editor de Supabase)
+-- -----------------------------------------------------------------------------
+--
+--   1. UNA VEZ EN LA VIDA, date de alta a ti mismo. Regístrate en Gobergo con
+--      un correo tuyo QUE NO SEA HERMANO NI PERSONAL DE NINGUNA HERMANDAD, y
+--      luego:
+--
+--        insert into soporte_cuentas (auth_user_id, nota)
+--        select id, 'soporte de Gobergo' from auth.users where email = 'tucorreo@ejemplo.com';
+--
+--   2. CUANDO ALGUIEN PIDA AYUDA:
+--
+--        select soporte_entrar('el-uuid-de-la-hermandad');
+--
+--      Recarga Gobergo y estarás dentro, viendo lo suyo. Arriba sale una banda
+--      roja que lo dice; ver `src/components/AppShell.tsx`.
+--
+--   3. AL TERMINAR:
+--
+--        select soporte_salir();
+--
+-- -----------------------------------------------------------------------------
+-- LAS CUATRO COSAS QUE LO HACEN SEGURO
+-- -----------------------------------------------------------------------------
+--
+--   · CADUCA SOLA. La entrada dura dos horas. Un soporte que se te olvida
+--     cerrado un viernes no es acceso permanente al censo de una hermandad.
+--
+--   · SOLO LEE… no, MIENTE: escribe igual que la hermandad, porque para
+--     reproducir un fallo de guardado hay que guardar. Por eso las otras tres.
+--
+--   · QUEDA ESCRITO EN SU REGISTRO. Entrar deja una línea en
+--     `registro_actividad` de ESA hermandad, con tu nombre. Ellos lo ven en su
+--     pantalla de actividad. Un acceso que el dueño de los datos no puede ver
+--     no es soporte, es otra cosa.
+--
+--   · SE VE EN PANTALLA. Mientras estás dentro, la aplicación pinta una banda
+--     que no se puede quitar. Es para ti: para que no te creas que estás en tu
+--     propia hermandad y borres algo.
+--
+-- Ejecútalo después de `multi-hermandad.sql` y de `registro-actividad.sql`.
+-- Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 1. QUIÉN ES SOPORTE
+-- -----------------------------------------------------------------------------
+
+create table if not exists soporte_cuentas (
+  auth_user_id uuid primary key references auth.users(id) on delete cascade,
+  nota text not null default '',
+  creado_el timestamptz not null default now()
+);
+
+alter table soporte_cuentas enable row level security;
+/*
+ * Sin ninguna política: RLS deniega todo desde la aplicación. Ni leerla.
+ *
+ * Que no se pueda LEER importa tanto como que no se pueda escribir: una tabla
+ * legible sería una lista de «qué cuentas pueden entrar en cualquier
+ * hermandad», que es justo el objetivo que se le pone a quien quiera entrar.
+ * Las funciones de abajo la consultan porque van con `security definer`.
+ */
+
+/** ¿La cuenta que está pidiendo es una cuenta de soporte? */
+create or replace function es_soporte() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from soporte_cuentas s where s.auth_user_id = auth.uid())
+$$;
+grant execute on function es_soporte() to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- 2. DÓNDE ESTÁ METIDO AHORA MISMO
+-- -----------------------------------------------------------------------------
+
+create table if not exists soporte_sesion (
+  auth_user_id uuid primary key references auth.users(id) on delete cascade,
+  hermandad_id uuid not null references hermandades(id) on delete cascade,
+  /* Cuándo deja de valer. Ver arriba: no hay accesos que duren para siempre. */
+  hasta timestamptz not null,
+  entrado_el timestamptz not null default now(),
+  motivo text not null default ''
+);
+
+alter table soporte_sesion enable row level security;
+-- Tampoco tiene políticas: solo la tocan las funciones de abajo.
+
+-- -----------------------------------------------------------------------------
+-- 3. `hermandad_actual()` — EL ÚNICO SITIO QUE SE TOCA DE VERDAD
+-- -----------------------------------------------------------------------------
+--
+-- ¡OJO SI VIENES A CAMBIAR ESTO! Esta función es la frontera entre hermandades:
+-- la usan las políticas de RLS de TODAS las tablas. Un fallo aquí no da error,
+-- enseña el censo de otra hermandad.
+--
+-- Se redefine entera, con los TRES CAMINOS DE SIEMPRE INTACTOS y en el mismo
+-- orden, y un cuarto AL FINAL. Es importante que el cuarto vaya el último:
+--
+--   · `coalesce` en SQL evalúa perezoso: en cuanto uno de los tres primeros
+--     devuelve algo, el cuarto NI SE MIRA. Para el 100 % de las personas
+--     reales esta función cuesta exactamente lo que costaba antes.
+--   · Y si alguna vez una cuenta de soporte fuera además hermana de alguna
+--     hermandad, mandaría SU hermandad, no la suplantada. Que es lo correcto:
+--     nadie debe poder salirse de su propia casa por tener una llave maestra.
+--
+-- La definición original está en `multi-hermandad.sql`, sección 3. Si cambias
+-- una, cambia la otra.
+--
+create or replace function hermandad_actual() returns uuid
+language sql stable security definer set search_path = public as $$
+  select coalesce(
+    (select t.hermandad_id from titulares t where t.auth_user_id = auth.uid()),
+    (select p.hermandad_id from personal  p where p.auth_user_id = auth.uid() and p.activo),
+    (select h.hermandad_id from hermanos  h where h.auth_user_id = auth.uid()),
+    -- Y solo si no es ninguna de las tres cosas: la suplantación de soporte,
+    -- mientras no haya caducado.
+    (select s.hermandad_id from soporte_sesion s
+      where s.auth_user_id = auth.uid() and s.hasta > now())
+  )
+$$;
+grant execute on function hermandad_actual() to authenticated, anon;
+
+-- -----------------------------------------------------------------------------
+-- 4. ENTRAR Y SALIR
+-- -----------------------------------------------------------------------------
+
+/**
+ * Entra en una hermandad. Devuelve su nombre, para que veas en el acto que has
+ * acertado con el identificador.
+ *
+ * Deja constancia en el registro de actividad DE ESA HERMANDAD antes de dejar
+ * entrar, no después: si el insert de la sesión fallara, ya está escrito que se
+ * intentó.
+ */
+create or replace function soporte_entrar(cual uuid, por_que text default '')
+returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  quien text;
+  como_se_llama text;
+begin
+  if not es_soporte() then
+    raise exception 'Esta cuenta no es de soporte.';
+  end if;
+
+  select nombre into como_se_llama from hermandades where id = cual;
+  if como_se_llama is null then
+    raise exception 'No hay ninguna hermandad con ese identificador.';
+  end if;
+
+  select coalesce(email, 'soporte') into quien from auth.users where id = auth.uid();
+
+  insert into registro_actividad (hermandad_id, autor_id, autor_nombre, accion, sobre_tipo, detalle)
+  values (cual, auth.uid(), quien, 'soporte_entra', 'hermandad',
+          'Soporte de Gobergo ha entrado para ayudar' ||
+          case when por_que = '' then '.' else ': ' || por_que end);
+
+  insert into soporte_sesion (auth_user_id, hermandad_id, hasta, entrado_el, motivo)
+  values (auth.uid(), cual, now() + interval '2 hours', now(), por_que)
+  on conflict (auth_user_id) do update
+    set hermandad_id = excluded.hermandad_id,
+        hasta = excluded.hasta,
+        entrado_el = excluded.entrado_el,
+        motivo = excluded.motivo;
+
+  return como_se_llama;
+end $$;
+grant execute on function soporte_entrar(uuid, text) to authenticated;
+
+/** Sale. Se puede llamar aunque no estuvieras dentro. */
+create or replace function soporte_salir() returns void
+language plpgsql security definer set search_path = public as $$
+declare donde uuid; quien text;
+begin
+  select hermandad_id into donde from soporte_sesion where auth_user_id = auth.uid();
+  if donde is null then return; end if;
+
+  select coalesce(email, 'soporte') into quien from auth.users where id = auth.uid();
+  insert into registro_actividad (hermandad_id, autor_id, autor_nombre, accion, sobre_tipo, detalle)
+  values (donde, auth.uid(), quien, 'soporte_sale', 'hermandad',
+          'Soporte de Gobergo ha terminado.');
+
+  delete from soporte_sesion where auth_user_id = auth.uid();
+end $$;
+grant execute on function soporte_salir() to authenticated;
+
+/**
+ * ¿Estoy suplantando a alguien ahora mismo, y a quién?
+ *
+ * La llama la aplicación al arrancar para pintar la banda de aviso. Devuelve
+ * el nombre de la hermandad, o `null` si no. Para una cuenta normal —o sea,
+ * para todo el mundo— devuelve `null` sin tocar nada.
+ */
+create or replace function soporte_donde_estoy() returns text
+language sql stable security definer set search_path = public as $$
+  select h.nombre from soporte_sesion s
+    join hermandades h on h.id = s.hermandad_id
+   where s.auth_user_id = auth.uid() and s.hasta > now()
+$$;
+grant execute on function soporte_donde_estoy() to authenticated;
+
+/**
+ * Y la lista, para saber a dónde entrar. Solo la contesta si eres soporte.
+ *
+ *   select * from soporte_hermandades();
+ */
+create or replace function soporte_hermandades()
+returns table (id uuid, nombre text, creada_en timestamptz, hermanos bigint)
+language sql stable security definer set search_path = public as $$
+  select h.id, h.nombre, h.creada_en,
+         (select count(*) from hermanos x where x.hermandad_id = h.id)
+    from hermandades h
+   where es_soporte()
+   order by h.nombre
+$$;
+grant execute on function soporte_hermandades() to authenticated;
+
+-- =============================================================================
+--   VERSION-DEL-ESQUEMA.SQL — Que la aplicación avise cuando la base se ha quedado atrás
+-- =============================================================================
+
+-- =============================================================================
+--   LA VERSIÓN DEL ESQUEMA: PODER ACTUALIZAR SIN ROMPER NADA
+-- =============================================================================
+--
+-- SI ERES UN PROGRAMADOR Y ACABAS DE LLEGAR, EMPIEZA POR AQUÍ.
+--
+-- -----------------------------------------------------------------------------
+-- EL PROBLEMA QUE RESUELVE
+-- -----------------------------------------------------------------------------
+--
+-- Gobergo tiene una aplicación (el navegador) y una base de datos (Supabase), y
+-- se actualizan POR SEPARADO:
+--
+--   · La aplicación se despliega y a los cinco minutos todo el mundo tiene la
+--     versión nueva, quiera o no.
+--   · La base de datos la actualiza cada hermandad a mano, pegando
+--     `ACTUALIZAR.sql` en el SQL Editor de su proyecto de Supabase. Cuando se
+--     acuerda. Si se acuerda.
+--
+-- O sea que existe, siempre, una ventana en la que la aplicación es más nueva
+-- que la base. Y lo que pasaba en esa ventana era lo peor que puede pasar:
+--
+--   La aplicación escribe en una columna que todavía no existe. Postgres NO
+--   ignora la columna de más: RECHAZA LA SENTENCIA ENTERA. No se pierde ese
+--   dato — no se guarda la fila. El tramo entero. El cobro entero. Y en
+--   pantalla no pasa nada raro: se rellena el formulario, se le da a guardar,
+--   dice que se ha guardado, y al recargar está en blanco.
+--
+-- Eso llegó reportado como «pongo la hora de citación y al recargar está en
+-- blanco», y hasta que se localizó no había forma de saber que la causa era
+-- una base sin actualizar. La aplicación no tenía manera de saberlo tampoco.
+--
+-- -----------------------------------------------------------------------------
+-- LA SOLUCIÓN: QUE LA BASE DIGA POR QUÉ VERSIÓN VA
+-- -----------------------------------------------------------------------------
+--
+-- Una tabla con un número. `ACTUALIZAR.sql` y `TODO-EN-UNO.sql` lo sellan al
+-- final, cuando ya han pasado todas las piezas. La aplicación lo lee al
+-- arrancar y lo compara con el que ella necesita (`src/lib/versionEsquema.ts`).
+--
+--   · Si coinciden, no pasa nada y no se ve nada.
+--   · Si la base va por detrás, sale una banda arriba que lo dice con todas
+--     las letras y explica qué hay que pegar en Supabase.
+--
+-- No es un arreglo: es convertir un fallo MUDO en un aviso. Que es todo lo que
+-- se puede hacer desde el lado del navegador, y es muchísimo.
+--
+-- -----------------------------------------------------------------------------
+-- CÓMO SE SUBE LA VERSIÓN CUANDO AÑADES UNA PIEZA
+-- -----------------------------------------------------------------------------
+--
+-- No se sube a mano, y ese es el punto. LA VERSIÓN ES EL NÚMERO DE PIEZAS del
+-- instalador (`scripts/generar-todo-en-uno.mjs`, la lista `PIEZAS`). Añadir un
+-- fichero .sql a esa lista sube la versión sola.
+--
+-- Lo único que tienes que hacer tú es poner el mismo número en
+-- `src/lib/versionEsquema.ts`. Y si se te olvida, `npm test` te lo dice por su
+-- nombre: hay una prueba que compara los dos.
+--
+-- POR QUÉ ASÍ Y NO CON UN NÚMERO INVENTADO. Porque un número que hay que
+-- acordarse de subir es un número que se olvida, y el día que se olvida el
+-- aviso deja de salir justo cuando hacía falta. Derivarlo de la lista de
+-- piezas lo hace imposible de olvidar.
+--
+-- Ejecutar esto dos veces no hace nada. Como todo lo demás.
+-- =============================================================================
+
+/*
+ * UNA TABLA DE CLAVE Y VALOR, no una columna suelta en otro sitio.
+ *
+ * Hoy solo guarda `version`, y podría ser una fila y ya está. Se deja abierta
+ * a propósito: el día que haga falta apuntar «cuándo se actualizó por última
+ * vez» o «qué pieza falló», va aquí sin migrar nada.
+ */
+create table if not exists esquema_gobergo (
+  clave text primary key,
+  valor integer not null,
+  sellado_el timestamptz not null default now()
+);
+
+/*
+ * NO LLEVA `hermandad_id`, Y ES A PROPÓSITO.
+ *
+ * Todas las hermandades comparten la misma base de datos y por tanto el mismo
+ * esquema: la versión es UNA para todas. Meterle `hermandad_id` daría a
+ * entender que cada hermandad puede ir por su versión, y no es verdad — no se
+ * puede tener la columna `fecha_baja` para unas sí y otras no.
+ */
+alter table esquema_gobergo enable row level security;
+
+/*
+ * LO LEE CUALQUIERA QUE HAYA ENTRADO, y también quien no.
+ *
+ * `anon` incluido, y hace falta: la web pública de la hermandad se pinta sin
+ * sesión, y si la base está atrasada quien la mantiene tiene que poder verlo
+ * desde ahí también. No hay nada que proteger: es un número entero que no
+ * dice absolutamente nada de nadie.
+ */
+drop policy if exists "esquema_leer" on esquema_gobergo;
+create policy "esquema_leer" on esquema_gobergo
+  for select to authenticated, anon using (true);
+
+/*
+ * ESCRIBIRLO NO PUEDE NADIE DESDE LA APLICACIÓN.
+ *
+ * No hay política de insert ni de update: con RLS encendida y sin política,
+ * Postgres deniega. El único que sella es el propio `ACTUALIZAR.sql`, que se
+ * ejecuta en el SQL Editor con permisos de dueño y se salta RLS.
+ *
+ * Si la aplicación pudiera sellar, el número dejaría de significar «lo que hay
+ * puesto en la base» para significar «lo que la aplicación cree», que es
+ * exactamente el dato que no sirve.
+ */
+
+/**
+ * Sella la versión. La llama el final de `ACTUALIZAR.sql` y de
+ * `TODO-EN-UNO.sql`, generada por los scripts; no la llames a mano.
+ */
+create or replace function sellar_esquema(n integer) returns void
+language sql security definer set search_path = public as $$
+  insert into esquema_gobergo (clave, valor, sellado_el)
+  values ('version', n, now())
+  on conflict (clave) do update
+    set valor = excluded.valor, sellado_el = excluded.sellado_el
+$$;
+
+/**
+ * Por qué versión va la base. Devuelve 0 si nunca se ha sellado, que es lo que
+ * le pasa a toda hermandad que montó su base antes de que esto existiera: no
+ * es un error, es «no lo sé todavía», y la aplicación lo trata como tal.
+ */
+create or replace function version_del_esquema() returns integer
+language sql stable security definer set search_path = public as $$
+  select coalesce((select valor from esquema_gobergo where clave = 'version'), 0)
+$$;
+
+grant execute on function version_del_esquema() to authenticated, anon;
+
+-- =============================================================================
+--   SELLO DE LA VERSIÓN — que la aplicación sepa que esta base está al día
+-- =============================================================================
+--
+-- Generado. Es el número de piezas de esta instalación. La aplicación lo lee al
+-- arrancar y avisa si va por detrás; ver `src/lib/versionEsquema.ts`.
+
+select sellar_esquema(62);

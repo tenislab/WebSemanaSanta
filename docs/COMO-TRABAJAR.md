@@ -67,9 +67,15 @@ sueltos hay que borrar de la raíz si quedaron de entregas anteriores.
 ## 3. Cómo está montado esto
 
 - **Vite + React + TypeScript**, CSS plano en un único `src/styles/global.css`.
-- **Sin base de datos todavía.** Los datos viven en `localStorage` y los módulos
-  los leen con `useSupabaseTable`, que ya sabe hablar con Supabase cuando esté
-  configurado. Ver `src/lib/supabaseSync.ts`.
+- **Los datos viven en Supabase**, y el navegador guarda un ESPEJO en
+  `localStorage` para que la aplicación vaya instantánea y aguante sin red. Los
+  módulos lo leen con `useSupabaseTable`; sin Supabase configurado, ese mismo
+  hook se comporta como almacenamiento local a secas. Ver
+  `src/lib/supabaseSync.ts`.
+- **Y el espejo tiene un techo.** Es el que pone `localStorage`, unos 5 MB, y
+  se alcanza SOLO CON QUE PASE EL TIEMPO: una hermandad de 800 hermanos junta
+  32.000 recibos en diez años. De ahí la «ventana de histórico»:
+  `src/lib/ventanaHistorico.ts`.
 - **Modo demostración**: la clave `cabildo-demo-modo` fuerza la lectura local.
   Ver `src/lib/demo.ts` (demo llena y demo vacía).
 - **Tema claro y oscuro** con tokens CSS. Un color definido **solo** dentro de
@@ -77,6 +83,23 @@ sueltos hay que borrar de la raíz si quedaron de entregas anteriores.
   defecto: es el bug clásico y ya ha aparecido varias veces aquí.
 - Los datos de ejemplo son **deterministas** a propósito (nada de `Math.random()`
   ni `Date.now()`): la demo no debe cambiar sola entre cargas.
+
+### Antes de tocar la base de datos o de desplegar: **`docs/DESPLIEGUE.md`**
+
+Es la guía corta de lo que hay que saber, y está escrita a partir de lo que ya
+ha salido mal. Lo imprescindible, en cuatro líneas:
+
+- La aplicación y la base **se actualizan por separado**, así que siempre hay
+  hermandades con la aplicación nueva y la base vieja. Escribir en una columna
+  que no existe **pierde la fila entera, en silencio**.
+- Por eso, al añadir un `.sql`: va **a las dos listas** de `scripts/`, se sube
+  `VERSION_ESQUEMA` en `src/lib/versionEsquema.ts` y se regeneran los dos
+  instaladores. `npm test` te lo dice si te saltas alguno.
+- Un cambio arriesgado va **detrás de una bandera** (`src/lib/novedades.ts`),
+  se enciende para una hermandad piloto y luego para todas. Apagarlo es una
+  línea de SQL, sin desplegar nada.
+- **La bandera envuelve código nuevo; nunca sustituye al viejo.** Es la única
+  regla de todo esto que ninguna prueba puede comprobar por ti.
 
 ---
 

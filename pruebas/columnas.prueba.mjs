@@ -411,6 +411,14 @@ async function nadieSeQuedaSinUsar({ caso }) {
     recuperaciones_hermano: 'las contraseñas olvidadas: solo la Edge Function con la clave de servicio',
     titulares: 'quién lleva la hermandad: se pregunta por es_titular(), no leyendo la tabla',
     suscripciones: 'por RPC (mi_suscripcion, activar_suscripcion_propia): el pack no lo elige el navegador',
+    /*
+     * LAS CUATRO DE «CRECER SIN ROMPER NADA». Ninguna se lee por su nombre a
+     * propósito, y en tres de los cuatro casos ES LA PROTECCIÓN:
+     */
+    novedades: 'por RPC (mis_novedades): la cuenta decide qué está encendido, no el navegador',
+    esquema_gobergo: 'por RPC (version_del_esquema): un número, y que no lo pueda escribir la aplicación es el punto',
+    soporte_cuentas: 'no se lee NUNCA: una lista legible de quién puede entrar en cualquier hermandad sería el objetivo perfecto',
+    soporte_sesion: 'igual: solo la tocan las funciones del servidor (soporte_entrar/salir/donde_estoy)',
   }
 
   // Todo lo que la aplicación nombra: el panel, el área del hermano y la

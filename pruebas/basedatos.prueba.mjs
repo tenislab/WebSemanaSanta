@@ -279,7 +279,252 @@ export default async function ({ caso }) {
   await laFacturaCuadraConLaBase({ sql, caso })
   await elPrecioRebajadoEsElMismoEnLosDosSitios({ sql, caso })
   await losDatosDeLaTiendaCuadran({ sql, caso })
+  await lasCosasDeCrecerSinRomperNada({ sql, caso })
 }
+
+/**
+ * LAS CUATRO PIEZAS DE «CRECER SIN ROMPER NADA», EJECUTADAS DE VERDAD.
+ *
+ * Las demás pruebas de esas piezas leen el SQL como texto: comprueban que la
+ * cerradura está ESCRITA. Aquí se comprueba que CIERRA, que no es lo mismo.
+ *
+ * Y en tres de las cuatro el fallo silencioso es el peligro real: una política
+ * que no deniega no da error, deja pasar; una función que devuelve el número
+ * equivocado no da error, hace que un aviso no salte nunca.
+ */
+async function lasCosasDeCrecerSinRomperNada({ sql, caso }) {
+  /*
+   * `psql -tA` imprime también las etiquetas de cada orden («DO», «SET»,
+   * «BEGIN»…), así que lo que interesa es la ÚLTIMA línea con contenido. Sin
+   * esto, media prueba compara «0» contra «DO\n0» y falla teniendo razón el
+   * código, que es la peor manera de perder una tarde.
+   */
+  const ETIQUETAS = /^(BEGIN|COMMIT|ROLLBACK|SET|RESET|DO|GRANT|REVOKE|(INSERT|UPDATE|DELETE|SELECT|MOVE|FETCH|COPY)( \d+)+)$/
+  const ultimo = (x) => String(x).trim().split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !ETIQUETAS.test(l))
+    .pop() ?? ''
+
+  /*
+   * Y HACERSE PASAR POR ALGUIEN NECESITA UNA TRANSACCIÓN.
+   *
+   * `set local` fuera de un `begin` no hace nada —avisa y sigue—, así que la
+   * consulta se ejecutaba sin cuenta y `hermandad_actual()` devolvía nulo. Con
+   * el `begin`/`commit` alrededor, la sesión de mentira dura lo que dura el
+   * bloque y no se escapa a la siguiente prueba.
+   */
+  const como = (quien, consulta) => sql(`
+    begin;
+    set local request.jwt.claim.sub = '${quien}';
+    ${consulta}
+    commit;
+  `)
+
+  // --- 1. LA VERSIÓN DEL ESQUEMA ---
+  /*
+   * `TODO-EN-UNO.sql` acaba de ejecutarse entero, así que la base tiene que
+   * decir el mismo número que la aplicación. Si esto se separa, el aviso de
+   * «tu base va atrasada» saltaría en TODAS las hermandades justo después de
+   * actualizar — y una alarma que salta cuando todo está bien se acaba
+   * ignorando también los días que tiene razón.
+   */
+  const { PIEZAS } = await import('../scripts/generar-todo-en-uno.mjs')
+  caso('la base dice por qué versión va', String(PIEZAS.length),
+    ultimo(await sql('select version_del_esquema();')))
+
+  /*
+   * Y NO LA PUEDE ESCRIBIR LA APLICACIÓN. Si pudiera, el número dejaría de
+   * significar «lo que hay puesto en la base» para significar «lo que la
+   * aplicación cree», que es exactamente el dato que no sirve.
+   *
+   * El `raise` de dentro no es adorno: si el insert llegara a pasar, el bloque
+   * reventaría con ON_ERROR_STOP y la prueba se caería en vez de dar «0» por
+   * un motivo equivocado.
+   */
+  const puedeSellar = await sql(`
+    do $$ begin
+      set local role authenticated;
+      begin
+        insert into esquema_gobergo (clave, valor) values ('trampa', 999);
+        raise exception 'LA APLICACION HA PODIDO SELLAR EL ESQUEMA';
+      exception when insufficient_privilege then null;
+      end;
+    end $$;
+    select count(*) from esquema_gobergo where clave = 'trampa';
+  `)
+  caso('y la aplicación no la puede escribir', '0', ultimo(puedeSellar))
+
+  // --- 2. LAS NOVEDADES ---
+  /*
+   * Una novedad recién creada NACE APAGADA y no la ve nadie, ni siquiera un
+   * piloto. Es la regla que hace que un despliegue malo no encienda nada.
+   */
+  await sql(`
+    insert into novedades (clave, descripcion) values ('prueba-bandera', 'de prueba')
+      on conflict (clave) do update set desde_canal = 'apagado';
+  `)
+  caso('una novedad nace apagada para todos', '0', ultimo(await sql(
+    `select count(*) from novedades where clave = 'prueba-bandera' and desde_canal <> 'apagado';`)))
+
+  /* Y la escalera solo admite sus tres peldaños: un valor inventado se rechaza. */
+  const canalInventado = await sql(`
+    do $$ begin
+      update novedades set desde_canal = 'todos' where clave = 'prueba-bandera';
+    exception when check_violation then null;
+    end $$;
+    select desde_canal from novedades where clave = 'prueba-bandera';
+  `)
+  caso('y no se le puede poner un canal que no existe', 'apagado', ultimo(canalInventado))
+
+  /* Igual con el canal de una hermandad: no puede quedarse en uno que el código no conozca. */
+  const canalRaro = await sql(`
+    do $$ begin
+      update hermandades set canal = 'beta';
+    exception when check_violation then null;
+    end $$;
+    select count(*) from hermandades where canal not in ('estable', 'piloto');
+  `)
+  caso('ninguna hermandad puede quedarse en un canal raro', '0', ultimo(canalRaro))
+
+  // --- 3. EL ACCESO DE SOPORTE ---
+  /*
+   * LO PRIMERO Y MÁS IMPORTANTE: `hermandad_actual()` SIGUE CONTESTANDO LO
+   * MISMO PARA TODO EL MUNDO.
+   *
+   * `soporte.sql` la redefine, y es la frontera entre hermandades: la usan las
+   * políticas de RLS de todas las tablas. Se comprueba contra un titular de
+   * verdad de los que ya ha creado esta prueba; si el cuarto camino hubiera
+   * roto alguno de los tres primeros, aquí saldría vacío.
+   */
+  const unTitular = ultimo(await sql('select auth_user_id from titulares where auth_user_id is not null limit 1;'))
+  const suHermandad = ultimo(await sql(`select hermandad_id from titulares where auth_user_id = '${unTitular}';`))
+  caso('hay un titular con el que probar', true, !!unTitular && !!suHermandad)
+  caso('un titular sigue viendo su hermandad de siempre', suHermandad,
+    ultimo(await como(unTitular, 'select hermandad_actual();')))
+
+  /*
+   * Y NADIE ES SOPORTE. La tabla nace vacía y no hay pantalla para darse de
+   * alta: mientras nadie escriba una fila a mano en el SQL Editor, esto está
+   * apagado del todo y `hermandad_actual()` no consulta ni una vez de más.
+   */
+  caso('no hay ninguna cuenta de soporte', '0', ultimo(await sql('select count(*) from soporte_cuentas;')))
+
+  /*
+   * UNA CUENTA CUALQUIERA NO PUEDE ENTRAR EN NINGUNA HERMANDAD.
+   *
+   * Es LA cerradura: `soporte_entrar` está concedida a `authenticated`, o sea
+   * que cualquiera la puede llamar. Lo que protege es lo que comprueba dentro,
+   * no quién la puede invocar.
+   */
+  const intruso = '00000000-0000-4000-8000-0000000000ff'
+  await sql(`insert into auth.users (id, email) values ('${intruso}', 'intruso@ejemplo.es') on conflict do nothing;`)
+  const intento = await sql(`
+    do $$ begin
+      perform set_config('request.jwt.claim.sub', '${intruso}', true);
+      begin
+        perform soporte_entrar('${suHermandad}');
+        raise exception 'HA ENTRADO SIN SER SOPORTE';
+      exception when raise_exception then
+        if sqlerrm = 'HA ENTRADO SIN SER SOPORTE' then raise; end if;
+      end;
+    end $$;
+    select count(*) from soporte_sesion;
+  `)
+  caso('quien no es soporte no puede entrar en ninguna hermandad', '0', ultimo(intento))
+
+  /*
+   * DADO DE ALTA, SÍ — y dejando constancia en el registro DE ESA HERMANDAD.
+   * Ellos lo ven en su pantalla de actividad; un acceso que el dueño de los
+   * datos no puede ver no es soporte, es otra cosa.
+   */
+  await sql(`insert into soporte_cuentas (auth_user_id, nota) values ('${intruso}', 'prueba');`)
+  const entrada = ultimo(await como(intruso, `select soporte_entrar('${suHermandad}', 'probando');`))
+  caso('dado de alta, entra y se le dice en cuál', true, entrada.length > 0)
+  caso('y queda escrito en el registro de esa hermandad', '1', ultimo(await sql(
+    `select count(*) from registro_actividad
+      where hermandad_id = '${suHermandad}' and accion = 'soporte_entra';`)))
+
+  /* Y mientras está dentro, `hermandad_actual()` le da la hermandad suplantada. */
+  caso('y ve lo que ve esa hermandad', suHermandad,
+    ultimo(await como(intruso, 'select hermandad_actual();')))
+
+  /* Al salir, se acabó. */
+  await como(intruso, 'select soporte_salir();')
+  caso('al salir ya no ve nada', 'nada',
+    ultimo(await como(intruso, "select coalesce(hermandad_actual()::text, 'nada');")))
+
+  /*
+   * Y LA SUPLANTACIÓN CADUCA SOLA. Se fuerza una entrada ya vencida: un soporte
+   * que se queda abierto un viernes no puede ser acceso permanente al censo de
+   * una hermandad.
+   */
+  await sql(`
+    insert into soporte_sesion (auth_user_id, hermandad_id, hasta)
+    values ('${intruso}', '${suHermandad}', now() - interval '1 minute')
+    on conflict (auth_user_id) do update set hasta = excluded.hasta;
+  `)
+  caso('una entrada caducada no vale', 'nada',
+    ultimo(await como(intruso, "select coalesce(hermandad_actual()::text, 'nada');")))
+  await sql('delete from soporte_sesion; delete from soporte_cuentas;')
+
+  // --- 4. VACIAR PARA RESTAURAR ---
+  /*
+   * Que haya algo que borrar. Sin esto, las dos comprobaciones de abajo
+   * compararían cero contra cero y pasarían aunque la función arrasara.
+   */
+  await sql(`
+    insert into hermanos (numero, nombre, dni, hermandad_id)
+    values (999001, 'Prueba de restauración', 'X0000001R', '${suHermandad}')
+    on conflict do nothing;
+  `)
+  const antes = ultimo(await sql(`select count(*) from hermanos where hermandad_id = '${suHermandad}';`))
+  caso('hay hermanos que se podrían borrar', true, Number(antes) > 0)
+
+  /*
+   * LA CERRADURA DE LA CONFIRMACIÓN. Hay que verla borrando de verdad: una
+   * función que «falla» sin lanzar habría dejado las tablas vacías igual, y el
+   * mensaje de error no habría cambiado nada.
+   */
+  const conMalaConfirmacion = await sql(`
+    do $$ begin
+      perform set_config('request.jwt.claim.sub', '${unTitular}', true);
+      begin
+        perform vaciar_hermandad_para_restaurar('11111111-1111-4111-8111-111111111111');
+      exception when others then null;
+      end;
+    end $$;
+    select count(*) from hermanos where hermandad_id = '${suHermandad}';
+  `)
+  caso('con la confirmación equivocada no se borra nada', antes, ultimo(conMalaConfirmacion))
+
+  /*
+   * Y LA DEL TITULAR. Se prueba con alguien que es PERSONAL de la hermandad
+   * —o sea, que pasa de sobra el «pertenece aquí» y aun así no puede—: hacerlo
+   * con un desconocido no distinguiría entre esta cerradura y la de arriba.
+   */
+  const alguienDePersonal = ultimo(await sql(`
+    select coalesce((select auth_user_id::text from personal
+                      where hermandad_id = '${suHermandad}' and auth_user_id is not null
+                        and activo limit 1), '');
+  `))
+  if (alguienDePersonal) {
+    const conPersonal = await sql(`
+      do $$
+      declare suya uuid;
+      begin
+        perform set_config('request.jwt.claim.sub', '${alguienDePersonal}', true);
+        suya := hermandad_actual();
+        begin
+          perform vaciar_hermandad_para_restaurar(suya);
+        exception when others then null;
+        end;
+      end $$;
+      select count(*) from hermanos where hermandad_id = '${suHermandad}';
+    `)
+    caso('y quien no es titular tampoco puede, aunque sea de la casa', antes, ultimo(conPersonal))
+  }
+}
+
 
 /**
  * EL BARRIDO DE DNI, CORTADO DE VERDAD.
@@ -562,7 +807,12 @@ async function actualizarUnaBaseQueYaFunciona({ sql, caso }) {
   // Y los dos módulos SÍ están puestos donde había permisos que rellenar.
   caso('los dos módulos ya no salen pendientes', false,
     enFalso.some((x) => /eventos|«web»/.test(x)))
-  caso('y comprueba veintiuna cosas', 21, filas.length)
+  /*
+   * Y el número, para que nadie borre una línea del informe sin querer. Sube
+   * cada vez que se añade algo que comprobar; al subirlo, mira que la línea
+   * nueva salga en «sí» ahí arriba —esa es la comprobación de verdad—.
+   */
+  caso('y comprueba veintiséis cosas', 26, filas.length)
   caso('la tienda sale en el inventario', true, filas.some((f) => /La tienda/.test(f)))
   // Lo último que se ha añadido, por su nombre: el recuento de arriba avisa
   // si el inventario pierde una línea, pero no de CUÁL, y quien ejecuta esto

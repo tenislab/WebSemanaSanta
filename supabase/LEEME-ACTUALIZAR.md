@@ -22,6 +22,22 @@ nada de lo que hay ahí borra ni sobrescribe datos.
 
 ---
 
+## Cómo saber si te toca
+
+Desde septiembre de 2026 **la aplicación te avisa sola**. Si tu base se ha
+quedado atrás, al entrar en el panel sale una banda arriba que lo dice y
+cuántas actualizaciones le faltan.
+
+Eso existe porque el fallo de tener la base atrasada era **mudo**: cuando la
+aplicación escribe en una columna que tu base todavía no tiene, Postgres no
+ignora la columna, **rechaza la fila entera**. Rellenabas la hora de citación
+de un tramo, le dabas a guardar, decía que se había guardado, y al recargar
+estaba en blanco. Sin un solo error en pantalla.
+
+Si no sale ninguna banda, tu base está al día y no tienes que hacer nada.
+
+---
+
 ## Si empiezas de cero
 
 `ACTUALIZAR.sql` **no** vale para una base vacía: solo trae lo que se ha ido

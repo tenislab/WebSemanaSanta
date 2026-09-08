@@ -13,6 +13,10 @@ import ThemeToggle from './ThemeToggle'
 import PaletaComandos, { type DestinoPaleta } from './PaletaComandos'
 import { useAuth } from '../context/AuthContext'
 import { useCargoDeLaSesionConEstado, puedeVerModulo, usePermisosSincronizados, cargoEnCristiano } from '../lib/permisos'
+import { apuntarCargo } from '../lib/vigilancia'
+import { traerNovedades } from '../lib/novedades'
+import { avisoDelEsquema, mirarElEsquema, type EstadoDelEsquema } from '../lib/versionEsquema'
+import { dondeEstoyDeSoporte, salirDeSoporte } from '../lib/soporte'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
 import ReportarFallo from './ReportarFallo'
@@ -256,6 +260,30 @@ export default function AppShell() {
   useEffect(() => {
     void hidratarPlantillas()
   }, [])
+
+  /*
+   * LAS TRES PREGUNTAS DEL ARRANQUE, todas opcionales y ninguna bloqueante.
+   *
+   * Las tres contestan «no pasa nada» en el caso normal, que es el 99,9 % de
+   * las veces, y ninguna puede impedir entrar: si fallan, se quedan como
+   * estaban y la aplicación sigue igual. Ver cada módulo para el detalle.
+   *
+   *   · `traerNovedades`  — qué funciones nuevas están encendidas para esta
+   *     hermandad (`lib/novedades.ts`).
+   *   · `mirarElEsquema`  — si su base de datos va por detrás de la aplicación
+   *     (`lib/versionEsquema.ts`). Es el aviso que convierte «se guarda y al
+   *     recargar está en blanco» en una frase que se puede leer.
+   *   · `dondeEstoyDeSoporte` — si esta sesión está viendo la hermandad de otro
+   *     (`lib/soporte.ts`). Devuelve `null` para todo el mundo menos para la
+   *     cuenta de soporte.
+   */
+  const [esquema, setEsquema] = useState<EstadoDelEsquema>({ estado: 'sin_saber' })
+  const [suplantando, setSuplantando] = useState<string | null>(null)
+  useEffect(() => {
+    void traerNovedades()
+    void mirarElEsquema().then(setEsquema)
+    void dondeEstoyDeSoporte().then(setSuplantando)
+  }, [])
   const navigate = useNavigate()
   const location = useLocation()
   const { settings: ajustesHermandad, resuelto: ajustesResueltos } = useHermandadSettingsConEstado()
@@ -296,6 +324,13 @@ export default function AppShell() {
    * entero. El metadata solo se usa para saber QUÉ cuenta de personal es.
    */
   const { cargo, resuelto: cargoResuelto } = useCargoDeLaSesionConEstado()
+  /*
+   * El cargo, apuntado para que viaje con los fallos que se guarden.
+   * Nunca el nombre ni el correo: solo «Tesorero/a». Ver `lib/vigilancia.ts`.
+   */
+  useEffect(() => {
+    if (cargoResuelto) apuntarCargo(cargo)
+  }, [cargo, cargoResuelto])
   // Trae los permisos reales de Supabase en cuanto cargan (no solo los que hubiera en este navegador).
   const permisosVersion = usePermisosSincronizados()
 
@@ -529,6 +564,52 @@ export default function AppShell() {
             </button>
           </div>
         </header>
+
+        {/*
+          LA BANDA DE SOPORTE. Va la PRIMERA de todas y no se puede cerrar.
+
+          Mientras se está viendo la hermandad de otro, la aplicación es
+          indistinguible de la propia: mismo censo, mismos botones de borrar.
+          Sin este aviso permanente lo que pasa —y pasa— es que se deja una
+          pestaña abierta y al día siguiente se toca algo creyendo que es la
+          casa de uno. No hay botón de «entendido» a propósito: la única forma
+          de que desaparezca es salir de verdad.
+        */}
+        {suplantando && (
+          <div className="banner-inline banner-inline--alerta app-sync-error" role="alert">
+            <span>
+              <b>Estás dentro de «{suplantando}» como soporte.</b> Todo lo que hagas aquí lo hace esa
+              hermandad, y queda escrito en su registro de actividad.
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => { void salirDeSoporte().then(() => window.location.reload()) }}
+            >
+              Salir de esta hermandad
+            </button>
+          </div>
+        )}
+
+        {/*
+          SU BASE DE DATOS VA POR DETRÁS DE LA APLICACIÓN.
+
+          Es el aviso que convierte el peor fallo mudo que tiene Gobergo —se
+          rellena, se guarda, dice que se ha guardado, y al recargar está en
+          blanco— en una frase que se puede leer y una instrucción que se puede
+          seguir. El porqué entero está en `lib/versionEsquema.ts`.
+
+          No se puede cerrar mientras el problema exista, porque el problema no
+          se va solo: se va pegando `ACTUALIZAR.sql`. Y no bloquea nada: la
+          hermandad sigue trabajando, avisada.
+        */}
+        {(() => {
+          const aviso = avisoDelEsquema(esquema)
+          return aviso ? (
+            <div className="banner-inline banner-inline--warn app-sync-error" role="alert">
+              <span><b>{aviso.titulo}.</b> {aviso.texto}</span>
+            </div>
+          ) : null
+        })()}
 
         {errorSync !== null && (
           <div className="banner-inline banner-inline--warn app-sync-error" role="alert">

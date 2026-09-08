@@ -36,6 +36,7 @@ import { CANALES, SEGMENTOS } from '../../data/comunicados'
 import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
 import { nuevoId } from '../../lib/supabaseSync'
 import { crearCopia, esCopiaValida, restaurarCopia, resumirCopia, sePuedeRestaurar } from '../../lib/backup'
+import { sePuedeVolcarEnLaBase, volcarCopiaEnLaBase } from '../../lib/restaurar'
 import {
   COPIAS_QUE_SE_GUARDAN, SIN_SABER, diasDesde, estadoDeLasCopias, type EstadoDeLasCopias,
 } from '../../lib/copiaAutomatica'
@@ -413,15 +414,73 @@ export default function Configuracion() {
       const trae = `${r.bloques} bloques de datos${r.archivos > 0 ? ` y ${r.archivos} archivos adjuntos` : ''}`
       if (!window.confirm(
         `Vas a restaurar una copia ${cuando}, con ${trae}.\n\n` +
-        'Esto sustituirá TODOS los datos actuales de la hermandad por los del archivo. ¿Continuar?',
+        'Esto sustituirá TODOS los datos actuales de la hermandad por los del archivo.\n\n' +
+        (sePuedeRestaurar()
+          ? '¿Continuar?'
+          : 'Se borrarán de la base de datos los hermanos, cuotas, papeletas, tesorería y todo lo '
+            + 'demás, y se meterán los del archivo en su lugar. Antes se te descargará una copia de '
+            + 'lo que hay ahora, por si acaso.\n\n¿Continuar?'),
       )) {
         setCopiaEstado(null)
         return
       }
-      setCopiaEstado('Restaurando…')
-      await restaurarCopia(obj)
-      setCopiaEstado('Copia restaurada. Recargando…')
-      setTimeout(() => window.location.reload(), 800)
+      /*
+       * DOS CAMINOS, Y NO SON INTERCAMBIABLES.
+       *
+       * · SIN base de datos (demostración, o Supabase sin configurar): se
+       *   restaura en el navegador, que es donde viven los datos. Es lo que
+       *   había desde siempre.
+       *
+       * · CON base de datos: hay que vaciar y volver a llenar las TABLAS.
+       *   Escribir en el navegador no restaura nada — la base lo machaca al
+       *   recargar—, y por eso este botón estuvo desactivado tanto tiempo. El
+       *   detalle entero está en `lib/restaurar.ts`.
+       */
+      if (sePuedeRestaurar()) {
+        setCopiaEstado('Restaurando…')
+        await restaurarCopia(obj)
+        setCopiaEstado('Copia restaurada. Recargando…')
+        setTimeout(() => window.location.reload(), 800)
+        return
+      }
+
+      /*
+       * ANTES DE BORRAR NADA, UNA COPIA DE LO QUE HAY. Y SI FALLA, NO SE SIGUE.
+       *
+       * Este es el paso que no se puede saltar. Restaurar es exactamente el
+       * momento en el que alguien puede haberse equivocado de archivo, y sin
+       * esto no habría marcha atrás de la marcha atrás: los datos de hoy
+       * habrían desaparecido para siempre entre el vaciado y el llenado.
+       *
+       * Se descarga al disco de quien lo lanza, no al cubo de copias: hace
+       * falta que exista AUNQUE la base de datos sea justo lo que está
+       * fallando.
+       */
+      setCopiaEstado('Guardando antes una copia de lo que hay ahora…')
+      const antes = await crearCopia()
+      const marca = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+      descargarArchivo(
+        `antes-de-restaurar-${marca}.json`,
+        JSON.stringify(antes),
+        'application/json;charset=utf-8;',
+      )
+
+      setCopiaEstado('Volcando la copia en la base de datos…')
+      const r2 = await volcarCopiaEnLaBase(obj)
+      const total = Object.values(r2.metidas).reduce((a, b) => a + b, 0)
+      if (r2.fallos.length > 0) {
+        /*
+         * No se recarga cuando algo ha fallado: el mensaje es lo único que dice
+         * QUÉ tabla se ha quedado fuera, y recargar se lo llevaría por delante.
+         */
+        setCopiaEstado(
+          `Restauración incompleta: han entrado ${total} filas, pero ha fallado ${r2.fallos.join(' · ')}. `
+          + 'Tienes en Descargas el archivo «antes-de-restaurar»: no lo borres.',
+        )
+        return
+      }
+      setCopiaEstado(`Copia restaurada: ${total} filas. Recargando…`)
+      setTimeout(() => window.location.reload(), 1200)
     } catch (e) {
       // El mensaje de la restauración explica qué ha pasado y si se ha
       // cambiado algo; genérico solo si el archivo ni siquiera se pudo leer.
@@ -1419,11 +1478,23 @@ export default function Configuracion() {
             escribiría en el navegador y la base de datos lo sobreescribiría al
             recargar. Antes el botón estaba, decía «Copia restaurada» y no
             había hecho nada. */}
-        {!sePuedeRestaurar() && (
+        {/*
+          Aquí ponía «Restaurar está desactivado», y era verdad: restaurar
+          escribía en el navegador y la base de datos lo machacaba al recargar,
+          así que el botón salía apagado antes que mentir.
+
+          Ya no. Ahora se vacía la hermandad en la base y se vuelven a meter sus
+          filas (`lib/restaurar.ts` y `supabase/restaurar-copia.sql`). Lo que se
+          dice aquí es lo que hay que saber ANTES de pulsarlo, que es distinto
+          de lo que se dice al confirmar: esto se lee sin prisa, aquello se lee
+          con el dedo encima.
+        */}
+        {!sePuedeRestaurar() && sePuedeVolcarEnLaBase() && (
           <p className="form-hint form-hint--alerta">
-            <b>Restaurar está desactivado</b> porque los datos están en la base de datos, no en este
-            navegador: lo que se escribiera aquí lo sobreescribiría la base de datos al recargar. La
-            copia que descargues sigue valiendo; volcarla es una operación que hacemos nosotros.
+            <b>Restaurar sustituye lo que hay en la base de datos</b>, no solo en este navegador:
+            borra los hermanos, cuotas, papeletas y tesorería de la hermandad y mete los del archivo.
+            Solo puede hacerlo quien figura como titular, se descarga antes una copia de lo que haya
+            en ese momento, y queda escrito en el registro de actividad.
           </p>
         )}
         {/*
@@ -1467,8 +1538,12 @@ export default function Configuracion() {
           <button
             type="button"
             className="btn btn-ghost"
-            disabled={!sePuedeRestaurar()}
-            title={sePuedeRestaurar() ? undefined : 'No disponible con la base de datos conectada'}
+            disabled={!sePuedeRestaurar() && !sePuedeVolcarEnLaBase()}
+            title={
+              sePuedeRestaurar() || sePuedeVolcarEnLaBase()
+                ? undefined
+                : 'No hay ni datos en este navegador ni base de datos conectada'
+            }
             onClick={() => backupRef.current?.click()}
           >
             Restaurar copia
