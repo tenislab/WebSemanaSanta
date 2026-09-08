@@ -25,7 +25,7 @@
  */
 export default async function ({ caso }) {
   const { readFile, stat } = await import('node:fs/promises')
-  const { generar, ETIQUETAS_ICONO, HUESO, ICONOS, RUTA_MARCA_COMPLETA, RUTA_MARCA_REDUCIDA } =
+  const { generar, ETIQUETAS_ICONO, HUESO, ICONOS } =
     await import('../scripts/generar-favicon.mjs')
 
   // --- Las etiquetas del icono, al día ---
@@ -58,14 +58,18 @@ export default async function ({ caso }) {
     const info = await stat(ruta).catch(() => null)
     caso(`${ruta} existe y pesa lo suyo`, true, !!info && info.size > lado * 12)
   }
-  for (const ruta of [RUTA_MARCA_COMPLETA, RUTA_MARCA_REDUCIDA]) {
-    const info = await stat(ruta).catch(() => null)
-    caso(`${ruta} está en su sitio`, true, !!info && info.size > 4000)
-  }
+  /*
+   * LA MARCA DE ANTES ya no la usa nadie: ni la aplicación ni el generador de
+   * iconos. Se queda archivada en `docs/marca/` —una marca anterior es parte de
+   * la historia de la casa— pero fuera de `src/assets`, para que no parezca que
+   * sigue en uso.
+   */
+  const dondeEstaba = await stat('src/assets/gobergo-marca-reducida.webp').catch(() => null)
+  caso('la marca vieja ya no está entre las que se usan', null, dondeEstaba)
 
-  // Y el archivo de la marca, con el original del que sale todo.
+  // Y el archivo de las marcas, con los originales de los que sale todo.
   const original = await stat('docs/marca/gobergo-original.webp').catch(() => null)
-  caso('el original de la marca está guardado', true, !!original && original.size > 10000)
+  caso('el original de la marca anterior está guardado', true, !!original && original.size > 10000)
 
   await laMarcaEsUnaSola({ caso })
   await todoElMundoPideLaMarcaAqui({ caso })
@@ -139,10 +143,28 @@ async function laMarcaEsUnaSola({ caso }) {
    * esto salta y le manda a leer el porqué.
    */
   const gen = await readFile('scripts/generar-favicon.mjs', 'utf8')
-  caso('los iconos se siguen sacando de la marca cuadrada', true,
-    /RUTA_MARCA_REDUCIDA = 'src\/assets\/gobergo-marca-reducida\.webp'/.test(gen))
+  caso('los iconos salen del mismo dibujo que la marca', true,
+    /RUTA_MARCA = 'src\/assets\/nazareno\.svg'/.test(gen))
+  /*
+   * Y ENGORDADO SEGÚN EL TAMAÑO, que es lo que hace que el mismo dibujo sirva
+   * para 16 y para 180. Sin esto el icono de la pestaña vuelve a ser una
+   * manchita — y eso no se ve desde el código, solo mirando la pestaña.
+   */
+  caso('con el grosor puesto por el tamaño', true, /function engorde\(lado\)/.test(gen))
+  caso('gordo en la pestaña', true, /if \(lado <= 32\) return \d+/.test(gen))
+  caso('y sin engordar en el del móvil', true, /return 0\n\}/.test(gen))
   caso('y en Logo.tsx está escrito por qué', true,
-    /icono de la pestaña sigue siendo el cuadrado/i.test(crudo))
+    /icono de la pestaña también es el nazareno/i.test(crudo))
+
+  /*
+   * Y EL GENERADOR TIENE QUE PODER EJECUTARSE.
+   *
+   * Importaba `playwright`, que NO está en las dependencias del proyecto: se
+   * caía en el import antes de hacer nada, y llevaba así vete a saber cuánto.
+   * Se descubrió al ir a cambiar el icono. Un generador que no arranca es un
+   * dibujo congelado que nadie sabe que está congelado.
+   */
+  caso('el generador no pide nada que el proyecto no tenga', false, /from 'playwright'/.test(gen))
 
   // Y el dibujo original guardado, que es de donde sale todo.
   const { stat } = await import('node:fs/promises')

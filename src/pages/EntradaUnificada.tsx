@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import AuthLayout from '../components/AuthLayout'
+import { IconoLibroDeReglas, IconoMedalla } from '../components/Iconos'
 
 /**
  * Punto de entrada dividido en dos caminos claros — nada de adivinar qué
@@ -19,7 +20,7 @@ export default function EntradaUnificada() {
       <div className="entrada-opciones">
         <Link to="/hermano" className="entrada-opcion">
           <span className="entrada-opcion__ic" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" /></svg>
+            <IconoMedalla />
           </span>
           <span>
             <b>Soy hermano/a</b>
@@ -28,7 +29,7 @@ export default function EntradaUnificada() {
         </Link>
         <Link to="/login" className="entrada-opcion">
           <span className="entrada-opcion__ic" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="7" width="18" height="14" rx="2" /><path d="M8 7V5a4 4 0 0 1 8 0v2" /></svg>
+            <IconoLibroDeReglas />
           </span>
           <span>
             <b>Gestiono la hermandad</b>

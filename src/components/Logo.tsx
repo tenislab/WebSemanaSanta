@@ -52,19 +52,21 @@ interface LogoProps {
  * bien»—.
  *
  * ----------------------------------------------------------------------------
- * Y EL ICONO DE LA PESTAÑA SIGUE SIENDO EL CUADRADO
+ * Y EL ICONO DE LA PESTAÑA TAMBIÉN ES EL NAZARENO, PERO ENGORDADO
  * ----------------------------------------------------------------------------
  *
- * A propósito, y medido: a 32 píxeles —la pestaña— un dibujo alto y estrecho
- * ocupa el 42 por ciento del ancho de su caja y se queda en una manchita
- * vertical. El icono cuadrado llena la caja y se lee. Son dos problemas
- * distintos: aquí hay sitio de sobra y allí no hay ninguno.
+ * Aquí decía que el icono seguía siendo el cuadrado con la G, y era la decisión
+ * correcta con el dibujo tal cual: a 16 píxeles una línea fina no existe, se
+ * convierte en una manchita gris.
  *
- * Los iconos los genera `scripts/generar-favicon.mjs` desde
- * `src/assets/gobergo-marca-reducida.webp`. Si algún día se quiere el nazareno
- * también ahí, hace falta un dibujo hecho para tamaño pequeño —más ancho, más
- * compacto y de trazo más grueso—, no este recortado: probé el recorte y a esos
- * tamaños el capirote suelto no se lee como un nazareno, se lee como una cuña.
+ * La salida no era cambiar de dibujo sino ENGORDAR ESTE. El icono se rasteriza
+ * desde el mismo `nazareno.svg` con un `stroke` del mismo color encima, y el
+ * grosor lo pone el tamaño: mucho a 16 y 32, poco a 48, ninguno a 180 —donde
+ * engordarlo solo le quitaría el trazo a mano—. Está en
+ * `scripts/generar-favicon.mjs`, en `engorde()`, con las medidas.
+ *
+ * Es lo mismo que hace cualquier tipografía, que dibuja distinto el cuerpo
+ * pequeño y el titular. Un dibujo, dos pesos, según dónde se mire.
  */
 
 /** Ancho dividido por alto, sacado del `viewBox` del dibujo (535 x 1112). */

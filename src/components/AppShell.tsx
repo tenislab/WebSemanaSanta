@@ -18,6 +18,7 @@ import { traerNovedades } from '../lib/novedades'
 import { contarAvisosQueEsperan } from '../lib/notificaciones'
 import { avisoDelEsquema, mirarElEsquema, type EstadoDelEsquema } from '../lib/versionEsquema'
 import { dondeEstoyDeSoporte, salirDeSoporte } from '../lib/soporte'
+import { IconoMedalla } from './Iconos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
 import ReportarFallo from './ReportarFallo'
@@ -569,10 +570,7 @@ export default function AppShell() {
                 title="Tus cuotas, tu papeleta y tus datos"
                 aria-label="Mi área de hermano"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" strokeLinecap="round" />
-                </svg>
+                <IconoMedalla />
                 <span className="app-topbar__texto">Mi área de hermano</span>
               </Link>
             )}
