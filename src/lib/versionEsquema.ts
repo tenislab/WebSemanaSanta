@@ -62,7 +62,7 @@ import { modoDemoActivo } from './demo'
  * POR QUÉ VERSIÓN VA ESTA APLICACIÓN. Es el número de ficheros de la lista
  * `PIEZAS` en `scripts/generar-todo-en-uno.mjs`. Ver arriba.
  */
-export const VERSION_ESQUEMA = 62
+export const VERSION_ESQUEMA = 64
 
 export type EstadoDelEsquema =
   /* Todavía no se ha preguntado, o no hay base a la que preguntar. */

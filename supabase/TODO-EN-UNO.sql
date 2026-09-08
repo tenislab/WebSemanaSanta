@@ -80,11 +80,13 @@
 --   55. reglas-de-reparto.sql      Gastos porcentuales enlazados a una partida, para pérdidas y ganancias
 --   56. pago-tarjeta.sql           Que el hermano pague su cuota o su papeleta con tarjeta
 --   57. papeleta-personalizada-en-el-cortejo.sql Que una papeleta propia de la hermandad ocupe puesto en el cortejo
---   58. vigilancia.sql             Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
---   59. canal-de-actualizacion.sql Sacar una novedad a una hermandad piloto antes que a todas
---   60. restaurar-copia.sql        Poder volcar la copia de UNA hermandad sin tocar a las demás
---   61. soporte.sql                Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
---   62. version-del-esquema.sql    Que la aplicación avise cuando la base se ha quedado atrás
+--   58. campos-del-hermano.sql     Los campos a medida de la hermandad, guardados en la ficha y no en un navegador
+--   59. familia-en-los-dos-lados.sql Que el hijo vea de qué familia es, sin poder leer la ficha entera de su padre
+--   60. vigilancia.sql             Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
+--   61. canal-de-actualizacion.sql Sacar una novedad a una hermandad piloto antes que a todas
+--   62. restaurar-copia.sql        Poder volcar la copia de UNA hermandad sin tocar a las demás
+--   63. soporte.sql                Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
+--   64. version-del-esquema.sql    Que la aplicación avise cuando la base se ha quedado atrás
 --
 -- -----------------------------------------------------------------------------
 -- LO ÚNICO QUE HAY QUE LEER ANTES
@@ -10250,6 +10252,126 @@ comment on column opciones_papeleta.tramo_id is
   'cortejo (la papeleta simbólica, un recuerdo, un donativo).';
 
 -- =============================================================================
+--   CAMPOS-DEL-HERMANO.SQL — Los campos a medida de la hermandad, guardados en la ficha y no en un navegador
+-- =============================================================================
+
+-- =============================================================================
+--   LOS CAMPOS A MEDIDA DE LA HERMANDAD, GUARDADOS EN LA FICHA
+-- =============================================================================
+--
+-- Cada hermandad puede inventarse sus propios campos —talla de túnica, número
+-- de llave, si tiene el carné de la banda— desde Configuración. Eso ya
+-- funcionaba: la DEFINICIÓN de los campos vive en `hermandad_settings.
+-- campos_propios` y viaja bien.
+--
+-- Lo que no existía era dónde guardar el VALOR de cada hermano.
+--
+-- -----------------------------------------------------------------------------
+-- POR QUÉ NO SE VEÍA
+-- -----------------------------------------------------------------------------
+--
+-- Porque la mitad que viaja es la que se pinta. Desde cualquier ordenador se
+-- veía el campo «Talla de túnica» dibujado en la ficha, en su sitio, con su
+-- nombre correcto… y vacío. Para los cuatrocientos hermanos. Sin ningún error,
+-- sin nada roto en pantalla: un campo vacío parece un campo sin rellenar.
+--
+-- El valor se escribía en `localStorage` del ordenador donde se rellenó, y ahí
+-- se quedaba. La secretaria que tomó las tallas en su portátil las veía todas;
+-- cualquier otra persona, ninguna.
+--
+-- -----------------------------------------------------------------------------
+-- POR QUÉ `jsonb` Y NO UNA COLUMNA POR CAMPO
+-- -----------------------------------------------------------------------------
+--
+-- Porque los campos los inventa cada hermandad, y son distintos en cada una.
+-- Una columna por campo significaría que dar de alta un campo nuevo desde
+-- Configuración tendría que ejecutar un `alter table` — o sea, que la
+-- aplicación necesitaría permisos para cambiar el esquema. Eso no se le da a
+-- la clave anónima ni debe dársele.
+--
+-- Se guarda como un objeto `{ "id-del-campo": "valor" }`, y el valor SIEMPRE
+-- como texto: si mañana la hermandad cambia el tipo de un campo de «texto» a
+-- «número», lo que ya estaba escrito no se pierde.
+--
+-- Ejecútalo después de `multi-hermandad.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+alter table hermanos add column if not exists campos jsonb;
+
+comment on column hermanos.campos is
+  'Valores de los campos a medida de la hermandad, indexados por el id del campo '
+  '({"id": "valor"}). La DEFINICIÓN de los campos está en '
+  'hermandad_settings.campos_propios; aquí solo van los valores, siempre como texto.';
+
+/*
+ * NO HACE FALTA TOCAR NINGUNA POLÍTICA.
+ *
+ * `campos` es una columna más de `hermanos`, y RLS no distingue columnas: quien
+ * puede leer y escribir la ficha puede leer y escribir esta. Es lo correcto —
+ * la talla de túnica no es más secreta que el teléfono, y las dos están en la
+ * misma fila.
+ *
+ * Y EL HERMANO NO SE LA PUEDE CAMBIAR desde su área, aunque el disparador
+ * `hermanos_solo_personal_toca_el_cargo` no la nombre: lo que manda el área del
+ * hermano lo decide `contactoDelHermanoToRow` en la aplicación, que envía tres
+ * campos y ninguno es este. La lista blanca del disparador es el cinturón; el
+ * tirante es que la columna ni siquiera viaja en esa dirección.
+ */
+
+-- =============================================================================
+--   FAMILIA-EN-LOS-DOS-LADOS.SQL — Que el hijo vea de qué familia es, sin poder leer la ficha entera de su padre
+-- =============================================================================
+
+-- =============================================================================
+--   QUE LA FAMILIA SE VEA POR LOS DOS LADOS
+-- =============================================================================
+--
+-- Un menor a cargo de su padre es un vínculo entre dos fichas, y hasta ahora
+-- solo se veía desde una:
+--
+--   · EL PADRE, en su área, ve a los suyos. Eso funciona: la política
+--     `hermanos_a_cargo_select` le deja leer las fichas cuyo `tutor_id` es él.
+--   · EL HIJO, en la suya, no veía nada. Ni una línea diciendo de quién
+--     depende. Y no es un olvido de la pantalla: es que NO PUEDE leer la ficha
+--     de su padre. La política va en un solo sentido, y está bien que vaya así.
+--
+-- -----------------------------------------------------------------------------
+-- POR QUÉ NO SE ARREGLA CON UNA POLÍTICA MÁS
+-- -----------------------------------------------------------------------------
+--
+-- Lo obvio sería añadir «y también puedes leer la ficha de tu tutor». Sería un
+-- error: RLS decide POR FILAS, no por columnas. Dejarle leer esa fila le da el
+-- teléfono de su padre, su dirección, SU IBAN y sus notas de salud. Todo, para
+-- poder enseñar un nombre.
+--
+-- Así que va por función, que sí puede elegir columnas: devuelve el nombre y el
+-- número de hermano, y nada más. Es exactamente lo que hace falta para escribir
+-- «Perteneces a la familia de Juan Pérez (hermano nº 47)».
+--
+-- Ejecútalo después de `hermano-con-cargo.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+/**
+ * De quién depende quien está preguntando. Devuelve cero filas si no depende de
+ * nadie, que es el caso de casi todos.
+ *
+ * `security definer` para poder mirar una fila que quien llama no puede leer, y
+ * acotada por `hermano_propio_id()`: solo contesta por el tutor DE QUIEN
+ * PREGUNTA. No acepta parámetros a propósito — una función así con un `id`
+ * suelto sería un buscador de nombres del censo entero.
+ */
+create or replace function mi_tutor()
+returns table (id uuid, nombre text, numero integer)
+language sql stable security definer set search_path = public as $$
+  select t.id, t.nombre, t.numero
+    from hermanos yo
+    join hermanos t on t.id = yo.tutor_id
+   where yo.id = hermano_propio_id()
+$$;
+
+grant execute on function mi_tutor() to authenticated;
+
+-- =============================================================================
 --   VIGILANCIA.SQL — Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
 -- =============================================================================
 
@@ -11112,4 +11234,4 @@ grant execute on function version_del_esquema() to authenticated, anon;
 -- Generado. Es el número de piezas de esta instalación. La aplicación lo lee al
 -- arrancar y avisa si va por detrás; ver `src/lib/versionEsquema.ts`.
 
-select sellar_esquema(62);
+select sellar_esquema(64);

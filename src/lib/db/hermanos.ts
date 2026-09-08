@@ -40,6 +40,41 @@ export function hermanoToRow(h: Hermano): Record<string, unknown> {
     fecha_bautismo: h.fechaBautismo ?? null,
     talla_tunica: h.tallaTunica ?? null,
     notas_salud: h.notasSalud ?? null,
+    /*
+     * QUIÉN LO LLEVA. Estas dos líneas —esta y su pareja en `rowToHermano`—
+     * faltaban, y con ellas se caía TODO «Mi familia».
+     *
+     * La columna `hermanos.tutor_id` existe en la base desde
+     * `area-hermano.sql`, con su índice y sus políticas. Lo que no existía era
+     * que la aplicación la mandara. Así que al aprobar la solicitud de un
+     * menor, el vínculo se guardaba… en el espejo del navegador de quien la
+     * aprobó, y en ningún sitio más.
+     *
+     * LO QUE PASABA, y encaja con lo que se reportó: la secretaria aprueba al
+     * niño y lo ve bien colgando de su padre. Al recargar —o desde cualquier
+     * otro ordenador, o desde el móvil del padre— la consulta trae `tutor_id`
+     * a nulo, y el padre entra en su área y no tiene a nadie a su cargo. Sin
+     * un solo error: la ficha del niño está, con su número y sus datos; lo
+     * único que se ha perdido es de quién es hijo.
+     *
+     * Y no se podía ver probando en un solo ordenador, que es como se prueba.
+     */
+    tutor_id: h.tutorId ?? null,
+    /*
+     * LOS CAMPOS A MEDIDA DE LA HERMANDAD (talla de túnica, nº de llave…).
+     *
+     * Mismo fallo y peor, porque aquí ni siquiera había columna: se escribían
+     * en la ficha desde el panel y se quedaban en ese navegador para siempre.
+     * La DEFINICIÓN de los campos sí viajaba —vive en `hermandad_settings`— así
+     * que desde otro ordenador se veía el campo «Talla de túnica» perfectamente
+     * dibujado y SIEMPRE VACÍO, para los cuatrocientos hermanos.
+     *
+     * Que la definición viajara y el valor no es lo que lo hacía indetectable:
+     * la pantalla se pinta entera y bien.
+     *
+     * La columna la crea `supabase/campos-del-hermano.sql`.
+     */
+    campos: h.campos ?? null,
     baja_solicitada: h.bajaSolicitada ?? false,
     baja_solicitada_el: h.bajaSolicitadaEl ?? null,
     motivo_baja: h.motivoBaja ?? null,
@@ -104,6 +139,9 @@ export function rowToHermano(r: Record<string, unknown>): Hermano {
     fechaBautismo: (r.fecha_bautismo as string | null) ?? undefined,
     tallaTunica: (r.talla_tunica as string | null) ?? undefined,
     notasSalud: (r.notas_salud as string | null) ?? undefined,
+    // Las dos parejas de lo de arriba. Sin estas, subiría y no volvería.
+    tutorId: (r.tutor_id as string | null) ?? undefined,
+    campos: (r.campos as Record<string, string> | null) ?? undefined,
     bajaSolicitada: Boolean(r.baja_solicitada),
     bajaSolicitadaEl: (r.baja_solicitada_el as string | null) ?? undefined,
     motivoBaja: (r.motivo_baja as string | null) ?? undefined,

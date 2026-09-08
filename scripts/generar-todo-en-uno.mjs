@@ -109,6 +109,21 @@ export const PIEZAS = [
    */
   ['papeleta-personalizada-en-el-cortejo.sql', 'Que una papeleta propia de la hermandad ocupe puesto en el cortejo'],
   /*
+   * LA COLUMNA QUE FALTABA PARA LOS CAMPOS A MEDIDA DE LA HERMANDAD.
+   *
+   * La definición de los campos viajaba (vive en `hermandad_settings`) y el
+   * VALOR de cada hermano no tenía dónde guardarse: se quedaba en el navegador
+   * donde se escribió. Desde cualquier otro ordenador el campo salía dibujado
+   * y vacío, para todo el censo, sin dar ningún error.
+   */
+  ['campos-del-hermano.sql', 'Los campos a medida de la hermandad, guardados en la ficha y no en un navegador'],
+  /*
+   * Y QUE EL VÍNCULO SE VEA POR LOS DOS LADOS. El padre veía a los suyos; el
+   * hijo no veía nada, porque no puede leer la ficha de su tutor —y no debe:
+   * ahí está su IBAN—. Va por función, que sí puede elegir columnas.
+   */
+  ['familia-en-los-dos-lados.sql', 'Que el hijo vea de qué familia es, sin poder leer la ficha entera de su padre'],
+  /*
    * --- LO QUE HACE FALTA PARA CRECER SIN ROMPER NADA ---
    *
    * Las cinco piezas de abajo no añaden ninguna pantalla: son las que hacen

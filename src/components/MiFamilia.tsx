@@ -6,7 +6,7 @@ import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import { deudaDe, type Cuota } from '../data/cuotas'
 import type { SolicitudAlta } from '../lib/solicitudes'
-import { etiquetaDeSolicitud, explicarSolicitud } from '../lib/familia'
+import { etiquetaDeSolicitud, explicarSolicitud, type MiTutor } from '../lib/familia'
 
 /**
  * La familia a cargo de este hermano: los menores que lleva él.
@@ -25,6 +25,7 @@ export default function MiFamilia({
   solicitudesFamilia,
   onSolicitarAlta,
   bloqueado,
+  tutor,
 }: {
   /** Los hermanos que este hermano tiene a su cargo. */
   aCargo: Hermano[]
@@ -56,6 +57,16 @@ export default function MiFamilia({
     => Promise<{ ok: boolean; error?: string }>
   /** Motivo por el que no puede pedir nada ahora mismo (baja, deuda…). */
   bloqueado?: string | null
+  /**
+   * DE QUIÉN DEPENDE QUIEN ESTÁ MIRANDO, si depende de alguien.
+   *
+   * El vínculo de familia son dos fichas y solo se veía desde una: el padre
+   * veía a los suyos y el hijo no veía nada, ni una línea diciendo de qué
+   * familia es. Llega por `mi_tutor()`, que devuelve el nombre y el número y
+   * nada más — el hijo NO puede leer la ficha de su padre, y no debe: ahí
+   * están su teléfono y su IBAN.
+   */
+  tutor?: MiTutor | null
 }) {
   const [abriendo, setAbriendo] = useState(false)
   const [enviada, setEnviada] = useState(false)
@@ -96,7 +107,22 @@ export default function MiFamilia({
         Los hermanos que llevas tú. Aquí ves su papeleta y sus cuotas sin pasar por secretaría.
       </p>
 
-      {aCargo.length === 0 && solicitudesFamilia.length === 0 && (
+      {/*
+        EL OTRO LADO DEL VÍNCULO, que faltaba entero.
+        Va lo primero, antes que los que lleva: quien depende de alguien suele
+        no llevar a nadie, y esta es toda la sección para él.
+      */}
+      {tutor && (
+        <div className="banner-inline banner-inline--accent">
+          <span>
+            Perteneces a la familia de <b>{tutor.nombre}</b>
+            {tutor.numero > 0 ? ` (hermano/a nº ${tutor.numero})` : ''}. Es quien lleva tu papeleta y
+            tus cuotas desde su área.
+          </span>
+        </div>
+      )}
+
+      {aCargo.length === 0 && solicitudesFamilia.length === 0 && !tutor && (
         <p className="form-hint">Todavía no tienes a nadie a tu cargo.</p>
       )}
 

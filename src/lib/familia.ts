@@ -1,5 +1,6 @@
 import type { SolicitudAlta } from './solicitudes'
 import { hoyIso } from './hoy'
+import { isSupabaseConfigured, supabase } from './supabase'
 
 /**
  * LO QUE UN HERMANO HA PEDIDO PARA LOS SUYOS, RESUELTO O NO.
@@ -107,4 +108,41 @@ function enCristiano(iso: string): string {
   const d = new Date(`${iso}T00:00:00`)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+/** De quién depende un hermano: lo justo para decirlo, y nada más. */
+export interface MiTutor {
+  id: string
+  nombre: string
+  numero: number
+}
+
+/**
+ * DE QUÉ FAMILIA ES QUIEN ESTÁ MIRANDO.
+ *
+ * El vínculo de familia son dos fichas y hasta ahora solo se veía desde una: el
+ * padre veía a los suyos y el hijo no veía nada. No era un olvido de la
+ * pantalla — es que el hijo NO PUEDE leer la ficha de su padre, y no debe:
+ * ahí están su teléfono, su dirección y su IBAN.
+ *
+ * Por eso va por función del servidor (`mi_tutor()`), que sí puede elegir
+ * columnas: devuelve el nombre y el número, que es todo lo que hace falta para
+ * escribir «Perteneces a la familia de …».
+ *
+ * NO LANZA NUNCA. En una base que todavía no tiene la pieza puesta, la llamada
+ * da error y aquí se traduce a `null`, o sea a «no dependes de nadie» — que es
+ * lo que se veía antes de existir esto. Un dato de adorno no puede impedir a
+ * nadie entrar en su área.
+ */
+export async function traerMiTutor(): Promise<MiTutor | null> {
+  if (!isSupabaseConfigured || !supabase) return null
+  try {
+    const { data, error } = await supabase.rpc('mi_tutor')
+    if (error || !Array.isArray(data) || data.length === 0) return null
+    const t = data[0] as { id?: string; nombre?: string; numero?: number }
+    if (!t?.id || !t?.nombre) return null
+    return { id: t.id, nombre: t.nombre, numero: Number(t.numero ?? 0) }
+  } catch {
+    return null
+  }
 }

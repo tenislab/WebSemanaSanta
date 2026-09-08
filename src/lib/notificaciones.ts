@@ -5,6 +5,8 @@ import type { Hermano } from '../data/hermanos'
 import type { SolicitudAlta } from './solicitudes'
 import type { SolicitudPapeleta } from './solicitudesPapeleta'
 import { hermanosSinCuota } from './cuotasEmision'
+import type { MensajeWeb } from './mensajesWeb'
+import { resumenMensaje } from './mensajesWeb'
 
 /**
  * TODO LO QUE ESPERA A QUE LA JUNTA HAGA ALGO, EN UN SOLO SITIO.
@@ -38,6 +40,31 @@ export type TipoAviso =
   | 'altaHermano' | 'pagoCuota' | 'pagoPapeleta' | 'peticionPapeleta'
   /* Hermanos activos a los que no se les ha emitido la cuota del ejercicio. */
   | 'sinCuota'
+  /*
+   * QUIEN HA PEDIDO LA BAJA DESDE SU ÁREA.
+   *
+   * Esto faltaba, y era el peor de todos los silencios de esta pantalla. La
+   * baja se guardaba bien —queda marcada en la ficha, con su fecha y su
+   * motivo— y llegaba a la base. Lo único que no pasaba es que alguien se
+   * enterara: había que buscar al hermano por su nombre para verlo.
+   *
+   * O sea que una persona pedía darse de baja de su hermandad, la aplicación
+   * le decía que quedaba pedida, y allí se quedaba. Semanas. Hasta que llamaba
+   * preguntando por qué le seguían pasando el recibo — que es exactamente la
+   * llamada más desagradable que puede recibir una hermandad.
+   */
+  | 'bajaPedida'
+  /*
+   * LOS MENSAJES DE LA WEB PÚBLICA.
+   *
+   * Tenían su bandeja desde el principio, pero DENTRO de la pantalla de Web
+   * pública: para verlos había que ir a mirarlos, y a esa pantalla se entra
+   * cuando se quiere cambiar algo de la web, o sea casi nunca.
+   *
+   * Un formulario de contacto que nadie mira es peor que no tenerlo: la
+   * hermandad publica un «escríbenos» y no contesta.
+   */
+  | 'mensajeWeb'
 
 export interface Aviso {
   /** Único entre todos los tipos: el mismo id puede existir en dos tablas. */
@@ -75,6 +102,11 @@ export interface FuentesDeAvisos {
    */
   ejercicio?: number | null
   conceptoCuota?: string | null
+  /**
+   * Los mensajes de la web pública. Opcional: quien no los pase —una pantalla
+   * que solo quiera el número del menú— sigue funcionando igual.
+   */
+  mensajesWeb?: MensajeWeb[]
 }
 
 function nombreDe(hermanos: Hermano[], id: string | undefined): string {
@@ -167,6 +199,75 @@ export function avisosPendientes(f: FuentesDeAvisos): Aviso[] {
   }
 
   /*
+   * --- QUIEN HA PEDIDO LA BAJA ---
+   *
+   * Es el aviso que más falta hacía y el que no estaba. La baja se guardaba
+   * bien y llegaba a la base; simplemente no la miraba nadie, así que había que
+   * buscar al hermano por su nombre para enterarse de que la había pedido.
+   *
+   * SE MIRA `bajaSolicitada` Y NO `estado === 'Baja'`: son dos cosas distintas
+   * y confundirlas haría que el aviso no se fuera nunca. `bajaSolicitada` es
+   * «lo ha pedido»; `estado` es «se ha tramitado». Mientras secretaría no la
+   * tramite, el hermano sigue Activo y con la marca puesta — que es justo el
+   * estado en el que hay que avisar. Al tramitarla, `darDeBajaEnCenso` limpia
+   * la marca y el aviso desaparece solo.
+   */
+  for (const h of f.hermanos.filter((x) => x.bajaSolicitada && x.estado !== 'Baja')) {
+    avisos.push({
+      id: `baja:${h.id}`,
+      tipo: 'bajaPedida',
+      titulo: `${h.nombre} ha pedido darse de baja`,
+      /*
+       * EL MOTIVO VA AQUÍ, entero. No se le obliga a darlo —exigir que alguien
+       * se justifique para irse está feo— pero cuando lo da es lo único que
+       * permite intentar retenerle antes de tramitarla.
+       */
+      detalle: [
+        h.numero > 0 ? `Hermano/a nº ${h.numero}` : null,
+        h.bajaSolicitadaEl ? `pedida el ${h.bajaSolicitadaEl}` : null,
+        h.motivoBaja || 'sin motivo indicado',
+      ].filter(Boolean).join(' · '),
+      fecha: h.bajaSolicitadaEl ?? '',
+      hermanoId: h.id,
+      refId: h.id,
+      // No se tramita desde aquí: dar de baja toca el escalafón, las cuotas
+      // pendientes y la papeleta del año. Eso lo hace la ficha, con todo delante.
+      aceptar: 'Ver su ficha',
+      /*
+       * DIRECTO A SU FICHA, no a la lista. `?ficha=` ya lo entiende la pantalla
+       * de Hermanos. Llevar a la lista de cuatrocientos y decirle a alguien que
+       * busque a Fulano es la mitad del trabajo, y es la mitad que se olvida.
+       */
+      donde: `/app/hermanos?ficha=${h.id}`,
+    })
+  }
+
+  /*
+   * --- LOS MENSAJES DE LA WEB PÚBLICA ---
+   *
+   * Tenían su bandeja desde el principio, pero solo DENTRO de la pantalla de
+   * Web pública, y a esa pantalla se entra cuando se quiere cambiar algo de la
+   * web: casi nunca. Un formulario de contacto que nadie mira es peor que no
+   * tenerlo, porque la hermandad publica un «escríbenos» y no contesta.
+   *
+   * SOLO LOS NO LEÍDOS. Un mensaje leído y sin contestar ya no es un aviso: es
+   * trabajo pendiente de alguien, y esta pantalla es para enterarse, no para
+   * llevar una lista de tareas.
+   */
+  for (const m of (f.mensajesWeb ?? []).filter((x) => !x.leido)) {
+    avisos.push({
+      id: `web:${m.id}`,
+      tipo: 'mensajeWeb',
+      titulo: `${m.nombre || 'Alguien'} ha escrito desde la web`,
+      detalle: [resumenMensaje(m), m.email, m.telefono].filter(Boolean).join(' · '),
+      fecha: m.fecha,
+      refId: m.id,
+      aceptar: 'Leerlo',
+      donde: '/app/web',
+    })
+  }
+
+  /*
    * QUIEN NO TIENE CUOTA. Llegó dicho así: «las cuotas tienen que ir por
    * hermanos, no puede haber hermano y cuota vacía».
    *
@@ -211,11 +312,15 @@ export function avisosPendientes(f: FuentesDeAvisos): Aviso[] {
    * al menos es estable y no baila entre recargas.
    */
   const PRIORIDAD: Record<TipoAviso, number> = {
+    // Los tres primeros tienen a una PERSONA esperando respuesta. Va por delante
+    // de cualquier trabajo, por urgente que parezca el trabajo.
     altaHermano: 0,
-    sinCuota: 1,
-    peticionPapeleta: 2,
-    pagoPapeleta: 3,
-    pagoCuota: 4,
+    bajaPedida: 1,
+    mensajeWeb: 2,
+    sinCuota: 3,
+    peticionPapeleta: 4,
+    pagoPapeleta: 5,
+    pagoCuota: 6,
   }
   return avisos.sort(
     (a, b) => PRIORIDAD[a.tipo] - PRIORIDAD[b.tipo] || a.titulo.localeCompare(b.titulo, 'es'),
@@ -231,12 +336,25 @@ export function cuantosAvisos(f: FuentesDeAvisos): number {
 export function avisosPorTipo(avisos: Aviso[]): { tipo: TipoAviso; titulo: string; avisos: Aviso[] }[] {
   const NOMBRES: Record<TipoAviso, string> = {
     altaHermano: 'Quieren entrar en la hermandad',
+    bajaPedida: 'Han pedido darse de baja',
     sinCuota: 'Hermanos sin cuota',
     peticionPapeleta: 'Papeletas pedidas',
     pagoPapeleta: 'Pagos de papeleta por confirmar',
     pagoCuota: 'Pagos de cuota por confirmar',
+    mensajeWeb: 'Mensajes desde la web',
   }
-  const orden: TipoAviso[] = ['altaHermano', 'sinCuota', 'peticionPapeleta', 'pagoPapeleta', 'pagoCuota']
+  /*
+   * LAS BAJAS VAN LAS SEGUNDAS, justo detrás de quien quiere entrar.
+   *
+   * No es por gusto: son las dos únicas cosas de esta lista donde hay una
+   * PERSONA esperando una respuesta de la hermandad. Lo demás es trabajo, y el
+   * trabajo puede esperar al martes; una baja sin contestar acaba en una
+   * llamada preguntando por qué le siguen pasando el recibo.
+   */
+  const orden: TipoAviso[] = [
+    'altaHermano', 'bajaPedida', 'mensajeWeb',
+    'sinCuota', 'peticionPapeleta', 'pagoPapeleta', 'pagoCuota',
+  ]
   return orden
     .map((tipo) => ({ tipo, titulo: NOMBRES[tipo], avisos: avisos.filter((a) => a.tipo === tipo) }))
     .filter((g) => g.avisos.length > 0)

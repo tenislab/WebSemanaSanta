@@ -10,6 +10,7 @@ import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
 import { useSolicitudesPapeleta } from '../../lib/solicitudesPapeleta'
+import { useMensajesWeb } from '../../lib/mensajesWeb'
 import { avisosPendientes, avisosPorTipo, type Aviso } from '../../lib/notificaciones'
 import { hoyIso } from '../../lib/hoy'
 import { useConceptosCuota } from '../../lib/conceptosCuota'
@@ -77,6 +78,15 @@ export default function Notificaciones() {
    * cofradía porque nadie vio su petición.
    */
   const [peticionesPapeleta] = useSolicitudesPapeleta()
+  /*
+   * LOS MENSAJES DE LA WEB PÚBLICA.
+   *
+   * Tenían su bandeja dentro de la pantalla de Web pública y no salían aquí, así
+   * que para enterarse de que alguien había escrito había que ir a mirar — y a
+   * esa pantalla se entra cuando se quiere cambiar algo de la web, o sea casi
+   * nunca. Una hermandad publica un «escríbenos» y no contesta.
+   */
+  const [mensajesWeb] = useMensajesWeb()
 
   // Lo traído de la base manda sobre lo que hubiera en pantalla.
   const listaSolicitudes = solicitudes.length > 0 || solicitudesRemotas.length === 0
@@ -115,10 +125,10 @@ export default function Notificaciones() {
 
   const avisos = useMemo(
     () => avisosPendientes({
-      solicitudes: listaSolicitudes, cuotas, papeletas, peticionesPapeleta, hermanos,
+      solicitudes: listaSolicitudes, cuotas, papeletas, peticionesPapeleta, hermanos, mensajesWeb,
       ejercicio, conceptoCuota,
     }),
-    [listaSolicitudes, cuotas, papeletas, peticionesPapeleta, hermanos, ejercicio, conceptoCuota],
+    [listaSolicitudes, cuotas, papeletas, peticionesPapeleta, hermanos, mensajesWeb, ejercicio, conceptoCuota],
   )
   const grupos = useMemo(() => avisosPorTipo(avisos), [avisos])
 

@@ -28,10 +28,16 @@
  *     propio diputado lo perdía al cambiar de móvil. No se puede rehacer: esa
  *     noche no vuelve.
  *
- *   · LOS CAMPOS PROPIOS. Lo llamativo es que el VALOR sí viajaba —va dentro
- *     de la ficha, que está en la base— y la definición no. Desde otro
- *     ordenador, la talla de túnica estaba guardada y no se veía por ninguna
- *     parte.
+ *   · LOS CAMPOS PROPIOS. Aquí decía que «el VALOR sí viajaba —va dentro de la
+ *     ficha, que está en la base— y la definición no». ERA FALSO, y lo escribí
+ *     yo: la ficha está en la base, sí, pero `hermanoToRow` no mandaba
+ *     `campos`, y en la tabla `hermanos` no existía esa columna siquiera.
+ *
+ *     O sea que faltaban LAS DOS MITADES, no una. La definición no volvía (eso
+ *     lo arregla este fichero) y el valor no llegaba a ir (eso lo arregla
+ *     `supabase/campos-del-hermano.sql` y el mapeo de `lib/db/hermanos.ts`).
+ *     Desde otro ordenador se veía el campo «Talla de túnica» bien dibujado y
+ *     vacío para los cuatrocientos hermanos.
  *
  *   · LOS AJUSTES DE CUOTAS. Esto toca dinero: el bloqueo de papeleta a los
  *     morosos no valía desde otro ordenador, y el control de la mora por dos

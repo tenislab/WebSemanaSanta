@@ -280,6 +280,81 @@ export default async function ({ caso }) {
   await elPrecioRebajadoEsElMismoEnLosDosSitios({ sql, caso })
   await losDatosDeLaTiendaCuadran({ sql, caso })
   await lasCosasDeCrecerSinRomperNada({ sql, caso })
+  await laFichaGuardaTodoLoQueDice({ sql, caso })
+}
+
+/**
+ * QUE LA FICHA GUARDE DE VERDAD LO QUE LA PANTALLA DICE QUE HA GUARDADO.
+ *
+ * Dos columnas se habían quedado por el camino y las dos daban el mismo fallo
+ * mudo: el dato se escribía, se veía, se recargaba y seguía ahí —porque
+ * `localStorage` guarda el objeto entero— y solo desaparecía EN OTRO
+ * DISPOSITIVO. Que es justo el que no se prueba.
+ *
+ *   · `tutor_id` — la columna existía y la aplicación no la mandaba.
+ *   · `campos`   — ni columna había.
+ *
+ * `fichacompleta.prueba.mjs` ya compara las listas leyendo el código. Esto es
+ * lo otro: escribir una fila de verdad y volver a leerla.
+ */
+async function laFichaGuardaTodoLoQueDice({ sql, caso }) {
+  const ultimo = (x) => String(x).trim().split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !/^(BEGIN|COMMIT|SET|DO|INSERT \d+ \d+|UPDATE \d+|DELETE \d+)$/.test(l))
+    .pop() ?? ''
+
+  const donde = ultimo(await sql('select id from hermandades limit 1;'))
+
+  /*
+   * PADRE E HIJO, con el vínculo puesto. Se escribe con `insert`, como lo
+   * escribe la aplicación, y se vuelve a leer: si la columna no existiera,
+   * Postgres rechazaría la fila ENTERA y esto se caería aquí — que es
+   * exactamente lo que se quiere que pase.
+   */
+  await sql(`
+    delete from hermanos where dni in ('X0009001P', 'X0009002H');
+    insert into hermanos (numero, nombre, dni, hermandad_id, campos)
+    values (990001, 'Padre de Prueba', 'X0009001P', '${donde}', '{"talla": "M"}'::jsonb);
+    insert into hermanos (numero, nombre, dni, hermandad_id, tutor_id, campos)
+    values (990002, 'Hijo de Prueba', 'X0009002H', '${donde}',
+            (select id from hermanos where dni = 'X0009001P'), '{"talla": "6"}'::jsonb);
+  `)
+
+  caso('el vínculo de familia se guarda', 'Padre de Prueba', ultimo(await sql(`
+    select p.nombre from hermanos h join hermanos p on p.id = h.tutor_id
+     where h.dni = 'X0009002H';`)))
+
+  caso('y los campos a medida también', 'M', ultimo(await sql(
+    `select campos->>'talla' from hermanos where dni = 'X0009001P';`)))
+  caso('cada uno el suyo', '6', ultimo(await sql(
+    `select campos->>'talla' from hermanos where dni = 'X0009002H';`)))
+
+  /*
+   * --- Y `mi_tutor()` DEVUELVE EL NOMBRE Y NADA MÁS ---
+   *
+   * Esta es la comprobación que importa de esa función. Lo fácil habría sido
+   * darle al hijo permiso para leer la ficha de su padre, y eso le habría dado
+   * su teléfono, su dirección y SU IBAN — todo, para poder enseñar un nombre.
+   * Por eso va por función: puede elegir columnas donde RLS no puede.
+   */
+  const columnas = ultimo(await sql(`
+    select string_agg(p.parameter_name, ',' order by p.ordinal_position)
+      from information_schema.parameters p
+      join information_schema.routines r on r.specific_name = p.specific_name
+     where r.routine_name = 'mi_tutor' and p.parameter_mode = 'OUT';
+  `))
+  caso('mi_tutor solo devuelve id, nombre y número', 'id,nombre,numero', columnas)
+
+  /*
+   * Y NO ACEPTA PARÁMETROS. Una función así con un `id` suelto sería un
+   * buscador de nombres del censo entero, saltándose RLS por diseño.
+   */
+  caso('y no acepta que le digas de quién', '0', ultimo(await sql(`
+    select count(*) from information_schema.parameters p
+      join information_schema.routines r on r.specific_name = p.specific_name
+     where r.routine_name = 'mi_tutor' and p.parameter_mode = 'IN';`)))
+
+  await sql("delete from hermanos where dni in ('X0009001P', 'X0009002H');")
 }
 
 /**

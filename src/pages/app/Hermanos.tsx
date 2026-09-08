@@ -179,6 +179,23 @@ export default function Hermanos() {
    */
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = useMemo(() => hermanos.find((h) => h.id === selectedId) ?? null, [hermanos, selectedId])
+  /*
+   * LA FAMILIA, LOS DOS LADOS DEL MISMO VÍNCULO.
+   *
+   * `tutor_id` es una sola columna, pero se mira de dos maneras: hacia arriba
+   * («¿de quién depende este?») y hacia abajo («¿a quién lleva?»). Aquí están
+   * las dos, porque en la ficha hacen falta las dos: con un menor delante lo
+   * primero que se pregunta es de quién es hijo, y con un padre delante, a
+   * quién lleva.
+   *
+   * Van como funciones y no como `useMemo` porque solo se llaman al pintar la
+   * ficha abierta —una de cuatrocientas— y memorizar dos búsquedas en una lista
+   * costaría más que hacerlas.
+   */
+  const tutorDe = (h: Hermano | null) =>
+    (h?.tutorId ? hermanos.find((x) => x.id === h.tutorId) ?? null : null)
+  const losQueLleva = (h: Hermano | null) =>
+    (h ? hermanos.filter((x) => x.tutorId === h.id) : [])
   /* Su historial de asistencia, dicho en una frase. Se lee del mapa completo
      —va por `año:hermano`, así que lo de cada edición sigue ahí— y se recalcula
      solo al cambiar de ficha. */
@@ -2011,6 +2028,41 @@ export default function Hermanos() {
                   nueva desde <code>/hermano</code>, con «He olvidado mi contraseña».
                 </dd>
               </div>
+              {/*
+                LA FAMILIA, POR LOS DOS LADOS.
+
+                No estaba en la ficha, ni en un sentido ni en el otro, y es lo
+                primero que se pregunta al tener delante a un menor: «¿este de
+                quién es?». Había que salir a buscarlo.
+
+                Se pintan los dos lados porque el vínculo es uno solo mirado
+                desde sitios distintos: `tutorId` dice de quién depende, y los
+                que lo tienen a él en su `tutorId` son los que lleva.
+              */}
+              {tutorDe(selected) && (
+                <div>
+                  <dt>A cargo de</dt>
+                  <dd>
+                    <Link to={`/app/hermanos?ficha=${tutorDe(selected)!.id}`}>
+                      {tutorDe(selected)!.nombre}
+                    </Link>
+                    {tutorDe(selected)!.numero > 0 ? ` · nº ${tutorDe(selected)!.numero}` : ''}
+                  </dd>
+                </div>
+              )}
+              {losQueLleva(selected).length > 0 && (
+                <div>
+                  <dt>Lleva a</dt>
+                  <dd>
+                    {losQueLleva(selected).map((h, i) => (
+                      <span key={h.id}>
+                        {i > 0 && ', '}
+                        <Link to={`/app/hermanos?ficha=${h.id}`}>{h.nombre}</Link>
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              )}
             </dl>
 
             {/*

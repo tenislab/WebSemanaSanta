@@ -100,7 +100,7 @@ import {
   type IconoHermandad,
 } from '../lib/hermandades'
 import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
-import { solicitudesDeMiFamilia } from '../lib/familia'
+import { solicitudesDeMiFamilia, traerMiTutor, type MiTutor } from '../lib/familia'
 import { situacionDeHermano, etiquetaDeSituacion } from '../lib/estadoCuotaHermano'
 import { ejercicioDeCuotas } from '../lib/cuotasEmision'
 import { fijarHermandadDeLaPagina, hermandadesPublicas, type HermandadPublica } from '../lib/multiHermandad'
@@ -1392,6 +1392,19 @@ export default function HermanoPortal() {
     [hermanos, hermanoPrincipal],
   )
   /**
+   * DE QUÉ FAMILIA ES ÉL, si es de alguna.
+   *
+   * No sale de `hermanos`: sus políticas solo le dejan ver SU ficha y las de
+   * los que lleva, así que la de su padre no está en esa lista y nunca lo
+   * estará —ni debe, que ahí va el IBAN—. Se pregunta al servidor, que
+   * devuelve el nombre y el número y nada más.
+   */
+  const [miTutor, setMiTutor] = useState<MiTutor | null>(null)
+  useEffect(() => {
+    void traerMiTutor().then(setMiTutor)
+  }, [hermanoPrincipal?.id])
+
+  /**
    * Todas las altas de familia que ha pedido, RESUELTAS INCLUIDAS.
    *
    * Aquí estaba el fallo: se filtraba por «Pendiente», así que en cuanto
@@ -2434,6 +2447,7 @@ export default function HermanoPortal() {
             solicitudesFamilia={solicitudesFamilia}
             onSolicitarAlta={solicitarAltaFamilia}
             bloqueado={deBaja ? 'Tu ficha figura de baja: no se pueden pedir altas nuevas.' : null}
+            tutor={miTutor}
           />
         )}
 
