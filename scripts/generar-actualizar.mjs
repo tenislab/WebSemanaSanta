@@ -140,6 +140,13 @@ export const PIEZAS_ACTUALIZACION = [
    */
   ['familia-en-los-dos-lados.sql', 'Que el hijo vea de qué familia es, sin poder leer la ficha entera de su padre'],
   /*
+   * EL NUMERITO DEL MENÚ. La pantalla de Notificaciones ya lo enseñaba todo;
+   * lo que faltaba es enterarse SIN entrar a mirarla. Va en la base y no en el
+   * navegador porque el numerito sale en TODAS las pantallas, y contarlo aquí
+   * obligaría a cargar cinco tablas en cada una.
+   */
+  ['contador-de-avisos.sql', 'El numerito del menú: cuántas cosas esperan respuesta'],
+  /*
    * --- LO QUE HACE FALTA PARA CRECER SIN ROMPER NADA ---
    *
    * Las cinco piezas de abajo no añaden ninguna pantalla: son las que hacen

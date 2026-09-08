@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext'
 import { useCargoDeLaSesionConEstado, puedeVerModulo, usePermisosSincronizados, cargoEnCristiano } from '../lib/permisos'
 import { apuntarCargo } from '../lib/vigilancia'
 import { traerNovedades } from '../lib/novedades'
+import { contarAvisosQueEsperan } from '../lib/notificaciones'
 import { avisoDelEsquema, mirarElEsquema, type EstadoDelEsquema } from '../lib/versionEsquema'
 import { dondeEstoyDeSoporte, salirDeSoporte } from '../lib/soporte'
 import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
@@ -286,6 +287,31 @@ export default function AppShell() {
   }, [])
   const navigate = useNavigate()
   const location = useLocation()
+
+  /*
+   * EL NUMERITO DEL MENÚ.
+   *
+   * CUÁNDO SE PREGUNTA, que es lo único delicado de esto:
+   *
+   *   · Al entrar en el panel.
+   *   · Y cada vez que se ENTRA O SE SALE de Notificaciones, porque es ahí
+   *     donde se resuelven y donde el número tiene que bajar.
+   *
+   * No en cada cambio de pantalla: sería una consulta cada vez que alguien
+   * pincha en el menú, cincuenta veces por sesión, para un adorno. Y tampoco
+   * con un temporizador: una hermandad no necesita enterarse de una baja al
+   * segundo, y un temporizador es una consulta cada X para siempre, en todas
+   * las hermandades a la vez, también de madrugada.
+   *
+   * El precio de esto es que si alguien deja el panel abierto toda la mañana,
+   * el número es el de cuando entró. Se acepta: es un aviso, no un reloj.
+   */
+  const [avisosEsperando, setAvisosEsperando] = useState(0)
+  const enNotificaciones = location.pathname.startsWith('/app/notificaciones')
+  useEffect(() => {
+    void contarAvisosQueEsperan().then(setAvisosEsperando)
+  }, [enNotificaciones])
+
   const { settings: ajustesHermandad, resuelto: ajustesResueltos } = useHermandadSettingsConEstado()
   const [mostrarAlta, setMostrarAlta] = useState(() => false)
   /*
@@ -446,6 +472,22 @@ export default function AppShell() {
                 >
                   <span className="app-nav__ic">{item.icon}</span>
                   {item.label}
+                  {/*
+                    LA LUZ DEL BUZÓN. Sin esto, la pantalla de Notificaciones lo
+                    enseña todo… y solo si a alguien se le ocurre entrar. Una
+                    baja pedida el martes seguía esperando el jueves.
+
+                    `aria-label` aparte del número porque un «3» suelto no dice
+                    nada a quien navega con lector de pantalla.
+                  */}
+                  {item.to === '/app/notificaciones' && avisosEsperando > 0 && (
+                    <span
+                      className="app-nav__cuantos"
+                      aria-label={`${avisosEsperando} ${avisosEsperando === 1 ? 'cosa espera' : 'cosas esperan'} respuesta`}
+                    >
+                      {avisosEsperando > 99 ? '99+' : avisosEsperando}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </div>

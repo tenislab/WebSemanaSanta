@@ -6,6 +6,8 @@ import type { SolicitudAlta } from './solicitudes'
 import type { SolicitudPapeleta } from './solicitudesPapeleta'
 import { hermanosSinCuota } from './cuotasEmision'
 import type { MensajeWeb } from './mensajesWeb'
+import { isSupabaseConfigured, supabase } from './supabase'
+import { modoDemoActivo } from './demo'
 import { resumenMensaje } from './mensajesWeb'
 
 /**
@@ -325,6 +327,62 @@ export function avisosPendientes(f: FuentesDeAvisos): Aviso[] {
   return avisos.sort(
     (a, b) => PRIORIDAD[a.tipo] - PRIORIDAD[b.tipo] || a.titulo.localeCompare(b.titulo, 'es'),
   )
+}
+
+/**
+ * ============================================================================
+ * EL NUMERITO DEL MENÚ
+ * ============================================================================
+ *
+ * La pantalla de Notificaciones lo enseña todo, pero solo si entras a mirarla.
+ * Esto es la luz del buzón: el número que sale al lado de «Notificaciones» en
+ * el menú, en todas las pantallas.
+ *
+ * LO CUENTA LA BASE, NO EL NAVEGADOR, y esa es la decisión de todo el asunto.
+ * `cuantosAvisos()` de aquí abajo sabe contarlos, pero necesita tener delante
+ * las solicitudes, las cuotas, las papeletas, los hermanos y los mensajes. Y el
+ * numerito sale EN TODAS LAS PANTALLAS: contarlo aquí obligaría a cargar esas
+ * cinco tablas en Tesorería, en el Inventario y en la Web pública, que es justo
+ * lo contrario de lo que se está haciendo para que esto aguante al crecer.
+ *
+ * La función del servidor es una consulta y devuelve un número. El detalle de
+ * qué cuenta —y qué NO cuenta, que importa más— está en
+ * `supabase/contador-de-avisos.sql`.
+ *
+ * NO LANZA NUNCA. Si falla —base atrasada sin la función, sin red, proyecto en
+ * pausa— devuelve 0, o sea «no hay nada que ver», que es exactamente como se
+ * comportaba antes de existir el contador. Un adorno del menú no puede impedir
+ * que nadie entre a trabajar.
+ */
+export async function contarAvisosQueEsperan(): Promise<number> {
+  if (!isSupabaseConfigured || !supabase) return 0
+  if (modoDemoActivo()) return 0
+  try {
+    const { data, error } = await supabase.rpc('avisos_que_esperan')
+    if (error) return 0
+    const n = Number(data ?? 0)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * LOS TIPOS QUE **NO** ENTRAN EN EL NUMERITO, con su motivo.
+ *
+ * Se exporta para que una prueba pueda comprobar que todo tipo de aviso está o
+ * contado en la función de la base o aquí. Así, añadir un tipo nuevo obliga a
+ * decidir de qué lado va en vez de que se quede fuera sin que nadie lo note.
+ */
+export const NO_CUENTAN_EN_EL_MENU: Partial<Record<TipoAviso, string>> = {
+  /*
+   * «Hermanos sin cuota» no es algo que HAYA LLEGADO: es un estado de la
+   * hermandad. No hay nadie esperando al otro lado, no se resuelve
+   * contestando, y estaría en el contador todo el año hasta que se emitieran
+   * las cuotas. Un numerito que no baja nunca es un numerito que se deja de
+   * mirar — y con él se dejan de mirar los que sí importaban.
+   */
+  sinCuota: 'es un estado de la hermandad, no algo que espere respuesta',
 }
 
 /** Cuántos hay, para el número del menú. */

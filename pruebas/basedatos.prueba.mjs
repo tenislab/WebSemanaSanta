@@ -281,6 +281,81 @@ export default async function ({ caso }) {
   await losDatosDeLaTiendaCuadran({ sql, caso })
   await lasCosasDeCrecerSinRomperNada({ sql, caso })
   await laFichaGuardaTodoLoQueDice({ sql, caso })
+  await elNumeritoDelMenuCuentaBien({ sql, caso })
+}
+
+/**
+ * QUE EL NUMERITO DEL MENÚ CUENTE LO SUYO Y SOLO LO SUYO.
+ *
+ * `avisos_que_esperan()` va con `security definer`, o sea que SE SALTA RLS. Si
+ * a una de sus seis cuentas se le olvidara el `hermandad_id`, sumaría lo de
+ * TODAS las hermandades del proyecto — y no daría error, daría un número más
+ * grande. Un fallo así nadie lo mira dos veces: se piensa que hay mucho lío.
+ *
+ * `contador.prueba.mjs` ya lee el SQL y comprueba que las seis lo llevan
+ * escrito. Esto es lo otro: meter una fila en OTRA hermandad y ver que no la
+ * cuenta.
+ */
+async function elNumeritoDelMenuCuentaBien({ sql, caso }) {
+  const ultimo = (x) => String(x).trim().split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !/^(BEGIN|COMMIT|SET|DO|INSERT \d+ \d+|UPDATE \d+|DELETE \d+)$/.test(l))
+    .pop() ?? ''
+
+  const titular = ultimo(await sql('select auth_user_id from titulares where auth_user_id is not null limit 1;'))
+  const mia = ultimo(await sql(`select hermandad_id from titulares where auth_user_id = '${titular}';`))
+
+  const contar = async () => Number(ultimo(await sql(`
+    begin;
+    set local request.jwt.claim.sub = '${titular}';
+    select avisos_que_esperan();
+    commit;
+  `)))
+
+  const departida = await contar()
+
+  /*
+   * UNA SOLICITUD DE ALTA PENDIENTE EN **OTRA** HERMANDAD.
+   *
+   * Es la comprobación que importa: si el número sube, la función está mirando
+   * fuera de su casa.
+   */
+  const otra = ultimo(await sql(`
+    insert into hermandades (nombre) values ('Hermandad de al lado (prueba)') returning id;`))
+  await sql(`
+    insert into solicitudes_alta (nombre, dni, email, estado, fecha, hermandad_id)
+    values ('De otra casa', 'X0009003L', 'otra@ejemplo.es', 'Pendiente', '2026-09-01', '${otra}');
+  `)
+  caso('lo de otra hermandad no cuenta', departida, await contar())
+
+  /* Y lo de la suya sí, una por una. */
+  await sql(`
+    insert into solicitudes_alta (nombre, dni, email, estado, fecha, hermandad_id)
+    values ('De la mía', 'X0009004C', 'mia@ejemplo.es', 'Pendiente', '2026-09-01', '${mia}');
+  `)
+  caso('y lo suyo sí', departida + 1, await contar())
+
+  /*
+   * LA BAJA PEDIDA CUENTA, Y DEJA DE CONTAR AL TRAMITARLA.
+   *
+   * Las dos mitades importan: sin la segunda, el numerito se quedaría con un
+   * aviso fijo que no se puede quitar, y un número que no baja nunca se deja de
+   * mirar — con él, los que sí importaban.
+   */
+  await sql(`
+    insert into hermanos (numero, nombre, dni, hermandad_id, baja_solicitada, estado)
+    values (990003, 'Se quiere ir', 'X0009005K', '${mia}', true, 'Activo');
+  `)
+  caso('la baja pedida cuenta', departida + 2, await contar())
+  await sql(`update hermanos set estado = 'Baja' where dni = 'X0009005K';`)
+  caso('y deja de contar al tramitarla', departida + 1, await contar())
+
+  await sql(`
+    delete from solicitudes_alta where dni in ('X0009003L', 'X0009004C');
+    delete from hermanos where dni = 'X0009005K';
+    delete from hermandades where id = '${otra}';
+  `)
+  caso('y al limpiar vuelve a como estaba', departida, await contar())
 }
 
 /**

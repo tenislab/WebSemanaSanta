@@ -1405,6 +1405,38 @@ span.logo-mark img { width: 100%; height: 100%; }
 .app-nav__link:hover { background: rgba(243, 237, 226, 0.06); color: var(--marfil-100); }
 .app-nav__link.is-active { background: rgba(214, 188, 138, 0.14); color: var(--oro-300); font-weight: 600; }
 
+/*
+  EL NUMERITO DE NOTIFICACIONES.
+
+  `margin-left: auto` lo empuja al borde derecho del enlace, que es donde se
+  busca sin pensar: los tres o cuatro numeritos de cualquier aplicación están
+  ahí y el ojo ya va solo.
+
+  VA EN ORO Y NO EN ROJO. El menú entero es morado y marfil, y un rojo de aviso
+  ahí dentro no dice «tienes cosas»: dice «algo se ha roto». El oro es el color
+  con el que esta aplicación señala lo importante desde el principio, y sobre el
+  morado destaca igual.
+
+  `tabular-nums` para que el 1 ocupe lo mismo que el 8 y el numerito no cambie
+  de ancho al pasar de 9 a 10, dando un salto en el menú.
+*/
+.app-nav__cuantos {
+  margin-left: auto;
+  min-width: 1.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--oro-500);
+  color: var(--morado-900);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* Sobre el enlace activo el fondo ya es dorado claro: el numerito se invierte
+   para no desaparecer dentro de él. */
+.app-nav__link.is-active .app-nav__cuantos { background: var(--oro-300); }
+
 .app-side__foot {
   border-top: 1px solid rgba(214, 188, 138, 0.18);
   padding-top: 0.9rem; margin-top: 0.9rem;
