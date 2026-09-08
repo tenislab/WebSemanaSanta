@@ -132,9 +132,41 @@ async function laMarcaEsUnaSola({ caso }) {
 
   const css = await readFile('src/styles/global.css', 'utf8')
   caso('el color de la marca sale de un token, no de un hexadecimal suelto', true,
-    /\.logo-mark \{[\s\S]{0,700}color: var\(--/.test(css))
+    /\.logo-mark \{[\s\S]{0,1400}color: var\(--/.test(css))
   caso('y en claro pasa a marfil', true,
     /\.logo-mark--claro \{ color: var\(--marfil-100\); \}/.test(css))
+
+  /*
+   * --- Y EL TOKEN TIENE QUE CAMBIAR CON EL TEMA ---
+   *
+   * Este es un fallo que metí yo y que se vio en cuanto se desplegó. La marca
+   * de antes era una ilustración en oro Y granate, así que se leía sobre
+   * cualquier fondo. Esta es de UN SOLO COLOR: con un granate fijo desaparece
+   * en cuanto el fondo también es oscuro — y en tema oscuro lo son la pantalla
+   * de suscripción y la cabecera de cada recibo.
+   *
+   * `--accent` es granate en claro y oro en oscuro. Un `--morado-*` o un
+   * hexadecimal a pelo NO cambian, y por eso están prohibidos aquí.
+   */
+  caso('la marca usa el token que cambia con el tema', true,
+    /\.logo-mark \{[\s\S]{0,1400}color: var\(--accent\);/.test(css))
+  caso('y ese token de verdad cambia en tema oscuro', true,
+    /prefers-color-scheme: dark[\s\S]{0,900}--accent: var\(--oro-300\)/.test(css))
+
+  /*
+   * --- EL LACRE DEL PORTAL, QUE ES DONDE SE VIO ---
+   *
+   * El lacre es un disco de CERA GRANATE. Ahí no vale ni el granate —se funde
+   * con la cera, que es como estaba— ni el marfil, que canta demasiado para un
+   * sello. En oro parece lo que es: una figura grabada, del mismo tono que el
+   * anillo que el lacre ya lleva alrededor.
+   */
+  caso('dentro del lacre la marca va en oro', true,
+    /\.portal__sello-disco \.logo-mark \{ color: rgba\(226, 196, 132/.test(css))
+  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  // Y el cinturón: si mañana se borra esa regla, que no vuelva a desaparecer.
+  caso('y se pide en claro por si esa regla desaparece', true,
+    /<LogoMark size=\{64\} claro \/>/.test(portal))
 
   // --- 3. EL ICONO DE LA PESTAÑA SIGUE SIENDO EL CUADRADO ---
   /*

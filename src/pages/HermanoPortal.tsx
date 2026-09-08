@@ -1489,7 +1489,11 @@ export default function HermanoPortal() {
                 {hermandadElegida?.logoDataUrl ? (
                   <img src={hermandadElegida.logoDataUrl} alt="" className="portal__aside-escudo" />
                 ) : (
-                  <LogoMark size={64} />
+                  /* `claro` porque el lacre es cera GRANATE: sin esto la marca
+                     se pintaba del mismo color que el fondo y no se veía. El
+                     tono exacto —oro, como el anillo del lacre— lo pone el CSS;
+                     esto es el cinturón por si esa regla desaparece. */
+                  <LogoMark size={64} claro />
                 )}
               </span>
             </div>

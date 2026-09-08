@@ -292,14 +292,37 @@ h1, h2, h3,
     EL COLOR DEL TRAZO SE DECIDE AQUÍ, no dentro del dibujo.
 
     La marca es un nazareno de una sola línea, y el `<svg>` la pinta con
-    `currentColor`. Sobre papel va granate; sobre la cabecera del panel —que es
-    granate oscuro— tiene que pasar a marfil o desaparece del menú. Era el
-    motivo de meter el dibujo en línea en vez de dejarlo como imagen: una
-    imagen no se puede repintar desde fuera.
+    `currentColor`. Era el motivo de meterlo en línea en vez de dejarlo como
+    imagen: una imagen no se puede repintar desde fuera.
+
+    VA CON `--accent` Y NO CON UN GRANATE FIJO, y esto es un arreglo:
+
+      · La marca de antes era una ilustración en oro Y granate, así que se veía
+        sobre cualquier fondo. Esta es de UN SOLO COLOR, y un granate fijo
+        desaparece en cuanto el fondo también es oscuro.
+      · `--accent` es granate en tema claro y ORO en tema oscuro, que es
+        exactamente lo que hace falta. Sin esto, en tema oscuro la marca se
+        perdía en la pantalla de suscripción y en la cabecera de cada recibo.
+      · Y AL IMPRIMIR no manda ninguno de los dos: `@media print` pone todo el
+        documento en tinta negra, la marca incluida. Es lo correcto — un logo
+        en oro pálido sobre papel blanco no se ve.
   */
-  color: var(--morado-700);
+  color: var(--accent);
 }
+/* Sobre fondo oscuro cuando el token no basta: la cabecera del panel. */
 .logo-mark--claro { color: var(--marfil-100); }
+
+/*
+  Y DENTRO DEL LACRE, en oro.
+
+  El lacre del portal es un disco de CERA GRANATE, así que ahí no vale ni el
+  granate ni el marfil: el granate se funde con la cera —que es como estaba, y
+  no se veía— y el marfil canta demasiado para lo que es un sello.
+
+  En oro es lo que de verdad parece: una figura grabada en la cera, del mismo
+  tono que el anillo que ya lleva el lacre alrededor.
+*/
+.portal__sello-disco .logo-mark { color: rgba(226, 196, 132, 0.92); }
 /*
   `contain` Y NO `fill`, y ahora importa más que antes.
 
