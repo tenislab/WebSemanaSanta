@@ -67,50 +67,87 @@ export default async function ({ caso }) {
   const original = await stat('docs/marca/gobergo-original.webp').catch(() => null)
   caso('el original de la marca está guardado', true, !!original && original.size > 10000)
 
-  await lasDosVersiones({ caso, HUESO })
+  await laMarcaEsUnaSola({ caso })
   await todoElMundoPideLaMarcaAqui({ caso })
 }
 
 /**
- * LAS DOS VERSIONES, y que la elección no se pueda olvidar.
+ * LA MARCA ES UNA SOLA, Y NO SE APLASTA.
  *
- * El logotipo es una orla de filigrana con la G, el farol y la cruz de remate.
- * A 96 píxeles es una preciosidad; a 32 —la pestaña, la cabecera del panel, el
- * membrete de un recibo— se convierte en una mancha dorada. La reducida es la
- * misma marca sin la orla, y se lee a 24.
+ * Aquí antes se comprobaba otra cosa: que hubiera DOS ilustraciones —la orla
+ * con la G para los tamaños grandes, la misma sin orla para los pequeños— y que
+ * la elección la hiciera el componente y no cada pantalla. Era la regla
+ * correcta para aquel logotipo.
  *
- * Lo importante es que elegir NO sea decisión de cada pantalla: hay veinte
- * sitios que piden la marca y en dieciocho es pequeña. Si hubiera que acordarse
- * en cada uno, el día menos pensado alguien mete la orla en la cabecera.
+ * Ahora la marca es un nazareno de línea y es UNA SOLA para toda la
+ * aplicación: enseñar dos dibujos distintos según el tamaño de la caja es
+ * tener dos marcas. Así que lo que hay que vigilar cambió, y son otras tres
+ * cosas — las tres capaces de romperse sin que la pantalla parezca rota:
+ *
+ *   1. QUE NO SE APLASTE. Es el riesgo nuevo, y el que no se ve. La marca de
+ *      antes era cuadrada, así que `size` era «el lado»; esta mide 1 de ancho
+ *      por 2,08 de alto. Si alguien vuelve a poner `width: size, height: size`
+ *      —que es lo que había escrito y es lo natural de escribir— el nazareno
+ *      sale gordo y bajito. Y nadie mira dos veces una pantalla que «se ve
+ *      bien».
+ *
+ *   2. QUE SE PUEDA REPINTAR. El dibujo es un trazo de un solo color y la
+ *      cabecera del panel es granate oscuro. Como imagen, la marca desaparecía
+ *      del menú lateral y no había forma de arreglarlo desde fuera. Va en línea
+ *      y con `currentColor` justamente por eso: si vuelve a ser un `<img>`,
+ *      vuelve el problema.
+ *
+ *   3. QUE EL ICONO DE LA PESTAÑA SIGA SIENDO EL CUADRADO. No es un olvido: a
+ *      32 píxeles el nazareno ocupa el 42 por ciento del ancho de su caja y se
+ *      queda en una manchita. Está medido, y está escrito en `Logo.tsx` para
+ *      que el próximo que lo vea sepa que es una decisión.
  */
-async function lasDosVersiones({ caso, HUESO }) {
+async function laMarcaEsUnaSola({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const crudo = await readFile('src/components/Logo.tsx', 'utf8')
   const logo = crudo.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 
-  caso('la marca trae sus dos versiones', true,
-    /gobergo-marca\.webp/.test(logo) && /gobergo-marca-reducida\.webp/.test(logo))
-  caso('y la elige sola por el tamaño', true, /size >= CORTE/.test(logo))
-  caso('con el corte en una constante, no a ojo', true, /const CORTE = \d+/.test(logo))
-  // Se puede forzar cuando haga falta, pero por defecto decide el tamaño.
-  caso('se puede forzar una u otra', true, /variante\?: 'completa' \| 'reducida'/.test(logo))
+  // --- 1. NO SE APLASTA ---
+  caso('la proporción está escrita, no a ojo', true, /const PROPORCION = \d+ \/ \d+/.test(logo))
+  caso('el alto manda y el ancho sale de la proporción', true,
+    /const ancho = Math\.round\(size \* PROPORCION\)/.test(logo))
+  /*
+   * Y NO SE FUERZAN LOS DOS. `width: size, height: size` es exactamente lo que
+   * había antes —era correcto entonces— y es lo que volvería a escribir
+   * cualquiera que no supiera que la marca cambió de forma.
+   */
+  caso('no se le da el mismo valor a lo alto y a lo ancho', false,
+    /width: size, height: size/.test(logo))
 
-  // La marca se pide en claro y en oscuro: la cabecera es granate y el papel
-  // es blanco, y tiene que verse en los dos.
-  caso('la marca tiene versión clara', true, /claro\s*=\s*false/.test(logo))
+  // --- 2. SE PUEDE REPINTAR ---
+  caso('el trazo lo pinta el CSS', true, /fill="currentColor"/.test(logo))
+  caso('y va en línea, no como imagen', true, /<path d=\{NAZARENO\}/.test(logo))
+  caso('sin volver a ser un <img>', false, /<img/.test(logo))
+  caso('con su versión clara para la cabecera oscura', true, /logo-mark--claro/.test(logo))
   caso('y quien la pide puede elegirla', true, /LogoMark size=\{size\} claro=\{light\}/.test(logo))
 
+  const css = await readFile('src/styles/global.css', 'utf8')
+  caso('el color de la marca sale de un token, no de un hexadecimal suelto', true,
+    /\.logo-mark \{[\s\S]{0,700}color: var\(--/.test(css))
+  caso('y en claro pasa a marfil', true,
+    /\.logo-mark--claro \{ color: var\(--marfil-100\); \}/.test(css))
+
+  // --- 3. EL ICONO DE LA PESTAÑA SIGUE SIENDO EL CUADRADO ---
   /*
-   * Los colores de la marca, en un sitio y con nombre. El dibujo ya no los
-   * usa —es una ilustración— pero los necesitan la baldosa del icono, la barra
-   * del navegador en el móvil y los documentos que se imprimen. Sueltos por
-   * ahí, la aplicación acaba con dos dorados distintos.
+   * Se comprueba en el generador, que es quien lo decide. Si algún día alguien
+   * lo apunta al nazareno sin dibujar antes una versión para tamaño pequeño,
+   * esto salta y le manda a leer el porqué.
    */
-  const { readFile: leer } = await import('node:fs/promises')
-  const marca = await leer('src/lib/marca.ts', 'utf8')
-  const constantes = [...marca.matchAll(/export const ([A-Z][A-Z_]*) = '(#[0-9A-Fa-f]{3,8})'/g)]
-  caso('los colores de la marca están en lib/marca.ts', true, constantes.length >= 3)
-  caso('y el icono usa ese mismo hueso', true, marca.includes(HUESO))
+  const gen = await readFile('scripts/generar-favicon.mjs', 'utf8')
+  caso('los iconos se siguen sacando de la marca cuadrada', true,
+    /RUTA_MARCA_REDUCIDA = 'src\/assets\/gobergo-marca-reducida\.webp'/.test(gen))
+  caso('y en Logo.tsx está escrito por qué', true,
+    /icono de la pestaña sigue siendo el cuadrado/i.test(crudo))
+
+  // Y el dibujo original guardado, que es de donde sale todo.
+  const { stat } = await import('node:fs/promises')
+  const original = await stat('docs/marca/nazareno-original.svg').catch(() => null)
+  caso('el nazareno original está guardado', true, !!original && original.size > 1500)
 }
 
 /**

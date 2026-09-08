@@ -288,9 +288,26 @@ h1, h2, h3,
   align-items: center;
   justify-content: center;
   flex: none;
+  /*
+    EL COLOR DEL TRAZO SE DECIDE AQUÍ, no dentro del dibujo.
+
+    La marca es un nazareno de una sola línea, y el `<svg>` la pinta con
+    `currentColor`. Sobre papel va granate; sobre la cabecera del panel —que es
+    granate oscuro— tiene que pasar a marfil o desaparece del menú. Era el
+    motivo de meter el dibujo en línea en vez de dejarlo como imagen: una
+    imagen no se puede repintar desde fuera.
+  */
+  color: var(--morado-700);
 }
-/* La marca es una ilustración: se estira al hueco y se deja `contain` para que
-   no se deforme si alguien le da una caja que no es cuadrada. */
+.logo-mark--claro { color: var(--marfil-100); }
+/*
+  `contain` Y NO `fill`, y ahora importa más que antes.
+
+  La marca dejó de ser cuadrada: es 1 de ancho por 2,08 de alto. El componente
+  ya le da a la caja la proporción correcta, pero esto es el cinturón — cae
+  dentro de sitios que tienen su propia regla para `img`, y ahí es donde una
+  marca se aplasta sin que nadie lo note.
+*/
 .logo-mark svg,
 .logo-mark img { width: 100%; height: 100%; object-fit: contain; }
 /* Ni se selecciona ni se arrastra: en la cabecera, arrastrarla sin querer
