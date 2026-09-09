@@ -234,6 +234,115 @@ export async function enviarCorreo(mensaje: {
  * durante media hora algo que ya tenía instalado, sin tocar lo que fallaba.
  * Un 404 de verdad sí es inequívoco; el resto hay que contarlo entero.
  */
+/**
+ * MANDAR UN CORREO DISTINTO A CADA UNO.
+ *
+ * ============================================================================
+ * POR QUÉ HACE FALTA OTRA FUNCIÓN Y NO VALE `enviarCorreo`
+ * ============================================================================
+ *
+ * `enviarCorreo` manda UN cuerpo a N direcciones, que es lo eficiente y lo que
+ * se quiere el 95 % de las veces. Pero en cuanto el texto dice «Hola {nombre}»
+ * ya no hay un cuerpo: hay ochocientos, uno por persona. No es una variante,
+ * es otra operación.
+ *
+ * ----------------------------------------------------------------------------
+ * VA DE UNO EN UNO Y EN FILA, Y ES A PROPÓSITO
+ * ----------------------------------------------------------------------------
+ *
+ * Ochocientas peticiones en paralelo es la forma más rápida de que el proveedor
+ * te tome por spam el primer día — está escrito arriba, en el troceado de
+ * `enviarCorreo`, y aquí vale igual o más.
+ *
+ * En fila, ochocientos correos tardan unos minutos. Es el precio de que cada
+ * uno lleve el nombre de quien lo lee, y por eso la pantalla NO se queda muda:
+ * `alVer` va contando, y se puede enseñar «312 de 800».
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE SE HACE CUANDO UNO FALLA, QUE ES LA DECISIÓN QUE IMPORTA
+ * ----------------------------------------------------------------------------
+ *
+ * SE SIGUE CON LOS DEMÁS. Un correo mal escrito en el censo —que en un censo
+ * importado de un Excel es lo normal— no puede dejar sin comunicado a los
+ * setecientos noventa y nueve restantes.
+ *
+ * Pero se CUENTAN y se devuelven. Descartar en silencio a alguien de una lista
+ * de destinatarios es dejarlo sin enterarse de nada sin que nadie llegue a
+ * saberlo, y ese es justo el fallo que ya costó caro aquí una vez: la pantalla
+ * decía «enviado a 572» de 612 y nadie caía en la diferencia.
+ *
+ * Y HAY UN FRENO DE EMERGENCIA. Si fallan los diez primeros seguidos, no es un
+ * correo mal escrito: es que el proveedor está caído, la clave ha caducado o la
+ * cuenta está bloqueada. Seguir intentándolo setecientas noventa veces más
+ * tarda un cuarto de hora, machaca al proveedor y acaba igual. Se para y se
+ * dice.
+ */
+export interface ResultadoUnoAUno {
+  enviados: number
+  fallidos: number
+  /** Se paró antes de tiempo porque fallaba TODO. Los que quedaron sin intentar. */
+  cortado: boolean
+  sinIntentar: number
+  error?: string
+}
+
+/** Fallos seguidos desde el principio a partir de los cuales se da por caído el proveedor. */
+export const FALLOS_SEGUIDOS_PARA_RENDIRSE = 10
+
+export async function enviarCorreoUnoAUno(
+  mensajes: { para: string; asunto: string; texto?: string; html?: string }[],
+  alVer?: (hechos: number, total: number) => void,
+): Promise<ResultadoUnoAUno> {
+  let enviados = 0
+  let fallidos = 0
+  let seguidos = 0
+  let error: string | undefined
+
+  for (let i = 0; i < mensajes.length; i++) {
+    const m = mensajes[i]
+    let ok = false
+    try {
+      const r = await enviarCorreo({ para: [m.para], asunto: m.asunto, texto: m.texto, html: m.html })
+      ok = r.ok
+      if (!ok && !error) error = r.error
+    } catch {
+      // `enviarCorreo` promete no lanzar, pero esto va dentro de un bucle de
+      // ochocientas vueltas: si alguna vez rompe esa promesa, no se lleva por
+      // delante a los que faltan.
+      ok = false
+    }
+    if (ok) {
+      enviados++
+      seguidos = 0
+    } else {
+      fallidos++
+      seguidos++
+    }
+    alVer?.(i + 1, mensajes.length)
+
+    /*
+     * EL FRENO. Solo cuenta si no ha entrado NI UNO: con un solo envío bueno,
+     * lo que falla son direcciones sueltas y hay que terminar la lista. Si no
+     * ha salido ninguno y llevamos diez seguidos, el problema es el proveedor.
+     */
+    if (enviados === 0 && seguidos >= FALLOS_SEGUIDOS_PARA_RENDIRSE && i + 1 < mensajes.length) {
+      return {
+        enviados,
+        fallidos,
+        cortado: true,
+        sinIntentar: mensajes.length - (i + 1),
+        error:
+          `No ha salido ninguno de los ${seguidos} primeros, así que se ha parado en vez de `
+          + `intentarlo ${mensajes.length - (i + 1)} veces más. Suele ser la clave del proveedor de `
+          + `correo o la cuenta bloqueada: míralo en Configuración → Correo.`
+          + (error ? ` El servidor dijo: ${error}` : ''),
+      }
+    }
+  }
+
+  return { enviados, fallidos, cortado: false, sinIntentar: 0, error: fallidos > 0 ? error : undefined }
+}
+
 export function explicarFalloDeEnvio(error: unknown): string {
   const crudo = (error as { message?: string })?.message ?? ''
   const estado = (error as { context?: { status?: number } })?.context?.status

@@ -399,3 +399,159 @@ export function cabeceraHtml(
   )
   return lineas.join('\n')
 }
+
+/* ===========================================================================
+   LA REVISIÓN DE SEO: LO QUE DE VERDAD ROMPE, Y NADA MÁS
+   =========================================================================== */
+
+/**
+ * Un aviso de la revisión.
+ *
+ * `grave` separa «esto no funciona» de «esto se puede mejorar», y la
+ * separación importa: mezclados, los dos se leen igual y se ignoran los dos.
+ */
+export interface AvisoSeo {
+  id: string
+  texto: string
+  /** Qué hacer. Un aviso sin esto es un reproche. */
+  queHacer: string
+  grave: boolean
+}
+
+/**
+ * LOS DOS LARGOS QUE IMPORTAN, y de dónde salen.
+ *
+ * Google no corta por caracteres sino por ANCHO EN PÍXELES —unos 580 en el
+ * título y 920 en la descripción— así que cualquier número es aproximado. Estos
+ * son los que usa todo el mundo y se quedan del lado prudente: pasarse un poco
+ * no rompe nada, y quedarse corto tampoco. Lo que sí se nota es pasarse mucho,
+ * que es lo que esto avisa.
+ */
+export const LARGO_TITULO = 60
+export const LARGO_DESCRIPCION = 160
+
+/**
+ * REVISA LA WEB Y DICE QUÉ LE PASA.
+ *
+ * ============================================================================
+ * POR QUÉ SON POCOS AVISOS Y NO CIEN
+ * ============================================================================
+ *
+ * Porque una lista larga de reproches no la lee nadie. Ya pasó una vez en esta
+ * misma pantalla: los avisos de la web eran una retahíla y hubo que
+ * convertirlos en una barra de progreso para que se miraran.
+ *
+ * Así que aquí solo entra lo que CAMBIA ALGO de verdad para quien busca la
+ * hermandad en Google o pega el enlace en un grupo de WhatsApp. Nada de
+ * densidad de palabras clave ni de consejos de manual.
+ *
+ * Y CADA AVISO DICE QUÉ HACER. Un aviso que solo dice qué está mal es un
+ * reproche: quien lo lee no sabe si le toca a él, ni por dónde empezar.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE ESTO NO PROMETE
+ * ----------------------------------------------------------------------------
+ *
+ * Salir el primero en Google. Ningún editor hace eso. Lo que hace es que la web
+ * esté bien puesta y se comparta bien, que es lo que sí depende de nosotros.
+ */
+export function revisarSeo(
+  web: WebPublica,
+  hermandad: HermandadSettings,
+): AvisoSeo[] {
+  const avisos: AvisoSeo[] = []
+  const titulo = tituloWeb(web, hermandad).trim()
+  const descripcion = descripcionWeb(web).trim()
+
+  /*
+   * LO PRIMERO Y LO MÁS GRAVE: LA WEB SIN PUBLICAR.
+   *
+   * Va la primera porque mientras esté oculta, TODO lo demás da igual: se puede
+   * escribir la mejor descripción del mundo y Google no la va a ver. Es el
+   * aviso que evita pasarse una tarde afinando textos que no está leyendo
+   * nadie.
+   */
+  if (!web.publicada) {
+    avisos.push({
+      id: 'sin-publicar',
+      texto: 'La web está oculta, así que Google no la ve y nadie puede abrir el enlace.',
+      queHacer: 'Publícala desde Diseño cuando esté lista. Hasta entonces, lo de aquí abajo no cambia nada.',
+      grave: true,
+    })
+  }
+
+  // --- LA DESCRIPCIÓN ---
+  if (!descripcion) {
+    avisos.push({
+      id: 'sin-descripcion',
+      texto: 'No hay descripción: al pegar el enlace en WhatsApp sale el título y debajo, nada.',
+      queHacer: 'Escribe dos líneas diciendo quiénes sois y cuándo hacéis estación de penitencia.',
+      grave: true,
+    })
+  } else if (descripcion.length > LARGO_DESCRIPCION) {
+    avisos.push({
+      id: 'descripcion-larga',
+      texto: `La descripción tiene ${descripcion.length} caracteres y Google enseña unos ${LARGO_DESCRIPCION}.`,
+      queHacer: 'Recórtala, y pon lo importante al principio: lo que se corta es el final.',
+      grave: false,
+    })
+  } else if (descripcion.length < 50) {
+    /*
+     * Demasiado corta también se avisa, y NO es un capricho de manual: con
+     * quince caracteres Google se inventa la descripción sacando texto de la
+     * página, y lo que saca suele ser el menú.
+     */
+    avisos.push({
+      id: 'descripcion-corta',
+      texto: `La descripción tiene ${descripcion.length} caracteres: se queda muy corta.`,
+      queHacer: 'Con menos de cincuenta, Google se la inventa sacando texto de la página — y suele coger el menú.',
+      grave: false,
+    })
+  }
+
+  // --- EL TÍTULO ---
+  if (titulo.length > LARGO_TITULO) {
+    avisos.push({
+      id: 'titulo-largo',
+      texto: `El título tiene ${titulo.length} caracteres y Google corta sobre los ${LARGO_TITULO}.`,
+      queHacer: 'Deja delante el nombre de la hermandad: es lo que la gente busca y lo que no puede cortarse.',
+      grave: false,
+    })
+  }
+
+  /*
+   * --- LA IMAGEN AL COMPARTIR ---
+   *
+   * Sin imagen, el enlace en WhatsApp sale como una línea de texto gris. Con
+   * ella ocupa media pantalla y se pincha. Es, con diferencia, lo que más
+   * cambia de todo lo que hay en esta lista — y lo que menos cuesta.
+   */
+  if (!web.seo.imagenDataUrl && (web.heroFotos ?? []).length === 0) {
+    avisos.push({
+      id: 'sin-imagen',
+      texto: 'No hay imagen al compartir: en WhatsApp el enlace sale como una línea de texto gris.',
+      queHacer: 'Sube una foto apaisada (1200×630) en «Al compartir», o pon fotos en la portada.',
+      grave: false,
+    })
+  }
+
+  /*
+   * --- EL DOMINIO ---
+   *
+   * Un enlace largo con nuestro dominio dentro se comparte peor: la gente
+   * desconfía de lo que no reconoce. No es urgente y no rompe nada, por eso no
+   * es grave — pero conviene decirlo, porque el trámite tarda y hay que
+   * empezarlo pronto.
+   */
+  if (!web.dominio) {
+    avisos.push({
+      id: 'sin-dominio',
+      texto: 'La web no tiene dominio propio, así que el enlace lleva el nuestro dentro.',
+      queHacer: 'Con un dominio de la hermandad el enlace se reconoce y se comparte más. El trámite tarda: mejor empezarlo pronto.',
+      grave: false,
+    })
+  }
+
+  return avisos
+}
+

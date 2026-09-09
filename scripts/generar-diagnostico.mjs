@@ -16,6 +16,9 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 
 const ALIAS = {
   solicitudToRow: 'solicitudes_alta',
+  // `reglasAutomaticas.ts` no se llama como su tabla: la heurística mira el
+  // nombre del fichero y no puede adivinar el guión bajo.
+  reglaToRow: 'reglas_automaticas',
   mensajeToRow: 'mensajes_web',
   settingsToRow: 'hermandad_settings',
   /*
@@ -161,6 +164,43 @@ const funciones = new Set()
 for (const f of fuentesRpc) {
   const src = await readFile(f, 'utf8')
   for (const m of src.matchAll(/\.rpc\(\s*'([a-z_0-9]+)'/g)) funciones.add(m[1])
+}
+
+/*
+ * ----------------------------------------------------------------------------
+ * Y LAS QUE LLAMA EL SERVIDOR, QUE ERAN UN PUNTO CIEGO
+ * ----------------------------------------------------------------------------
+ *
+ * Lo de arriba mira `src`, o sea el navegador. Pero las funciones del dinero
+ * NO las llama el navegador a propósito: las llama una función de Supabase con
+ * la clave de servicio, porque desde el navegador nadie puede activarse una
+ * suscripción ni darse por pagado.
+ *
+ * O sea que las cinco funciones de las que depende el cobro entero
+ * —`activar_suscripcion_por_usuario`, `cancelar_suscripcion_por_stripe`,
+ * `cobrar_pago_tarjeta` y las dos de la renovación— no estaban en esta lista.
+ * Si faltaran en una base, el webhook contestaría 502, Stripe reintentaría
+ * unas horas y se rendiría, y la hermandad se quedaría sin activar habiendo
+ * pagado. Aquí no salía nada.
+ *
+ * Es el mismo fallo que ya tuvo este fichero con siete tablas: lo que no se
+ * mira no está roto hasta el día que lo está.
+ *
+ * Se buscan de dos formas porque hay dos maneras de llamarlas en esos
+ * ficheros: por la ruta REST (`rpc/loquesea`) y por el ayudante `llamarRpc`.
+ * La llamada genérica —`rpc/${nombre}`— no cuela por el filtro, que solo
+ * admite letras minúsculas, números y guión bajo.
+ */
+for (const dir of await readdir('supabase/functions', { withFileTypes: true })) {
+  if (!dir.isDirectory()) continue
+  let src
+  try {
+    src = await readFile(`supabase/functions/${dir.name}/index.ts`, 'utf8')
+  } catch {
+    continue
+  }
+  for (const m of src.matchAll(/rpc\/([a-z_0-9]+)/g)) funciones.add(m[1])
+  for (const m of src.matchAll(/llamarRpc\(\s*'([a-z_0-9]+)'/g)) funciones.add(m[1])
 }
 /*
  * `hermandad_actual()` no se llama nunca desde el navegador —es la frontera de

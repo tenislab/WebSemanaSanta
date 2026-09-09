@@ -1,6 +1,26 @@
 import type { CriteriosSegmento } from '../lib/segmentacion'
 /** Canal de envío; la hermandad activa los suyos en Configuración. */
 export type Canal = string
+/**
+ * `Programado` YA SE MANDA. Antes no lo mandaba nadie, nunca.
+ *
+ * Se podía marcar, se le ponía fecha, se guardaba en `fecha_programada` y la
+ * pantalla lo contaba en su recuadro — y ahí se quedaba para siempre. La mitad
+ * visible de una función a la que le faltaba la invisible.
+ *
+ * Ahora sale al abrir Comunicados, y sale UNA sola vez aunque entren tres
+ * personas a la vez. Dos cosas que conviene saber antes de tocar esto:
+ *
+ *   · LO MANDA EL NAVEGADOR, no un servidor. Para saber a quién va hace falta
+ *     `filtrarSegmento()`, que sabe de cuotas de verdad, cargos efectivos,
+ *     campos a medida y cumpleaños. Reescribir eso en SQL serían dos versiones
+ *     de la misma regla. El porqué entero, en `src/lib/envioProgramado.ts`.
+ *
+ *   · Y SALE DESDE COMUNICADOS, que es donde está cargado el censo. Por eso el
+ *     numerito del menú se enciende cuando hay uno vencido: para que alguien
+ *     entre. Un comunicado programado para el martes a las nueve puede salir el
+ *     martes a las once — y antes salía nunca.
+ */
 export type EstadoComunicado = 'Borrador' | 'Programado' | 'Enviado'
 export type RedSocial = 'Facebook' | 'Instagram' | 'X' | 'YouTube' | 'TikTok'
 

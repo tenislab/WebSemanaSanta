@@ -83,11 +83,15 @@
 --   58. campos-del-hermano.sql     Los campos a medida de la hermandad, guardados en la ficha y no en un navegador
 --   59. familia-en-los-dos-lados.sql Que el hijo vea de qué familia es, sin poder leer la ficha entera de su padre
 --   60. contador-de-avisos.sql     El numerito del menú: cuántas cosas esperan respuesta
---   61. vigilancia.sql             Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
---   62. canal-de-actualizacion.sql Sacar una novedad a una hermandad piloto antes que a todas
---   63. restaurar-copia.sql        Poder volcar la copia de UNA hermandad sin tocar a las demás
---   64. soporte.sql                Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
---   65. version-del-esquema.sql    Que la aplicación avise cuando la base se ha quedado atrás
+--   61. envio-programado.sql       Que un comunicado programado se mande, y una sola vez
+--   62. reglas-automaticas.sql     Felicitar el cumpleaños (y demás) sin que nadie se acuerde
+--   63. ensayo-de-restauracion.sql Comprobar que la copia encaja antes de vaciar nada
+--   64. renovacion-y-fallo-de-cobro.sql Que se apunte la renovación, y que una tarjeta que falla se avise antes de cortar
+--   65. vigilancia.sql             Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
+--   66. canal-de-actualizacion.sql Sacar una novedad a una hermandad piloto antes que a todas
+--   67. restaurar-copia.sql        Poder volcar la copia de UNA hermandad sin tocar a las demás
+--   68. soporte.sql                Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
+--   69. version-del-esquema.sql    Que la aplicación avise cuando la base se ha quedado atrás
 --
 -- -----------------------------------------------------------------------------
 -- LO ÚNICO QUE HAY QUE LEER ANTES
@@ -3091,7 +3095,23 @@ revoke insert, update, delete on suscripciones from anon, authenticated;
  * Devolver algo siempre evita que la aplicación tenga que distinguir «no hay
  * fila» de «no está activa»: para lo que le importa, es lo mismo.
  */
-create or replace function mi_suscripcion()
+/*
+ * SE BORRA ANTES DE CREARLA, y no es manía: `create or replace` NO puede
+ * cambiar el número de columnas que devuelve una función.
+ *
+ * Importa aquí porque una pieza posterior —`renovacion-y-fallo-de-cobro.sql`—
+ * le añade una columna, y una hermandad que ya tenía las dos y vuelve a
+ * ejecutar el instalador entero se encontraba, en esta línea, con «cannot
+ * change return type of existing function» y la instalación parada a la mitad.
+ *
+ * Volver a ejecutar el instalador encima de una base ya montada NO es un caso
+ * raro: es lo que hace todo el mundo al actualizar. Lo cazó la prueba que
+ * ejecuta `TODO-EN-UNO.sql` dos veces seguidas, que existe exactamente para
+ * esto.
+ */
+drop function if exists mi_suscripcion();
+
+create function mi_suscripcion()
 returns table (activa boolean, pack text, periodo text, desde date, hasta date)
 language sql stable security definer set search_path = public as $$
   select
@@ -10492,6 +10512,30 @@ language sql stable security definer set search_path = public as $$
     -- Quien ha pedido su papeleta de sitio.
   + (select count(*) from solicitudes_papeleta
       where hermandad_id = hermandad_actual() and estado = 'Pendiente')
+    /*
+     * Y LOS COMUNICADOS PROGRAMADOS A LOS QUE YA LES TOCABA SALIR.
+     *
+     * Este es distinto de los otros cinco y merece la explicación: no hay
+     * nadie al otro lado esperando respuesta. Lo que hay es un comunicado que
+     * la hermandad dio por hecho —lo programó, lo vio como «Programado» y se
+     * quedó tranquila— y que NO SALE HASTA QUE ALGUIEN ABRE COMUNICADOS.
+     *
+     * Sale de ahí y no de un servidor porque para saber a quién va hace falta
+     * el censo entero con sus cuotas resueltas, y eso solo está cargado en esa
+     * pantalla (el porqué entero, en `src/lib/envioProgramado.ts`).
+     *
+     * Así que el numerito es lo que hace que alguien entre, y por eso este
+     * cuenta aunque no sea una petición: sin él, un comunicado programado por
+     * alguien que ya no entra en Comunicados se quedaría esperando meses.
+     *
+     * Y baja solo en cuanto sale, que es la condición para que un contador se
+     * siga mirando.
+     */
+  + (select count(*) from comunicados
+      where hermandad_id = hermandad_actual()
+        and estado = 'Programado'
+        and fecha_programada is not null
+        and fecha_programada <= to_char(current_date, 'YYYY-MM-DD'))
 $$;
 
 grant execute on function avisos_que_esperan() to authenticated;
@@ -10514,6 +10558,634 @@ create index if not exists hermanos_baja_pedida_idx
 
 create index if not exists mensajes_web_sin_leer_idx
   on mensajes_web (hermandad_id) where not leido;
+
+-- =============================================================================
+--   ENVIO-PROGRAMADO.SQL — Que un comunicado programado se mande, y una sola vez
+-- =============================================================================
+
+-- =============================================================================
+--   QUE UN COMUNICADO PROGRAMADO SE MANDE DE VERDAD
+-- =============================================================================
+--
+-- LO QUE PASABA HASTA AHORA, Y ERA UN FALLO VIVO:
+--
+-- Un comunicado se podía marcar como «Programado», se le ponía fecha, se
+-- guardaba en `fecha_programada` y la pantalla lo contaba en su recuadro.
+--
+-- Y NO LO MANDABA NADIE. NUNCA. No había una sola línea en el proyecto que
+-- leyera esas filas para enviarlas: se quedaban ahí para siempre.
+--
+-- Es la mitad visible de una función a la que le falta la invisible, que es el
+-- fallo que más veces se ha repetido en esta aplicación. Y de los que peor
+-- sientan, porque la hermandad programa la convocatoria del cabildo, la ve en
+-- la lista como «Programado», y se queda tranquila.
+--
+-- -----------------------------------------------------------------------------
+-- QUIÉN LO MANDA: EL NAVEGADOR DE QUIEN ENTRE, NO UN SERVIDOR
+-- -----------------------------------------------------------------------------
+--
+-- Es la decisión de fondo y conviene entenderla antes de cambiarla.
+--
+-- Lo «obvio» sería una función de Supabase llamada por `pg_cron`. El problema
+-- es QUIÉN SON LOS DESTINATARIOS: eso lo decide `filtrarSegmento()` en
+-- `src/lib/segmentacion.ts`, que sabe de estados, cuotas de verdad sacadas de
+-- los recibos, edades, etiquetas, cargos efectivos, campos a medida y ahora
+-- cumpleaños. Reescribir todo eso en SQL serían DOS versiones de la misma
+-- regla, y la segunda siempre se queda atrás. Ese es exactamente el fallo que
+-- dejó a media junta sin recibir la convocatoria durante meses.
+--
+-- Así que lo manda la aplicación, que es donde vive esa regla — y donde están
+-- las claves del correo, que tampoco pueden bajar a la base.
+--
+-- YA HAY PRECEDENTE, y funciona: la copia de seguridad semanal se hace igual
+-- (`src/lib/copiaAutomatica.ts`), la lanza quien entra en el panel, y está
+-- escrito allí por qué: «en una hermandad es alguien casi todas las semanas».
+--
+-- LO QUE SE PIERDE: un comunicado programado para el martes a las nueve sale
+-- cuando alguien abra el panel, que puede ser el martes a las once. Para una
+-- convocatoria de cabildo eso da igual. Y lo que había antes era NUNCA.
+--
+-- -----------------------------------------------------------------------------
+-- POR QUÉ ENTONCES HACE FALTA ESTE SQL
+-- -----------------------------------------------------------------------------
+--
+-- Por una sola cosa, y es la que importa: QUE NO SE MANDE DOS VECES.
+--
+-- Si la secretaria y el tesorero abren el panel a la vez un martes por la
+-- mañana, los dos navegadores ven el mismo comunicado vencido y los dos lo
+-- mandan. Ochocientas personas reciben la convocatoria por duplicado.
+--
+-- Eso no se puede arreglar en el navegador: dos navegadores no se ven entre
+-- ellos. Se arregla aquí, donde solo hay una base de datos: se PIDE el
+-- comunicado antes de mandarlo, y la base se lo da a uno solo.
+--
+-- Es la misma idea que `cuotas.remesada_el`, que marca lo que ya viajó en un
+-- fichero para que no entre dos veces — y por el mismo motivo: dos remesas con
+-- el mismo recibo son dos cargos al hermano.
+--
+-- Ejecútalo después de `multi-hermandad.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+/*
+ * QUIÉN LO TIENE COGIDO Y DESDE CUÁNDO. Vacío = libre, que es lo normal.
+ *
+ * Es una fecha y no un booleano a propósito: una pestaña que se cierra a mitad
+ * del envío deja el comunicado cogido para siempre si esto fuera un «sí/no».
+ * Con la hora se sabe cuánto lleva cogido y se puede soltar (ver abajo).
+ */
+alter table comunicados add column if not exists enviando_desde timestamptz;
+
+/*
+ * CUÁNTAS VECES SE HA INTENTADO. Es el freno del bucle infinito.
+ *
+ * Sin esto, un comunicado que revienta a mitad del envío se vuelve a coger a
+ * la media hora, revienta otra vez, y así para siempre — mandando cada vez
+ * unos cuantos correos a la misma gente. Un bucle que manda correo es lo peor
+ * que puede tener esto.
+ */
+alter table comunicados add column if not exists envio_intentos int not null default 0;
+
+/* Qué falló la última vez, para poder decirlo en pantalla en vez de callar. */
+alter table comunicados add column if not exists envio_error text;
+
+comment on column comunicados.enviando_desde is
+  'Un navegador lo tiene cogido para mandarlo. Vacío = libre. Impide que dos '
+  'personas que entran a la vez lo manden dos veces.';
+comment on column comunicados.envio_intentos is
+  'Intentos de envío. A partir de MAXIMO_INTENTOS deja de intentarse y se avisa: '
+  'un bucle que manda correo es peor que un comunicado sin mandar.';
+
+/**
+ * PIDE UN COMUNICADO PARA MANDARLO. Devuelve el que te toca, o nada.
+ *
+ * ===========================================================================
+ * ESTO ES UN «COMPARE AND SWAP», Y ES TODA LA GRACIA DEL FICHERO
+ * ===========================================================================
+ *
+ * El `update` lleva DENTRO la condición de que esté libre. Postgres ejecuta
+ * los `update` de uno en uno sobre la misma fila, así que de dos navegadores
+ * que pidan a la vez, el primero cumple la condición y se lo lleva, y el
+ * segundo ya no la cumple y se va con las manos vacías.
+ *
+ * Preguntar primero («¿está libre?») y actualizar después NO valdría: entre la
+ * pregunta y la respuesta cabe el otro navegador. Tiene que ser la misma
+ * sentencia.
+ *
+ * ---------------------------------------------------------------------------
+ * LAS CUATRO CONDICIONES, UNA POR UNA
+ * ---------------------------------------------------------------------------
+ */
+create or replace function reclamar_comunicado_programado()
+returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int)
+language sql volatile security definer set search_path = public as $$
+  update comunicados c
+     set enviando_desde = now(),
+         envio_intentos = c.envio_intentos + 1
+   where c.id = (
+     select x.id from comunicados x
+      where x.hermandad_id = hermandad_actual()
+        -- 1. Que esté programado. Un borrador no se manda solo, y uno ya
+        --    enviado no se vuelve a mandar.
+        and x.estado = 'Programado'
+        -- 2. Que le haya llegado el día. Se compara como texto porque la
+        --    columna es texto y las fechas van en `aaaa-mm-dd`, que ordena
+        --    igual escrita que como fecha. Es `<=` y no `=`: si el día señalado
+        --    no entró nadie al panel, el comunicado sale al día siguiente en
+        --    vez de perderse para siempre.
+        and x.fecha_programada is not null
+        and x.fecha_programada <= to_char(current_date, 'YYYY-MM-DD')
+        -- 3. Que no lo tenga cogido nadie. O que lo tenga cogido desde hace
+        --    tanto que ya no puede estar mandándolo: media hora es de sobra
+        --    para ochocientos correos, y una pestaña cerrada a mitad no puede
+        --    dejar la convocatoria bloqueada para siempre.
+        and (x.enviando_desde is null or x.enviando_desde < now() - interval '30 minutes')
+        -- 4. Y que no lleve ya demasiados intentos. Ver `envio_intentos`.
+        and x.envio_intentos < 3
+      -- El más antiguo primero: si se acumularon varios, salen en el orden en
+      -- que se programaron, que es el orden en que se pensaron.
+      order by x.fecha_programada, x.numero
+      limit 1
+      for update skip locked
+   )
+  returning c.id, c.titulo, c.cuerpo, c.destinatarios, c.envio_intentos
+$$;
+
+grant execute on function reclamar_comunicado_programado() to authenticated;
+
+/**
+ * YA ESTÁ MANDADO: se cierra.
+ *
+ * Se suelta el candado y se deja el alcance real —a cuántos se le ha escrito
+ * de verdad—, que es lo que luego se lee en la lista. Y se borra el error
+ * anterior si lo había: un intento que sale bien limpia lo de antes.
+ */
+create or replace function cerrar_comunicado_enviado(p_id uuid, p_alcance int)
+returns void
+language sql volatile security definer set search_path = public as $$
+  update comunicados
+     set estado = 'Enviado',
+         fecha_envio = to_char(current_date, 'YYYY-MM-DD'),
+         alcance = p_alcance,
+         enviando_desde = null,
+         envio_error = null
+   where id = p_id and hermandad_id = hermandad_actual()
+$$;
+
+grant execute on function cerrar_comunicado_enviado(uuid, int) to authenticated;
+
+/**
+ * NO SE HA PODIDO: se suelta y se apunta por qué.
+ *
+ * SE QUEDA EN «Programado» A PROPÓSITO, para que se vuelva a intentar. Lo que
+ * NO se hace es reintentar sin fin: `envio_intentos` ya subió al pedirlo, y a
+ * la tercera deja de cogerse.
+ *
+ * Y el motivo se guarda para poder enseñarlo. Un comunicado que lleva tres
+ * días sin salir y no dice por qué es un comunicado que nadie va a arreglar.
+ */
+create or replace function soltar_comunicado_fallido(p_id uuid, p_error text)
+returns void
+language sql volatile security definer set search_path = public as $$
+  update comunicados
+     set enviando_desde = null,
+         envio_error = left(coalesce(p_error, 'No se pudo mandar.'), 500)
+   where id = p_id and hermandad_id = hermandad_actual()
+$$;
+
+grant execute on function soltar_comunicado_fallido(uuid, text) to authenticated;
+
+/*
+ * EL ÍNDICE. Esta consulta se hace al entrar en el panel, o sea muchas veces al
+ * día y en todas las hermandades.
+ *
+ * Es PARCIAL —solo indexa lo que está programado— y eso importa: de mil
+ * comunicados de una hermandad, los programados son dos o tres. El índice ocupa
+ * casi nada y acierta siempre.
+ */
+create index if not exists comunicados_programados_idx
+  on comunicados (hermandad_id, fecha_programada)
+  where estado = 'Programado';
+
+-- =============================================================================
+--   REGLAS-AUTOMATICAS.SQL — Felicitar el cumpleaños (y demás) sin que nadie se acuerde
+-- =============================================================================
+
+-- =============================================================================
+--   LAS REGLAS QUE SE DISPARAN SOLAS (felicitar el cumpleaños y compañía)
+-- =============================================================================
+--
+-- Una REGLA es tres cosas juntas: un sesgo (a quién), una plantilla (qué se
+-- dice) y un cuándo (todos los días, todos los meses…). Cuando le toca, crea un
+-- comunicado programado para hoy — y a partir de ahí sigue el mismo camino que
+-- cualquier otro comunicado programado, que ya está hecho y probado
+-- (`envio-programado.sql`).
+--
+-- ESO ES LO IMPORTANTE DE ESTE FICHERO: no manda correo. Solo escribe el
+-- comunicado. Todo lo delicado —el candado para que no salga dos veces, los
+-- tres intentos, la personalización, el freno de las marcas mal escritas— ya
+-- está resuelto una vez y no se vuelve a resolver aquí.
+--
+-- -----------------------------------------------------------------------------
+-- POR QUÉ LAS REGLAS NACEN APAGADAS
+-- -----------------------------------------------------------------------------
+--
+-- Porque una regla encendida manda correos EN NOMBRE DE LA HERMANDAD sin que
+-- nadie los lea antes. Eso está bien para «feliz cumpleaños» y está mal para
+-- casi todo lo demás.
+--
+-- Así que se crean apagadas, se ve qué habría hecho hoy, y se enciende cuando
+-- se ha visto funcionar. Encender es un clic; deshacer ochocientos correos no
+-- es nada.
+--
+-- -----------------------------------------------------------------------------
+-- Y POR QUÉ NO SE MANDA DOS VECES EL MISMO DÍA
+-- -----------------------------------------------------------------------------
+--
+-- `ultima_vez` guarda el día en que la regla se disparó por última vez, y no se
+-- vuelve a disparar hasta que cambie. Es el mismo problema que el envío
+-- programado —tres personas entran por la mañana— y se resuelve igual: la
+-- condición va DENTRO del `update`, no en una pregunta previa.
+--
+-- Sin eso, felicitar el cumpleaños significaría felicitarlo una vez por cada
+-- miembro de la junta que abra el panel esa mañana.
+--
+-- Ejecútalo después de `envio-programado.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+create table if not exists reglas_automaticas (
+  id uuid primary key default gen_random_uuid(),
+  hermandad_id uuid not null references hermandades(id) on delete cascade,
+  /* Cómo la llama la hermandad: «Felicitar el cumpleaños». */
+  nombre text not null,
+  /*
+   * CADA CUÁNTO SE MIRA.
+   *
+   *   'diaria'   — todos los días. Es la de los cumpleaños.
+   *   'mensual'  — el día 1. Para «los que cumplen este mes».
+   *
+   * No hay más a propósito. Un calendario completo de repeticiones ya existe
+   * para los eventos y es la parte más difícil de mantener que tiene la
+   * aplicación; aquí no hace falta y no se copia.
+   */
+  cada text not null default 'diaria' check (cada in ('diaria', 'mensual')),
+  /* El sesgo, tal cual lo guarda la aplicación (`CriteriosSegmento`). */
+  criterios jsonb not null default '{}'::jsonb,
+  /* Cómo se llama el segmento en cristiano, para el propio comunicado. */
+  destinatarios text not null default '',
+  asunto text not null default '',
+  cuerpo text not null default '',
+  /*
+   * APAGADA AL NACER. Ver arriba: es la decisión que separa esto de una
+   * máquina de mandar correos sin supervisión.
+   */
+  activa boolean not null default false,
+  /* El último día en que se disparó. Es lo que impide repetirla. */
+  ultima_vez date,
+  creada_en timestamptz not null default now()
+);
+
+alter table reglas_automaticas enable row level security;
+
+/*
+ * LAS VE Y LAS TOCA QUIEN LLEVA COMUNICADOS, y nadie más. Una regla es un
+ * botón que escribe a los ochocientos hermanos: no puede tocarla cualquiera con
+ * una cuenta.
+ */
+drop policy if exists reglas_de_mi_hermandad on reglas_automaticas;
+create policy reglas_de_mi_hermandad on reglas_automaticas
+  for all to authenticated
+  using (hermandad_id = hermandad_actual() and modulo_permitido('comunicados'))
+  with check (hermandad_id = hermandad_actual() and modulo_permitido('comunicados'));
+
+create index if not exists reglas_activas_idx
+  on reglas_automaticas (hermandad_id) where activa;
+
+/**
+ * ¿QUÉ REGLA TOCA HOY? Devuelve una y la marca como disparada.
+ *
+ * ===========================================================================
+ * ES EL MISMO «COMPARE AND SWAP» QUE EL ENVÍO PROGRAMADO
+ * ===========================================================================
+ *
+ * La condición de que no se haya disparado hoy va DENTRO del `update`. De tres
+ * personas que abran el panel la misma mañana, la primera se la lleva y las
+ * otras dos se van con las manos vacías.
+ *
+ * Preguntar antes y actualizar después NO valdría, y aquí se ve muy claro lo
+ * que costaría: felicitar el cumpleaños una vez por cada miembro de la junta
+ * que abra el panel.
+ */
+create or replace function reclamar_regla_de_hoy()
+returns table (id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text)
+language sql volatile security definer set search_path = public as $$
+  update reglas_automaticas r
+     set ultima_vez = current_date
+   where r.id = (
+     select x.id from reglas_automaticas x
+      where x.hermandad_id = hermandad_actual()
+        and x.activa
+        -- No se ha disparado hoy. `is null` es la primera vez de todas.
+        and (x.ultima_vez is null or x.ultima_vez < current_date)
+        -- Y si es mensual, solo el día 1.
+        and (x.cada = 'diaria' or extract(day from current_date) = 1)
+      order by x.creada_en
+      limit 1
+      for update skip locked
+   )
+  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo
+$$;
+
+grant execute on function reclamar_regla_de_hoy() to authenticated;
+
+/**
+ * SI LA REGLA NO LLEGÓ A CREAR SU COMUNICADO, SE DESMARCA.
+ *
+ * Que se la lleve alguien y luego falle —sin red, un sesgo que no se resuelve—
+ * no puede dejarla marcada como hecha: se perdería la felicitación de ese día
+ * y no habría forma de saberlo.
+ *
+ * Se devuelve al día anterior en vez de a vacío: dejarla en `null` la haría
+ * parecer recién creada, y se perdería el dato de cuándo funcionó por última
+ * vez, que es lo que dice si una regla lleva un mes sin hacer nada.
+ */
+create or replace function devolver_regla(p_id uuid)
+returns void
+language sql volatile security definer set search_path = public as $$
+  update reglas_automaticas
+     set ultima_vez = current_date - 1
+   where id = p_id and hermandad_id = hermandad_actual()
+$$;
+
+grant execute on function devolver_regla(uuid) to authenticated;
+
+-- =============================================================================
+--   ENSAYO-DE-RESTAURACION.SQL — Comprobar que la copia encaja antes de vaciar nada
+-- =============================================================================
+
+-- =============================================================================
+--   MIRAR SI LA COPIA ENCAJA **ANTES** DE VACIAR NADA
+-- =============================================================================
+--
+-- EL PROBLEMA, QUE ES EL PEOR QUE TIENE LA APLICACIÓN
+--
+-- Restaurar va en este orden y no se puede cambiar:
+--
+--   1. Se descarga una copia de resguardo de lo que hay.
+--   2. SE VACÍAN LAS TABLAS.
+--   3. Se meten las filas del archivo, tabla por tabla.
+--
+-- Entre el 2 y el 3 la hermandad no tiene datos, y eso está asumido y contado
+-- en `src/lib/restaurar.ts`. Lo que NO estaba resuelto es lo otro: si las filas
+-- del archivo no encajan en la base —una columna que la copia trae y esta base
+-- todavía no tiene— eso NO SE DESCUBRE HASTA EL PASO 3. O sea, después de
+-- haber vaciado.
+--
+-- Y no es un caso rebuscado: es EL caso. La base de datos la actualiza cada
+-- hermandad a mano pegando `ACTUALIZAR.sql`, así que «aplicación nueva, base
+-- vieja» es el estado normal durante días o semanas —está contado entero en
+-- `src/lib/versionEsquema.ts`—. Una copia hecha el martes, con la base ya al
+-- día, volcada el jueves en un proyecto que se quedó atrás: las tablas se
+-- vacían, los `insert` los rechaza Postgres uno a uno, y la hermandad se queda
+-- con menos datos que antes de «restaurar».
+--
+-- Eso convierte la red de seguridad en la causa de la pérdida.
+--
+-- -----------------------------------------------------------------------------
+-- LO QUE HACE ESTO
+-- -----------------------------------------------------------------------------
+--
+-- Se le mandan SOLO LOS NOMBRES DE LAS COLUMNAS que trae la copia —unos cientos
+-- de bytes, no el archivo, que pesa megas— y contesta cuáles no existen en esta
+-- base. Si contesta algo, no se vacía nada y se dice qué falta.
+--
+-- POR QUÉ COMPARAR NOMBRES Y NO ENSAYAR UN `insert` DE VERDAD. Porque una
+-- función no puede deshacer su propia transacción y devolver a la vez el
+-- resultado: o revierte y se lleva la respuesta por delante, o responde y deja
+-- las filas de ensayo metidas. Comparar contra el catálogo es exacto para el
+-- fallo que de verdad pasa —la columna que no está— y no toca ni una fila.
+--
+-- Lo que NO caza: un tipo incompatible, o una restricción que rechace un valor
+-- concreto. Son mucho más raros —las copias salen de la propia aplicación— y
+-- para esos sigue estando el paso 1, la copia de resguardo.
+--
+-- Ejecútalo después de `restaurar-copia.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+/**
+ * ¿QUÉ COLUMNAS DE LA COPIA NO EXISTEN EN ESTA BASE?
+ *
+ * Se le pasa `{"hermanos": ["id","nombre",…], "cuotas": [...]}` y devuelve una
+ * fila por cada columna que falta. Vacío = la copia encaja y se puede seguir.
+ *
+ * `security definer` para poder leer el catálogo, que un usuario normal no ve
+ * entero. No hace falta acotar por hermandad: aquí no se lee ni se escribe ni
+ * un dato de nadie, solo se miran nombres de columnas del esquema — que son los
+ * mismos para todas las hermandades del proyecto.
+ *
+ * Se ignoran las tablas que no existen en absoluto: eso ya lo dice
+ * `DIAGNOSTICO.sql` con mucho más detalle, y avisar aquí de una tabla entera
+ * que falta sería mandar a arreglar el problema al sitio equivocado.
+ */
+create or replace function columnas_que_faltan_para_restaurar(p_columnas jsonb)
+returns table (tabla text, columna text)
+language sql stable security definer set search_path = public as $$
+  select t.tabla, c.columna
+    from jsonb_each(p_columnas) as t(tabla, cols)
+    cross join lateral jsonb_array_elements_text(t.cols) as c(columna)
+   where to_regclass('public.' || quote_ident(t.tabla)) is not null
+     and not exists (
+       select 1 from information_schema.columns ic
+        where ic.table_schema = 'public'
+          and ic.table_name = t.tabla
+          and ic.column_name = c.columna
+     )
+$$;
+
+grant execute on function columnas_que_faltan_para_restaurar(jsonb) to authenticated;
+
+-- =============================================================================
+--   RENOVACION-Y-FALLO-DE-COBRO.SQL — Que se apunte la renovación, y que una tarjeta que falla se avise antes de cortar
+-- =============================================================================
+
+-- =============================================================================
+--   LA RENOVACIÓN Y LA TARJETA QUE FALLA
+-- =============================================================================
+--
+-- El circuito de la suscripción atendía el alta (`checkout.session.completed`)
+-- y la baja (`customer.subscription.deleted`). Le faltaban las dos cosas que
+-- pasan EN MEDIO, que es donde vive una suscripción de verdad: que se renueve
+-- cada mes y que un día la tarjeta falle.
+--
+-- -----------------------------------------------------------------------------
+-- 1. LA TARJETA QUE FALLA — EL AGUJERO QUE HABÍA
+-- -----------------------------------------------------------------------------
+--
+-- Cuando a una hermandad le falla la tarjeta, Stripe lo reintenta durante unas
+-- semanas y, si al final no cobra, cancela la suscripción y manda
+-- `customer.subscription.deleted` — que sí se atendía. Así que el agujero
+-- estaba ACOTADO: no era acceso gratis para siempre.
+--
+-- Lo malo no eran esas semanas de más. Era que NADIE SE LO DECÍA A LA
+-- HERMANDAD. Se enteraba el día que se quedaba fuera de golpe, sin haber
+-- recibido un solo aviso, y encima en la peor semana del año si tocaba en
+-- marzo.
+--
+-- Ahora se apunta el día que falla, y la aplicación lo enseña arriba mientras
+-- siga fallando. NO SE LE CORTA EL ACCESO: una tarjeta caducada no es un
+-- impago, es una tarjeta caducada. Cortar el día uno sería tratar a una
+-- hermandad que lleva pagando dos años como a un moroso.
+--
+-- -----------------------------------------------------------------------------
+-- 2. `hasta` ERA UNA COLUMNA MUERTA
+-- -----------------------------------------------------------------------------
+--
+-- La columna existía y decía «hasta cuándo está pagada». Comprobado:
+-- `activar_suscripcion` la recibía como parámetro y el webhook SIEMPRE le
+-- pasaba `null`, así que estaba vacía en todas las filas; y la aplicación no la
+-- leía nunca —el muro de pago es `activa` y punto—.
+--
+-- Un dato que parece significar algo y no significa nada es peor que no
+-- tenerlo: el día que alguien lo mire para decidir, decidirá sobre vacío.
+--
+-- Se rellena en vez de quitarla, y por un motivo concreto: es lo que permite
+-- decir «te caduca en una semana» antes de que caduque, en vez de después.
+--
+-- Ejecútalo después de `webhook-stripe.sql`. Volver a ejecutarlo no hace nada.
+-- =============================================================================
+
+/*
+ * CUÁNDO FALLÓ EL ÚLTIMO COBRO. Vacío = todo bien, que es el caso de siempre.
+ *
+ * Es una fecha y no un booleano a propósito: «lleva fallando desde el 3» dice
+ * si esto acaba de pasar o lleva tres semanas, y eso cambia lo que se hace.
+ */
+alter table suscripciones add column if not exists pago_fallido_el date;
+
+comment on column suscripciones.pago_fallido_el is
+  'Día en que Stripe no pudo cobrar. Vacío = al corriente. NO corta el acceso: '
+  'lo usa la aplicación para avisar a la hermandad antes de que Stripe se rinda '
+  'y cancele. Se limpia sola en cuanto un cobro entra.';
+
+/**
+ * SE HA COBRADO EL MES (o el año): se renueva.
+ *
+ * Hace tres cosas y las tres importan:
+ *   · Deja `hasta` con la fecha real hasta la que está pagada — que es lo que
+ *     convierte esa columna en un dato y no en un adorno.
+ *   · LIMPIA `pago_fallido_el`. Si la tarjeta falló y al tercer intento entró,
+ *     el aviso tiene que desaparecer solo: un aviso que hay que quitar a mano
+ *     se queda puesto para siempre.
+ *   · Y vuelve a poner `activa`, por si venía de una cancelación.
+ *
+ * Se busca por `stripe_subscription_id` y no por hermandad: es el único dato
+ * que Stripe manda en la factura, y es el que ata las dos partes.
+ */
+create or replace function renovar_suscripcion_por_stripe(
+  p_stripe_subscription text,
+  p_hasta date default null
+) returns void
+language sql security definer set search_path = public as $$
+  update suscripciones
+     set activa = true,
+         hasta = coalesce(p_hasta, hasta),
+         pago_fallido_el = null,
+         actualizada_en = now()
+   where stripe_subscription_id = p_stripe_subscription
+$$;
+
+/**
+ * NO SE HA PODIDO COBRAR: se apunta el día.
+ *
+ * NO TOCA `activa`, y es la decisión de todo este archivo. Stripe reintenta
+ * durante semanas y la mayoría de las veces acaba cobrando —una tarjeta
+ * renovada, un banco que rechazó una vez—. Cortarle el acceso a la hermandad
+ * en el primer fallo sería dejar sin papeletas a cuatrocientas personas por
+ * una tarjeta caducada.
+ *
+ * Y si de verdad no se cobra nunca, Stripe cancela la suscripción y manda
+ * `customer.subscription.deleted`, que sí corta. El cierre llega por ahí, no
+ * por aquí.
+ *
+ * `coalesce` en la fecha: si ya estaba fallando, se conserva el PRIMER día. Es
+ * el que dice cuánto lleva así.
+ */
+create or replace function marcar_pago_fallido_por_stripe(p_stripe_subscription text)
+returns void
+language sql security definer set search_path = public as $$
+  update suscripciones
+     set pago_fallido_el = coalesce(pago_fallido_el, current_date),
+         actualizada_en = now()
+   where stripe_subscription_id = p_stripe_subscription
+$$;
+
+/*
+ * QUE NO LAS PUEDA LLAMAR EL NAVEGADOR. Y HAY QUE QUITÁRSELO EXPRESAMENTE.
+ *
+ * Esto estaba MAL ESCRITO aquí, y merece quedar contado porque es una trampa
+ * con la que se tropieza cualquiera. El comentario que había decía «no se
+ * conceden a `authenticated`», dando por hecho que no poner un `grant` bastaba.
+ * No basta: Postgres concede EXECUTE a `public` en cuanto se crea la función.
+ * O sea que sin estas dos líneas estaban concedidas, y el comentario afirmaba
+ * exactamente lo contrario de lo que pasaba.
+ *
+ * Lo que quedaba abierto eran dos botones para cualquiera con una sesión
+ * iniciada: «renuévame la suscripción» y «bórrame el aviso de que no he
+ * pagado». Lo cazó una prueba que le pregunta al propio Postgres
+ * (`has_function_privilege`) en vez de leer el SQL — leyéndolo no se ve, que
+ * es justo por lo que el comentario parecía razonable.
+ *
+ * Las llama el webhook con la clave de servicio, que va como `service_role` y
+ * es la única que las necesita. Es la misma regla que siguen las otras tres
+ * funciones de este circuito en `webhook-stripe.sql`.
+ */
+revoke all on function renovar_suscripcion_por_stripe(text, date) from public, anon, authenticated;
+grant execute on function renovar_suscripcion_por_stripe(text, date) to service_role;
+
+revoke all on function marcar_pago_fallido_por_stripe(text) from public, anon, authenticated;
+grant execute on function marcar_pago_fallido_por_stripe(text) to service_role;
+
+/**
+ * Y QUE LA APLICACIÓN PUEDA VERLO.
+ *
+ * `mi_suscripcion()` ya devolvía `hasta` —vacío en todas las filas, porque
+ * nadie lo rellenaba— y ahora devuelve además `pago_fallido_el`. Sin esto la
+ * columna se quedaría en la base sin que nadie la leyera, que es exactamente
+ * la enfermedad que este archivo viene a curar.
+ *
+ * HAY QUE BORRARLA ANTES, y no es un descuido: `create or replace` NO puede
+ * cambiar el tipo que devuelve una función. Con una columna más en el
+ * `returns table` Postgres contesta «cannot change return type of existing
+ * function» y se para la instalación entera. `drop ... if exists` primero, y
+ * así volver a ejecutar el fichero sigue sin hacer daño.
+ *
+ * No hay ventana de riesgo: entre el `drop` y el `create` va todo dentro de la
+ * misma ejecución del editor SQL, y una llamada que caiga justo ahí ya está
+ * cubierta —`cargarSuscripcionDeLaBase()` devuelve `null` ante cualquier
+ * error y la pantalla se queda con la copia local.
+ */
+drop function if exists mi_suscripcion();
+
+create function mi_suscripcion()
+returns table (
+  activa boolean,
+  pack text,
+  periodo text,
+  desde date,
+  hasta date,
+  pago_fallido_el date
+)
+language sql stable security definer set search_path = public as $$
+  select
+    coalesce(s.activa, false),
+    s.pack,
+    s.periodo,
+    s.desde,
+    s.hasta,
+    s.pago_fallido_el
+  from (select 1) x
+  left join suscripciones s on s.hermandad_id = hermandad_actual()
+$$;
+grant execute on function mi_suscripcion() to authenticated;
 
 -- =============================================================================
 --   VIGILANCIA.SQL — Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
@@ -11378,4 +12050,4 @@ grant execute on function version_del_esquema() to authenticated, anon;
 -- Generado. Es el número de piezas de esta instalación. La aplicación lo lee al
 -- arrancar y avisa si va por detrás; ver `src/lib/versionEsquema.ts`.
 
-select sellar_esquema(65);
+select sellar_esquema(69);

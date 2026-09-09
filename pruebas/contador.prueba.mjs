@@ -82,11 +82,11 @@ export default async function ({ cargar, caso }) {
   caso('los hermanos sin cuota no cuentan en el menú', true,
     !!m.NO_CUENTAN_EN_EL_MENU.sinCuota)
 
-  // --- LAS SEIS CUENTAS VAN ACOTADAS A LA HERMANDAD ---
+  // --- TODAS LAS CUENTAS VAN ACOTADAS A LA HERMANDAD ---
   /*
    * `avisos_que_esperan()` es `security definer`, o sea que SE SALTA RLS. Si
-   * una de las seis cuentas se dejara el `hermandad_id`, el numerito sumaría lo
-   * de todas las hermandades del proyecto. No daría error: daría un número más
+   * una de las cuentas se dejara el `hermandad_id`, el numerito sumaría lo de
+   * todas las hermandades del proyecto. No daría error: daría un número más
    * grande, que es la clase de fallo que nadie mira dos veces.
    */
   /*
@@ -96,10 +96,33 @@ export default async function ({ cargar, caso }) {
    * antes de lo que hay que comprobar y da que TODAS están mal. Me pasó.
    */
   const trozos = sql.split('select count(*) from').slice(1)
-  caso('cuenta seis cosas', 6, trozos.length)
-  caso('y las seis van acotadas a la hermandad', [],
+  /*
+   * SIETE. Eran seis; la séptima son los comunicados programados a los que ya
+   * les tocaba salir, y es distinta de las otras: no hay nadie esperando
+   * respuesta. Cuenta porque un comunicado programado NO sale hasta que alguien
+   * abre Comunicados —para saber a quién va hace falta el censo, que solo está
+   * cargado allí— así que el numerito es lo que hace que alguien entre.
+   *
+   * El número está escrito a mano a propósito: cambiarlo obliga a venir aquí y
+   * a decidir si la cuenta nueva de verdad tiene que estar en el menú, en vez
+   * de que se cuele una que no baja nunca.
+   */
+  caso('cuenta siete cosas', 7, trozos.length)
+  caso('y las siete van acotadas a la hermandad', [],
     trozos.filter((t) => !/hermandad_id = hermandad_actual\(\)/.test(t))
       .map((t) => t.trim().split(/\s/)[0]))
+
+  /*
+   * Y LA SÉPTIMA BAJA SOLA EN CUANTO SALE. Es la condición de todo contador:
+   * el que no baja se deja de mirar, y con él se dejan de mirar los que sí
+   * importaban. Al mandarse, el comunicado pasa a «Enviado» y deja de contar.
+   */
+  caso('el comunicado programado deja de contar al salir', true,
+    /from comunicados[\s\S]{0,200}?estado = 'Programado'/.test(sql))
+  // Y solo cuentan los VENCIDOS: uno programado para dentro de un mes no es
+  // nada pendiente, es un plan.
+  caso('y solo cuentan los que ya tocaban', true,
+    /fecha_programada <= to_char\(current_date/.test(sql))
 
   /*
    * LA BAJA MIRA LAS DOS COLUMNAS. `baja_solicitada` es «lo ha pedido» y

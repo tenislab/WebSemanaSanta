@@ -81,7 +81,7 @@ import AvisoFalta from '../../components/AvisoFalta'
 import { requisito } from '../../lib/requisitos'
 import { cultosDelCalendario } from '../../lib/cultosDelCalendario'
 import { getCampana } from '../../lib/campana'
-import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml } from '../../lib/seoWeb'
+import { baseDeLaWeb, robotsTxt, rutasDeLaWeb, sitemapXml, revisarSeo, LARGO_TITULO } from '../../lib/seoWeb'
 import { EditorParrafos, EditorFotos } from '../../components/EditorContenido'
 import { comprimirImagen, leerArchivo } from '../../lib/imagen'
 import { guardarImagen, hayAlmacen, mudarImagenes, sustituirImagenes } from '../../lib/almacenImagenes'
@@ -4376,8 +4376,19 @@ function CompartirTab({
             value={web.seo.titulo}
             onChange={(e) => editar('seo', (x) => ({ ...x, titulo: e.target.value }))}
             placeholder={web.titulo || 'Nombre de la hermandad'}
+            aria-invalid={titulo.length > LARGO_TITULO}
           />
-          <p className="form-hint">Si lo dejas vacío se usa el nombre de la web.</p>
+          {/*
+            EL CONTADOR, IGUAL QUE EL DE LA DESCRIPCIÓN. La descripción lo tenía
+            y el título no, así que se escribía a ciegas justo en el campo que
+            más se corta: Google enseña unos sesenta caracteres y lo que sobra
+            desaparece — normalmente el nombre de la hermandad, si va al final.
+          */}
+          <p className={`form-hint${titulo.length > LARGO_TITULO ? ' form-hint--alerta' : ''}`}>
+            {titulo.length} de {LARGO_TITULO} caracteres
+            {titulo.length > LARGO_TITULO && ' — Google cortará el resto.'}
+            {titulo.length === 0 && ' · Si lo dejas vacío se usa el nombre de la web.'}
+          </p>
         </div>
 
         <div className="form-row">
@@ -4413,6 +4424,54 @@ function CompartirTab({
             Sin imagen propia se usa la primera foto de la portada. Se ve mejor apaisada (1200×630).
           </p>
         </div>
+      </section>
+
+      {/*
+        ====================================================================
+        LA REVISIÓN: LO QUE DE VERDAD ROMPE, Y NADA MÁS
+        ====================================================================
+
+        Antes esto se escribía a ciegas: se rellenaba el título y la
+        descripción y no había forma de saber si estaba bien puesto hasta que
+        alguien pegaba el enlace en un grupo de WhatsApp y salía en gris.
+
+        Son POCOS avisos a propósito. Una lista larga de reproches no la lee
+        nadie — ya pasó en esta misma pantalla, y hubo que convertir los avisos
+        de la web en una barra de progreso para que se miraran. Aquí solo entra
+        lo que cambia algo de verdad para quien busca la hermandad o comparte
+        el enlace.
+
+        Y cada uno dice QUÉ HACER. Un aviso que solo dice qué está mal es un
+        reproche: quien lo lee no sabe si le toca a él ni por dónde empezar.
+      */}
+      <section className="settings-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Revisión</h2>
+        </div>
+        {(() => {
+          const avisos = revisarSeo(web, hermandad)
+          if (avisos.length === 0) {
+            return (
+              <p className="form-hint form-hint--ok">
+                ✓ Todo lo que depende de vosotros está puesto: título, descripción, imagen y dominio.
+                Salir el primero en Google no lo decide esto —ni ninguna otra herramienta—, pero la
+                web está bien presentada.
+              </p>
+            )
+          }
+          return (
+            <ul className="lista-limpia">
+              {/* Lo grave primero: mezclado con lo demás se lee igual y se ignora igual. */}
+              {[...avisos].sort((a, b) => Number(b.grave) - Number(a.grave)).map((a) => (
+                <li key={a.id} className={`aviso aviso--${a.grave ? 'warn' : 'info'}`} style={{ marginBottom: '0.5rem' }}>
+                  <b>{a.texto}</b>
+                  <br />
+                  <span className="table-subtle">{a.queHacer}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        })()}
       </section>
 
       <section className="settings-card">

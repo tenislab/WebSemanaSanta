@@ -267,6 +267,14 @@ with esperado (tabla, columna) as (
     ('proyectos', 'recaudacion_id'),
     ('proyectos', 'responsable_id'),
     ('proyectos', 'responsable_nombre'),
+    ('reglas_automaticas', 'activa'),
+    ('reglas_automaticas', 'asunto'),
+    ('reglas_automaticas', 'cada'),
+    ('reglas_automaticas', 'criterios'),
+    ('reglas_automaticas', 'cuerpo'),
+    ('reglas_automaticas', 'destinatarios'),
+    ('reglas_automaticas', 'id'),
+    ('reglas_automaticas', 'nombre'),
     ('reglas_reparto', 'activo'),
     ('reglas_reparto', 'categoria_base'),
     ('reglas_reparto', 'categoria_destino'),
@@ -327,34 +335,53 @@ with esperado (tabla, columna) as (
     ('tramos', 'tipo')
 ), funciones_esperadas (nombre) as (
   values
+    ('abrir_pago_tarjeta'),
+    ('activar_suscripcion_por_usuario'),
     ('activar_suscripcion_propia'),
     ('anular_venta'),
     ('avisar_reserva_lista'),
     ('avisos_que_esperan'),
     ('baja_de_la_web'),
+    ('cancelar_suscripcion_por_stripe'),
     ('cancelar_suscripcion_propia'),
+    ('canjear_recuperacion_hermano'),
     ('catalogo_web'),
+    ('cerrar_comunicado_enviado'),
+    ('cobrar_pago_tarjeta'),
+    ('columnas_que_faltan_para_restaurar'),
     ('confirmar_suscripcion'),
     ('contar_visita'),
     ('crear_hermandad'),
     ('crear_reserva_web'),
     ('dar_de_baja_hermano'),
+    ('datos_para_avisar_reserva'),
     ('datos_tienda'),
+    ('devolver_regla'),
     ('emitir_certificado'),
     ('entregar_reserva'),
     ('es_titular'),
+    ('fijar_sesion_pago'),
     ('hermandad_actual'),
     ('hermandad_de_la_tienda'),
     ('hermandad_de_la_web'),
     ('hermandades_publicas'),
+    ('hermano_propio_id'),
+    ('llave_para_confirmar'),
+    ('marcar_pago_fallido_por_stripe'),
     ('mi_hermandad_id'),
     ('mi_suscripcion'),
     ('mi_tutor'),
     ('mis_novedades'),
     ('modulo_permitido'),
     ('mover_stock'),
+    ('pedir_recuperacion_hermano'),
+    ('reclamar_comunicado_programado'),
+    ('reclamar_regla_de_hoy'),
     ('registrar_venta'),
+    ('renovar_suscripcion_por_stripe'),
+    ('resguardo_de_reserva'),
     ('resolver_email_hermano'),
+    ('soltar_comunicado_fallido'),
     ('soltar_reserva'),
     ('soporte_donde_estoy'),
     ('soporte_salir'),
@@ -488,17 +515,17 @@ select * from (
         then 'TU BASE NO SE HA ACTUALIZADO NUNCA'
       when coalesce((xpath('/row/valor/text()', query_to_xml(
              'select valor from esquema_gobergo where clave = ''version''',
-             false, true, '')))[1]::text::int, 0) < 65
+             false, true, '')))[1]::text::int, 0) < 69
         then 'TU BASE VA POR DETRÁS'
       else 'al día'
     end as "Qué pasa",
     'versión del esquema' as "Tabla",
     case
       when to_regclass('public.esquema_gobergo') is null
-        then 'debería ir por la 65: pega ACTUALIZAR.sql'
+        then 'debería ir por la 69: pega ACTUALIZAR.sql'
       else 'va por la ' || coalesce((xpath('/row/valor/text()', query_to_xml(
              'select valor from esquema_gobergo where clave = ''version''',
-             false, true, '')))[1]::text, '?') || ' y debería ir por la 65'
+             false, true, '')))[1]::text, '?') || ' y debería ir por la 69'
     end as "Columna"
 ) todo
 -- Lo que está al día se calla: si sale una sola fila, es que hay algo que ver.

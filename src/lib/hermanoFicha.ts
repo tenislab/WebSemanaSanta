@@ -110,11 +110,43 @@ export function tonoDe(nombre: string): { fondo: string; tinta: string } {
   return TONOS[suma % TONOS.length]
 }
 
-/** Cuántos años cumple este año quien nació en esa fecha (para felicitar). */
+/**
+ * ¿ES HOY SU CUMPLEAÑOS?
+ *
+ * ============================================================================
+ * EL 29 DE FEBRERO
+ * ============================================================================
+ *
+ * Quien nació un 29 de febrero NO CUMPLÍA NUNCA: tres de cada cuatro años ese
+ * día no existe, y la comparación de día y mes daba falso siempre. Con la
+ * felicitación a mano en el censo pasaba desapercibido —nadie echa de menos un
+ * nombre en una lista— pero en cuanto esto dispara un correo automático, esa
+ * persona es la única de la hermandad a la que no se felicita jamás.
+ *
+ * En los años que no son bisiestos se cumple el 28. Se elige el 28 y no el 1 de
+ * marzo porque es lo que hace todo el mundo, y porque adelantar mantiene la
+ * felicitación dentro de «su» mes.
+ *
+ * Es el mismo fallo que ya costó caro en el calendario: un acto anual el 29 de
+ * febrero se quedaba en el 1 de marzo para siempre. Vale la pena arreglarlo en
+ * los dos sitios y no solo donde se vio.
+ */
 export function esSuCumpleHoy(iso: string | undefined, hoy = new Date()): boolean {
   if (!iso) return false
   const [, mes, dia] = iso.split('-').map(Number)
-  return mes === hoy.getMonth() + 1 && dia === hoy.getDate()
+  if (!mes || !dia) return false
+  const mesHoy = hoy.getMonth() + 1
+  const diaHoy = hoy.getDate()
+  if (mes === mesHoy && dia === diaHoy) return true
+  // Nacido un 29 de febrero, y este año febrero se queda en 28: cumple hoy.
+  if (mes === 2 && dia === 29 && mesHoy === 2 && diaHoy === 28 && !esBisiesto(hoy.getFullYear())) {
+    return true
+  }
+  return false
+}
+
+function esBisiesto(anio: number): boolean {
+  return (anio % 4 === 0 && anio % 100 !== 0) || anio % 400 === 0
 }
 
 /** Frase corta con la antigüedad, para la cabecera de la ficha. */

@@ -36,6 +36,9 @@ import { CANALES, SEGMENTOS } from '../../data/comunicados'
 import { restablecerDatosDeEjemplo } from '../../lib/persistencia'
 import { nuevoId } from '../../lib/supabaseSync'
 import { crearCopia, esCopiaValida, restaurarCopia, resumirCopia, sePuedeRestaurar } from '../../lib/backup'
+import {
+  cifrarYComprobar, abrirCopiaCifrada, esCopiaCifrada, revisarContrasena, MINIMO_CONTRASENA,
+} from '../../lib/copiaCifrada'
 import { sePuedeVolcarEnLaBase, volcarCopiaEnLaBase } from '../../lib/restaurar'
 import {
   COPIAS_QUE_SE_GUARDAN, SIN_SABER, diasDesde, estadoDeLasCopias, type EstadoDeLasCopias,
@@ -366,12 +369,63 @@ export default function Configuracion() {
     setTimeout(() => setCuerposSaved(false), 3000)
   }
 
-  async function descargarCopia() {
+  /*
+   * ==========================================================================
+   * LA CONTRASEÑA DE LA COPIA
+   * ==========================================================================
+   *
+   * Se pide DOS VECES, y es lo que más veces va a salvar a alguien de todo
+   * esto: una errata no se descubre al descargar —el archivo sale igual de
+   * bien— sino el día que hace falta abrirlo, que es el peor día posible y ya
+   * sin remedio.
+   *
+   * Y se avisa con todas las letras antes: una copia cifrada cuya contraseña
+   * se pierde no la abre nadie, tampoco nosotros. Eso hay que decirlo antes y
+   * no en la letra pequeña, porque cambia una amenaza por otra.
+   */
+  const [pidiendoClave, setPidiendoClave] = useState(false)
+  const [clave, setClave] = useState('')
+  const [claveRepetida, setClaveRepetida] = useState('')
+  const revisionClave = revisarContrasena(clave, claveRepetida)
+
+  async function descargarCopia(contrasena?: string) {
     setCopiaEstado('Preparando la copia…')
     try {
       const copia = await crearCopia()
       const fecha = hoyIso()
       const slug = (settings.nombreLegal || 'hermandad').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      if (contrasena) {
+        /*
+         * SE COMPRUEBA QUE DESCIFRA ANTES DE DARLA. Una copia que no se puede
+         * abrir es peor que no tener copia: la hermandad cree que la tiene y
+         * lo descubre el día que hace falta.
+         */
+        const r = await cifrarYComprobar(JSON.stringify(copia), contrasena, {
+          hermandad: settings.nombreLegal || 'Hermandad',
+          fecha,
+        })
+        if ('error' in r) {
+          setCopiaEstado(r.error)
+          setTimeout(() => setCopiaEstado(null), 12000)
+          return
+        }
+        /*
+         * OTRA EXTENSIÓN, y no es cosmético: `.json` invita a abrirlo con
+         * cualquier cosa y a que alguien lo dé por corrupto al ver que no se
+         * entiende. `.gobergo` dice que hace falta la aplicación.
+         */
+        descargarArchivo(
+          `copia-cabildo-${slug}-${fecha}.gobergo`,
+          JSON.stringify(r.copia),
+          'application/octet-stream',
+        )
+        setPidiendoClave(false)
+        setClave('')
+        setClaveRepetida('')
+        setCopiaEstado('Copia cifrada descargada. Guarda la contraseña: sin ella no se puede abrir.')
+        setTimeout(() => setCopiaEstado(null), 9000)
+        return
+      }
       descargarArchivo(`copia-cabildo-${slug}-${fecha}.json`, JSON.stringify(copia), 'application/json;charset=utf-8;')
       // Si alguna tabla no se pudo traer, se dice. Una copia a la que le falta
       // algo y no lo cuenta se descubre el día que hace falta, que ya es tarde.
@@ -393,8 +447,44 @@ export default function Configuracion() {
     if (!file) return
     setCopiaEstado('Leyendo la copia…')
     try {
-      const texto = await file.text()
-      const obj = JSON.parse(texto)
+      let texto = await file.text()
+      let obj = JSON.parse(texto)
+      /*
+       * SI VIENE CIFRADA, SE PIDE LA CONTRASEÑA.
+       *
+       * Y se reconoce por su marca, no por la extensión: quien renombre el
+       * archivo —que pasa— se encontraría si no con «esto no es una copia de
+       * Gobergo», que es mentira y le manda a buscar el problema donde no está.
+       */
+      if (esCopiaCifrada(obj)) {
+        const deQuien = obj.hermandad ? ` de ${obj.hermandad}` : ''
+        const deCuando = obj.fecha ? ` del ${obj.fecha}` : ''
+        const dicha = window.prompt(
+          `Esta copia${deQuien}${deCuando} está cifrada.\n\n`
+          + 'Escribe la contraseña con la que se descargó:',
+        )
+        if (dicha === null) {                    // le dio a cancelar
+          setCopiaEstado(null)
+          return
+        }
+        const claro = await abrirCopiaCifrada(obj, dicha)
+        /*
+         * Y SI NO ES, SE DICE POR SU NOMBRE. «Archivo no válido» aquí sería
+         * cruel y falso: el archivo está perfectamente, lo que falla es la
+         * contraseña, y hay que decirlo para que se vuelva a intentar en vez
+         * de dar la copia por perdida.
+         */
+        if (claro === null) {
+          setCopiaEstado(
+            'Esa contraseña no abre la copia. El archivo está bien; vuelve a intentarlo. '
+            + 'Si no la recuerdas, esta copia no se puede abrir: no hay forma de recuperarla.',
+          )
+          setTimeout(() => setCopiaEstado(null), 12000)
+          return
+        }
+        texto = claro
+        obj = JSON.parse(claro)
+      }
       if (!esCopiaValida(obj)) {
         setCopiaEstado('El archivo no es una copia de Gobergo válida.')
         setTimeout(() => setCopiaEstado(null), 4000)
@@ -1548,10 +1638,95 @@ export default function Configuracion() {
           >
             Restaurar copia
           </button>
-          <button type="button" className="btn btn-primary" onClick={descargarCopia}>
+          <button type="button" className="btn btn-primary" onClick={() => setPidiendoClave(true)}>
             Descargar copia
           </button>
         </div>
+
+        {/*
+          ==================================================================
+          LA CONTRASEÑA DE LA COPIA
+          ==================================================================
+
+          POR QUÉ CIFRAR ES LO SUYO: este archivo lleva las cuatrocientas
+          fichas con su DNI, su dirección, su teléfono y sus IBAN. Y acaba en
+          un pendrive, en un adjunto o en el WhatsApp de la junta, que es lo
+          que la gente hace con un archivo llamado «copia de seguridad».
+
+          Y POR QUÉ NO SE OBLIGA: una copia cifrada cuya contraseña se pierde
+          es una copia que ya no existe. No hay «recuperar contraseña» que
+          valga —si lo hubiera, el cifrado no serviría— y el censo es justo el
+          dato que no se puede volver a escribir. Esto cambia una amenaza por
+          otra, y la segunda pasa más a menudo.
+
+          Así que se recomienda, se avisa con todas las letras, y se deja la
+          otra puerta abierta para quien sepa lo que hace.
+        */}
+        {pidiendoClave && (
+          <div className="assign-box" style={{ marginTop: '0.9rem' }}>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>Proteger la copia con contraseña</h3>
+            <p className="form-hint" style={{ marginTop: 0 }}>
+              La copia lleva dentro el censo entero: nombres, DNI, direcciones, teléfonos e IBAN.
+              Cifrarla es lo suyo si va a salir de este ordenador.
+            </p>
+            <div className="banner-inline banner-inline--warn" style={{ marginBottom: '0.7rem' }}>
+              <span>
+                <b>Apunta la contraseña donde no se pierda.</b> Si se pierde, esta copia no la abre
+                nadie — tampoco nosotros. No hay forma de recuperarla.
+              </span>
+            </div>
+            <div className="form-row">
+              <label htmlFor="claveCopia">Contraseña</label>
+              <input
+                id="claveCopia" type="password" autoComplete="new-password"
+                value={clave} onChange={(e) => setClave(e.target.value)}
+                placeholder={`Al menos ${MINIMO_CONTRASENA} caracteres`}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="claveCopia2">Repítela</label>
+              {/*
+                SE PIDE DOS VECES, y es la comprobación que más veces va a
+                salvar a alguien: una errata no se descubre al descargar —el
+                archivo sale igual de bien— sino el día que hace falta abrirlo.
+              */}
+              <input
+                id="claveCopia2" type="password" autoComplete="new-password"
+                value={claveRepetida} onChange={(e) => setClaveRepetida(e.target.value)}
+              />
+            </div>
+            {clave !== '' && !revisionClave.puede && (
+              <p className="form-hint" style={{ color: 'var(--peligro, #b91c1c)' }}>{revisionClave.motivo}</p>
+            )}
+            <div className="settings-actions" style={{ marginTop: '0.7rem' }}>
+              <button
+                type="button" className="btn btn-primary"
+                disabled={!revisionClave.puede}
+                onClick={() => { void descargarCopia(clave) }}
+              >
+                Descargar cifrada
+              </button>
+              {/*
+                LA OTRA PUERTA, y va marcada como lo que es. Hay quien guarda su
+                copia en un disco cifrado y no quiere otra contraseña más; y hay
+                quien prefiere el riesgo de que se lea al riesgo de perderla.
+                Decidirlo por ellos sería peor que explicárselo.
+              */}
+              <button
+                type="button" className="btn btn-ghost"
+                onClick={() => { setPidiendoClave(false); void descargarCopia() }}
+              >
+                Descargar sin cifrar
+              </button>
+              <button
+                type="button" className="btn btn-ghost"
+                onClick={() => { setPidiendoClave(false); setClave(''); setClaveRepetida('') }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="settings-card settings-card--peligro">

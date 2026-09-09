@@ -123,6 +123,71 @@ export async function miHermandadId(): Promise<string | null> {
 }
 
 /**
+ * ¿ENCAJA ESTA COPIA EN ESTA BASE? SE PREGUNTA ANTES DE VACIAR NADA.
+ *
+ * ============================================================================
+ * EL FALLO QUE ESTO CIERRA, Y ES EL PEOR QUE TIENE LA APLICACIÓN
+ * ============================================================================
+ *
+ * El orden de la restauración es: se vacía, y luego se llena. Si las filas del
+ * archivo NO ENCAJAN —una columna que la copia trae y esta base todavía no
+ * tiene— eso no se descubría hasta el paso de llenar. O sea, DESPUÉS DE HABER
+ * VACIADO.
+ *
+ * Y no es un caso rebuscado: es EL caso. La base la actualiza cada hermandad a
+ * mano pegando `ACTUALIZAR.sql`, así que «aplicación nueva, base vieja» es el
+ * estado normal durante días o semanas (ver `versionEsquema.ts`). Una copia
+ * hecha el martes con la base al día, volcada el jueves en un proyecto que se
+ * quedó atrás: las tablas se vacían, Postgres rechaza los `insert` uno a uno, y
+ * la hermandad se queda con MENOS datos que antes de «restaurar».
+ *
+ * Eso convierte la red de seguridad en la causa de la pérdida.
+ *
+ * ----------------------------------------------------------------------------
+ * SE MANDAN LOS NOMBRES, NO EL ARCHIVO
+ * ----------------------------------------------------------------------------
+ *
+ * Unos cientos de bytes. Mandar la copia entera para que el servidor la probara
+ * sería mandar megas por la red, y es justo por eso por lo que esto no es
+ * atómico de entrada.
+ *
+ * Y se miran las columnas de UNA fila por tabla, no de todas: en una copia
+ * hecha por la propia aplicación todas las filas de una tabla tienen las mismas
+ * columnas. Recorrer cuatrocientas para encontrar lo mismo cuatrocientas veces
+ * no añade nada.
+ */
+export async function loQueNoEncaja(copia: CopiaSeguridad): Promise<string[]> {
+  if (!supabase) return []
+  const muestra: Record<string, string[]> = {}
+  for (const [tabla, filas] of Object.entries(copia.tablas ?? {})) {
+    const primera = (filas as unknown[])[0]
+    if (!primera || typeof primera !== 'object') continue
+    const cols = Object.keys(primera as Record<string, unknown>)
+      // `hermandad_id` se quita antes de insertar (ver `filaLimpia`), así que
+      // no cuenta: avisar de él sería avisar de algo que nunca se manda.
+      .filter((c) => c !== 'hermandad_id')
+    if (cols.length > 0) muestra[tabla] = cols
+  }
+  if (Object.keys(muestra).length === 0) return []
+
+  const { data, error } = await supabase.rpc('columnas_que_faltan_para_restaurar', { p_columnas: muestra })
+  /*
+   * SI NO SE PUEDE PREGUNTAR, SE DEJA PASAR.
+   *
+   * Es deliberado y cuesta pensarlo. La comprobación existe para evitar una
+   * pérdida de datos, así que la tentación es bloquear ante la duda — pero una
+   * base que aún no tiene ESTA función (que es exactamente una base atrasada)
+   * daría error 404, y bloquear dejaría sin restaurar justo a quien más lo
+   * necesita, sin ninguna otra manera de hacerlo.
+   *
+   * Lo que protege en ese caso es el paso 1, la copia de resguardo, que no es
+   * opcional. Esto es un cinturón de más, no el único.
+   */
+  if (error || !Array.isArray(data)) return []
+  return (data as { tabla: string; columna: string }[]).map((x) => `${x.tabla}.${x.columna}`)
+}
+
+/**
  * Vacía y vuelve a llenar. NO llama al paso 1 (la copia de resguardo): eso lo
  * hace la pantalla, porque necesita el navegador para descargar el archivo y
  * porque tiene que poder pararlo todo si la descarga falla.
@@ -161,6 +226,24 @@ export async function volcarCopiaEnLaBase(copia: CopiaSeguridad): Promise<Result
   const mia = await miHermandadId()
   if (!mia) {
     throw new Error('No se ha podido saber de qué hermandad eres. Vuelve a entrar e inténtalo otra vez.')
+  }
+
+  /*
+   * Y AQUÍ, JUSTO ANTES DE VACIAR, LA ÚLTIMA COMPROBACIÓN.
+   *
+   * Va después de todo lo demás y pegada al `vaciar` a propósito: es lo último
+   * que se mira antes de que ya no haya vuelta atrás. Si la copia no encaja, se
+   * lanza — y aquí lanzar es seguro porque todavía no se ha borrado nada.
+   */
+  const noEncaja = await loQueNoEncaja(copia)
+  if (noEncaja.length > 0) {
+    throw new Error(
+      'Esta copia no encaja en la base de datos: le faltan columnas que la copia sí trae '
+      + `(${noEncaja.slice(0, 6).join(', ')}${noEncaja.length > 6 ? `, y ${noEncaja.length - 6} más` : ''}). `
+      + 'NO se ha tocado nada. Pega «supabase/ACTUALIZAR.sql» en el SQL Editor de Supabase para poner '
+      + 'la base al día, y vuelve a intentarlo: si se hubiera vaciado primero, esos datos se habrían '
+      + 'perdido.',
+    )
   }
 
   // --- Paso 2: vaciar. Las cerraduras están en el servidor. ---

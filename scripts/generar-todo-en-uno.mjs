@@ -131,6 +131,36 @@ export const PIEZAS = [
    */
   ['contador-de-avisos.sql', 'El numerito del menú: cuántas cosas esperan respuesta'],
   /*
+   * QUE UN COMUNICADO PROGRAMADO SE MANDE. Se podía programar, se guardaba la
+   * fecha y la pantalla lo contaba — y no lo mandaba nadie, nunca. Lo manda la
+   * aplicación (es donde vive la regla de a quién va y donde están las claves
+   * del correo); esto es el candado que impide que dos personas que entran a
+   * la vez lo manden dos veces.
+   */
+  ['envio-programado.sql', 'Que un comunicado programado se mande, y una sola vez'],
+  /*
+   * LAS REGLAS QUE SE DISPARAN SOLAS. Felicitar el cumpleaños sin que nadie se
+   * acuerde. No manda correo: crea el comunicado programado y deja que siga el
+   * camino de arriba, que ya está probado. Nacen APAGADAS a propósito.
+   */
+  ['reglas-automaticas.sql', 'Felicitar el cumpleaños (y demás) sin que nadie se acuerde'],
+  /*
+   * MIRAR SI LA COPIA ENCAJA ANTES DE VACIAR. Restaurar vacía primero y llena
+   * después; si las filas no encajan —una columna que esta base todavía no
+   * tiene, que es el estado NORMAL mientras la hermandad no pega
+   * `ACTUALIZAR.sql`— eso se descubría con las tablas ya vacías.
+   */
+  ['ensayo-de-restauracion.sql', 'Comprobar que la copia encaja antes de vaciar nada'],
+  /*
+   * LA RENOVACIÓN Y LA TARJETA QUE FALLA. El circuito del cobro atendía el alta
+   * y la baja, y le faltaba lo que pasa EN MEDIO: que se cobre cada mes y que
+   * un día la tarjeta no pase. Apunta el día del fallo para poder avisar a la
+   * hermandad ANTES de que Stripe se rinda y la cancele, y de paso rellena
+   * `suscripciones.hasta`, que era una columna que estaba vacía en todas las
+   * filas mientras aparentaba decir hasta cuándo estaba pagada.
+   */
+  ['renovacion-y-fallo-de-cobro.sql', 'Que se apunte la renovación, y que una tarjeta que falla se avise antes de cortar'],
+  /*
    * --- LO QUE HACE FALTA PARA CRECER SIN ROMPER NADA ---
    *
    * Las cinco piezas de abajo no añaden ninguna pantalla: son las que hacen

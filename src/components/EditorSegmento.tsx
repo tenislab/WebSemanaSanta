@@ -131,6 +131,29 @@ export default function EditorSegmento({
             <option value="Menores">Solo menores de edad</option>
           </select>
         </div>
+        {/*
+          EL CUMPLEAÑOS. Faltaba, y era lo único que impedía dirigir un
+          comunicado a quien cumple años — ni siquiera a mano se podía. La
+          aplicación ya sabía quién cumple, pero solo en la pantalla del censo,
+          con un filtro suyo aparte.
+        */}
+        <div className="form-row">
+          <label>Cumpleaños</label>
+          <select
+            value={criterios.cumpleanos ?? 'Todos'}
+            onChange={(e) => editar({ cumpleanos: e.target.value as CriteriosSegmento['cumpleanos'] })}
+          >
+            <option value="Todos">No se mira</option>
+            <option value="Hoy">Solo quien cumple hoy</option>
+            <option value="EsteMes">Quien cumple este mes</option>
+          </select>
+          {criterios.cumpleanos && criterios.cumpleanos !== 'Todos' && (
+            <p className="form-hint">
+              Quien no tenga la fecha de nacimiento en su ficha se queda fuera: no es que no cumpla
+              hoy, es que no se sabe.
+            </p>
+          )}
+        </div>
       </div>
       <div className="form-grid-2">
         <div className="form-row">

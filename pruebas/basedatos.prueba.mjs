@@ -4253,4 +4253,448 @@ async function elCertificadoDeAntiguedad({ sql, caso }) {
   caso('el hermano ve sus dos certificados', '2', await ve(UPEON))
   caso('y el otro solo el suyo', '1', await ve(UOTRO))
   caso('la secretaría los ve todos', '3', await ve(USECRE))
+
+  /*
+   * ==========================================================================
+   * LA RENOVACIÓN Y LA TARJETA QUE FALLA, EJECUTADAS DE VERDAD
+   * ==========================================================================
+   *
+   * Aquí no se comprueba que el SQL exista —eso ya lo hace `cobrofallido`
+   * leyéndolo— sino QUÉ HACE. Y hay tres cosas que solo se ven ejecutándolas:
+   *
+   *   · Que un fallo de cobro NO desactive la suscripción. Es la decisión de
+   *     todo este circuito y la que deja a cuatrocientas personas dentro o
+   *     fuera. Leyendo el texto se ve que la sentencia no menciona `activa`;
+   *     ejecutándola se ve que la fila sigue activa después.
+   *   · Que el aviso SE LIMPIE SOLO cuando entra el cobro. Un aviso que hay
+   *     que quitar a mano se queda puesto para siempre.
+   *   · Que se conserve el PRIMER día del fallo y no el último. Es lo que
+   *     distingue «esto acaba de pasar» de «lleva tres semanas», que es
+   *     justamente lo que decide el tono del aviso.
+   */
+  const SUS = "'sub_pruebadecobro'"
+  const suscrita = async () => solo(await sql(
+    `select coalesce(activa::text, 'no hay fila') from suscripciones
+      where stripe_subscription_id = ${SUS}`))
+  const fallo = async () => solo(await sql(
+    `select coalesce(pago_fallido_el::text, 'sin fallo') from suscripciones
+      where stripe_subscription_id = ${SUS}`))
+  const pagadaHasta = async () => solo(await sql(
+    `select coalesce(hasta::text, 'sin fecha') from suscripciones
+      where stripe_subscription_id = ${SUS}`))
+
+  await sql(`insert into suscripciones
+      (hermandad_id, activa, pack, periodo, desde, stripe_subscription_id)
+     values (${H}, true, 'completo', 'mensual', current_date, ${SUS})
+     on conflict (hermandad_id) do update
+       set activa = true, stripe_subscription_id = excluded.stripe_subscription_id,
+           hasta = null, pago_fallido_el = null`)
+  caso('la hermandad empieza suscrita y al corriente', 'true|sin fallo',
+    `${await suscrita()}|${await fallo()}`)
+
+  // 1. FALLA LA TARJETA. Se apunta el día, y NO se toca el acceso.
+  await sql(`select marcar_pago_fallido_por_stripe(${SUS})`)
+  caso('un cobro fallido NO desactiva la suscripción', 'true', await suscrita())
+  caso('pero deja apuntado el día', 'sí',
+    (await fallo()) === 'sin fallo' ? 'no' : 'sí')
+
+  /*
+   * 2. VUELVE A FALLAR. Se guarda el PRIMER día, no el último.
+   *
+   * Se retrasa la fecha a mano para poder comprobarlo en la misma pasada: si
+   * `coalesce` estuviera al revés, el segundo fallo la pondría en hoy y el
+   * aviso volvería a decir «hoy» eternamente, sin llegar nunca a urgente.
+   */
+  await sql(`update suscripciones set pago_fallido_el = current_date - 9
+              where stripe_subscription_id = ${SUS}`)
+  await sql(`select marcar_pago_fallido_por_stripe(${SUS})`)
+  caso('un segundo fallo conserva el primer día', '9', solo(await sql(
+    `select (current_date - pago_fallido_el)::text from suscripciones
+      where stripe_subscription_id = ${SUS}`)))
+
+  // 3. ENTRA EL COBRO. Se rellena `hasta` y el aviso desaparece solo.
+  await sql(`select renovar_suscripcion_por_stripe(${SUS}, date '2027-04-30')`)
+  caso('al cobrar se limpia el aviso', 'sin fallo', await fallo())
+  caso('y `hasta` deja de estar vacía', '2027-04-30', await pagadaHasta())
+  caso('la suscripción sigue activa', 'true', await suscrita())
+
+  /*
+   * 4. Y SIN FECHA NO SE PIERDE LA QUE HABÍA.
+   *
+   * El webhook pasa `null` cuando Stripe no manda el periodo de la línea.
+   * Sobrescribir con vacío sería cambiar un dato bueno por ninguno.
+   */
+  await sql(`select renovar_suscripcion_por_stripe(${SUS}, null)`)
+  caso('renovar sin fecha no borra la que había', '2027-04-30', await pagadaHasta())
+
+  /*
+   * 5. Y NADIE PUEDE LLAMARLAS DESDE EL NAVEGADOR.
+   *
+   * Es lo que separa «Stripe dice que se ha pagado» de «me pongo pagado yo».
+   * Sin este permiso revocado, cualquiera con una sesión iniciada tendría dos
+   * botones: renovarse la suscripción y borrarse el aviso de que no ha pagado.
+   */
+  const puede = async (fn) => solo(await sql(
+    `select has_function_privilege('authenticated', p.oid, 'execute')::text
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = '${fn}'`))
+  caso('renovar no se le concede al navegador', 'false',
+    await puede('renovar_suscripcion_por_stripe'))
+  caso('ni apuntar un cobro fallido', 'false',
+    await puede('marcar_pago_fallido_por_stripe'))
+
+  /*
+   * 6. PERO LA HERMANDAD SÍ PUEDE VER SU PROPIO AVISO.
+   *
+   * `mi_suscripcion()` se recrea en esa misma pieza para devolver la columna
+   * nueva —`create or replace` no puede cambiar el tipo devuelto— y lo que se
+   * comprueba aquí es que después del cambio sigue concedida y sigue trayendo
+   * las siete columnas. Si el `grant` se hubiera quedado atrás tras el `drop`,
+   * la aplicación entera vería el muro de pago.
+   */
+  caso('mi_suscripcion sigue siendo llamable desde el navegador', 'true',
+    await puede('mi_suscripcion'))
+  caso('y devuelve el aviso de cobro fallido', 'true', solo(await sql(
+    `select exists (select 1 from information_schema.routines r
+       where r.routine_name = 'mi_suscripcion'
+         and r.routine_definition like '%pago_fallido_el%')::text`)))
+
+
+  /*
+   * ==========================================================================
+   * EL CANDADO DEL COMUNICADO PROGRAMADO
+   * ==========================================================================
+   *
+   * Es lo único de todo el envío programado que NO se puede probar sin una base
+   * de datos: dos navegadores no se pueden simular con objetos, hace falta
+   * Postgres decidiendo a quién se lo da.
+   *
+   * EL CASO REAL: la secretaria y el tesorero abren el panel a la vez un martes
+   * por la mañana. Los dos navegadores ven el mismo comunicado vencido. Sin
+   * candado, los dos lo mandan, y ochocientas personas reciben la convocatoria
+   * del cabildo por duplicado.
+   */
+  const cuantos = async (donde) => numero(await sql(
+    `select count(*) from comunicados where hermandad_id = ${H} and ${donde}`))
+
+  /*
+   * SE PIDE COMO LO PIDE UN NAVEGADOR, no como superusuario.
+   *
+   * `reclamar_comunicado_programado()` se acota con `hermandad_actual()`, y esa
+   * función saca la hermandad del testigo de la sesión. Sin testigo devuelve
+   * vacío — que es lo correcto y lo que hay que probar en el último caso— así
+   * que para todo lo demás hay que entrar como alguien de la hermandad.
+   */
+  const USEC = "'ba000000-0000-0000-0000-0000000000ba'"
+  await sql(`
+    insert into auth.users (id, email) values (${USEC}, 'programado@ea.es')
+      on conflict (id) do nothing;
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, antiguedad, estado, auth_user_id, email, cargo)
+      values ('bb000000-0000-0000-0000-0000000000bb', ${H}, 'Quien programa', '79000001A', 77, 2000,
+              'Activo', ${USEC}, 'programado@ea.es', 'Secretario/a')
+      on conflict (id) do nothing;
+  `)
+  /*
+   * Y SE QUEDA CON EL DATO, NO CON LO QUE DICE PSQL.
+   *
+   * `psql` imprime una línea por cada sentencia —BEGIN, SET, COMMIT— y `solo()`
+   * se queda con la última línea con algo escrito, que acaba siendo «COMMIT».
+   * Ya me pasó antes en este mismo fichero; se filtra por su nombre.
+   */
+  const ETIQUETAS_DE_PSQL = /^(BEGIN|COMMIT|ROLLBACK|SET|UPDATE \d+|INSERT \d+ \d+|DELETE \d+|SELECT \d+)$/
+  const soloDato = (t) => t.split('\n').map((x) => x.trim())
+    .filter((x) => x && !ETIQUETAS_DE_PSQL.test(x)).pop() ?? ''
+
+  /*
+   * Pide un comunicado como lo pediría el navegador de esa persona.
+   *
+   * TERMINA EN `commit` Y NO EN `rollback`, y no es un detalle: coger el
+   * comunicado ES una escritura —sube `envio_intentos` y pone el candado— y es
+   * justamente lo que hay que comprobar que persiste. Con `rollback` la prueba
+   * pasaría por dentro y no dejaría rastro, que es lo contrario de lo que se
+   * quiere: aquí interesa que la segunda llamada se encuentre lo de la primera.
+   */
+  const pedir = async (usuario = USEC) => soloDato(await sql(
+    `begin; set local role authenticated; set local request.jwt.claim.sub = ${usuario};
+       select titulo from reclamar_comunicado_programado(); commit;`))
+  /** Y llama a una de las dos funciones de cierre igual, como el navegador. */
+  const comoElNavegador = async (llamada, usuario = USEC) => sql(
+    `begin; set local role authenticated; set local request.jwt.claim.sub = ${usuario};
+       select ${llamada}; commit;`)
+
+  await sql(`delete from comunicados where hermandad_id = ${H}`)
+  await sql(`insert into comunicados
+      (id, numero, titulo, cuerpo, canal, destinatarios, estado, fecha_creacion,
+       fecha_programada, autor, hermandad_id)
+     values (gen_random_uuid(), 90, 'Cabildo de marzo', 'Se convoca…', 'Email',
+             'Todos los hermanos', 'Programado', '2027-01-01',
+             to_char(current_date, 'YYYY-MM-DD'), 'Secretaría', ${H})`)
+
+  /*
+   * 1. EL PRIMERO SE LO LLEVA, EL SEGUNDO SE VA CON LAS MANOS VACÍAS.
+   *
+   * Las dos llamadas van seguidas en la misma sesión, que es más duro que el
+   * caso real: si dos peticiones a la vez se lo repartieran mal, aquí se vería
+   * igual, porque lo que decide es la condición de dentro del `update` y no el
+   * momento en que llegan.
+   */
+  caso('el primero que pide se lo lleva', 'Cabildo de marzo', await pedir())
+  caso('y el segundo no se lo lleva', '', await pedir())
+
+  /* 2. Y QUEDA APUNTADO QUE SE INTENTÓ, que es lo que frena el bucle. */
+  caso('queda apuntado el intento', '1', numero(await sql(
+    `select envio_intentos from comunicados where hermandad_id = ${H}`)))
+  caso('y quién lo tiene cogido', '1', await cuantos('enviando_desde is not null'))
+
+  /* 3. AL CERRARLO SE SUELTA Y PASA A ENVIADO, con su alcance de verdad. */
+  await comoElNavegador(`cerrar_comunicado_enviado(
+      (select id from comunicados where hermandad_id = ${H}), 412)`)
+  caso('al cerrarlo pasa a enviado', '1', await cuantos("estado = 'Enviado'"))
+  caso('con el alcance real', '412', numero(await sql(
+    `select alcance from comunicados where hermandad_id = ${H}`)))
+  caso('y suelta el candado', '1', await cuantos('enviando_desde is null'))
+  /* Y ya no se lo lleva nadie más: enviado es enviado. */
+  caso('un comunicado enviado ya no se reparte', '', await pedir())
+
+  /*
+   * 4. UNO PROGRAMADO PARA MÁS ADELANTE NO SALE HOY.
+   *
+   * Parece obvio y es la mitad del sentido de programar: si saliera igual, la
+   * fecha no serviría de nada y la convocatoria del cabildo de marzo se
+   * mandaría en enero.
+   */
+  await sql(`delete from comunicados where hermandad_id = ${H}`)
+  await sql(`insert into comunicados
+      (id, numero, titulo, cuerpo, canal, destinatarios, estado, fecha_creacion,
+       fecha_programada, autor, hermandad_id)
+     values (gen_random_uuid(), 91, 'Para dentro de un mes', 'x', 'Email', 'Todos los hermanos',
+             'Programado', '2027-01-01', to_char(current_date + 30, 'YYYY-MM-DD'), 'Secretaría', ${H})`)
+  caso('uno programado para más adelante no sale hoy', '', await pedir())
+
+  /*
+   * 5. PERO UNO ATRASADO SÍ SALE.
+   *
+   * Es `<=` y no `=` a propósito: si el día señalado no entró nadie en el panel
+   * —un festivo, unas vacaciones— el comunicado saldría al día siguiente en vez
+   * de perderse para siempre. Con `=` se perdería, y en silencio.
+   */
+  await sql(`update comunicados set fecha_programada = to_char(current_date - 5, 'YYYY-MM-DD')
+              where hermandad_id = ${H}`)
+  caso('uno atrasado sí sale, no se pierde', 'Para dentro de un mes', await pedir())
+
+  /*
+   * 6. EL FRENO DEL BUCLE. A partir del tercer intento deja de darse.
+   *
+   * Sin esto, un comunicado que revienta a mitad del envío se vuelve a coger a
+   * la media hora, revienta otra vez, y así para siempre — mandando cada vez
+   * unos cuantos correos a la misma gente. Un bucle que manda correo es lo peor
+   * que puede tener esta aplicación.
+   */
+  await sql(`update comunicados set enviando_desde = null, envio_intentos = 3
+              where hermandad_id = ${H}`)
+  caso('a partir del tercer intento deja de darse', '', await pedir())
+  // Y al segundo todavía se da: el freno está en 3, no antes.
+  await sql(`update comunicados set envio_intentos = 2 where hermandad_id = ${H}`)
+  caso('pero al segundo todavía se intenta', 'Para dentro de un mes', await pedir())
+
+  /*
+   * 7. UNA PESTAÑA CERRADA A MITAD NO BLOQUEA EL COMUNICADO PARA SIEMPRE.
+   *
+   * Por eso `enviando_desde` es una hora y no un «sí/no»: quien lo cogió y
+   * cerró el navegador dejaría la convocatoria bloqueada eternamente. A la
+   * media hora se puede volver a coger.
+   */
+  await sql(`update comunicados set enviando_desde = now() - interval '2 hours', envio_intentos = 0
+              where hermandad_id = ${H}`)
+  caso('un candado viejo se puede volver a coger', 'Para dentro de un mes', await pedir())
+  // Pero uno reciente no: alguien lo está mandando ahora mismo.
+  await sql(`update comunicados set enviando_desde = now(), envio_intentos = 0
+              where hermandad_id = ${H}`)
+  caso('y uno recién cogido, no', '', await pedir())
+
+  /*
+   * 8. Y SOLTARLO DEJA EL MOTIVO ESCRITO, sin darlo por enviado.
+   *
+   * Un comunicado que lleva tres días sin salir y no dice por qué es un
+   * comunicado que nadie va a arreglar.
+   */
+  await comoElNavegador(`soltar_comunicado_fallido(
+      (select id from comunicados where hermandad_id = ${H}), 'El proveedor no contesta.')`)
+  caso('al soltarlo se apunta el motivo', 'El proveedor no contesta.', solo(await sql(
+    `select envio_error from comunicados where hermandad_id = ${H}`)))
+  caso('y sigue programado, no enviado', '1', await cuantos("estado = 'Programado'"))
+  caso('y libre para volver a intentarlo', '1', await cuantos('enviando_desde is null'))
+
+  /*
+   * 9. Y NO SE CRUZAN LAS HERMANDADES.
+   *
+   * `reclamar_comunicado_programado` es `security definer`, o sea que SE SALTA
+   * RLS. Si se le olvidara el `hermandad_actual()`, una hermandad mandaría el
+   * comunicado de otra —con su texto y a sus hermanos—. No daría error: haría
+   * eso.
+   */
+  await sql(`delete from comunicados where hermandad_id = ${H}`)
+  await sql(`insert into hermandades (id, nombre) values
+      ('99999999-9999-9999-9999-999999999999', 'La otra hermandad')
+     on conflict (id) do nothing`)
+  await sql(`insert into comunicados
+      (id, numero, titulo, cuerpo, canal, destinatarios, estado, fecha_creacion,
+       fecha_programada, autor, hermandad_id)
+     values (gen_random_uuid(), 92, 'De la otra hermandad', 'x', 'Email', 'Todos los hermanos',
+             'Programado', '2027-01-01', to_char(current_date, 'YYYY-MM-DD'), 'x',
+             '99999999-9999-9999-9999-999999999999')`)
+  caso('no se reparte el comunicado de otra hermandad', '', await pedir())
+
+
+  /*
+   * ==========================================================================
+   * EL CANDADO DE LAS REGLAS AUTOMÁTICAS
+   * ==========================================================================
+   *
+   * EL CASO REAL: la secretaria, el tesorero y el hermano mayor abren el panel
+   * la misma mañana. Los tres navegadores ven que la regla de cumpleaños toca
+   * hoy. Sin candado, los tres crean su comunicado y el hermano recibe TRES
+   * felicitaciones idénticas.
+   *
+   * Es el mismo «compare and swap» que el envío programado, y aquí se ve mejor
+   * lo que costaría hacerlo mal.
+   */
+  const pedirRegla = async (usuario = USEC) => soloDato(await sql(
+    `begin; set local role authenticated; set local request.jwt.claim.sub = ${usuario};
+       select nombre from reclamar_regla_de_hoy(); commit;`))
+
+  await sql(`delete from reglas_automaticas where hermandad_id = ${H}`)
+  await sql(`insert into reglas_automaticas
+      (id, hermandad_id, nombre, cada, criterios, destinatarios, asunto, cuerpo, activa)
+     values ('cc000000-0000-0000-0000-0000000000cc', ${H}, 'Felicitar el cumpleaños', 'diaria',
+             '{"cumpleanos":"Hoy"}'::jsonb, 'Los que cumplen hoy', '¡Felicidades!', 'Hola', true)`)
+
+  /* 1. LA PRIMERA SE LA LLEVA; LAS OTRAS DOS, NO. */
+  caso('la primera persona que entra se lleva la regla', 'Felicitar el cumpleaños', await pedirRegla())
+  caso('la segunda ya no', '', await pedirRegla())
+  caso('ni la tercera', '', await pedirRegla())
+  caso('y queda apuntado el día', '1', numero(await sql(
+    `select count(*) from reglas_automaticas
+      where hermandad_id = ${H} and ultima_vez = current_date`)))
+
+  /*
+   * 2. MAÑANA VUELVE A TOCAR. Es una regla diaria: si no volviera, felicitaría
+   * un solo día en toda su vida.
+   */
+  await sql(`update reglas_automaticas set ultima_vez = current_date - 1 where hermandad_id = ${H}`)
+  caso('al día siguiente vuelve a tocar', 'Felicitar el cumpleaños', await pedirRegla())
+
+  /*
+   * 3. UNA REGLA APAGADA NO SE DISPARA.
+   *
+   * Es la salvaguarda de todo el diseño —nacen apagadas para que alguien las
+   * vea antes de soltarlas— y sin esta condición no serviría de nada.
+   */
+  await sql(`update reglas_automaticas set activa = false, ultima_vez = null where hermandad_id = ${H}`)
+  caso('una regla apagada no se dispara', '', await pedirRegla())
+
+  /*
+   * 4. LA MENSUAL, SOLO EL DÍA 1. Si no, sería otra diaria con otro nombre — y
+   * mandaría la felicitación del mes treinta veces.
+   */
+  await sql(`update reglas_automaticas set activa = true, cada = 'mensual', ultima_vez = null
+              where hermandad_id = ${H}`)
+  const hoyEsUno = solo(await sql("select (extract(day from current_date) = 1)::text")) === 'true'
+  caso('la mensual solo se dispara el día 1', hoyEsUno ? 'Felicitar el cumpleaños' : '', await pedirRegla())
+
+  /*
+   * 5. Y DEVOLVERLA LA DEJA LISTA PARA MAÑANA, no para hoy.
+   *
+   * Se devuelve al día ANTERIOR y no a vacío: dejarla en `null` la haría
+   * parecer recién creada y se perdería el dato de cuándo funcionó por última
+   * vez, que es lo que dice si una regla lleva un mes sin hacer nada.
+   */
+  await sql(`update reglas_automaticas set cada = 'diaria', ultima_vez = current_date
+              where hermandad_id = ${H}`)
+  await comoElNavegador(`devolver_regla('cc000000-0000-0000-0000-0000000000cc')`)
+  caso('devolverla la deja lista otra vez', 'Felicitar el cumpleaños', await pedirRegla())
+  caso('y no la deja como recién creada', '0', numero(await sql(
+    `select count(*) from reglas_automaticas where hermandad_id = ${H} and ultima_vez is null`)))
+
+  /*
+   * 6. Y NO SE CRUZAN LAS HERMANDADES. `security definer` se salta RLS: sin el
+   * `hermandad_actual()`, una hermandad dispararía la regla de otra y le
+   * escribiría a sus hermanos.
+   */
+  await sql(`delete from reglas_automaticas where hermandad_id = ${H}`)
+  await sql(`insert into reglas_automaticas
+      (hermandad_id, nombre, cada, criterios, destinatarios, asunto, cuerpo, activa)
+     values ('99999999-9999-9999-9999-999999999999', 'De la otra', 'diaria',
+             '{}'::jsonb, 'x', 'x', 'x', true)`)
+  caso('no se dispara la regla de otra hermandad', '', await pedirRegla())
+
+  /*
+   * 7. Y UN HERMANO DE A PIE NO PUEDE TOCARLAS.
+   *
+   * Una regla es un botón que escribe a los ochocientos hermanos. La política
+   * exige `modulo_permitido('comunicados')`, así que quien no lleva
+   * comunicados no la ve ni la puede encender.
+   */
+  const veReglas = async (usuario) => numero(await sql(
+    `begin; set local role authenticated; set local request.jwt.claim.sub = ${usuario};
+       select count(*) from reglas_automaticas; rollback;`))
+  await sql(`insert into reglas_automaticas
+      (hermandad_id, nombre, cada, criterios, destinatarios, asunto, cuerpo, activa)
+     values (${H}, 'La de casa', 'diaria', '{}'::jsonb, 'x', 'x', 'x', true)`)
+  caso('quien lleva comunicados las ve', '1', await veReglas(USEC))
+
+
+  /*
+   * ==========================================================================
+   * QUE LA COPIA ENCAJE, COMPROBADO ANTES DE VACIAR
+   * ==========================================================================
+   *
+   * Restaurar vacía primero y llena después. Si las filas no encajan —una
+   * columna que la copia trae y esta base todavía no tiene— eso se descubría
+   * DESPUÉS de haber vaciado, y la hermandad se quedaba con menos datos que
+   * antes de «restaurar». La red de seguridad convertida en la causa de la
+   * pérdida.
+   *
+   * Y no es rebuscado: la base la actualiza cada hermandad a mano, así que
+   * «aplicación nueva, base vieja» es el estado normal durante semanas.
+   */
+  const faltan = async (columnas) => (await sql(
+    `select tabla || '.' || columna from columnas_que_faltan_para_restaurar('${JSON.stringify(columnas)}'::jsonb)
+      order by 1`)).split('\n').map((x) => x.trim()).filter(Boolean)
+
+  // Una copia que encaja no dice nada, que es el caso de todos los días.
+  caso('una copia que encaja no da ningún aviso', [],
+    await faltan({ hermanos: ['id', 'nombre', 'dni', 'numero'], cuotas: ['id', 'importe'] }))
+
+  /*
+   * Y UNA CON UNA COLUMNA DE MÁS, SÍ. Es exactamente lo que pasa con una base
+   * atrasada: la copia se hizo cuando la columna ya existía.
+   */
+  caso('una columna que esta base no tiene se caza', ['hermanos.columna_del_futuro'],
+    await faltan({ hermanos: ['id', 'nombre', 'columna_del_futuro'] }))
+  caso('y se cazan varias a la vez', ['cuotas.otra_mas', 'hermanos.columna_del_futuro'],
+    await faltan({ hermanos: ['id', 'columna_del_futuro'], cuotas: ['id', 'otra_mas'] }))
+
+  /*
+   * UNA TABLA QUE NO EXISTE SE IGNORA, y es deliberado: de eso ya avisa
+   * `DIAGNOSTICO.sql` con mucho más detalle. Sacar aquí las veinte columnas de
+   * una tabla que falta entera enterraría el aviso que sí sirve — y mandaría a
+   * arreglar el problema al sitio equivocado.
+   */
+  caso('una tabla que no existe se ignora', [],
+    await faltan({ tabla_que_no_existe: ['a', 'b', 'c'] }))
+
+  // Sin nada que comprobar, nada que decir.
+  caso('sin columnas no dice nada', [], await faltan({}))
+
+  /*
+   * Y LO PUEDE LLAMAR EL NAVEGADOR. Es `security definer` porque lee el
+   * catálogo, que un usuario normal no ve entero; si no estuviera concedida, la
+   * comprobación fallaría en silencio y —por cómo está escrito
+   * `loQueNoEncaja()`— se dejaría pasar la restauración sin mirar.
+   */
+  caso('el navegador puede preguntarlo', 'true', solo(await sql(
+    `select has_function_privilege('authenticated', p.oid, 'execute')::text
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'columnas_que_faltan_para_restaurar'`)))
 }

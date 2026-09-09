@@ -114,6 +114,30 @@ language sql stable security definer set search_path = public as $$
     -- Quien ha pedido su papeleta de sitio.
   + (select count(*) from solicitudes_papeleta
       where hermandad_id = hermandad_actual() and estado = 'Pendiente')
+    /*
+     * Y LOS COMUNICADOS PROGRAMADOS A LOS QUE YA LES TOCABA SALIR.
+     *
+     * Este es distinto de los otros cinco y merece la explicación: no hay
+     * nadie al otro lado esperando respuesta. Lo que hay es un comunicado que
+     * la hermandad dio por hecho —lo programó, lo vio como «Programado» y se
+     * quedó tranquila— y que NO SALE HASTA QUE ALGUIEN ABRE COMUNICADOS.
+     *
+     * Sale de ahí y no de un servidor porque para saber a quién va hace falta
+     * el censo entero con sus cuotas resueltas, y eso solo está cargado en esa
+     * pantalla (el porqué entero, en `src/lib/envioProgramado.ts`).
+     *
+     * Así que el numerito es lo que hace que alguien entre, y por eso este
+     * cuenta aunque no sea una petición: sin él, un comunicado programado por
+     * alguien que ya no entra en Comunicados se quedaría esperando meses.
+     *
+     * Y baja solo en cuanto sale, que es la condición para que un contador se
+     * siga mirando.
+     */
+  + (select count(*) from comunicados
+      where hermandad_id = hermandad_actual()
+        and estado = 'Programado'
+        and fecha_programada is not null
+        and fecha_programada <= to_char(current_date, 'YYYY-MM-DD'))
 $$;
 
 grant execute on function avisos_que_esperan() to authenticated;

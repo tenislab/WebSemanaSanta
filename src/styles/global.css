@@ -189,6 +189,105 @@ a { color: inherit; }
 img, svg { max-width: 100%; }
 ::selection { background: var(--oro-300); color: var(--morado-900); }
 
+/* =========================================================================
+   EL SUELO DE LOS CONTROLES: input, select y textarea
+   =========================================================================
+
+   POR QUÉ HACE FALTA ESTO, QUE ES LO IMPORTANTE.
+
+   No existía. El estilo de los controles se ponía POR CONTEXTOS —`.form-row
+   select`, `.assign-box select`, `.banner-inline select`, `.masiva select`,
+   `.tramo-ficha select`…— y funcionaba mientras todos los controles vivieran
+   en uno de esos contextos.
+
+   El día que aparece uno en un sitio nuevo, NACE SIN VESTIR: con el borde
+   negro fino, la flecha del sistema y las esquinas cuadradas del navegador. Se
+   vio en la tabla de Personal, en la casilla del cargo, al lado de una tabla
+   que no tiene ni un borde negro. Y no canta lo bastante como para que alguien
+   lo reporte: canta lo justo para que la pantalla parezca descuidada sin que
+   se sepa por qué.
+
+   Es el mismo patrón que ya costó caro dos veces aquí: algo que se resuelve
+   caso por caso acaba teniendo un caso que nadie resolvió. La forma de que no
+   se repita no es arreglar ese desplegable, es que el siguiente NAZCA BIEN.
+
+   ESTO NO PISA NADA. Va con selector de elemento (especificidad 0,0,1), así
+   que cualquier regla con clase —todas las de contexto— sigue mandando encima.
+   Solo pone el suelo donde no había nada.
+   ========================================================================= */
+input, select, textarea, button {
+  /* Se hereda la letra: sin esto los controles salen en la del sistema, que en
+     Windows es Arial y canta al lado de todo lo demás. */
+  font: inherit;
+}
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+select,
+textarea {
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  /* Un `<select>` mide lo que mide su opción más larga. Sin esto se sale de su
+     celda en cuanto alguien escribe un cargo con nombre largo. */
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+/*
+   LA FLECHA. `appearance: none` quita la del sistema —que es la que peor
+   canta— y hay que poner una, o el desplegable no parece un desplegable.
+
+   Va como imagen de fondo y no como pseudo-elemento porque un `<select>` no
+   admite `::after`: el navegador dibuja su interior y no deja meter nada.
+   Por eso hay dos declaraciones, una por tema: el color va dentro del SVG y no
+   se puede sacar de una variable.
+*/
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2357534e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 0.7rem;
+  cursor: pointer;
+}
+:root[data-theme='dark'] select,
+:root:not([data-theme='light']) select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%23a8a29e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+/*
+   Y EN TEMA CLARO SE VUELVE A PONER LA OSCURA. La regla de arriba lleva
+   `:not([data-theme='light'])`, que también acierta cuando no hay tema puesto
+   —o sea el ajuste «como el sistema»— y ahí puede tocar claro. Sin esta línea,
+   quien tenga el sistema en claro y no haya tocado nada vería la flecha gris
+   clara sobre fondo blanco.
+*/
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2357534e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+}
+/*
+   EL FOCO, VISIBLE. Se quita el anillo del sistema y hay que poner otro: sin
+   él, quien navega con el teclado no sabe dónde está. Es el mismo que ya usan
+   los formularios del panel, para que no haya dos focos distintos.
+*/
+input:not([type='checkbox']):not([type='radio']):focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+/* Un control apagado tiene que parecerlo, o se pulsa y no pasa nada. */
+input:disabled, select:disabled, textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 2rem; }
 
 /* familia serif para titulares con carácter */

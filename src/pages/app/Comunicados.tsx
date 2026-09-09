@@ -1,5 +1,5 @@
 import { llano } from '../../lib/buscar'
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, useRef } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import Drawer from '../../components/Drawer'
 import AvisoFalta from '../../components/AvisoFalta'
@@ -39,7 +39,17 @@ import {
 } from '../../lib/segmentacion'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import { agregarAvisoAVarios, agregarAvisoHermano, getPreferenciasAvisos, quiereAviso } from '../../lib/avisosHermano'
-import { correoDisponible, enviarCorreo, getAjustesCorreo } from '../../lib/correo'
+import { correoDisponible, enviarCorreo, enviarCorreoUnoAUno, getAjustesCorreo } from '../../lib/correo'
+import { llevaMarcas, personalizar, sePuedePersonalizar, vistaPrevia, MARCAS } from '../../lib/personalizar'
+import { getHermandadSettings } from '../../lib/hermandadSettings'
+import {
+  mandarLosProgramados, reclamarDeLaBase, cerrarEnLaBase, soltarEnLaBase,
+  type ComunicadoReclamado,
+} from '../../lib/envioProgramado'
+import {
+  dispararReglasDeHoy, reclamarReglaDeLaBase, devolverReglaEnLaBase,
+  useReglasAutomaticas, REGLAS_DE_FABRICA, type ReglaAutomatica,
+} from '../../lib/reglasAutomaticas'
 import { avisarPorCorreo, cuerpoCorreo } from '../../lib/avisosCorreo'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
@@ -602,7 +612,183 @@ export default function Comunicados() {
     return { total, programados, enviadosEsteMes, redesConectadas: cuentasConectadas.length }
   }, [comunicados, cuentasConectadas])
 
+  /*
+   * ==========================================================================
+   * LOS PROGRAMADOS QUE YA TOCABAN, AL ABRIR ESTA PANTALLA
+   * ==========================================================================
+   *
+   * Antes «Programado» no significaba nada: se guardaba la fecha y no lo
+   * mandaba nadie, nunca.
+   *
+   * SE HACE AQUÍ Y NO AL ENTRAR EN EL PANEL, y no es pereza: para saber A QUIÉN
+   * va un comunicado hace falta el censo entero con sus cuotas resueltas, sus
+   * cargos y sus etiquetas — que es justo lo que está cargado en ESTA pantalla
+   * y en ninguna otra. Cargarlo en el arranque de la aplicación sería traerse
+   * cinco tablas en Tesorería, en el Inventario y en la Web pública, que es lo
+   * contrario de lo que se está haciendo para que esto aguante al crecer.
+   *
+   * Para que alguien entre, el numerito del menú se enciende cuando hay uno
+   * vencido (`avisos_que_esperan()` en la base).
+   *
+   * SE ESPERA A TENER EL CENSO. Con `hermanos` todavía vacío, el segmento se
+   * resolvería a cero personas y el comunicado se cerraría como «enviado a 0».
+   * Eso es peor que no mandarlo: se pierde y ya no se vuelve a intentar.
+   */
+  const [reglas, setReglas] = useReglasAutomaticas()
+  const [programadosSalidos, setProgramadosSalidos] = useState<string | null>(null)
+  const yaLoIntente = useRef(false)
+  useEffect(() => {
+    if (yaLoIntente.current) return
+    if (hermanos.length === 0) return          // todavía no ha llegado el censo
+    yaLoIntente.current = true
+    /*
+     * PRIMERO LAS REGLAS, LUEGO EL ENVÍO. El orden no es casual: una regla
+     * crea un comunicado programado PARA HOY, así que si se dispara después de
+     * enviar, la felicitación de hoy no sale hasta que alguien vuelva a abrir
+     * esta pantalla — o sea, casi siempre mañana. Y felicitar el cumpleaños al
+     * día siguiente es peor que no felicitarlo.
+     */
+    void dispararReglasDeHoy({
+      reclamar: reclamarReglaDeLaBase,
+      /*
+       * A CUÁNTA GENTE ALCANZA HOY. Si no es a nadie —que es lo normal casi
+       * todos los días: de ochocientos hermanos, la mayoría de los días no
+       * cumple ninguno— no se crea nada. Un comunicado a cero personas por día
+       * llenaría la lista hasta enterrar los de verdad.
+       */
+      cuantos: (r) => filtrarSegmento(
+        hermanos, r.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota,
+      ).length,
+      crear: async (r) => {
+        const hoy = hoyIso()
+        const nuevo: Comunicado = {
+          id: nuevoId(),
+          numero: Math.max(0, ...comunicados.map((c) => c.numero)) + 1,
+          titulo: r.asunto,
+          cuerpo: r.cuerpo,
+          canal: 'Email',
+          redes: null,
+          destinatarios: r.destinatarios,
+          criterios: r.criterios,
+          /*
+           * PROGRAMADO PARA HOY, no «Enviado». Así entra por el camino de
+           * siempre —candado, tres intentos, personalización, freno de las
+           * marcas— en vez de tener el suyo propio.
+           */
+          estado: 'Programado',
+          fechaCreacion: hoy,
+          fechaProgramada: hoy,
+          fechaEnvio: null,
+          autor: r.nombre,
+          alcance: null,
+        }
+        setComunicados((prev) => [nuevo, ...prev])
+      },
+      devolver: devolverReglaEnLaBase,
+    }).then(() => mandarLosProgramados({
+      reclamar: reclamarDeLaBase,
+      destinatarios: async (c: ComunicadoReclamado) => {
+        /*
+         * Se resuelve con los criterios GUARDADOS del comunicado, que es lo
+         * único que sabe a quién iba. La fila que devuelve la base no los trae
+         * —vienen en `jsonb` y no hacen falta para el candado— así que se busca
+         * el comunicado ya cargado en esta pantalla, que es el mismo.
+         */
+        const guardado = comunicados.find((x) => x.id === c.id)
+        const alcance = resolverDestinatario({
+          destinatarios: c.destinatarios,
+          criterios: guardado?.criterios ?? null,
+        })
+        if (!alcance.reconocido) throw new Error('No se sabe a quién iba dirigido.')
+        // Al buzón del área SIEMPRE, igual que en el envío a mano.
+        agregarAvisoAVarios(alcance.hermanos.map((h) => h.id), c.cuerpo, 'comunicado', c.titulo)
+        const ajustes = getAjustesCorreo()
+        if (!correoDisponible(ajustes) || !ajustes.avisaDe.comunicados) return []
+        return [
+          ...alcance.hermanos
+            .filter((h) => quiereAviso(getPreferenciasAvisos(h.id), 'comunicado'))
+            .map((h) => ({ email: h.email, nombre: h.nombre, numero: h.numero })),
+          ...alcance.soloCorreo.map((p) => ({ email: p.email, nombre: p.nombre, numero: null })),
+        ].filter((d) => d.email && d.email.includes('@'))
+      },
+      enviar: async (c, gente) => {
+        const ctx = {
+          hermandad: getHermandadSettings().nombreLegal,
+          ejercicio: new Date().getFullYear(),
+        }
+        /*
+         * El mismo freno que en el envío a mano: un comunicado guardado antes
+         * de que existieran las marcas puede llevar `{nombe}` dentro. Aquí no
+         * hay nadie mirando la pantalla, así que con más razón.
+         */
+        const revision = sePuedePersonalizar(`${c.titulo}\n${c.cuerpo}`)
+        if (!revision.puede) return { enviados: 0, error: revision.motivo }
+        if (llevaMarcas(c.cuerpo) || llevaMarcas(c.titulo)) {
+          const mensajes = gente.map((d) => {
+            const asunto = personalizar(c.titulo, d, ctx)
+            const cuerpo = personalizar(c.cuerpo, d, ctx)
+            const { texto, html } = cuerpoCorreo(asunto, cuerpo.split('\n\n'))
+            return { para: d.email, asunto, texto, html }
+          })
+          const u = await enviarCorreoUnoAUno(mensajes)
+          return { enviados: u.enviados, error: u.error }
+        }
+        const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
+        const r = await enviarCorreo({ para: gente.map((d) => d.email), asunto: c.titulo, texto, html })
+        return { enviados: r.ok ? (r.enviados ?? gente.length) : 0, error: r.error }
+      },
+      cerrar: cerrarEnLaBase,
+      soltar: soltarEnLaBase,
+    }).then((r) => {
+      if (r.mandados === 0 && r.fallidos.length === 0) return
+      /*
+       * Y SE DICE. Un envío que ocurre solo y en silencio es indistinguible de
+       * uno que no ha ocurrido: la hermandad no sabría nunca si su comunicado
+       * salió, ni cuándo, ni a cuántos.
+       */
+      setProgramadosSalidos(
+        r.fallidos.length > 0
+          ? `No se ha podido mandar «${r.fallidos[0].titulo}»: ${r.fallidos[0].motivo}`
+          : `Se ${r.mandados === 1 ? 'ha mandado el comunicado programado' : `han mandado ${r.mandados} comunicados programados`}`
+            + ` que ya tocaba${r.mandados === 1 ? '' : 'n'}, a ${r.personas} ${r.personas === 1 ? 'persona' : 'personas'}.`,
+      )
+    }))
+    // Solo al llegar el censo, una vez. `yaLoIntente` lo garantiza.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hermanos.length])
+
+  /*
+   * EL TÍTULO Y EL CUERPO, EN ESTADO.
+   *
+   * Antes eran campos sueltos y se leían con `FormData` al guardar, que para un
+   * formulario normal está bien. Aquí ya no vale: la vista previa tiene que
+   * enseñar el texto CON EL NOMBRE PUESTO mientras se escribe, y el freno de
+   * las marcas mal escritas tiene que saltar antes de guardar, no después.
+   *
+   * Los `name` se quedan puestos: `handleCreate` sigue leyendo por `FormData`,
+   * así que esto no cambia por dónde entran los datos, solo permite mirarlos.
+   */
+  const [tituloNuevo, setTituloNuevo] = useState('')
+  const [cuerpoNuevo, setCuerpoNuevo] = useState('')
+
+  /*
+   * A QUIÉN SE LE ENSEÑA LA VISTA PREVIA: al primero del segmento elegido.
+   *
+   * Una vista previa con `{nombre}` en crudo es el mismo texto que ya se está
+   * escribiendo: no enseña nada. Con una persona de verdad se ve el resultado
+   * y, sobre todo, se ven las FICHAS SIN DATOS — que es donde salta «Hola
+   * hermano/a» y uno se entera de que hay que arreglar el censo.
+   */
+  const ctxPersonalizacion = {
+    hermandad: getHermandadSettings().nombreLegal,
+    ejercicio: new Date().getFullYear(),
+  }
+  const revisionMarcas = sePuedePersonalizar(`${tituloNuevo}\n${cuerpoNuevo}`)
+  const hayMarcas = llevaMarcas(tituloNuevo) || llevaMarcas(cuerpoNuevo)
+
   function abrirNuevo() {
+    setTituloNuevo('')
+    setCuerpoNuevo('')
     setCanalesNuevos([canales[0] ?? 'Email'])
     setSegmentarAvanzado(false)
     setDestinatarioNuevo(segmentos[0] ?? '')
@@ -659,14 +845,26 @@ export default function Comunicados() {
     // la hermandad active el correo no le quita a nadie su decisión.
     const ajustes = getAjustesCorreo()
     if (!correoDisponible(ajustes) || !ajustes.avisaDe.comunicados) return
-    const direcciones = [
+    /*
+     * SE GUARDA QUIÉN ES CADA UNO, NO SOLO SU DIRECCIÓN.
+     *
+     * Antes esto era una lista de correos y punto, porque el cuerpo era el
+     * mismo para todos. En cuanto el texto dice «Hola {nombre}» hay que saber
+     * de quién es cada dirección, así que se lleva la persona al lado.
+     *
+     * A los de `soloCorreo` —la junta con cuenta pero sin ficha— NO se les pone
+     * número de hermano: no lo son. `{numero}` se les queda vacío, que es la
+     * verdad, en vez de un cero impreso en un correo.
+     */
+    const destinos: { email: string; nombre: string; numero?: number | null }[] = [
       ...reciben
         .filter((h) => quiereAviso(getPreferenciasAvisos(h.id), 'comunicado'))
-        .map((h) => h.email),
+        .map((h) => ({ email: h.email, nombre: h.nombre, numero: h.numero })),
       // La junta con cuenta pero sin ficha en el censo. No tiene área donde
       // apagar los avisos, así que no hay preferencia que respetar: se le manda.
-      ...alcance.soloCorreo.map((p) => p.email),
-    ].filter((e) => e && e.includes('@'))
+      ...alcance.soloCorreo.map((p) => ({ email: p.email, nombre: p.nombre, numero: null })),
+    ].filter((d) => d.email && d.email.includes('@'))
+    const direcciones = destinos.map((d) => d.email)
     if (direcciones.length === 0) return
     setEnvioCorreo({ estado: 'enviando' })
     // El mismo membrete que los demás avisos: la banda con el color y el
@@ -729,6 +927,57 @@ export default function Comunicados() {
       return
     }
 
+    /*
+     * ¿LLEVA MARCAS? Entonces no hay UN correo: hay uno por persona.
+     *
+     * Y por eso se pregunta primero, en vez de mandar siempre uno a uno: un
+     * comunicado sin marcas —que son la mayoría— sigue saliendo de una vez, en
+     * tandas de cincuenta. Solo paga el precio de la fila quien lo necesita.
+     */
+    if (llevaMarcas(c.cuerpo) || llevaMarcas(c.titulo)) {
+      /*
+       * EL FRENO, OTRA VEZ AQUÍ. Ya está en el formulario, pero un comunicado
+       * guardado ayer con `{nombe}` dentro llega hasta aquí sin volver a pasar
+       * por él. Lo que no se puede deshacer es el correo.
+       */
+      const revision = sePuedePersonalizar(`${c.titulo}\n${c.cuerpo}`)
+      if (!revision.puede) {
+        setEnvioCorreo({ estado: 'error', texto: `${revision.motivo} No se ha mandado nada.` })
+        return
+      }
+      const ctx = {
+        hermandad: getHermandadSettings().nombreLegal,
+        ejercicio: new Date().getFullYear(),
+      }
+      const mensajes = destinos.map((d) => {
+        const asunto = personalizar(c.titulo, d, ctx)
+        const cuerpo = personalizar(c.cuerpo, d, ctx)
+        const { texto, html } = cuerpoCorreo(asunto, cuerpo.split('\n\n'))
+        return { para: d.email, asunto, texto, html }
+      })
+      const u = await enviarCorreoUnoAUno(mensajes, (hechos, total) => {
+        setEnvioCorreo({ estado: 'enviando', texto: `Enviando, uno por uno: ${hechos} de ${total}…` })
+      })
+      /*
+       * Y SE CUENTA LO QUE HA PASADO DE VERDAD, incluidos los que se quedaron
+       * sin intentar cuando se cortó. «Enviado» a secas encima de un envío que
+       * se paró en el número doce es la peor manera de acabar esto.
+       */
+      setEnvioCorreo(
+        u.cortado
+          ? { estado: 'error', texto: u.error ?? 'Se cortó el envío.' }
+          : u.fallidos > 0
+            ? {
+              estado: 'error',
+              texto: `Enviado a ${u.enviados} de ${mensajes.length}. A ${u.fallidos} no se ha podido: `
+                + `revisa sus correos en Hermanos, porque a esas personas no les ha llegado nada.`
+                + (u.error ? ` (${u.error})` : ''),
+            }
+            : { estado: 'hecho', texto: `Enviado por correo a ${u.enviados} personas, cada una con su nombre.` },
+      )
+      return
+    }
+
     const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
     const r = await enviarCorreo({ para: direcciones, asunto: c.titulo, texto, html })
     /*
@@ -780,6 +1029,19 @@ export default function Comunicados() {
           : !cuerpo ? 'El comunicado está vacío: escribe el texto.'
             : 'Elige al menos un canal por el que mandarlo.',
       })
+      return
+    }
+
+    /*
+     * Y NO SE GUARDA CON UNA MARCA QUE NO EXISTE.
+     *
+     * Ni siquiera como borrador, y esto es a propósito: un borrador se manda
+     * más adelante, a lo mejor desde otra pantalla y por otra persona. Dejarlo
+     * pasar aquí es dejar la bomba puesta con la mecha más larga.
+     */
+    const revision = sePuedePersonalizar(`${titulo}\n${cuerpo}`)
+    if (!revision.puede) {
+      setEnvioCorreo({ estado: 'error', texto: revision.motivo })
       return
     }
 
@@ -1149,6 +1411,137 @@ export default function Comunicados() {
         )}
       </section>
 
+      {/*
+        LO QUE HA SALIDO SOLO AL ABRIR ESTA PANTALLA.
+
+        Un envío que ocurre en silencio es indistinguible de uno que no ha
+        ocurrido: la hermandad no sabría nunca si su comunicado salió, ni
+        cuándo, ni a cuánta gente. Y si falló, menos.
+
+        Se puede cerrar porque, a diferencia del aviso de la base de datos
+        atrasada, esto ya ha pasado: no es un problema que siga ahí.
+      */}
+      {programadosSalidos && (
+        <div
+          className={`banner-inline ${/No se ha podido/.test(programadosSalidos) ? 'banner-inline--alerta' : 'banner-inline--accent'}`}
+          role="status"
+        >
+          <span>{/No se ha podido/.test(programadosSalidos) ? '⚠' : '📣'} {programadosSalidos}</span>
+          <button className="btn btn-ghost btn-sm" onClick={() => setProgramadosSalidos(null)}>Entendido</button>
+        </div>
+      )}
+
+      {/*
+        ====================================================================
+        LAS REGLAS QUE SE DISPARAN SOLAS
+        ====================================================================
+
+        Una regla es un sesgo + un texto + un cuándo. Cuando le toca, escribe
+        un comunicado programado para hoy y ahí acaba su trabajo: lo manda el
+        camino de siempre, con su candado y su «Hola {nombre}».
+
+        NACEN APAGADAS, y es la decisión que separa esto de una máquina de
+        mandar correos sin supervisión: una regla encendida escribe a
+        ochocientas personas en nombre de la hermandad sin que nadie lea el
+        texto antes. Se ve a cuánta gente alcanzaría HOY, y se enciende cuando
+        se ha visto. Encender es un clic; deshacer ochocientos correos no es
+        nada.
+      */}
+      <section className="settings-card">
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Que se manden solos</h2>
+        </div>
+        <p className="form-hint" style={{ marginTop: 0 }}>
+          Una regla escribe el comunicado por ti el día que toca — el cumpleaños de cada hermano,
+          por ejemplo. Sale con su nombre puesto, y se manda cuando alguien entre aquí.
+        </p>
+
+        {reglas.length === 0 ? (
+          <div className="assign-box">
+            <p className="form-hint" style={{ marginTop: 0 }}>
+              No tienes ninguna. Estas dos vienen escritas y las puedes cambiar después:
+            </p>
+            <div className="settings-actions">
+              {REGLAS_DE_FABRICA.map((f) => (
+                <button
+                  key={f.nombre}
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setReglas((prev) => [
+                    { ...f, id: nuevoId(), activa: false, ultimaVez: null } as ReglaAutomatica,
+                    ...prev,
+                  ])}
+                >
+                  {f.nombre}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <ul className="lista-limpia">
+            {reglas.map((r) => {
+              /*
+               * A CUÁNTA GENTE ALCANZA HOY. Es el dato que hace falta para
+               * atreverse a encenderla, y el que evita la sorpresa: se elige
+               * «los que cumplen hoy», sale a tres de ochocientos, y sin este
+               * número no hay forma de saber si es que solo cumplen tres o es
+               * que el resto no tiene la fecha puesta en su ficha.
+               */
+              const alcanza = filtrarSegmento(
+                hermanos, r.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota,
+              ).length
+              return (
+                <li key={r.id} className="assign-box" style={{ marginBottom: '0.6rem' }}>
+                  <div className="assign-box__row" style={{ justifyContent: 'space-between' }}>
+                    <div>
+                      <b>{r.nombre}</b>
+                      <p className="table-subtle" style={{ margin: '0.2rem 0 0' }}>
+                        {r.cada === 'diaria' ? 'Todos los días' : 'El día 1 de cada mes'}
+                        {' · '}{r.destinatarios}
+                        {' · '}
+                        <b>{alcanza === 0 ? 'hoy no toca a nadie' : `hoy alcanzaría a ${alcanza}`}</b>
+                        {r.ultimaVez && ` · última vez el ${r.ultimaVez}`}
+                      </p>
+                    </div>
+                    <label className="checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={r.activa}
+                        onChange={(e) => setReglas((prev) => prev.map((x) => (
+                          x.id === r.id ? { ...x, activa: e.target.checked } : x
+                        )))}
+                      />
+                      <span>{r.activa ? 'Encendida' : 'Apagada'}</span>
+                    </label>
+                  </div>
+                  {/*
+                    EL TEXTO A LA VISTA, sin tener que abrir nada. Es lo que se
+                    le va a mandar a ochocientas personas: esconderlo detrás de
+                    un botón «editar» es cómo se encienden reglas sin haber
+                    leído lo que dicen.
+                  */}
+                  <p className="table-subtle" style={{ margin: '0.5rem 0 0', whiteSpace: 'pre-wrap', fontSize: '0.85rem' }}>
+                    <b>{r.asunto}</b>{'\n'}{r.cuerpo}
+                  </p>
+                  <div className="settings-actions" style={{ marginTop: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm rgpd-borrar"
+                      onClick={() => {
+                        if (!window.confirm(`¿Quitar la regla «${r.nombre}»?`)) return
+                        setReglas((prev) => prev.filter((x) => x.id !== r.id))
+                      }}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
       <section className="stat-grid">
         <div className="stat-tile">
           <span className="stat-tile__label">Total comunicados</span>
@@ -1508,11 +1901,70 @@ export default function Comunicados() {
         <form id="comunicado-form" className="app-form" onSubmit={handleCreate}>
           <div className="form-row">
             <label htmlFor="titulo">Título</label>
-            <input id="titulo" name="titulo" type="text" placeholder="Ej. Convocatoria de Gobergo" required />
+            <input
+              id="titulo" name="titulo" type="text" required
+              placeholder="Ej. Convocatoria de Gobergo"
+              value={tituloNuevo}
+              onChange={(e) => setTituloNuevo(e.target.value)}
+            />
           </div>
           <div className="form-row">
             <label htmlFor="cuerpo">Mensaje</label>
-            <textarea id="cuerpo" name="cuerpo" rows={4} placeholder="Texto del comunicado" required />
+            <textarea
+              id="cuerpo" name="cuerpo" rows={4} required
+              placeholder={'Texto del comunicado.\n\nPuedes escribir «Hola {nombre},» y a cada uno le llegará con el suyo.'}
+              value={cuerpoNuevo}
+              onChange={(e) => setCuerpoNuevo(e.target.value)}
+            />
+            {/*
+              LAS MARCAS, CON SU BOTÓN. Escritas a mano se equivoca cualquiera
+              —y `{nombe}` mandado a ochocientas personas no se recoge— así que
+              se ponen pulsando, y la ayuda dice qué hace cada una.
+            */}
+            <div className="chips" style={{ marginTop: '0.5rem' }}>
+              <span className="form-hint" style={{ marginRight: '0.3rem' }}>Personalizar:</span>
+              {MARCAS.map((m) => (
+                <button
+                  key={m.marca}
+                  type="button"
+                  className="chip"
+                  title={`${m.que} — p. ej. «${m.ejemplo}»`}
+                  onClick={() => setCuerpoNuevo((t) => `${t}{${m.marca}}`)}
+                >
+                  {`{${m.marca}}`}
+                </button>
+              ))}
+            </div>
+            {/*
+              EL FRENO. Una marca que no existe se mandaría tal cual, entre
+              llaves, a todo el mundo. Se dice aquí y se bloquea al guardar:
+              es el mismo criterio que `acreedorIncompleto()` con el fichero
+              SEPA — no dejar generar algo que va a salir mal en casa de otro.
+            */}
+            {!revisionMarcas.puede && (
+              <p className="form-hint" style={{ color: 'var(--peligro, #b91c1c)', marginTop: '0.45rem' }}>
+                ⚠ {revisionMarcas.motivo}
+              </p>
+            )}
+            {/*
+              Y CÓMO LE VA A LLEGAR. Con el primero del segmento, que es una
+              persona de verdad con sus datos de verdad.
+            */}
+            {hayMarcas && revisionMarcas.puede && (
+              <div className="assign-box" style={{ marginTop: '0.6rem' }}>
+                <p className="form-hint" style={{ margin: '0 0 0.35rem' }}>
+                  {segmentoHermanos[0]
+                    ? `Así le llegará a ${segmentoHermanos[0].nombre}:`
+                    : 'Así llegará (no hay nadie en el segmento, se usa un ejemplo):'}
+                </p>
+                <p style={{ margin: 0, fontWeight: 600 }}>
+                  {vistaPrevia(tituloNuevo, segmentoHermanos[0] ?? null, ctxPersonalizacion)}
+                </p>
+                <p style={{ margin: '0.3rem 0 0', whiteSpace: 'pre-wrap' }}>
+                  {vistaPrevia(cuerpoNuevo, segmentoHermanos[0] ?? null, ctxPersonalizacion)}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="form-grid-2">

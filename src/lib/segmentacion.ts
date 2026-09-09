@@ -3,6 +3,7 @@ import type { Hermano } from '../data/hermanos'
 import { leerPersistido } from './persistencia'
 import { getCamposPropios, type CampoPropio } from './camposPropios'
 import type { SituacionCuota } from './estadoCuotaHermano'
+import { cumpleEsteMes, esSuCumpleHoy } from './hermanoFicha'
 
 /**
  * Segmentación de hermanos por criterios, para mandar comunicados solo a quien
@@ -21,6 +22,18 @@ export interface CriteriosSegmento {
   cuota: 'Todos' | 'AlDia' | 'Pendiente'
   /** Edad: mayores o menores de 18. */
   edad: 'Todos' | 'Mayores' | 'Menores'
+  /**
+   * QUIÉN CUMPLE AÑOS. Es lo que faltaba para poder felicitar.
+   *
+   * La aplicación sabía quién cumple —`cumpleEsteMes()` y `esSuCumpleHoy()`
+   * llevan tiempo en `hermanoFicha.ts`— pero solo en la pantalla del censo,
+   * con un filtro suyo aparte. El sesgo de comunicados no lo sabía, así que un
+   * comunicado NO se podía dirigir a quien cumple años. Ni siquiera a mano.
+   *
+   * Con esto ya se puede felicitar aunque no haya nada automático todavía, que
+   * es lo que hace que valga la pena por sí solo.
+   */
+  cumpleanos?: 'Todos' | 'Hoy' | 'EsteMes'
   /** Etiqueta concreta, o '' para cualquiera. */
   etiqueta: string
   /**
@@ -68,6 +81,7 @@ export const CRITERIOS_POR_DEFECTO: CriteriosSegmento = {
   estado: 'Todos',
   cuota: 'Todos',
   edad: 'Todos',
+  cumpleanos: 'Todos',
   etiqueta: '',
   cargo: '',
   soloConEmail: true,
@@ -147,6 +161,23 @@ export function filtrarSegmento(
       if (c.edad === 'Mayores' && e < 18) return false
       if (c.edad === 'Menores' && e >= 18) return false
     }
+    /*
+     * EL CUMPLEAÑOS.
+     *
+     * Se apoya en `hermanoFicha.ts` en vez de volver a escribir la cuenta aquí:
+     * dos versiones de la misma regla es como se acaba felicitando en el censo
+     * a quien no recibe la felicitación por correo. Y esas funciones ya saben
+     * lo del 29 de febrero, que es donde esto se rompe.
+     *
+     * Sin fecha de nacimiento no entra, igual que en el sesgo de edad: no es
+     * que no cumpla hoy, es que no se sabe. Felicitar a quien no toca es peor
+     * que no felicitar.
+     */
+    if (c.cumpleanos && c.cumpleanos !== 'Todos') {
+      if (!h.fechaNacimiento) return false
+      if (c.cumpleanos === 'Hoy' && !esSuCumpleHoy(h.fechaNacimiento)) return false
+      if (c.cumpleanos === 'EsteMes' && !cumpleEsteMes(h.fechaNacimiento)) return false
+    }
     if (c.etiqueta) {
       const suyas = h.etiquetas ?? []
       const automaticas = roles.get(h.id) ?? []
@@ -193,6 +224,14 @@ export function etiquetaSegmento(c: CriteriosSegmento, campos: CampoPropio[] = [
   ]
   if (c.edad === 'Mayores') partes.push('mayores de edad')
   if (c.edad === 'Menores') partes.push('menores de edad')
+  /*
+   * VA DELANTE DE LO DEMÁS a propósito. Este texto es el que se guarda como
+   * destinatario del comunicado y el que se lee luego en la lista, y en un
+   * comunicado de felicitación lo que lo identifica es el cumpleaños, no que
+   * sean activos y tengan correo.
+   */
+  if (c.cumpleanos === 'Hoy') partes.push('que cumplen años hoy')
+  if (c.cumpleanos === 'EsteMes') partes.push('que cumplen años este mes')
   if (c.cuota === 'AlDia') partes.push('al día de cuota')
   if (c.cuota === 'Pendiente') partes.push('con cuota pendiente')
   if (c.etiqueta) partes.push(`etiqueta «${c.etiqueta}»`)

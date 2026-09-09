@@ -93,6 +93,8 @@ export default async function ({ caso }) {
         // mismo caso que `solicitudPapeletaToRow`.
         mandatoSepaToRow: 'mandatos_sepa',
         tareaRedToRow: 'tareas_redes',
+        // `reglasAutomaticas.ts` → `reglas_automaticas`: mismo caso.
+        reglaToRow: 'reglas_automaticas',
         /*
          * La tienda lleva VARIAS tablas en un solo fichero (`db/tienda.ts`),
          * así que el nombre del fichero no dice a cuál va cada traductor. Es
