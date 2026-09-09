@@ -141,6 +141,14 @@ create policy "novedades_leer" on novedades
  * un tercer canal, o un porcentaje, o una fecha de caducidad, se cambia aquí y
  * las hermandades que no hayan recargado siguen funcionando.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que esto deje de ser una lista de claves sueltas y pase a
+ * devolver una tabla —clave y fecha, pongamos—, Postgres corta con «cannot
+ * change return type of existing function» en la base de una hermandad que ya
+ * tiene la versión vieja: en producción, a mitad de ACTUALIZAR.sql.
+ */
+drop function if exists mis_novedades();
 create or replace function mis_novedades() returns setof text
 language sql stable security definer set search_path = public as $$
   select n.clave from novedades n

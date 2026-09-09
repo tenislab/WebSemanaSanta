@@ -62,7 +62,23 @@ revoke insert, update, delete on suscripciones from anon, authenticated;
  * Devolver algo siempre evita que la aplicación tenga que distinguir «no hay
  * fila» de «no está activa»: para lo que le importa, es lo mismo.
  */
-create or replace function mi_suscripcion()
+/*
+ * SE BORRA ANTES DE CREARLA, y no es manía: `create or replace` NO puede
+ * cambiar el número de columnas que devuelve una función.
+ *
+ * Importa aquí porque una pieza posterior —`renovacion-y-fallo-de-cobro.sql`—
+ * le añade una columna, y una hermandad que ya tenía las dos y vuelve a
+ * ejecutar el instalador entero se encontraba, en esta línea, con «cannot
+ * change return type of existing function» y la instalación parada a la mitad.
+ *
+ * Volver a ejecutar el instalador encima de una base ya montada NO es un caso
+ * raro: es lo que hace todo el mundo al actualizar. Lo cazó la prueba que
+ * ejecuta `TODO-EN-UNO.sql` dos veces seguidas, que existe exactamente para
+ * esto.
+ */
+drop function if exists mi_suscripcion();
+
+create function mi_suscripcion()
 returns table (activa boolean, pack text, periodo text, desde date, hasta date)
 language sql stable security definer set search_path = public as $$
   select

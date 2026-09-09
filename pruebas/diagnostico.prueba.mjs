@@ -24,7 +24,7 @@
  * Los dos instaladores ya tenían esta prueba. Este no. Ahora sí.
  */
 export default async function ({ caso }) {
-  const { readFile } = await import('node:fs/promises')
+  const { readFile, readdir } = await import('node:fs/promises')
   const { execFile } = await import('node:child_process')
   const { promisify } = await import('node:util')
   const correr = promisify(execFile)
@@ -166,4 +166,48 @@ export default async function ({ caso }) {
       (n) => !new RegExp(`create (or replace )?function\\s+${n}\\s*\\(`, 'i').test(enUno)))
   caso('ni por ningún cubo que no se cree', [],
     cubosVigilados.filter((n) => !new RegExp(`values \\('${n}', '${n}'`).test(enUno)))
+
+
+  /*
+   * --- Y LAS QUE LLAMA EL SERVIDOR, QUE ERAN UN PUNTO CIEGO ---
+   *
+   * La lista de funciones se sacaba SOLO de las llamadas `.rpc(…)` que hay en
+   * `src`, o sea del navegador. Pero las funciones del dinero no las llama el
+   * navegador A PROPÓSITO: las llama una función de Supabase con la clave de
+   * servicio, porque desde el navegador nadie puede activarse una suscripción
+   * ni darse por pagado.
+   *
+   * O sea que el circuito entero del cobro estaba fuera del diagnóstico. Si
+   * una de esas funciones faltara en una base, el webhook contestaría 502,
+   * Stripe reintentaría unas horas y se rendiría, y la hermandad se quedaría
+   * sin activar HABIENDO PAGADO. El diagnóstico habría dicho que todo está
+   * bien.
+   *
+   * Es el mismo fallo que ya tuvo este fichero con siete tablas: lo que no se
+   * mira no está roto hasta el día que lo está. Aquí se comprueba desde el
+   * otro lado —leyendo las funciones de Supabase, no el generador— para que no
+   * baste con cambiar el generador para que la prueba pase.
+   */
+  const llamadasDelServidor = new Set()
+  for (const dir of await readdir('supabase/functions', { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue
+    let src
+    try {
+      src = await readFile(`supabase/functions/${dir.name}/index.ts`, 'utf8')
+    } catch {
+      continue
+    }
+    // Las dos formas de llamarlas que hay en esos ficheros: la ruta REST y el
+    // ayudante `llamarRpc`. La genérica —`rpc/${…}`— no cuela por el filtro.
+    for (const m of src.matchAll(/rpc\/([a-z_0-9]+)/g)) llamadasDelServidor.add(m[1])
+    for (const m of src.matchAll(/llamarRpc\(\s*'([a-z_0-9]+)'/g)) llamadasDelServidor.add(m[1])
+  }
+  caso('se encuentran las funciones que llama el servidor', true, llamadasDelServidor.size >= 8)
+  caso('y el diagnóstico las vigila todas', [],
+    [...llamadasDelServidor].filter((n) => !funcionesVigiladas.includes(n)))
+  // Y en concreto las del cobro, que son las que más caro salen si faltan.
+  for (const n of ['activar_suscripcion_por_usuario', 'cancelar_suscripcion_por_stripe',
+    'renovar_suscripcion_por_stripe', 'marcar_pago_fallido_por_stripe', 'cobrar_pago_tarjeta']) {
+    caso(`vigila ${n}`, true, funcionesVigiladas.includes(n))
+  }
 }

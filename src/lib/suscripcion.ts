@@ -107,11 +107,36 @@ export interface Suscripcion {
   pack: PackId | null
   periodo: Periodo | null
   desde: string | null
+  /**
+   * HASTA CUÁNDO ESTÁ PAGADA. La rellena el webhook con la fecha que manda
+   * Stripe en cada factura cobrada.
+   *
+   * Estuvo mucho tiempo en la base SIN QUE NADIE LA ESCRIBIERA —el webhook le
+   * pasaba siempre `null`— y sin que nadie la leyera. Un dato que parece
+   * significar algo y no significa nada es peor que no tenerlo: el día que
+   * alguien lo mire para decidir, decidirá sobre vacío.
+   *
+   * NO ES EL MURO DE PAGO. El muro sigue siendo `activa`, y a propósito: si el
+   * acceso dependiera de esta fecha, un webhook que no llegara un día dejaría
+   * a la hermandad fuera sin deber nada.
+   */
+  hasta: string | null
+  /**
+   * EL DÍA QUE FALLÓ EL COBRO, o `null` —que es lo normal—.
+   *
+   * Sirve para AVISAR, no para cortar. Stripe reintenta durante semanas y casi
+   * siempre acaba cobrando; lo que hacía falta es que la hermandad se entere
+   * mientras hay tiempo de cambiar la tarjeta, en vez de quedarse fuera de
+   * golpe el día que Stripe se rinde. Ver `renovacion-y-fallo-de-cobro.sql`.
+   */
+  pagoFallidoEl: string | null
 }
 
 export const CLAVE_SUSCRIPCION = 'cabildo-suscripcion'
 
-export const SUSCRIPCION_INICIAL: Suscripcion = { activa: false, pack: null, periodo: null, desde: null }
+export const SUSCRIPCION_INICIAL: Suscripcion = {
+  activa: false, pack: null, periodo: null, desde: null, hasta: null, pagoFallidoEl: null,
+}
 
 /**
  * ¿Este navegador SABE algo de la suscripción de la hermandad?
@@ -166,6 +191,14 @@ export async function cargarSuscripcionDeLaBase(): Promise<Suscripcion | null> {
       pack: (fila.pack as PackId | null) ?? null,
       periodo: (fila.periodo as Periodo | null) ?? null,
       desde: (fila.desde as string | null) ?? null,
+      /*
+       * Estas dos las devuelve `mi_suscripcion()`. En una base que todavía no
+       * tiene la pieza de la renovación no vienen, y `?? null` las deja
+       * vacías: el aviso simplemente no sale, que es lo correcto mientras no
+       * haya nada que decir. (El aviso de esquema atrasado va por su cuenta.)
+       */
+      hasta: (fila.hasta as string | null) ?? null,
+      pagoFallidoEl: (fila.pago_fallido_el as string | null) ?? null,
     }
     try {
       localStorage.setItem(CLAVE_SUSCRIPCION, JSON.stringify(s))
@@ -233,15 +266,111 @@ export function getSuscripcion(): Suscripcion {
       pack: raw.pack as PackId,
       periodo: (raw.periodo as Periodo) ?? 'mensual',
       desde: (raw.desde as string) ?? null,
+      hasta: (raw.hasta as string) ?? null,
+      pagoFallidoEl: (raw.pagoFallidoEl as string) ?? null,
     }
   }
   // Formato antiguo ({ activa, plan: 'mensual'|'anual' }) → pack «Todo»
   if (raw.plan === 'anual' || raw.plan === 'mensual') {
-    return { activa: true, pack: 'todo', periodo: raw.plan, desde: (raw.desde as string) ?? null }
+    return {
+      activa: true, pack: 'todo', periodo: raw.plan, desde: (raw.desde as string) ?? null,
+      hasta: null, pagoFallidoEl: null,
+    }
   }
   // Suscripción con un pack que no reconocemos: se trata como NO activa. Antes
   // se concedía «Todo» (todas las capacidades) ante cualquier dato inesperado.
   return SUSCRIPCION_INICIAL
+}
+
+/**
+ * EL AVISO DE QUE LA TARJETA HA FALLADO, en castellano y listo para pintar.
+ *
+ * ============================================================================
+ * POR QUÉ ESTE AVISO EXISTE
+ * ============================================================================
+ *
+ * Porque el fallo que arregla no era «acceso gratis»: Stripe reintenta unas
+ * semanas y, si no cobra, cancela y la hermandad se queda fuera. Eso ya estaba
+ * atendido. Lo que NO estaba es que alguien se lo dijera. La hermandad se
+ * enteraba el día que se quedaba fuera de golpe, sin un solo aviso previo, y
+ * si tocaba en marzo se enteraba en la peor semana del año.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ NO ES UN CORREO
+ * ----------------------------------------------------------------------------
+ *
+ * Porque el correo de verdad depende de tener un dominio verificado, y hasta
+ * entonces lo que se manda acaba en la carpeta de correo no deseado. Un aviso
+ * que no se lee es peor que ninguno: da la sensación de haber avisado. Dentro
+ * de la aplicación se ve seguro, porque para trabajar hay que entrar.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ SE DICE CUÁNTOS DÍAS LLEVA
+ * ----------------------------------------------------------------------------
+ *
+ * Porque «tu tarjeta ha fallado» dicho el día 1 y dicho el día 18 son dos
+ * situaciones distintas y piden dos reacciones distintas, y el texto tiene que
+ * notarlo. Si no, el aviso del día 18 se lee con la misma calma que el del día
+ * 1 — y ese es el que ya no admite calma.
+ *
+ * Devuelve `null` cuando no hay nada que decir, que es el caso de siempre.
+ *
+ * @param hoyISO Se pasa desde fuera para poder probarlo con una fecha fija. Sin
+ *   él habría que esperar tres semanas para comprobar el segundo texto.
+ */
+export function avisoDePagoFallido(
+  s: Suscripcion,
+  hoyISO?: string,
+): { titulo: string; texto: string; urgente: boolean } | null {
+  if (!s.pagoFallidoEl) return null
+  const dias = diasDesde(s.pagoFallidoEl, hoyISO)
+  /*
+   * A partir de aquí se da por urgente. Stripe deja de reintentar alrededor de
+   * las tres semanas; a los catorce días quedan pocos intentos y el aviso pasa
+   * de «cámbiala cuando puedas» a «cámbiala hoy».
+   *
+   * El número es DELIBERADAMENTE prudente: si Stripe cambiara su calendario,
+   * equivocarse por avisar pronto no le cuesta nada a nadie, y equivocarse por
+   * avisar tarde deja a una hermandad fuera.
+   */
+  const urgente = dias >= 14
+  const cuanto =
+    dias <= 0 ? 'hoy'
+      : dias === 1 ? 'ayer'
+        : `hace ${dias} días`
+  return {
+    titulo: urgente
+      ? 'Tu suscripción está a punto de cancelarse'
+      : 'No hemos podido cobrar tu suscripción',
+    texto:
+      `El cobro falló ${cuanto} —lo normal es una tarjeta caducada o un banco que rechazó el cargo—. `
+      + 'No se ha bloqueado nada y podéis seguir trabajando con normalidad. '
+      + (urgente
+        ? 'Pero quedan pocos intentos: si el siguiente tampoco entra, la suscripción se cancelará y el panel se cerrará. '
+        : 'Se volverá a intentar solo durante unos días. ')
+      + 'Actualiza la tarjeta desde Configuración → Suscripción y el aviso desaparecerá en cuanto entre el cobro.',
+    urgente,
+  }
+}
+
+/**
+ * Días completos entre una fecha «YYYY-MM-DD» y hoy. Nunca negativo.
+ *
+ * Se parte la cadena a mano en vez de `new Date(iso)`, porque esa forma
+ * interpreta «2026-03-01» como medianoche EN UTC y en España eso es el 28 de
+ * febrero por la noche: el aviso diría «ayer» el mismo día que ha fallado.
+ */
+function diasDesde(iso: string, hoyISO?: string): number {
+  const aUTC = (t: string) => {
+    const [a, m, d] = t.slice(0, 10).split('-').map(Number)
+    return Date.UTC(a, (m ?? 1) - 1, d ?? 1)
+  }
+  const hoy = hoyISO ? aUTC(hoyISO) : (() => {
+    const n = new Date()
+    return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())
+  })()
+  const dif = Math.round((hoy - aUTC(iso)) / 86_400_000)
+  return Number.isFinite(dif) && dif > 0 ? dif : 0
 }
 
 export function saveSuscripcion(s: Suscripcion) {
@@ -321,7 +450,9 @@ export function useSuscripcion() {
   const [error, setError] = useState<string | null>(null)
 
   async function activar(pack: PackId, periodo: Periodo, fechaISO: string) {
-    const s: Suscripcion = { activa: true, pack, periodo, desde: fechaISO }
+    const s: Suscripcion = {
+      activa: true, pack, periodo, desde: fechaISO, hasta: null, pagoFallidoEl: null,
+    }
     setSuscripcion(s)
     saveSuscripcion(s)
     setError(null)

@@ -135,7 +135,28 @@ comment on column comunicados.envio_intentos is
  * LAS CUATRO CONDICIONES, UNA POR UNA
  * ---------------------------------------------------------------------------
  */
-create or replace function reclamar_comunicado_programado()
+/*
+ * SE BORRA ANTES DE CREARLA. NO ES MANÍA: `create or replace` NO PUEDE CAMBIAR
+ * LO QUE DEVUELVE UNA FUNCIÓN.
+ *
+ * Y esto ya me costó una vez, con `mi_suscripcion()`. Lo volví a hacer aquí:
+ * a esta función se le añadió una columna al `returns table` para poder
+ * reanudar un envío cortado, y a una hermandad que ya tenía la versión de
+ * antes, Postgres le paró la actualización entera con:
+ *
+ *     ERROR: cannot change return type of existing function
+ *     HINT:  Use DROP FUNCTION ... first.
+ *
+ * En una base RECIÉN MONTADA no pasa nada —la función se crea una sola vez— y
+ * por eso las pruebas daban verde: instalan desde cero. El fallo solo aparece
+ * ACTUALIZANDO, que es lo que hace todo el mundo menos yo.
+ *
+ * `if exists` para que en una base nueva no haga nada, y con el `drop` delante
+ * volver a ejecutar el fichero sigue siendo inofensivo.
+ */
+drop function if exists reclamar_comunicado_programado();
+
+create function reclamar_comunicado_programado()
 returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int, ya_enviados int)
 language sql volatile security definer set search_path = public as $$
   update comunicados c

@@ -1698,6 +1698,20 @@ end $$;
 alter table mensajes_web add column if not exists hermandad_id uuid references hermandades(id) on delete cascade;
 create index if not exists mensajes_web_hermandad_idx on mensajes_web (hermandad_id);
 
+/*
+ * Y CON VALOR POR DEFECTO, como el resto de tablas.
+ *
+ * El visitante de la web no ha iniciado sesión, así que manda el
+ * `hermandad_id` a mano y este defecto no le afecta (lo que se manda gana).
+ * Pero al buzón también escribe la HERMANDAD: cuando se deshace el borrado de
+ * un mensaje, el navegador lo vuelve a insertar con los mismos campos con los
+ * que lo leyó, y ahí no va `hermandad_id`. Sin defecto, esa fila la rechazaba
+ * la política «con_hermandad_al_entrar» y el «deshacer» fallaba SIEMPRE: el
+ * mensaje —alguien de fuera que había escrito dejando su teléfono— se perdía
+ * para siempre.
+ */
+alter table mensajes_web alter column hermandad_id set default hermandad_actual();
+
 
 -- -----------------------------------------------------------------------------
 -- 6. LA FRONTERA ENTRE HERMANDADES
@@ -2126,6 +2140,15 @@ grant execute on function resolver_email_hermano(uuid, text) to anon, authentica
 --
 -- Solo responde si la web está publicada: una hermandad que está preparando
 -- la suya no tiene por qué aparecer todavía.
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists hermandad_de_la_web(text);
 create or replace function hermandad_de_la_web(p_slug text)
 returns table (
   nombre_legal text, direccion text, codigo_postal text, ciudad text,
@@ -7300,6 +7323,15 @@ comment on function pct_de_descuento(uuid, uuid, uuid) is
  * A igualdad de porcentaje, el más antiguo: así el número no baila de un día
  * para otro por haber creado otro descuento igual.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists mejor_descuento_para(uuid, uuid);
 create or replace function mejor_descuento_para(p_hermandad_id uuid, p_hermano_id uuid)
 returns table (id uuid, porcentaje numeric)
 language sql stable security definer set search_path = public as $$
@@ -9393,6 +9425,15 @@ on conflict do nothing;
 -- todas partes. Y se devuelve solo el TOTAL: quién ha donado y cuánto no sale
 -- de la hermandad.
 
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists campanas_de_la_web(text);
 create or replace function campanas_de_la_web(p_slug text)
 returns table (
   id uuid,
@@ -10381,6 +10422,15 @@ comment on column hermanos.campos is
  * PREGUNTA. No acepta parámetros a propósito — una función así con un `id`
  * suelto sería un buscador de nombres del censo entero.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists mi_tutor();
 create or replace function mi_tutor()
 returns table (id uuid, nombre text, numero integer)
 language sql stable security definer set search_path = public as $$
@@ -10700,7 +10750,28 @@ comment on column comunicados.envio_intentos is
  * LAS CUATRO CONDICIONES, UNA POR UNA
  * ---------------------------------------------------------------------------
  */
-create or replace function reclamar_comunicado_programado()
+/*
+ * SE BORRA ANTES DE CREARLA. NO ES MANÍA: `create or replace` NO PUEDE CAMBIAR
+ * LO QUE DEVUELVE UNA FUNCIÓN.
+ *
+ * Y esto ya me costó una vez, con `mi_suscripcion()`. Lo volví a hacer aquí:
+ * a esta función se le añadió una columna al `returns table` para poder
+ * reanudar un envío cortado, y a una hermandad que ya tenía la versión de
+ * antes, Postgres le paró la actualización entera con:
+ *
+ *     ERROR: cannot change return type of existing function
+ *     HINT:  Use DROP FUNCTION ... first.
+ *
+ * En una base RECIÉN MONTADA no pasa nada —la función se crea una sola vez— y
+ * por eso las pruebas daban verde: instalan desde cero. El fallo solo aparece
+ * ACTUALIZANDO, que es lo que hace todo el mundo menos yo.
+ *
+ * `if exists` para que en una base nueva no haga nada, y con el `drop` delante
+ * volver a ejecutar el fichero sigue siendo inofensivo.
+ */
+drop function if exists reclamar_comunicado_programado();
+
+create function reclamar_comunicado_programado()
 returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int, ya_enviados int)
 language sql volatile security definer set search_path = public as $$
   update comunicados c
@@ -10945,7 +11016,28 @@ create index if not exists reglas_activas_idx
  * que costaría: felicitar el cumpleaños una vez por cada miembro de la junta
  * que abra el panel.
  */
-create or replace function reclamar_regla_de_hoy()
+/*
+ * SE BORRA ANTES DE CREARLA. NO ES MANÍA: `create or replace` NO PUEDE CAMBIAR
+ * LO QUE DEVUELVE UNA FUNCIÓN.
+ *
+ * Y esto ya me costó una vez, con `mi_suscripcion()`. Lo volví a hacer aquí:
+ * a esta función se le añadió una columna al `returns table` para poder
+ * reanudar un envío cortado, y a una hermandad que ya tenía la versión de
+ * antes, Postgres le paró la actualización entera con:
+ *
+ *     ERROR: cannot change return type of existing function
+ *     HINT:  Use DROP FUNCTION ... first.
+ *
+ * En una base RECIÉN MONTADA no pasa nada —la función se crea una sola vez— y
+ * por eso las pruebas daban verde: instalan desde cero. El fallo solo aparece
+ * ACTUALIZANDO, que es lo que hace todo el mundo menos yo.
+ *
+ * `if exists` para que en una base nueva no haga nada, y con el `drop` delante
+ * volver a ejecutar el fichero sigue siendo inofensivo.
+ */
+drop function if exists reclamar_regla_de_hoy();
+
+create function reclamar_regla_de_hoy()
 returns table (
   id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text,
   /*
@@ -11080,6 +11172,15 @@ grant execute on function devolver_regla(uuid) to authenticated;
  * `DIAGNOSTICO.sql` con mucho más detalle, y avisar aquí de una tabla entera
  * que falta sería mandar a arreglar el problema al sitio equivocado.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists columnas_que_faltan_para_restaurar(jsonb);
 create or replace function columnas_que_faltan_para_restaurar(p_columnas jsonb)
 returns table (tabla text, columna text)
 language sql stable security definer set search_path = public as $$
@@ -11425,6 +11526,16 @@ begin
   return borradas;
 end $$;
 
+/*
+ * Y NO LA PUEDE LLAMAR CUALQUIERA: Postgres da permiso de ejecución a PUBLIC
+ * al crear la función, así que un visitante sin sesión podía borrar los
+ * errores de producción de todas las hermandades a la vez. Es lo único que
+ * cuenta lo que se está rompiendo en las bases de verdad.
+ *
+ * La llama el trabajo semanal de `cron`, que corre como dueño de la base.
+ */
+revoke all on function limpiar_errores_cliente() from public, anon, authenticated;
+
 -- =============================================================================
 --   CANAL-DE-ACTUALIZACION.SQL — Sacar una novedad a una hermandad piloto antes que a todas
 -- =============================================================================
@@ -11572,6 +11683,14 @@ create policy "novedades_leer" on novedades
  * un tercer canal, o un porcentaje, o una fecha de caducidad, se cambia aquí y
  * las hermandades que no hayan recargado siguen funcionando.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que esto deje de ser una lista de claves sueltas y pase a
+ * devolver una tabla —clave y fecha, pongamos—, Postgres corta con «cannot
+ * change return type of existing function» en la base de una hermandad que ya
+ * tiene la versión vieja: en producción, a mitad de ACTUALIZAR.sql.
+ */
+drop function if exists mis_novedades();
 create or replace function mis_novedades() returns setof text
 language sql stable security definer set search_path = public as $$
   select n.clave from novedades n
@@ -11670,6 +11789,15 @@ grant execute on function mis_novedades() to authenticated;
  * Con `security definer` se saltaría RLS y quedaría UNA sola cerradura entre
  * este `delete` y el censo de las otras cuarenta y nueve hermandades. No.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists vaciar_hermandad_para_restaurar(uuid);
 create or replace function vaciar_hermandad_para_restaurar(confirmacion uuid)
 returns table (tabla text, borradas bigint)
 language plpgsql security invoker set search_path = public as $$
@@ -11984,6 +12112,15 @@ grant execute on function soporte_donde_estoy() to authenticated;
  *
  *   select * from soporte_hermandades();
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists soporte_hermandades();
 create or replace function soporte_hermandades()
 returns table (id uuid, nombre text, creada_en timestamptz, hermanos bigint)
 language sql stable security definer set search_path = public as $$
@@ -12124,6 +12261,21 @@ language sql security definer set search_path = public as $$
   on conflict (clave) do update
     set valor = excluded.valor, sellado_el = excluded.sellado_el
 $$;
+
+/*
+ * Y NO LA PUEDE LLAMAR CUALQUIERA.
+ *
+ * Postgres da permiso de ejecución a PUBLIC en cuanto se crea una función: no
+ * poner `grant` no restringe nada, hay que quitarlo a mano. Así que un
+ * visitante de la web, sin haber iniciado sesión, podía sellar la versión que
+ * le diera la gana. Con `sellar_esquema(1)` toda hermandad se encuentra con
+ * que su base «va por la versión 1» y la aplicación le pide para siempre que
+ * ejecute ACTUALIZAR.sql, que ya ha ejecutado.
+ *
+ * Esto lo llama el final de los ficheros generados, que se pegan en el editor
+ * SQL de Supabase: allí se es el dueño de la base y no hace falta permiso.
+ */
+revoke all on function sellar_esquema(integer) from public, anon, authenticated;
 
 /**
  * Por qué versión va la base. Devuelve 0 si nunca se ha sellado, que es lo que

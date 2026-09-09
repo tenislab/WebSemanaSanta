@@ -124,6 +124,21 @@ language sql security definer set search_path = public as $$
     set valor = excluded.valor, sellado_el = excluded.sellado_el
 $$;
 
+/*
+ * Y NO LA PUEDE LLAMAR CUALQUIERA.
+ *
+ * Postgres da permiso de ejecución a PUBLIC en cuanto se crea una función: no
+ * poner `grant` no restringe nada, hay que quitarlo a mano. Así que un
+ * visitante de la web, sin haber iniciado sesión, podía sellar la versión que
+ * le diera la gana. Con `sellar_esquema(1)` toda hermandad se encuentra con
+ * que su base «va por la versión 1» y la aplicación le pide para siempre que
+ * ejecute ACTUALIZAR.sql, que ya ha ejecutado.
+ *
+ * Esto lo llama el final de los ficheros generados, que se pegan en el editor
+ * SQL de Supabase: allí se es el dueño de la base y no hace falta permiso.
+ */
+revoke all on function sellar_esquema(integer) from public, anon, authenticated;
+
 /**
  * Por qué versión va la base. Devuelve 0 si nunca se ha sellado, que es lo que
  * le pasa a toda hermandad que montó su base antes de que esto existiera: no

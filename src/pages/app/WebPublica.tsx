@@ -1,7 +1,7 @@
 import { asegurarFuentesDeLaWeb } from '../../lib/fuentesDeLaWeb'
 import { useMoverConElFoco } from '../../lib/foco'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ESTILOS,
   GUION_ESTACION,
@@ -101,6 +101,7 @@ import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import { pedirActivarDominio } from '../../lib/reporteFallo'
 import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { problemaDeTelefono } from '../../lib/telefono'
+import { contactoQueSePublica, avisoDeDatoPersonal, type DatoPublicado } from '../../lib/contactoPublico'
 import { ibanValido, porQueNoValeElIban } from '../../lib/iban'
 
 /**
@@ -227,6 +228,16 @@ type Pestana = 'diseno' | 'marco' | 'contacto' | 'compartir' | 'visitas' | 'avis
  * A qué sección de la web corresponde cada pestaña del editor: la vista previa
  * salta a ella y la resalta, para no perder de vista qué se está tocando.
  */
+/** Las pestañas que existen, para poder fiarse de lo que venga en la URL. */
+const PESTANAS: Pestana[] = [
+  'diseno', 'marco', 'contacto', 'compartir', 'visitas', 'avisos', 'portada', 'galeria',
+  'actualidad', 'cultos', 'cartel', 'caridad', 'paginas', 'boletines', 'historia',
+  'titulares', 'hazte', 'estacion', 'junta', 'donativos', 'loteria', 'tienda', 'buzon',
+]
+function esPestana(x: string | null): x is Pestana {
+  return x !== null && (PESTANAS as string[]).includes(x)
+}
+
 const SECCION_DE_PESTANA: Partial<Record<Pestana, FocoPreview>> = {
   galeria: 'galeria',
   actualidad: 'actualidad',
@@ -445,9 +456,40 @@ export default function WebPublica() {
   useEffect(() => { asegurarFuentesDeLaWeb() }, [])
   const [web, setWeb] = useWebPublica()
   const hermandad = useHermandadSettings()
+  /*
+   * A ESTA PANTALLA SE PUEDE LLEGAR APUNTANDO A UNA PESTAÑA.
+   *
+   * «Leerlo», en Notificaciones, abría `/app/web` a secas, y como la pestaña
+   * se recuerda en la sesión, caías en Diseño o en Portada: parecía que el
+   * botón te sacaba a la web pública en vez de enseñarte el mensaje. Con
+   * `?ir=buzon` se dice a dónde, y manda sobre lo recordado.
+   */
+  const [params, setParams] = useSearchParams()
+  const pedida = params.get('ir')
+  /*
+   * El mensaje que se pidió abrir se guarda AL ENTRAR, porque los parámetros
+   * se limpian de la barra de direcciones en cuanto se usan y el buzón tarda
+   * un pintado en tener la lista cargada: si se leyera de la URL en ese
+   * momento, ya no habría nada que leer.
+   */
+  const [mensajePedido] = useState(() => params.get('mensaje'))
   const [pestana, setPestanaState] = useState<Pestana>(
-    () => (sessionStorage.getItem('cabildo-web-pestana') as Pestana | null) ?? 'diseno',
+    () => (esPestana(pedida) ? pedida : ((sessionStorage.getItem('cabildo-web-pestana') as Pestana | null) ?? 'diseno')),
   )
+  /*
+   * Y se quita de la barra de direcciones en cuanto se ha usado: si se queda,
+   * cambias de pestaña, recargas y te devuelve al buzón sin venir a cuento.
+   */
+  useEffect(() => {
+    if (!pedida) return
+    if (esPestana(pedida)) setPestana(pedida)
+    const limpio = new URLSearchParams(params)
+    limpio.delete('ir')
+    limpio.delete('mensaje')
+    setParams(limpio, { replace: true })
+    // Solo cuando cambia lo pedido: si se mete `params` entero, se repite sola.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedida])
   /** Se recuerda durante la sesión: se entra y se sale del módulo muchas veces. */
   function setPestana(p: Pestana) {
     setPestanaState(p)
@@ -804,7 +846,7 @@ export default function WebPublica() {
           {pestana === 'donativos' && <DonativosTab web={web} hermandad={hermandad} editar={editar} />}
           {pestana === 'loteria' && <LoteriaTab web={web} editar={editar} />}
           {pestana === 'tienda' && <TiendaTab />}
-          {pestana === 'buzon' && <BuzonWebTab />}
+          {pestana === 'buzon' && <BuzonWebTab abrirId={mensajePedido} />}
           {pestana === 'visitas' && <VisitasTab />}
           {pestana === 'avisos' && <AvisosTab web={web} editar={editar} />}
           {pestana === 'contacto' && <ContactoTab web={web} hermandad={hermandad} editar={editar} />}
@@ -2133,7 +2175,7 @@ function LoteriaTab({ web, editar }: { web: WebPublica; editar: EditarFn }) {
  * lotería. Vive en el editor de la web porque es lo que la web recibe, y
  * porque quien la monta es quien tiene que ver si funciona.
  */
-function BuzonWebTab() {
+function BuzonWebTab({ abrirId }: { abrirId?: string | null }) {
   const [mensajes, guardar] = useMensajesWeb()
   const [filtro, setFiltro] = useState<'todos' | 'sinleer' | 'pendientes'>('todos')
   const [abierto, setAbierto] = useState<MensajeWeb | null>(null)
@@ -2198,6 +2240,23 @@ function BuzonWebTab() {
       })
     }
   }
+
+  /*
+   * «Leerlo» viene de Notificaciones con el mensaje puesto en la URL: se abre
+   * ese, sin buscarlo en la lista. Espera a que los mensajes estén cargados
+   * —la primera vuelta la lista viene vacía— y solo lo hace una vez, para que
+   * cerrar la ficha no la vuelva a abrir.
+   */
+  const yaAbierto = useRef(false)
+  useEffect(() => {
+    if (!abrirId || yaAbierto.current) return
+    const m = mensajes.find((x) => x.id === abrirId)
+    if (!m) return
+    yaAbierto.current = true
+    abrir(m)
+    // `abrir` cambia en cada pintado; lo que manda es el identificador.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirId, mensajes])
 
   function abrir(m: MensajeWeb) {
     setAbierto(m)
@@ -4522,10 +4581,28 @@ function CompartirTab({
   )
 }
 
+/**
+ * Lo que se publica en un campo de contacto que se ha dejado vacío.
+ *
+ * Va escrito y a la vista, no de «placeholder». Un placeholder es texto gris:
+ * se lee como un ejemplo de lo que podrías poner, nunca como lo que ya está
+ * publicado. Con esa confusión se publicó el correo y el móvil personales del
+ * secretario en la web, con los campos aparentemente vacíos.
+ */
+function LoQueSePublica({ dato }: { dato: DatoPublicado }) {
+  if (dato.origen !== 'hermandad') return null
+  return (
+    <p className="form-hint">
+      Ahora se publica <b>{dato.valor}</b>, que es lo que hay en <Link to="/app/configuracion">Configuración</Link>.
+    </p>
+  )
+}
+
 /* ------------------------------ Contacto ------------------------------ */
 function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: HermandadSettings; editar: EditarFn }) {
   function editarRed(id: string, c: Partial<RedWeb>) { editar('redes', (xs) => xs.map((r) => (r.id === id ? { ...r, ...c } : r))) }
-  const direccion = web.direccion || hermandad.direccion
+  const publicado = contactoQueSePublica(web, hermandad)
+  const direccion = publicado.direccion.valor
   const mapa = urlMapaIncrustado(web.mapaUrl, direccion)
   // Un enlace que no es de Google Maps no se incrusta a propósito: un iframe a
   // cualquier sitio es un agujero en la web pública.
@@ -4535,11 +4612,27 @@ function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: H
     <>
       <section className="settings-card">
         <div className="settings-card__head"><h2 className="settings-card__title">Dónde estáis y cómo contactar</h2></div>
-        <p className="form-hint">Si dejas un campo vacío, se usan los datos de <Link to="/app/configuracion">Configuración</Link>.</p>
-        <div className="form-row"><label htmlFor="direccion">Dirección</label><input id="direccion" type="text" value={web.direccion} onChange={(e) => editar('direccion', e.target.value)} placeholder={hermandad.direccion || 'Calle, número, ciudad'} /></div>
+        <p className="form-hint">Si dejas un campo vacío, se publica lo que haya en <Link to="/app/configuracion">Configuración</Link>.</p>
+        <div className="form-row">
+          <label htmlFor="direccion">Dirección</label>
+          <input id="direccion" type="text" value={web.direccion} onChange={(e) => editar('direccion', e.target.value)} placeholder="Calle, número, ciudad" />
+          <LoQueSePublica dato={publicado.direccion} />
+        </div>
         <div className="form-grid-2">
-          <div className="form-row"><label htmlFor="telefono">Teléfono</label><input id="telefono" type="tel" inputMode="tel" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder={hermandad.telefono || '954 00 00 00'} /><AvisoDeCampo texto={problemaDeTelefono(web.telefono)} /></div>
-          <div className="form-row"><label htmlFor="email">Correo</label><input id="email" type="email" value={web.email} onChange={(e) => editar('email', e.target.value)} placeholder={hermandad.email || 'secretaria@…'} /></div>
+          <div className="form-row">
+            <label htmlFor="telefono">Teléfono</label>
+            <input id="telefono" type="tel" inputMode="tel" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder="954 00 00 00" />
+            {/* Primero QUÉ se publica y luego el reparo: un aviso sobre un dato
+                que todavía no se ha dicho se lee dos veces. */}
+            <LoQueSePublica dato={publicado.telefono} />
+            <AvisoDeCampo texto={problemaDeTelefono(web.telefono) ?? avisoDeDatoPersonal(publicado.telefono, 'telefono')} />
+          </div>
+          <div className="form-row">
+            <label htmlFor="email">Correo</label>
+            <input id="email" type="email" value={web.email} onChange={(e) => editar('email', e.target.value)} placeholder="secretaria@…" />
+            <LoQueSePublica dato={publicado.email} />
+            <AvisoDeCampo texto={avisoDeDatoPersonal(publicado.email, 'email')} />
+          </div>
         </div>
       </section>
 

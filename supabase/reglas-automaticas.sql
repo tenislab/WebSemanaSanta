@@ -125,7 +125,28 @@ create index if not exists reglas_activas_idx
  * que costaría: felicitar el cumpleaños una vez por cada miembro de la junta
  * que abra el panel.
  */
-create or replace function reclamar_regla_de_hoy()
+/*
+ * SE BORRA ANTES DE CREARLA. NO ES MANÍA: `create or replace` NO PUEDE CAMBIAR
+ * LO QUE DEVUELVE UNA FUNCIÓN.
+ *
+ * Y esto ya me costó una vez, con `mi_suscripcion()`. Lo volví a hacer aquí:
+ * a esta función se le añadió una columna al `returns table` para poder
+ * reanudar un envío cortado, y a una hermandad que ya tenía la versión de
+ * antes, Postgres le paró la actualización entera con:
+ *
+ *     ERROR: cannot change return type of existing function
+ *     HINT:  Use DROP FUNCTION ... first.
+ *
+ * En una base RECIÉN MONTADA no pasa nada —la función se crea una sola vez— y
+ * por eso las pruebas daban verde: instalan desde cero. El fallo solo aparece
+ * ACTUALIZANDO, que es lo que hace todo el mundo menos yo.
+ *
+ * `if exists` para que en una base nueva no haga nada, y con el `drop` delante
+ * volver a ejecutar el fichero sigue siendo inofensivo.
+ */
+drop function if exists reclamar_regla_de_hoy();
+
+create function reclamar_regla_de_hoy()
 returns table (
   id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text,
   /*

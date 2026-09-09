@@ -82,6 +82,15 @@
  * Con `security definer` se saltaría RLS y quedaría UNA sola cerradura entre
  * este `delete` y el censo de las otras cuarenta y nueve hermandades. No.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists vaciar_hermandad_para_restaurar(uuid);
 create or replace function vaciar_hermandad_para_restaurar(confirmacion uuid)
 returns table (tabla text, borradas bigint)
 language plpgsql security invoker set search_path = public as $$

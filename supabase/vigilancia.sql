@@ -137,3 +137,13 @@ begin
   get diagnostics borradas = row_count;
   return borradas;
 end $$;
+
+/*
+ * Y NO LA PUEDE LLAMAR CUALQUIERA: Postgres da permiso de ejecución a PUBLIC
+ * al crear la función, así que un visitante sin sesión podía borrar los
+ * errores de producción de todas las hermandades a la vez. Es lo único que
+ * cuenta lo que se está rompiendo en las bases de verdad.
+ *
+ * La llama el trabajo semanal de `cron`, que corre como dueño de la base.
+ */
+revoke all on function limpiar_errores_cliente() from public, anon, authenticated;

@@ -62,6 +62,15 @@
  * `DIAGNOSTICO.sql` con mucho más detalle, y avisar aquí de una tabla entera
  * que falta sería mandar a arreglar el problema al sitio equivocado.
  */
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists columnas_que_faltan_para_restaurar(jsonb);
 create or replace function columnas_que_faltan_para_restaurar(p_columnas jsonb)
 returns table (tabla text, columna text)
 language sql stable security definer set search_path = public as $$

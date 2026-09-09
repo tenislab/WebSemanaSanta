@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs'
+
+const leerFuente = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+
 /**
  * LOS DOS AVISOS QUE NO EXISTÍAN, Y LA FAMILIA POR LOS DOS LADOS.
  *
@@ -98,6 +102,36 @@ export default async function ({ cargar, caso }) {
    * llevar una lista de tareas.
    */
   caso('el ya leído no vuelve a avisar', false, web.some((a) => a.titulo.includes('Ya Leído')))
+
+  /*
+   * Y «LEERLO» TIENE QUE ABRIR EL MENSAJE.
+   *
+   * Llegó dicho así: «lo de leerlo de notificaciones no funciona, pulsas y te
+   * lleva a la web». Y era eso: el aviso apuntaba a `/app/web` a secas. El
+   * buzón vive DENTRO de esa pantalla, en una pestaña, y la pantalla se abre
+   * por la última pestaña que se estuviera tocando —se guarda en la sesión—.
+   * Así que «Leerlo» te dejaba en Diseño, o en Portada, o donde fuera: parecía
+   * que el botón te sacaba a la web pública en vez de enseñarte el mensaje.
+   *
+   * Ahora lleva la pestaña y el mensaje puestos, y la pantalla los obedece.
+   */
+  caso('«Leerlo» va a la pestaña del buzón', true, web[0].donde.includes('ir=buzon'))
+  caso('y dice cuál abrir', true, web[0].donde.includes('mensaje=m1'))
+
+  const pantalla = leerFuente('src/pages/app/WebPublica.tsx')
+  caso('la pantalla de la web obedece a la pestaña pedida', true,
+    pantalla.includes("params.get('ir')") && pantalla.includes('esPestana(pedida)'))
+  caso('y lo pedido manda sobre la pestaña recordada', true,
+    pantalla.includes("esPestana(pedida) ? pedida : ((sessionStorage.getItem('cabildo-web-pestana')"))
+  caso('el buzón abre el mensaje que se le pide', true,
+    pantalla.includes('function BuzonWebTab({ abrirId }') && pantalla.includes('<BuzonWebTab abrirId={mensajePedido} />'))
+  /*
+   * Y los parámetros se quitan de la barra de direcciones en cuanto se usan:
+   * si se quedan, cambias de pestaña, recargas y te devuelve al buzón sin
+   * venir a cuento.
+   */
+  caso('los parámetros no se quedan pegados en la dirección', true,
+    pantalla.includes("limpio.delete('ir')") && pantalla.includes("limpio.delete('mensaje')"))
 
   // Y sin pasarle mensajes, no revienta: quien no los tenga sigue igual.
   caso('sin mensajes no pasa nada', 0,

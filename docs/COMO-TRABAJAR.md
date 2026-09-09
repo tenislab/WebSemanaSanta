@@ -114,6 +114,26 @@ ha salido mal. Lo imprescindible, en cuatro líneas:
 
 ---
 
+## 4 bis. Los documentos también se quedan viejos
+
+**Al cerrar algo que un documento da por pendiente, se tacha EN EL MISMO
+COMMIT.** No «luego»: en el mismo.
+
+No es una manía. `docs/COBROS-LO-QUE-FALTA.md` daba por pendientes cuatro cosas
+que llevaban meses hechas —los mandatos SEPA, el webhook de Stripe, la lectura
+de devoluciones y el pago con tarjeta del hermano— y el plan de trabajo que
+salía de él era, entero, sobre problemas que no existían.
+
+Y no es un caso aislado: `DIAGNOSTICO.sql` llevaba meses sin mirar siete tablas
+porque su generador se caía al arrancar, y el de los iconos ni se podía
+ejecutar. Lo que se genera se puede vigilar con una prueba, y ya se vigila. **Un
+documento en prosa no se puede vigilar: solo queda la disciplina.**
+
+Si dudas de si un documento dice la verdad, la comprobación es mirar el código,
+no el documento. Cuatro `grep` bastaron para desmontar aquel.
+
+---
+
 ## 5. Al terminar una fase
 
 1. Comprobarla de verdad en el navegador.

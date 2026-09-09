@@ -247,3 +247,13 @@ hermandad.
   huecos marcados entre corchetes).
 - Identificador de Acreedor SEPA y dominio: son trámites que solo puede hacer la
   hermandad, y son los que más tardan. Conviene empezarlos pronto.
+
+---
+
+## Y a partir de aquí
+
+F14–F17 son las de arriba. **Lo que viene después está en
+`docs/PLAN-F18-EN-ADELANTE.md`**: comunicados que se mandan solos (F18), el
+editor de SEO (F19), la copia cifrada (F20), lo que quedaba pendiente (F21) y
+la deuda técnica (F22).
+

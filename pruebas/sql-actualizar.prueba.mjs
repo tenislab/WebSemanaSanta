@@ -44,9 +44,26 @@ export default async function ({ caso }) {
   /*
    * --- LA COMPROBACIÓN QUE IMPORTA ---
    *
-   * Para cada fichero de actualizar, se miran las funciones que define y se
-   * busca si alguno POSTERIOR del instalador vuelve a definir alguna. Si la
-   * hay, ese fichero no se puede ejecutar suelto: dejaría la versión vieja.
+   * De todas las definiciones de una función manda LA ÚLTIMA que se ejecuta.
+   * Así que el peligro es que `ACTUALIZAR.sql` deje puesta una versión VIEJA:
+   * ejecuta una pieza que define `modulo_permitido()`, y la pieza que la
+   * mejoraba no está en la lista. La base se queda con la de antes, sin un
+   * solo error, y quien lo nota es el tesorero que además es hermano cuando se
+   * queda fuera de Tesorería.
+   *
+   * LA CONDICIÓN EXACTA, que no es «que nadie la redefina después»: es QUE LA
+   * QUE LA REDEFINE DESPUÉS NO ESTÉ EN ESTA LISTA.
+   *
+   * La diferencia importa y se vio en cuanto entró `suscripcion.sql`, que
+   * define `mi_suscripcion()` — y la vuelve a definir, con una columna más, la
+   * pieza de la renovación, que TAMBIÉN va en la lista y va detrás. Ahí no hay
+   * nada que arreglar: se ejecutan las dos, en ese orden, y queda la buena.
+   * Igual que en el instalador.
+   *
+   * Se comprueba mirando el orden DE ESTA LISTA y no el del instalador, aunque
+   * sean el mismo: es este el que se va a ejecutar, y que coincidan lo
+   * comprueba el caso de arriba. Si algún día dejaran de coincidir, saltaría
+   * aquel y no este.
    */
   const defineFunciones = async (fichero) => {
     const texto = await readFile(`supabase/${fichero}`, 'utf8')
@@ -54,17 +71,46 @@ export default async function ({ caso }) {
       [...texto.matchAll(/create (?:or replace )?function\s+([a-z_0-9]+)\s*\(/gi)].map((m) => m[1]),
     )
   }
-  const pisadas = []
-  for (const fichero of deActualizar) {
-    const mias = await defineFunciones(fichero)
-    if (mias.size === 0) continue
-    for (const posterior of orden.slice(orden.indexOf(fichero) + 1)) {
-      for (const fn of await defineFunciones(posterior)) {
-        if (mias.has(fn)) pisadas.push(`${fichero} define ${fn}(), que ${posterior} redefine después`)
+  const buscarPisadas = async (lista) => {
+    const pisadas = []
+    for (const fichero of lista) {
+      const mias = await defineFunciones(fichero)
+      if (mias.size === 0) continue
+      for (const posterior of orden.slice(orden.indexOf(fichero) + 1)) {
+        // Si la que redefine viaja en el mismo sobre y detrás, no pisa nada:
+        // la base acaba con la misma versión que en una instalación nueva.
+        if (lista.indexOf(posterior) > lista.indexOf(fichero)) continue
+        for (const fn of await defineFunciones(posterior)) {
+          if (mias.has(fn)) {
+            pisadas.push(`${fichero} define ${fn}(), que ${posterior} redefine después y no va en la lista`)
+          }
+        }
       }
     }
+    return pisadas
   }
-  caso('ninguna pieza redefine algo que otra pisa después', '', pisadas.join(' · '))
+  caso('ninguna pieza redefine algo que otra pisa después', '',
+    (await buscarPisadas(deActualizar)).join(' · '))
+
+  /*
+   * --- Y QUE LA REGLA SIGA TENIENDO DIENTES ---
+   *
+   * La de arriba se ha aflojado una vez, a propósito y con motivo. Aflojar una
+   * regla y verla en verde es exactamente igual que arreglar el problema, y
+   * desde fuera no se distinguen: las dos cosas se ven como una prueba que
+   * pasa. Así que se le da de comer un caso malo de verdad y se comprueba que
+   * lo escupe.
+   *
+   * El caso es real: `rls-cargos.sql` define `modulo_permitido()` y lo
+   * redefine después `rls-endurecer.sql`, que NO va en la lista. Meter el
+   * primero sin el segundo dejaría a la base con la versión vieja de la
+   * función que decide quién entra en cada módulo, y sin un solo error.
+   */
+  const conUnaMala = [...deActualizar]
+  conUnaMala.splice(1, 0, 'rls-cargos.sql')
+  const cazadas = await buscarPisadas(conUnaMala)
+  caso('la regla caza una pieza que sí deja una versión vieja', true,
+    cazadas.some((x) => /^rls-cargos\.sql define modulo_permitido/.test(x)))
 
   /*
    * --- Y EL CASO CONCRETO QUE PASÓ, escrito aparte ---

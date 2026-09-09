@@ -259,6 +259,15 @@ on conflict do nothing;
 -- todas partes. Y se devuelve solo el TOTAL: quién ha donado y cuánto no sale
 -- de la hermandad.
 
+/*
+ * DROP ANTES DEL CREATE: «create or replace» NO PUEDE CAMBIAR EL TIPO QUE
+ * DEVUELVE. El día que a esta función se le añada una columna al `returns
+ * table`, Postgres corta con «cannot change return type of existing function»
+ * — y no aquí, donde se instala desde cero y no existe todavía, sino en la
+ * base de una hermandad que ya tiene la versión vieja. O sea, en producción y
+ * a mitad de ACTUALIZAR.sql. Ha pasado dos veces.
+ */
+drop function if exists campanas_de_la_web(text);
 create or replace function campanas_de_la_web(p_slug text)
 returns table (
   id uuid,

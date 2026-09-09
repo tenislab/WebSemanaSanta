@@ -228,6 +228,56 @@ Deno.serve(async (req: Request) => {
       p_stripe_subscription: suscripcionStripe,
     })
     if (!ok) return respuesta({ error: 'No se ha podido activar la suscripción.' }, 502)
+  } else if (evento.type === 'invoice.paid') {
+    /*
+     * SE HA COBRADO EL MES. Es el evento que faltaba y el que hace que
+     * `suscripciones.hasta` signifique algo: hasta ahora esa columna se
+     * quedaba siempre vacía porque nadie la rellenaba nunca.
+     *
+     * LA FECHA SALE DE `lines.data[0].period.end` Y NO DE `period_end`. La
+     * factura tiene su propio periodo, que en la primera factura de una
+     * suscripción NO es el de la suscripción: es el trozo que se está
+     * cobrando. El periodo bueno es el de la línea.
+     *
+     * Y si no viene, no se inventa: se pasa `null` y la función deja el valor
+     * anterior. Una fecha de caducidad inventada es peor que ninguna.
+     */
+    const suscripcionStripe = objeto.subscription as string | undefined
+    if (suscripcionStripe) {
+      const lineas = (objeto.lines as { data?: { period?: { end?: number } }[] } | undefined)?.data
+      const finUnix = lineas?.[0]?.period?.end ?? (objeto.period_end as number | undefined)
+      const hasta = typeof finUnix === 'number' && finUnix > 0
+        ? new Date(finUnix * 1000).toISOString().slice(0, 10)
+        : null
+      const ok = await llamarRpc('renovar_suscripcion_por_stripe', {
+        p_stripe_subscription: suscripcionStripe,
+        p_hasta: hasta,
+      })
+      // 502 para que Stripe reintente: el dinero está cobrado y lo que falta es
+      // apuntarlo. Con un 200 la renovación se perdería sin dejar rastro.
+      if (!ok) return respuesta({ error: 'No se ha podido renovar la suscripción.' }, 502)
+    }
+  } else if (evento.type === 'invoice.payment_failed') {
+    /*
+     * NO SE HA PODIDO COBRAR.
+     *
+     * Solo se apunta el día. NO se corta el acceso: Stripe reintenta durante
+     * semanas y casi siempre acaba cobrando. Cortar en el primer fallo sería
+     * dejar sin papeletas a cuatrocientas personas por una tarjeta caducada.
+     *
+     * El cierre, si de verdad no se cobra nunca, llega por
+     * `customer.subscription.deleted`, que ya se atiende aquí abajo.
+     *
+     * Lo que esto arregla no es el cobro: es que la hermandad SE ENTERE. Antes
+     * no había ningún aviso y se encontraba la puerta cerrada de golpe.
+     */
+    const suscripcionStripe = objeto.subscription as string | undefined
+    if (suscripcionStripe) {
+      const ok = await llamarRpc('marcar_pago_fallido_por_stripe', {
+        p_stripe_subscription: suscripcionStripe,
+      })
+      if (!ok) return respuesta({ error: 'No se ha podido apuntar el cobro fallido.' }, 502)
+    }
   } else if (evento.type === 'customer.subscription.deleted') {
     const suscripcionStripe = objeto.id as string | undefined
     if (suscripcionStripe) {
@@ -235,9 +285,10 @@ Deno.serve(async (req: Request) => {
       if (!ok) return respuesta({ error: 'No se ha podido desactivar la suscripción.' }, 502)
     }
   }
-  // Cualquier otro tipo de evento (pago rechazado, factura, lo que sea): se
-  // reconoce con 200 sin hacer nada. Devolver un error por un evento que no
-  // se maneja haría que Stripe lo reintentara para siempre.
+  // Cualquier OTRO tipo de evento: se reconoce con 200 sin hacer nada. Devolver
+  // un error por un evento que no se maneja haría que Stripe lo reintentara
+  // para siempre. (Aquí ponía «pago rechazado, factura»: los dos se atienden
+  // ya, arriba.)
 
   return respuesta({ recibido: true })
 })

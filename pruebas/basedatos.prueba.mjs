@@ -104,6 +104,78 @@ export default async function ({ caso }) {
   caso('y se puede volver a ejecutar encima', 'ok', otraVez)
 
   /*
+   * ==========================================================================
+   * ACTUALIZAR SOBRE UNA VERSIÓN ANTIGUA, QUE ES LO QUE HACE TODO EL MUNDO
+   * ==========================================================================
+   *
+   * EL AGUJERO QUE ESTO TAPA, y llegó desde producción con el SQL parado a la
+   * mitad:
+   *
+   *     ERROR: cannot change return type of existing function
+   *     HINT:  Use DROP FUNCTION reclamar_comunicado_programado() first.
+   *
+   * `create or replace` NO puede cambiar lo que devuelve una función. Si a una
+   * le añades una columna en el `returns table`, en una base que ya tiene la
+   * versión de antes Postgres se planta y no ejecuta NADA de lo que venga
+   * detrás.
+   *
+   * Y TODAS LAS PRUEBAS DABAN VERDE, incluida la que ejecuta el instalador dos
+   * veces seguidas — porque instalan desde CERO: la función se crea una sola
+   * vez, con la firma nueva, y no hay ninguna versión vieja con la que
+   * chocar. El fallo solo existe ACTUALIZANDO, que es justamente lo único que
+   * hace una hermandad que ya está funcionando.
+   *
+   * Así que aquí se fabrica el caso a mano: se crean las funciones con la
+   * firma ANTIGUA y se pasa `ACTUALIZAR.sql` por encima. Es la única forma de
+   * que esto se cace sin esperar a que lo cace una hermandad.
+   */
+  const actualizarSql = await readFile('supabase/ACTUALIZAR.sql', 'utf8')
+  await sql(`
+    drop function if exists reclamar_comunicado_programado();
+    create function reclamar_comunicado_programado()
+    returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int)
+    language sql volatile security definer set search_path = public as $vieja$
+      select null::uuid, null::text, null::text, null::text, null::int limit 0
+    $vieja$;
+    drop function if exists reclamar_regla_de_hoy();
+    create function reclamar_regla_de_hoy()
+    returns table (id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text)
+    language sql volatile security definer set search_path = public as $vieja$
+      select null::uuid, null::text, null::jsonb, null::text, null::text, null::text limit 0
+    $vieja$;
+    drop function if exists mi_suscripcion();
+    create function mi_suscripcion()
+    returns table (activa boolean, pack text, periodo text, desde date, hasta date)
+    language sql stable security definer set search_path = public as $vieja$
+      select false, null::text, null::text, null::date, null::date limit 0
+    $vieja$;
+  `)
+  let sobreLoViejo = ''
+  try {
+    await sql(actualizarSql)
+    sobreLoViejo = 'ok'
+  } catch (e) {
+    sobreLoViejo = String(e.stderr ?? e.message).split('\n').filter((l) => /ERROR/.test(l)).join(' · ')
+  }
+  caso('ACTUALIZAR.sql pasa por encima de la versión anterior', 'ok', sobreLoViejo)
+  /*
+   * Y LA FUNCIÓN QUEDA CON LA FIRMA NUEVA, no con la vieja. Si el `drop`
+   * estuviera pero el `create` fallara en silencio, lo de arriba pasaría igual
+   * y la aplicación se encontraría una función a la que le falta una columna.
+   */
+  /* `solo` todavía no existe en este punto del fichero: se declara más abajo. */
+  const ultimaColumna = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean).pop() ?? ''
+  caso('y queda con la columna nueva', 'ya_enviados', ultimaColumna(await sql(
+    `select p.proargnames[array_length(p.proargnames, 1)]
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'reclamar_comunicado_programado'`)))
+  caso('y la de las reglas también', 'ultima_vez', ultimaColumna(await sql(
+    `select p.proargnames[array_length(p.proargnames, 1)]
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'reclamar_regla_de_hoy'`)))
+
+
+  /*
    * ESCRIBIR DE VERDAD EN CADA TABLA.
    *
    * Con las columnas EXACTAS que escribe cada `toRow`. Es lo único que
@@ -268,6 +340,8 @@ export default async function ({ caso }) {
   await cadaCargoEnLoSuyo({ sql, caso })
   await nadieGuardaContrasenasEnClaro({ sql, caso })
   await losFormulariosPublicosTienenFreno({ sql, caso })
+  await sePuedeDeshacerElBorradoDeUnMensaje({ sql, caso })
+  await loDeMantenimientoNoLoTocaUnVisitante({ sql, caso })
   await hermanoDeDosHermandades({ sql, caso })
   await elWebhookDeStripeActivaLaSuscripcion({ sql, caso })
   await elMandatoSepaLoFirmaElPropioHermano({ sql, caso })
@@ -2007,6 +2081,128 @@ async function elFormularioYaNoLaPide({ caso }) {
  * Se ejecuta de verdad, empujando las tres, porque un contador que se lee bien
  * puede contar mal.
  */
+/*
+ * LO QUE SOLO DEBE TOCAR EL MANTENIMIENTO.
+ *
+ * Postgres da permiso de ejecución a PUBLIC EN CUANTO SE CREA UNA FUNCIÓN. No
+ * escribir ningún `grant` no restringe nada: hay que quitarlo a mano con un
+ * `revoke`. Es justo al revés de lo que parece, y por eso se cuela solo.
+ *
+ * Dos funciones de mantenimiento estaban abiertas a cualquiera que entrara en
+ * la web sin haber iniciado sesión:
+ *
+ *   · `sellar_esquema(n)` — con `sellar_esquema(1)`, la base «va por la
+ *     versión 1» y la aplicación le pide para siempre a la hermandad que
+ *     ejecute ACTUALIZAR.sql, que ya ha ejecutado.
+ *   · `limpiar_errores_cliente()` — borra los errores de producción, que es lo
+ *     único que cuenta qué se está rompiendo en las bases de verdad.
+ *
+ * No las llama nadie desde el navegador: una la ejecuta el final de los
+ * ficheros generados —pegados en el editor SQL, donde se es el dueño de la
+ * base— y la otra un trabajo semanal de cron. Así que se cierran del todo.
+ *
+ * Se prueba POR LOS DOS LADOS: que el visitante no puede, y que quien tiene
+ * que poder sigue pudiendo. Un `revoke` de más rompe la actualización de todas
+ * las hermandades a la vez, y eso no se ve hasta que alguien actualiza.
+ */
+async function loDeMantenimientoNoLoTocaUnVisitante({ sql, caso }) {
+  const comoVisitante = async (sentencia) => {
+    try {
+      await sql(`begin; set local role anon; ${sentencia} rollback;`)
+      return 'sí'
+    } catch (e) {
+      return /permission denied/i.test(String(e?.stderr ?? e)) ? 'no' : 'no (por otra cosa)'
+    }
+  }
+
+  caso('un visitante no puede sellar la versión del esquema', 'no',
+    await comoVisitante('select sellar_esquema(1);'))
+  caso('un visitante no puede borrar los errores de producción', 'no',
+    await comoVisitante('select limpiar_errores_cliente();'))
+
+  // Y quien las usa de verdad sigue pudiendo: el dueño de la base, que es
+  // quien pega ACTUALIZAR.sql en el editor y quien corre el cron.
+  const antes = (await sql('select version_del_esquema()')).trim()
+  await sql(`select sellar_esquema(${antes});`)
+  caso('el dueño de la base sí puede sellarla', antes, (await sql('select version_del_esquema()')).trim())
+  caso('y sí puede limpiar los errores', true,
+    /^\s*-?\d+\s*$/.test(await sql('select limpiar_errores_cliente()')))
+}
+
+/*
+ * DESHACER EL BORRADO DE UN MENSAJE DEL BUZÓN.
+ *
+ * Detrás de cada mensaje hay alguien de fuera que ha escrito a la hermandad
+ * dejando su teléfono. Borrarlo por error no avisa: ese contacto deja de
+ * existir. Por eso hay un «deshacer», y el navegador vuelve a insertar la fila
+ * con los mismos campos con los que la leyó.
+ *
+ * Con los que la leyó: SIN `hermandad_id`, porque esa columna no viaja al
+ * navegador. `mensajes_web` era la única tabla con `hermandad_id` a la que el
+ * navegador escribe directamente y que NO tenía `default hermandad_actual()`,
+ * así que la fila entraba con la hermandad nula y la política de entrada la
+ * rechazaba. El deshacer fallaba SIEMPRE y el mensaje se perdía.
+ *
+ * Esto no se veía leyendo el SQL ni probando como superusuario —que se salta
+ * las políticas—: hay que insertar como `authenticated`, que es lo que hace un
+ * navegador. Se comprueban los tres caminos de esta tabla, porque el arreglo
+ * de uno podía romper otro.
+ */
+async function sePuedeDeshacerElBorradoDeUnMensaje({ sql, caso }) {
+  const HD = "'71000000-0000-0000-0000-000000000071'"
+  const UID = '71111111-1111-1111-1111-111111111171'
+  await sql(`
+    insert into hermandades (id, nombre) values (${HD}, 'Hdad. del deshacer')
+      on conflict (id) do nothing;
+    insert into auth.users (id, email) values ('${UID}', 'secre@deshacer.es')
+      on conflict (id) do nothing;
+    insert into titulares (hermandad_id, auth_user_id) values (${HD}, '${UID}')
+      on conflict do nothing;
+    delete from mensajes_web where hermandad_id = ${HD};
+  `)
+
+  const comoElPersonal = async (sentencia) => {
+    try {
+      await sql(`
+        begin;
+          set local role authenticated;
+          set local "request.jwt.claim.sub" = '${UID}';
+          ${sentencia}
+        commit;
+      `)
+      return 'sí'
+    } catch { return 'no' }
+  }
+  const comoVisitante = async (sentencia) => {
+    try {
+      await sql(`begin; set local role anon; ${sentencia} commit;`)
+      return 'sí'
+    } catch { return 'no' }
+  }
+
+  // 1. El deshacer: la fila vuelve tal cual la leyó el navegador, sin hermandad.
+  caso('se puede deshacer el borrado de un mensaje', 'sí', await comoElPersonal(
+    `insert into mensajes_web (tipo, fecha, nombre, email, telefono, asunto, mensaje, leido, atendido)
+       values ('contacto', '9 sep 2026', 'Ana', 'a@x.es', '600', 'Hola', 'Texto', false, false);`))
+
+  // Y vuelve A SU HERMANDAD, no a ninguna otra ni a ninguna: si entrara con la
+  // hermandad nula, el mensaje existiría sin que nadie pudiera volver a verlo.
+  caso('el mensaje devuelto queda en su hermandad', '1',
+    (await sql(`select count(*) from mensajes_web where hermandad_id = ${HD} and nombre = 'Ana'`)).trim())
+
+  // 2. El visitante de la web sigue pudiendo escribir: manda la hermandad él,
+  //    porque no ha iniciado sesión y para él el valor por defecto es nulo.
+  caso('el visitante de la web puede escribir al buzón', 'sí', await comoVisitante(
+    `insert into mensajes_web (hermandad_id, nombre, mensaje) values (${HD}, 'Visita', 'hola');`))
+
+  // 3. Y sin decir a qué hermandad, sigue sin poder: un mensaje sin dueño no lo
+  //    lee nadie nunca, y esa puerta es por donde entraría la basura.
+  caso('un mensaje sin hermandad se sigue rechazando', 'no', await comoVisitante(
+    `insert into mensajes_web (nombre, mensaje) values ('Nadie', 'x');`))
+
+  await sql(`delete from mensajes_web where hermandad_id = ${HD}`)
+}
+
 async function losFormulariosPublicosTienenFreno({ sql, caso }) {
   const HD = "'70000000-0000-0000-0000-000000000007'"
   await sql(`

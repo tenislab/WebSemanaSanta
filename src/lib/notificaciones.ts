@@ -265,7 +265,16 @@ export function avisosPendientes(f: FuentesDeAvisos): Aviso[] {
       fecha: m.fecha,
       refId: m.id,
       aceptar: 'Leerlo',
-      donde: '/app/web',
+      /*
+       * A LA PESTAÑA DEL BUZÓN, no a «Web pública» a secas.
+       *
+       * El buzón vive dentro de la pantalla de la web, y esa pantalla se abre
+       * por la última pestaña que se estuviera tocando —se guarda en la
+       * sesión—. Así que «Leerlo» llevaba a Diseño, o a Portada, o a donde
+       * fuera: parecía que el botón te sacaba a la web en vez de abrirte el
+       * mensaje. Con `ir` se dice a qué pestaña, y con `mensaje` cuál.
+       */
+      donde: `/app/web?ir=buzon&mensaje=${m.id}`,
     })
   }
 
