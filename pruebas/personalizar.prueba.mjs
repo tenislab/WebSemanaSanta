@@ -272,4 +272,34 @@ export default async function ({ cargar, caso }) {
    */
   caso('un envío cortado se dice', true, /u\.cortado[\s\S]{0,120}?estado: 'error'/.test(pantalla))
   caso('y un envío a medias, también', true, /Enviado a \$\{u\.enviados\} de \$\{mensajes\.length\}/.test(pantalla))
+
+
+  /*
+   * ==========================================================================
+   * Y QUE LLEGUE BIEN A RESEND, QUE ES DONDE ACABA TODO ESTO
+   * ==========================================================================
+   *
+   * La copia oculta es obligatoria en cuanto hay más de un destinatario:
+   * mandar el comunicado con las mil direcciones a la vista es filtrar el censo
+   * entero, y en una hermandad eso son datos de categoría especial.
+   *
+   * PERO CON UN SOLO DESTINATARIO NO HAY NADA QUE OCULTAR, y ponerlo en copia
+   * oculta hace daño. Desde que los comunicados se personalizan, cada correo
+   * sale por separado — y así llegaban todos con «para: no-responder@…» y el
+   * destinatario en oculta: un correo dirigido a nadie, con el nombre propio
+   * dentro. Es la forma exacta de un envío masivo camuflado, y los filtros de
+   * spam lo tratan como tal.
+   */
+  const fn = await readFile('supabase/functions/enviar-correo/index.ts', 'utf8')
+  caso('a una sola persona se le escribe a ella', true,
+    /para\.length === 1\s*\n\s*\? \{ to: para \}/.test(fn))
+  caso('y a varias, en copia oculta', true, /: \{ to: \[soloLaDireccion\(REMITENTE\)\], bcc: para \}/.test(fn))
+  /*
+   * Y SE DECIDE POR EL NÚMERO, NO POR UN PARÁMETRO. Un interruptor que dijera
+   * «mándalo a la vista» acabaría puesto algún día en un envío de ochocientos,
+   * y ahí se filtra el censo entero. Con un solo destinatario no se puede
+   * filtrar a nadie porque no hay nadie más.
+   */
+  caso('sin ningún interruptor para saltarse la copia oculta', false,
+    /cuerpo\.(directo|sinOculta|visible)/.test(fn))
 }

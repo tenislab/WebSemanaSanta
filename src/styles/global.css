@@ -236,39 +236,32 @@ textarea {
   box-sizing: border-box;
 }
 /*
-   LA FLECHA. `appearance: none` quita la del sistema —que es la que peor
-   canta— y hay que poner una, o el desplegable no parece un desplegable.
+   LA FLECHA DEL SISTEMA SE QUEDA. Y AQUÍ HAY UNA LECCIÓN CARA.
 
-   Va como imagen de fondo y no como pseudo-elemento porque un `<select>` no
-   admite `::after`: el navegador dibuja su interior y no deja meter nada.
-   Por eso hay dos declaraciones, una por tema: el color va dentro del SVG y no
-   se puede sacar de una variable.
+   Esta regla ponía `appearance: none` y dibujaba su propio chevron como imagen
+   de fondo. Se veía perfecto en la tabla de Personal —que es donde se probó— y
+   ROMPÍA los desplegables del resto de la aplicación: salían con el chevron
+   REPETIDO en zigzag por todo el ancho, encima del texto.
+
+   El porqué, que no es evidente y por eso queda escrito: las reglas de
+   contexto —`.form-row select`, `.assign-box select`…— redefinen el fondo con
+   la FORMA CORTA (`background: var(--bg)`), y una forma corta reescribe TODAS
+   sus propiedades. Devolvía `background-repeat` a `repeat` y `background-size`
+   a `auto`, y el navegador se quedaba con la imagen de aquí y la tileaba. Ni
+   con flecha ni sin ella: con veinte.
+
+   Se podría perseguir contexto por contexto. NO SE HACE: son cinco reglas hoy,
+   y la que se escriba mañana volvería a romperlo — que es exactamente el
+   problema que esta sección venía a resolver. El suelo pone solo lo que nadie
+   más discute (borde, radio, alto, letra, foco) y no entra en el fondo, que es
+   de quien lo pinte.
+
+   Y la flecha del sistema nunca fue el problema: lo que cantaba en la tabla de
+   Personal era el borde negro fino, las esquinas cuadradas y la letra del
+   sistema. Eso sí se arregla aquí, y sin romper nada.
 */
 select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 2rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2357534e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.7rem center;
-  background-size: 0.7rem;
   cursor: pointer;
-}
-:root[data-theme='dark'] select,
-:root:not([data-theme='light']) select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%23a8a29e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
-/*
-   Y EN TEMA CLARO SE VUELVE A PONER LA OSCURA. La regla de arriba lleva
-   `:not([data-theme='light'])`, que también acierta cuando no hay tema puesto
-   —o sea el ajuste «como el sistema»— y ahí puede tocar claro. Sin esta línea,
-   quien tenga el sistema en claro y no haya tocado nada vería la flecha gris
-   clara sobre fondo blanco.
-*/
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2357534e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  }
 }
 /*
    EL FOCO, VISIBLE. Se quita el anillo del sistema y hay que poner otro: sin

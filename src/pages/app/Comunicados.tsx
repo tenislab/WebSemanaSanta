@@ -28,6 +28,7 @@ import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, personalDelSegmento, type
 import { personalToRow, rowToPersonal } from '../../lib/db/personal'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
+import { supabase, isSupabaseConfigured } from '../../lib/supabase'
 import { useEtiquetas } from '../../lib/etiquetas'
 import {
   CRITERIOS_POR_DEFECTO,
@@ -682,6 +683,33 @@ export default function Comunicados() {
           autor: r.nombre,
           alcance: null,
         }
+        /*
+         * SE ESCRIBE EN LA BASE **ESPERANDO**, y no con `setComunicados`.
+         *
+         * ============================================================
+         * ESTE ERA UN FALLO MUDO, Y DE LOS PEORES
+         * ============================================================
+         *
+         * `setComunicados` lanza la escritura y sigue: no la espera y no dice
+         * si ha fallado. Y peor: `useSupabaseTable` SE SALTA la escritura
+         * entera mientras su tabla no haya terminado de cargar
+         * (`cargado.current`). Este efecto espera al censo, que es OTRO hook
+         * con su propia carga, así que la carrera es real.
+         *
+         * Lo que pasaba entonces: la regla se marcaba como disparada —eso sí
+         * llega a la base—, el comunicado se quedaba solo en la memoria de esa
+         * pestaña, y la felicitación se perdía sin que nadie llegara a saberlo.
+         * Y la regla no vuelve a tocar hasta mañana.
+         *
+         * Escribiendo aquí directamente, un fallo LANZA, `dispararReglasDeHoy`
+         * devuelve la regla, y mañana se vuelve a intentar. Que es lo que tiene
+         * que pasar.
+         */
+        if (isSupabaseConfigured && supabase) {
+          const { error } = await supabase.from('comunicados').insert(comunicadoToRow(nuevo))
+          if (error) throw new Error(error.message)
+        }
+        // Y ya en la pantalla, para que se vea sin recargar.
         setComunicados((prev) => [nuevo, ...prev])
       },
       devolver: devolverReglaEnLaBase,
@@ -1504,9 +1532,17 @@ export default function Comunicados() {
                       </p>
                     </div>
                     <label className="checkbox-row">
+                      {/*
+                        Y NO SE PUEDE ENCENDER CON UNA MARCA QUE NO EXISTE.
+                        Aquí hace más falta que en un comunicado a mano: una
+                        regla encendida se manda sola, sin que nadie vuelva a
+                        leer el texto. Un `{nombe}` puesto hoy saldría en cada
+                        cumpleaños durante años.
+                      */}
                       <input
                         type="checkbox"
                         checked={r.activa}
+                        disabled={!r.activa && !sePuedePersonalizar(`${r.asunto}\n${r.cuerpo}`).puede}
                         onChange={(e) => setReglas((prev) => prev.map((x) => (
                           x.id === r.id ? { ...x, activa: e.target.checked } : x
                         )))}
@@ -1515,15 +1551,93 @@ export default function Comunicados() {
                     </label>
                   </div>
                   {/*
-                    EL TEXTO A LA VISTA, sin tener que abrir nada. Es lo que se
-                    le va a mandar a ochocientas personas: esconderlo detrás de
-                    un botón «editar» es cómo se encienden reglas sin haber
-                    leído lo que dicen.
+                    EL TEXTO SE VE Y SE EDITA AQUÍ MISMO, sin abrir nada.
+
+                    Es lo que se le va a mandar a ochocientas personas:
+                    esconderlo detrás de un botón «editar» es cómo se encienden
+                    reglas sin haber leído lo que dicen. Y una felicitación que
+                    no se puede cambiar no sirve: cada hermandad escribe a los
+                    suyos a su manera, y el texto de fábrica es un punto de
+                    partida, no una imposición.
                   */}
-                  <p className="table-subtle" style={{ margin: '0.5rem 0 0', whiteSpace: 'pre-wrap', fontSize: '0.85rem' }}>
-                    <b>{r.asunto}</b>{'\n'}{r.cuerpo}
-                  </p>
+                  <div className="form-row" style={{ marginTop: '0.6rem' }}>
+                    <label htmlFor={`asunto-${r.id}`}>Asunto</label>
+                    <input
+                      id={`asunto-${r.id}`}
+                      type="text"
+                      value={r.asunto}
+                      onChange={(e) => setReglas((prev) => prev.map((x) => (
+                        x.id === r.id ? { ...x, asunto: e.target.value } : x
+                      )))}
+                    />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor={`cuerpo-${r.id}`}>Mensaje</label>
+                    <textarea
+                      id={`cuerpo-${r.id}`}
+                      rows={5}
+                      value={r.cuerpo}
+                      onChange={(e) => setReglas((prev) => prev.map((x) => (
+                        x.id === r.id ? { ...x, cuerpo: e.target.value } : x
+                      )))}
+                    />
+                    {/* Las mismas marcas y el mismo botón que en un comunicado a mano. */}
+                    <div className="chips" style={{ marginTop: '0.5rem' }}>
+                      <span className="form-hint" style={{ marginRight: '0.3rem' }}>Personalizar:</span>
+                      {MARCAS.map((mk) => (
+                        <button
+                          key={mk.marca}
+                          type="button"
+                          className="chip"
+                          title={`${mk.que} — p. ej. «${mk.ejemplo}»`}
+                          onClick={() => setReglas((prev) => prev.map((x) => (
+                            x.id === r.id ? { ...x, cuerpo: `${x.cuerpo}{${mk.marca}}` } : x
+                          )))}
+                        >
+                          {`{${mk.marca}}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {(() => {
+                    /*
+                      EL MISMO FRENO QUE EN UN COMUNICADO A MANO, y aquí hace
+                      MÁS falta: una regla encendida se manda sola, sin que
+                      nadie vuelva a leer el texto. Un `{nombe}` puesto hoy
+                      saldría cada cumpleaños durante años.
+                    */
+                    const rev = sePuedePersonalizar(`${r.asunto}\n${r.cuerpo}`)
+                    if (!rev.puede) {
+                      return (
+                        <p className="form-hint" style={{ color: 'var(--peligro, #b91c1c)' }}>
+                          ⚠ {rev.motivo}
+                        </p>
+                      )
+                    }
+                    // Y cómo le llegará a alguien de los que la van a recibir.
+                    const aQuien = filtrarSegmento(
+                      hermanos, r.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota,
+                    )[0] ?? null
+                    return (
+                      <div className="assign-box" style={{ marginTop: '0.2rem' }}>
+                        <p className="form-hint" style={{ margin: '0 0 0.35rem' }}>
+                          {aQuien ? `Así le llegará a ${aQuien.nombre}:` : 'Así llegará (hoy no toca a nadie, se usa un ejemplo):'}
+                        </p>
+                        <p style={{ margin: 0, fontWeight: 600 }}>
+                          {vistaPrevia(r.asunto, aQuien, ctxPersonalizacion)}
+                        </p>
+                        <p style={{ margin: '0.3rem 0 0', whiteSpace: 'pre-wrap' }}>
+                          {vistaPrevia(r.cuerpo, aQuien, ctxPersonalizacion)}
+                        </p>
+                      </div>
+                    )
+                  })()}
                   <div className="settings-actions" style={{ marginTop: '0.5rem' }}>
+                    {/*
+                      NO SE PUEDE ENCENDER CON UNA MARCA MAL ESCRITA. El
+                      interruptor de arriba se apaga solo en ese caso: ver el
+                      `disabled` de la casilla.
+                    */}
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm rgpd-borrar"

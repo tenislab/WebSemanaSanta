@@ -804,11 +804,28 @@ Deno.serve(async (req: Request) => {
     headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: remitente,
-      // Cada hermano en copia OCULTA: mandar el comunicado con las mil
-      // direcciones a la vista es filtrar el censo entero, y en una hermandad
-      // eso son datos de categoría especial.
-      to: [soloLaDireccion(REMITENTE)],
-      bcc: para,
+      /*
+       * A UNA SOLA PERSONA SE LE ESCRIBE A ELLA. A VARIAS, EN COPIA OCULTA.
+       *
+       * La copia oculta es obligatoria en cuanto hay más de uno: mandar el
+       * comunicado con las mil direcciones a la vista es filtrar el censo
+       * entero, y en una hermandad eso son datos de categoría especial.
+       *
+       * PERO CON UN SOLO DESTINATARIO NO HAY NADA QUE OCULTAR, y ponerlo en
+       * copia oculta hace daño. Desde que los comunicados se personalizan
+       * —«Hola Jaime»— cada correo sale por separado, y así llegaban todos con
+       * «para: no-responder@…» y al destinatario en oculta: un correo dirigido
+       * a nadie, con el nombre propio dentro. Eso lo penalizan los filtros de
+       * spam, y con razón — es la forma exacta de un envío masivo camuflado.
+       *
+       * Se decide por el número y no por un parámetro a propósito: un
+       * interruptor que dijera «mándalo a la vista» acabaría puesto algún día
+       * en un envío de ochocientos. Con un solo destinatario no se puede
+       * filtrar a nadie porque no hay nadie más.
+       */
+      ...(para.length === 1
+        ? { to: para }
+        : { to: [soloLaDireccion(REMITENTE)], bcc: para }),
       subject: cuerpo.asunto,
       ...(cuerpo.html ? { html: cuerpo.html } : {}),
       ...(cuerpo.texto ? { text: cuerpo.texto } : {}),

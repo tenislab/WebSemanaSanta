@@ -7594,7 +7594,19 @@ create index if not exists comunicados_programados_idx
 
 create table if not exists reglas_automaticas (
   id uuid primary key default gen_random_uuid(),
-  hermandad_id uuid not null references hermandades(id) on delete cascade,
+  /*
+   * `default hermandad_actual()` — Y ESTO SE ME OLVIDÓ, Y ROMPIÓ LA TABLA.
+   *
+   * El navegador NO manda `hermandad_id` al insertar, y es a propósito: lo pone
+   * la base a partir de quién está pidiendo, no el contenido de lo que llega.
+   * Todas las tablas de la hermandad se declaran así.
+   *
+   * Sin el `default`, la fila llegaba con `hermandad_id` vacío y RLS la
+   * rechazaba: «new row violates row-level security policy». Y el mensaje que
+   * salía en pantalla mandaba a mirar los permisos del cargo, que estaban
+   * perfectamente — el fallo estaba aquí.
+   */
+  hermandad_id uuid not null default hermandad_actual() references hermandades(id) on delete cascade,
   /* Cómo la llama la hermandad: «Felicitar el cumpleaños». */
   nombre text not null,
   /*
@@ -7623,6 +7635,16 @@ create table if not exists reglas_automaticas (
   ultima_vez date,
   creada_en timestamptz not null default now()
 );
+
+/*
+ * Y PARA LAS BASES QUE YA EJECUTARON LA VERSIÓN SIN `default`.
+ *
+ * `create table if not exists` no toca una tabla que ya existe, así que a quien
+ * pegó el SQL antes de este arreglo no le llegaría la corrección de arriba: se
+ * quedaría con la tabla creada y sin poder escribir en ella nunca. Esta línea
+ * es la que se lo arregla, y en una base nueva no hace nada.
+ */
+alter table reglas_automaticas alter column hermandad_id set default hermandad_actual();
 
 alter table reglas_automaticas enable row level security;
 

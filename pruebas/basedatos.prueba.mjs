@@ -4643,6 +4643,44 @@ async function elCertificadoDeAntiguedad({ sql, caso }) {
      values (${H}, 'La de casa', 'diaria', '{}'::jsonb, 'x', 'x', 'x', true)`)
   caso('quien lleva comunicados las ve', '1', await veReglas(USEC))
 
+  /*
+   * ==========================================================================
+   * Y QUE SE PUEDAN CREAR DESDE EL NAVEGADOR. ESTO ES LO QUE ME FALTÓ.
+   * ==========================================================================
+   *
+   * Todo lo de arriba insertaba las reglas como superusuario, que se salta RLS.
+   * Así que la tabla se probó entera SIN PROBAR LO ÚNICO que hace la
+   * aplicación: crear una regla desde una sesión normal.
+   *
+   * Y estaba rota. Se me olvidó `default hermandad_actual()` en la columna
+   * —lo llevan todas las demás tablas de la hermandad— así que la fila llegaba
+   * con la hermandad vacía y RLS la rechazaba: «new row violates row-level
+   * security policy». En pantalla salía un aviso que mandaba a revisar los
+   * permisos del cargo, que estaban perfectamente.
+   *
+   * La lección, que es la de siempre en este fichero: probar con la clave que
+   * se salta los permisos no prueba los permisos.
+   */
+  await sql(`delete from reglas_automaticas where hermandad_id = ${H}`)
+  const crearRegla = async (usuario) => {
+    try {
+      await sql(`begin; set local role authenticated; set local request.jwt.claim.sub = ${usuario};
+        insert into reglas_automaticas (nombre, cada, criterios, destinatarios, asunto, cuerpo, activa)
+          values ('Desde el navegador', 'diaria', '{}'::jsonb, 'x', 'x', 'x', false);
+        commit;`)
+      return 'sí'
+    } catch (e) {
+      return String(e.stderr ?? e.message).includes('row-level security') ? 'RLS lo rechaza' : 'otro error'
+    }
+  }
+  caso('quien lleva comunicados puede crear una regla', 'sí', await crearRegla(USEC))
+  /*
+   * Y LA HERMANDAD SE LA PONE LA BASE, no el navegador: es lo que impide que
+   * un archivo o una petición manipulada escriban en la casa de al lado.
+   */
+  caso('y la hermandad se la pone la base sola', '1', numero(await sql(
+    `select count(*) from reglas_automaticas where hermandad_id = ${H} and nombre = 'Desde el navegador'`)))
+
 
   /*
    * ==========================================================================

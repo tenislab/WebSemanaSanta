@@ -42,46 +42,45 @@ export default async function ({ caso }) {
   caso('y no se sale de su hueco', true, /min-width: 0/.test(base))
 
   /*
-   * --- LA FLECHA, EN LOS DOS TEMAS ---
+   * --- Y NO SE TOCA EL FONDO. ESTA ES LA LECCIÓN CARA DE TODO EL FICHERO ---
    *
-   * `appearance: none` quita la del sistema, que es la que peor canta, y
-   * obliga a poner una: sin ella el desplegable no parece un desplegable.
+   * La primera versión ponía `appearance: none` y dibujaba su propio chevron
+   * como imagen de fondo. Se veía perfecto en la tabla de Personal —que es
+   * donde se probó— y ROMPÍA los desplegables del resto de la aplicación:
+   * salían con el chevron REPETIDO en zigzag por todo el ancho, encima del
+   * texto. Llegó reportado con una captura, desde producción.
    *
-   * Va como imagen de fondo y no como pseudo-elemento porque un `<select>` no
-   * admite `::after` — el navegador dibuja su interior y no deja meter nada—.
-   * Y por eso el color va DENTRO del SVG y hace falta una por tema: no se
-   * puede sacar de una variable.
-   */
-  /*
-   * SE MIRAN LAS DOS, la con prefijo y la sin él, y por separado.
+   * El porqué: las reglas de contexto (`.form-row select`, `.assign-box
+   * select`…) redefinen el fondo con la FORMA CORTA, y una forma corta
+   * reescribe TODAS sus propiedades — devolvía `background-repeat` a `repeat` y
+   * `background-size` a `auto`, y el navegador se quedaba con la imagen de la
+   * regla base y la tileaba.
    *
-   * La primera versión de esto buscaba «appearance: none» dentro del bloque, y
-   * pasaba en verde con `appearance: auto` puesto: lo que encontraba era el
-   * `-webkit-appearance: none` de la línea siguiente. Una comprobación que se
-   * conforma con que la palabra APAREZCA no comprueba nada.
+   * Y LO PEOR NO FUE EL FALLO, FUE QUE LAS PRUEBAS DABAN VERDE. Comprobaban
+   * que el `appearance: none` estuviera escrito y que hubiera una flecha por
+   * tema: todo eso era cierto y la pantalla estaba rota igual. Una prueba que
+   * comprueba que una línea existe no comprueba lo que esa línea le hace al
+   * resto de la hoja.
+   *
+   * Así que ahora se comprueba lo contrario: que el suelo NO entre en el fondo.
+   * Es la regla que impide que vuelva a pasar, y no depende de acordarse de
+   * mirar cinco contextos — que además serían seis en cuanto alguien escriba
+   * el siguiente.
    */
   const bloqueSelect = (css.match(/\nselect \{([\s\S]*?)\n\}/) ?? ['', ''])[1]
-  caso('se quita la flecha del sistema', true, /(^|\n)\s*appearance: none;/.test(bloqueSelect))
-  caso('y también en los navegadores con prefijo', true,
-    /-webkit-appearance: none;/.test(bloqueSelect))
-  caso('y se pone una propia', true, /background-image: url\("data:image\/svg\+xml/.test(bloqueSelect))
-  caso('con sitio para ella', true, /padding-right: 2rem/.test(bloqueSelect))
+  caso('el suelo no toca el fondo de los desplegables', [],
+    Object.keys({ 'background-image': 1, 'background-repeat': 1, 'background-size': 1, 'background-position': 1 })
+      .filter((prop) => new RegExp(`^\\s*${prop}:`, 'm').test(bloqueSelect)))
+  caso('ni le quita la apariencia del sistema', false, /appearance/.test(bloqueSelect))
   /*
-   * LA DE TEMA OSCURO. Sin ella, la flecha gris oscura sobre fondo casi negro
-   * no se ve — y el desplegable pasa a parecer un campo de texto.
+   * EL COLOR DE FONDO SÍ, LA IMAGEN NO. La diferencia es toda la lección: un
+   * `background: var(--bg)` en el suelo es inofensivo —cualquier contexto lo
+   * pisa entero y no queda nada colgando—, pero una IMAGEN puesta en el suelo
+   * sobrevive a que el contexto reescriba el `repeat` y el `size`, y eso es lo
+   * que tileaba el chevron por todo el ancho.
    */
-  caso('hay una flecha para el tema oscuro', true,
-    /:root\[data-theme='dark'\] select,\n:root:not\(\[data-theme='light'\]\) select \{/.test(css))
-  /*
-   * Y LA DE VUELTA PARA EL CLARO, que es la que se olvida siempre.
-   *
-   * La regla de oscuro lleva `:not([data-theme='light'])`, que TAMBIÉN acierta
-   * cuando no hay tema puesto —o sea el ajuste «como el sistema»—, y ahí puede
-   * tocar claro. Sin esta, quien tenga el sistema en claro y no haya tocado
-   * nada vería la flecha gris clara sobre fondo blanco.
-   */
-  caso('y se devuelve la oscura en tema claro', true,
-    /@media \(prefers-color-scheme: light\) \{\s*:root:not\(\[data-theme='dark'\]\) select \{/.test(css))
+  caso('el suelo pone color de fondo, que hace falta', true, /background: var\(--bg\)/.test(base))
+  caso('pero ninguna imagen', false, /background-image/.test(base))
 
   // --- EL FOCO SE VE ---
   /*

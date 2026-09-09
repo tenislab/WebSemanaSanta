@@ -160,6 +160,23 @@ export default async function ({ cargar, caso }) {
   caso('las reglas no mandan correo', false, /enviarCorreo|enviarCorreoUnoAUno|cuerpoCorreo/.test(src))
   const pantalla = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
   caso('crean un comunicado programado', true, /estado: 'Programado'/.test(pantalla))
+  /*
+   * Y SE ESCRIBE EN LA BASE ESPERANDO A QUE ENTRE, no con `setComunicados`.
+   *
+   * ESTE FUE UN FALLO MUDO Y ESTUVO PUESTO. `setComunicados` lanza la escritura
+   * y sigue: no la espera y no dice si ha fallado. Y peor, `useSupabaseTable`
+   * SE SALTA la escritura entera mientras su tabla no haya terminado de cargar
+   * — y este efecto espera al censo, que es otro hook con su propia carga, así
+   * que la carrera es real.
+   *
+   * Lo que pasaba: la regla se marcaba como disparada —eso sí llegaba—, el
+   * comunicado se quedaba en la memoria de esa pestaña, y la felicitación se
+   * perdía sin que nadie llegara a saberlo. Hasta mañana.
+   */
+  caso('el comunicado se escribe en la base esperando', true,
+    /await supabase\.from\('comunicados'\)\.insert\(comunicadoToRow\(nuevo\)\)/.test(pantalla))
+  caso('y un fallo al escribirlo lanza, para que la regla se devuelva', true,
+    /if \(error\) throw new Error\(error\.message\)/.test(pantalla))
   caso('para hoy', true, /fechaProgramada: hoy/.test(pantalla))
   /*
    * Y SE DISPARAN ANTES DE ENVIAR. El orden no es casual: una regla crea un
@@ -193,11 +210,33 @@ export default async function ({ cargar, caso }) {
   caso('se enseña a cuánta gente alcanzaría hoy', true, /hoy alcanzaría a \$\{alcanza\}/.test(pantalla))
   caso('y se dice cuando no toca a nadie', true, /hoy no toca a nadie/.test(pantalla))
   /*
-   * Y EL TEXTO SE VE SIN ABRIR NADA. Es lo que se le va a mandar a ochocientas
-   * personas: esconderlo detrás de un botón «editar» es cómo se encienden
-   * reglas sin haber leído lo que dicen.
+   * Y EL TEXTO SE VE **Y SE EDITA** SIN ABRIR NADA.
+   *
+   * Dos motivos, los dos importantes: es lo que se le va a mandar a ochocientas
+   * personas, y esconderlo detrás de un botón «editar» es cómo se encienden
+   * reglas sin haber leído lo que dicen; y una felicitación que no se puede
+   * cambiar no sirve — cada hermandad escribe a los suyos a su manera, y el
+   * texto de fábrica es un punto de partida, no una imposición.
    */
-  caso('el texto se ve sin abrir nada', true, /\{r\.asunto\}<\/b>/.test(pantalla))
+  caso('el asunto se puede editar', true, /x\.id === r\.id \? \{ \.\.\.x, asunto: e\.target\.value \}/.test(pantalla))
+  caso('y el mensaje también', true, /x\.id === r\.id \? \{ \.\.\.x, cuerpo: e\.target\.value \}/.test(pantalla))
+  caso('con los mismos botones de marca', true, /cuerpo: `\$\{x\.cuerpo\}\{\$\{mk\.marca\}\}`/.test(pantalla))
+  // Y se ve cómo le llegará a alguien de los que la van a recibir.
+  caso('con su vista previa', true, /vistaPrevia\(r\.cuerpo, aQuien, ctxPersonalizacion\)/.test(pantalla))
+
+  /*
+   * Y NO SE PUEDE ENCENDER CON UNA MARCA QUE NO EXISTE.
+   *
+   * Aquí hace MÁS falta que en un comunicado a mano: una regla encendida se
+   * manda sola, sin que nadie vuelva a leer el texto. Un `{nombe}` puesto hoy
+   * saldría en cada cumpleaños durante años, y nadie ata la queja del hermano
+   * con lo que se escribió aquel día.
+   */
+  caso('no se puede encender con una marca inventada', true,
+    /disabled=\{!r\.activa && !sePuedePersonalizar\(/.test(pantalla))
+  // Pero sí se puede APAGAR una que ya lo esté: si no, quedaría encendida y sin
+  // forma de pararla, que es lo peor de los dos mundos.
+  caso('pero una encendida siempre se puede apagar', true, /!r\.activa &&/.test(pantalla))
 
   /*
    * --- EL CANDADO, LEÍDO EN EL SQL ---

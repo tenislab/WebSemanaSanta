@@ -35,6 +35,8 @@ import {
   ventanaAbierta,
   diasHasta,
   renovacionDeHermano,
+  sePuedeConvocar,
+  hayCampanaCreada,
   type Campana,
   type EstadoRenovacion,
 } from '../../lib/campana'
@@ -667,8 +669,35 @@ export default function Papeletas() {
    * había avisado a ochocientos hermanos sin haber avisado a ninguno.
    */
   const [convocando, setConvocando] = useState(false)
+  /*
+   * EL FRENO DE LA FECHA. Fuera de plazo este correo miente: antes de abrir
+   * manda a ochocientas personas a sacar una papeleta que no van a poder sacar,
+   * y después de cerrar les anuncia como fecha límite un día que ya pasó. El
+   * porqué entero está en `sePuedeConvocar()`.
+   */
+  /*
+   * Y SE LE DICE SI LA CAMPAÑA EXISTE DE VERDAD.
+   *
+   * `getCampana()` nunca devuelve vacío: sin campaña creada devuelve la de
+   * fábrica, con fechas inventadas. Hoy caen dentro de ese plazo inventado, así
+   * que sin esto se ofrecía «Convocar papeletas» a una hermandad que no ha
+   * fijado ninguna fecha — anunciándole a ochocientas personas un plazo que
+   * nadie ha decidido y un año que a lo mejor no es el suyo.
+   */
+  const puedeConvocar = sePuedeConvocar(campana, undefined, hayCampanaCreada())
+
   async function convocar() {
     if (convocando) return
+    /*
+     * SE COMPRUEBA AQUÍ TAMBIÉN, y no solo en el botón. Un botón desactivado es
+     * un estado de la pantalla: sobrevive a un `Enter`, a una pestaña abierta
+     * desde ayer y a cualquiera que lo llame desde otro sitio mañana. Lo que no
+     * se puede deshacer es el correo.
+     */
+    if (!puedeConvocar.puede) {
+      window.alert(puedeConvocar.motivo)
+      return
+    }
     setConvocando(true)
     try {
       const r = await enviarConvocatoria(
@@ -900,11 +929,22 @@ export default function Papeletas() {
           </span>
         ) : (
           <span>
-            Avisa a los <b>{destinatariosConvocatoria(hermanos).length}</b> hermanos de que pueden solicitar su papeleta
-            de sitio {campana.anio}.
+            {/*
+              SIN CAMPAÑA NO SE INVITA A NADA. Decir «avisa a los 812 hermanos
+              de que pueden sacar su papeleta de 2027» cuando nadie ha fijado
+              ese año ni ese plazo es invitar a mandar un correo falso.
+            */}
+            {hayCampanaCreada()
+              ? <>Avisa a los <b>{destinatariosConvocatoria(hermanos).length}</b> hermanos de que pueden solicitar su papeleta de sitio {campana.anio}.</>
+              : <>Antes de convocar hay que crear la campaña: el año, cuándo abre el plazo y hasta cuándo. Las fechas que se ven ahora son de ejemplo.</>}
           </span>
         )}
-        <button className="btn btn-primary btn-sm" onClick={convocar} disabled={convocando}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={convocar}
+          disabled={convocando || !puedeConvocar.puede}
+          title={puedeConvocar.puede ? undefined : puedeConvocar.motivo}
+        >
           {convocando
             ? 'Enviando…'
             : convocatoria && convocatoria.anio === campana.anio
@@ -912,6 +952,15 @@ export default function Papeletas() {
               : 'Convocar papeletas'}
         </button>
       </div>
+
+      {/*
+        Y POR QUÉ NO SE PUEDE, ESCRITO. Un botón gris sin explicación se lee
+        como «está roto», y lo siguiente es una llamada preguntando qué pasa.
+        Aquí se dice qué falta y dónde se cambia.
+      */}
+      {!puedeConvocar.puede && (
+        <p className="table-subtle" style={{ marginTop: '-0.4rem' }}>{puedeConvocar.motivo}</p>
+      )}
 
       {/* Avisos de portada: lo que la secretaría debe mirar de un vistazo */}
       {(stats.pendientePago > 0 || tramosCasiLlenos.length > 0 || solicitudesPendientes.length > 0 || (abierta && stats.porRenovar > 0)) && (

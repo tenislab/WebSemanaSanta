@@ -99,6 +99,47 @@ export function getCampana(): Campana {
 }
 
 /**
+ * ¿HA CREADO LA HERMANDAD SU CAMPAÑA, O ESTÁ VIENDO LA DE FÁBRICA?
+ *
+ * ============================================================================
+ * POR QUÉ HACE FALTA DISTINGUIRLO
+ * ============================================================================
+ *
+ * `getCampana()` NUNCA devuelve vacío: si la hermandad no ha creado ninguna,
+ * devuelve `CAMPANA_POR_DEFECTO`, que trae fechas inventadas para que la
+ * demostración se vea funcionando.
+ *
+ * Eso está bien para pintar una pantalla y MUY MAL para decidir. Con las
+ * fechas de fábrica, una hermandad que no ha creado su campaña parecía tener
+ * una abierta —hoy cae dentro de ese plazo inventado— y se le ofrecía
+ * «Convocar papeletas»: el correo más importante del año, anunciando un plazo
+ * que nadie ha fijado y un año que a lo mejor no es el suyo.
+ *
+ * Y no se queda ahí: de `campana.anio` salen las papeletas «del año», que son
+ * las que ordenan el cortejo y reparten los sitios.
+ *
+ * ----------------------------------------------------------------------------
+ * CÓMO SE SABE
+ * ----------------------------------------------------------------------------
+ *
+ * Por si la clave está escrita. Solo la escriben dos sitios: `saveCampana()`
+ * —o sea, alguien la creó— y `cargarCampanaDeLaBase()`, que la trae si la
+ * hermandad ya la tenía guardada. La de fábrica no se escribe nunca.
+ *
+ * MIENTRAS LA BASE NO HA CONTESTADO devuelve `false` unos instantes, y eso es
+ * lo correcto: ante la duda, no ofrecer mandar un correo a ochocientas
+ * personas. Se corrige solo en cuanto llega la respuesta.
+ */
+export function hayCampanaCreada(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null
+  } catch {
+    // Sin `localStorage` no se puede saber. Mismo criterio: no.
+    return false
+  }
+}
+
+/**
  * Avisa a las pantallas abiertas de que la campaña ha cambiado.
  *
  * Hace falta porque `getCampana()` es SÍNCRONA y la usan quince sitios: si la
@@ -182,6 +223,130 @@ export function ventanaAbierta(campana: Campana): boolean {
 export function ventanaAbiertaPara(campana: Campana, participoElAnoAnterior: boolean): boolean {
   const inicio = participoElAnoAnterior ? campana.fechaInicioParticiparon : campana.fechaInicioNoParticiparon
   return diasHasta(inicio) <= 0 && diasHasta(campana.fechaLimiteRenovacion) >= 0
+}
+
+/**
+ * ¿SE PUEDE CONVOCAR HOY? Y si no, por qué no.
+ *
+ * ============================================================================
+ * EL FALLO QUE ESTO CIERRA
+ * ============================================================================
+ *
+ * «Convocar papeletas» manda a TODOS los hermanos con correo el aviso más
+ * importante del año, y no miraba ni una fecha. Se podía pulsar en agosto.
+ *
+ * Y lo que sale es un correo que dice, literalmente, «ya está abierto el plazo»
+ * y «tienes de plazo hasta el {fecha}». Pulsado fuera de temporada eso son dos
+ * mentiras a la vez, y cada una hace un destrozo distinto:
+ *
+ *   · ANTES DE ABRIR. Ochocientas personas entran a sacar su papeleta y el
+ *     área del hermano —que sí mira las fechas, con `ventanaAbiertaPara()`— les
+ *     dice que no pueden. Ochocientas personas convencidas de que la aplicación
+ *     está rota, y secretaría cogiendo el teléfono toda la semana.
+ *
+ *   · DESPUÉS DE LA FECHA LÍMITE. El correo anuncia como plazo una fecha QUE YA
+ *     PASÓ. Quien lo lea deprisa entiende que aún llega, y quien no, entiende
+ *     que ha perdido el sitio por culpa de un aviso que llegó tarde. Este es el
+ *     peor de los dos: el año pasado ese hermano salió, y el sitio se reparte.
+ *
+ * Un correo a ochocientas personas NO SE PUEDE DESHACER. Por eso esto es un
+ * bloqueo y no un aviso: es exactamente el mismo criterio que
+ * `acreedorIncompleto()` con el fichero SEPA —no dejar generar algo que va a
+ * salir mal en casa de otro— y que `cuotas.remesada_el` con las remesas.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ LA APERTURA ES LA DE LOS RENOVADORES
+ * ----------------------------------------------------------------------------
+ *
+ * Hay dos fechas de apertura: los que salieron el año pasado pueden antes, y
+ * los demás unos días después. La convocatoria va a todos a la vez, así que se
+ * toma la PRIMERA: en cuanto alguien puede sacar su papeleta, el plazo está
+ * abierto y el correo dice verdad para ese alguien.
+ *
+ * ----------------------------------------------------------------------------
+ * LA SALIDA, CUANDO LAS FECHAS SON LAS QUE ESTÁN MAL
+ * ----------------------------------------------------------------------------
+ *
+ * No hay «convocar de todas formas», a propósito. Si una hermandad de verdad
+ * necesita convocar hoy, es que sus fechas de campaña no son las que dice tener
+ * — y entonces lo que hay que arreglar son las fechas, no saltarse el freno:
+ * porque esas mismas fechas son las que van a decidir quién puede sacar
+ * papeleta y quién pierde su sitio. Por eso el motivo dice a dónde ir.
+ *
+ * @param hoyIso Se pasa desde fuera para poder probarlo con una fecha fija.
+ */
+export function sePuedeConvocar(
+  campana: Campana,
+  hoyIso?: string,
+  /*
+   * ¿HAY CAMPAÑA DE VERDAD, o es la de fábrica?
+   *
+   * Por defecto `true` porque las pruebas de las FECHAS —que son la mayoría—
+   * hablan de una campaña que existe, y arrastrar el tercer parámetro por
+   * todas ellas solo añadiría ruido. Lo que sí hay es una prueba que comprueba
+   * que la PANTALLA se lo pasa de verdad: es ahí donde el descuido costaría.
+   */
+  hayCampana = true,
+): { puede: boolean; motivo: string } {
+  /*
+   * LO PRIMERO DE TODO. Sin campaña creada, las fechas que se estarían mirando
+   * son inventadas, así que cualquier respuesta que saliera de compararlas
+   * sería una respuesta sobre nada.
+   */
+  if (!hayCampana) {
+    return {
+      puede: false,
+      motivo:
+        'Todavía no habéis creado la campaña de papeletas, así que las fechas que se ven son de '
+        + 'ejemplo. Créala en Ajustes de campaña —el año, cuándo abre el plazo y hasta cuándo— y '
+        + 'entonces se podrá convocar.',
+    }
+  }
+  const dias = (iso: string) => (hoyIso ? diasEntre(hoyIso, iso) : diasHasta(iso))
+  const abre = campana.fechaInicioParticiparon
+  const cierra = campana.fechaLimiteRenovacion
+
+  const faltan = dias(abre)
+  if (faltan > 0) {
+    return {
+      puede: false,
+      motivo:
+        `El plazo de la campaña ${campana.anio} todavía no ha abierto: empieza el ${enCristianoCorto(abre)}`
+        + `${faltan === 1 ? ' (mañana)' : `, dentro de ${faltan} días`}. `
+        + 'Si convocas ahora, el correo dirá que ya pueden sacar la papeleta y no podrán. '
+        + 'Si las fechas no son las buenas, cámbialas en Ajustes de campaña.',
+    }
+  }
+
+  const quedan = dias(cierra)
+  if (quedan < 0) {
+    return {
+      puede: false,
+      motivo:
+        `El plazo de la campaña ${campana.anio} se cerró el ${enCristianoCorto(cierra)}. `
+        + 'El correo anunciaría como fecha límite un día que ya ha pasado. '
+        + 'Si vas a ampliarlo, cambia la fecha en Ajustes de campaña y vuelve a convocar.',
+    }
+  }
+
+  return { puede: true, motivo: '' }
+}
+
+/** Días de `desde` a `hasta`, las dos en `yyyy-mm-dd`. Negativo si `hasta` ya pasó. */
+function diasEntre(desde: string, hasta: string): number {
+  const aUTC = (t: string) => {
+    const [a, m, d] = t.slice(0, 10).split('-').map(Number)
+    return Date.UTC(a, (m ?? 1) - 1, d ?? 1)
+  }
+  return Math.round((aUTC(hasta) - aUTC(desde)) / 86_400_000)
+}
+
+/** «2027-02-28» -> «28 de febrero de 2027». Para decírselo a una persona. */
+function enCristianoCorto(iso: string): string {
+  const [a, m, d] = iso.slice(0, 10).split('-').map(Number)
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+  return `${d} de ${meses[(m ?? 1) - 1]} de ${a}`
 }
 
 /**
