@@ -692,7 +692,17 @@ export default function Papeletas() {
    * fijado ninguna fecha — anunciándole a ochocientas personas un plazo que
    * nadie ha decidido y un año que a lo mejor no es el suyo.
    */
-  const puedeConvocar = sePuedeConvocar(campana, undefined, estadoCampana === 'creada')
+  const puedeConvocar = estadoCampana === 'sin-saber'
+    /*
+     * MIENTRAS NO CONSTA, NI SE OFRECE NI SE ACUSA.
+     *
+     * Con `sePuedeConvocar(..., false)` se decía «primero hay que crear la
+     * campaña» a la vez que la banda de arriba decía «comprobando la campaña
+     * de la hermandad…». Dos avisos seguidos que se contradicen: uno afirma que
+     * no existe y el otro que todavía no se sabe.
+     */
+    ? { puede: false, motivo: 'Comprobando la campaña…' }
+    : sePuedeConvocar(campana, undefined, estadoCampana === 'creada')
 
   async function convocar() {
     if (convocando) return
@@ -887,7 +897,14 @@ export default function Papeletas() {
           <p className="eyebrow">Papeletas de sitio</p>
           <h1>Renovación de papeletas</h1>
           <p className="dash-head__lead">
-            Campaña {campana.anio} · el censo entero, con quién ha renovado su sitio y quién no.{' '}
+            {/*
+              EL AÑO SOLO SI ES DE VERDAD. Sin campaña creada, `campana.anio` es
+              el del ejemplo: poner «Campaña 2027» como titular de la pantalla es
+              afirmar un año que nadie ha elegido, y a partir de ahí todo lo que
+              se lea debajo se entiende referido a él.
+            */}
+            {estadoCampana === 'creada' ? `Campaña ${campana.anio} · ` : ''}
+            El censo entero, con quién ha renovado su sitio y quién no.{' '}
             <Link to="/app/configuracion" className="dash-head__link">
               Personalizar datos de la hermandad
             </Link>
@@ -947,7 +964,15 @@ export default function Papeletas() {
       </div>
       )}
 
-      {/* Convocatoria: avisar a todos los hermanos de la apertura del plazo */}
+      {/*
+        Convocatoria: avisar a todos los hermanos de la apertura del plazo.
+
+        MIENTRAS NO CONSTA, ESTE RECUADRO NO SALE. La banda de arriba ya dice
+        que se está comprobando; poner aquí otro que diga lo mismo son dos
+        avisos seguidos con el mismo texto — y dos avisos iguales se leen como
+        ninguno. En cuanto contesta la base, aparece.
+      */}
+      {estadoCampana !== 'sin-saber' && (
       <div className="banner-inline banner-inline--accent" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {convocatoria && convocatoria.anio === campana.anio ? (
           <span>
@@ -990,6 +1015,7 @@ export default function Papeletas() {
               : 'Convocar papeletas'}
         </button>
       </div>
+      )}
 
 
 
@@ -1017,7 +1043,9 @@ export default function Papeletas() {
         <div className="stat-tile">
           <span className="stat-tile__label">Papeletas emitidas</span>
           <span className="stat-tile__value">{stats.emitidas}</span>
-          <span className="stat-tile__trend stat-tile__trend--neutral">Campaña {campana.anio}</span>
+          <span className="stat-tile__trend stat-tile__trend--neutral">
+            {estadoCampana === 'creada' ? `Campaña ${campana.anio}` : 'Sin campaña creada'}
+          </span>
         </div>
         <div className="stat-tile">
           <span className="stat-tile__label">Recaudado</span>

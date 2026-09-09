@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Papeleta } from '../data/papeletas'
 import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
+import { isSupabaseConfigured } from './supabase'
 
 /**
  * Una campaña de papeletas de sitio corresponde a la estación de penitencia
@@ -167,6 +168,19 @@ let seLePreguntoALaBase = false
  */
 export function estadoDeLaCampana(): 'creada' | 'sin-crear' | 'sin-saber' {
   if (hayCampanaCreada()) return 'creada'
+  /*
+   * SIN BASE DE DATOS NO HAY NADA QUE ESPERAR, y esto estaba mal.
+   *
+   * «Sin saber» solo tiene sentido mientras hay una consulta en marcha. Sin
+   * Supabase —modo demostración, o una hermandad que todavía no la ha
+   * conectado— no hay consulta ninguna: la respuesta es inmediata y es lo que
+   * diga este navegador.
+   *
+   * Sin esta línea, esas pantallas se quedaban en «Comprobando la campaña de la
+   * hermandad…» PARA SIEMPRE, y con el botón de convocar apagado sin más
+   * explicación que un mensaje que nunca se resolvía.
+   */
+  if (!isSupabaseConfigured) return 'sin-crear'
   return seLePreguntoALaBase ? 'sin-crear' : 'sin-saber'
 }
 
@@ -368,13 +382,19 @@ export function sePuedeConvocar(
    * sería una respuesta sobre nada.
    */
   if (!hayCampana) {
-    return {
-      puede: false,
-      motivo:
-        'Todavía no habéis creado la campaña de papeletas, así que las fechas que se ven son de '
-        + 'ejemplo. Créala en Ajustes de campaña —el año, cuándo abre el plazo y hasta cuándo— y '
-        + 'entonces se podrá convocar.',
-    }
+    /*
+     * SIN CAMPAÑA, EL MOTIVO ES CORTO. Y esto es una corrección de algo que se
+     * veía fatal en pantalla.
+     *
+     * Aquí se explicaba entero —qué falta, dónde se crea, qué se pone— y justo
+     * encima hay una banda que dice EXACTAMENTE eso. Se quedaban las dos
+     * seguidas contando lo mismo con otras palabras, que es la forma más rápida
+     * de que no se lea ninguna.
+     *
+     * La explicación larga vive en la banda de arriba, que es la que manda; esto
+     * solo tiene que decir por qué el botón está apagado.
+     */
+    return { puede: false, motivo: 'Primero hay que crear la campaña.' }
   }
   const dias = (iso: string) => (hoyIso ? diasEntre(hoyIso, iso) : diasHasta(iso))
   const abre = campana.fechaInicioParticiparon

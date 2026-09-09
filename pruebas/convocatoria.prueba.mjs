@@ -151,8 +151,18 @@ export default async function ({ caso, cargar }) {
   caso('sin campaña creada no se convoca', false, sinCampana.puede)
   caso('aunque las fechas de ejemplo digan que sí', true,
     campana.sePuedeConvocar(C, '2026-11-15', true).puede)
-  caso('y se dice que las fechas son de ejemplo', true, /de ejemplo/.test(sinCampana.motivo))
-  caso('y dónde se crea', true, /Ajustes de campaña/.test(sinCampana.motivo))
+  /*
+   * EL MOTIVO ES CORTO A PROPÓSITO, y esto también se corrigió mirando la
+   * pantalla: aquí se explicaba entero —qué falta, dónde se crea, qué se pone—
+   * y justo encima hay una banda que dice EXACTAMENTE eso. Se quedaban las dos
+   * seguidas contando lo mismo con otras palabras, que es la forma más rápida
+   * de que no se lea ninguna.
+   *
+   * La explicación larga vive en la banda; esto solo dice por qué el botón
+   * está apagado. Que la banda la lleve se comprueba más abajo.
+   */
+  caso('el motivo es corto, no una segunda explicación', true, sinCampana.motivo.length < 60)
+  caso('y dice lo que falta', true, /crear la campaña/.test(sinCampana.motivo))
 
   /*
    * Y SE SABE POR SI LA CLAVE ESTÁ ESCRITA: solo la escriben `saveCampana()`
@@ -252,6 +262,36 @@ export default async function ({ caso, cargar }) {
     /estadoCampana !== 'creada' \? \(/.test(pantalla))
   caso('y distingue «no hay» de «todavía no consta»', true,
     /estadoCampana === 'sin-crear'[\s\S]{0,400}?Comprobando la campaña/.test(pantalla))
+  // La explicación entera va en la banda, que es la que manda.
+  caso('la banda explica qué hay que crear y dónde', true,
+    /Ajustes de campaña<\/b>/.test(pantalla) && /el año, cuándo abre el plazo/.test(pantalla))
+  /*
+   * Y MIENTRAS NO CONSTA, EL RECUADRO DE CONVOCAR NO SALE. Con él salían dos
+   * avisos seguidos con el MISMO texto —«Comprobando la campaña…» dos veces—,
+   * y dos avisos iguales se leen como ninguno.
+   */
+  caso('sin saberlo todavía, no sale el recuadro de convocar', true,
+    /\{estadoCampana !== 'sin-saber' && \(/.test(pantalla))
+  /*
+   * Y EL AÑO NO SE AFIRMA SIN CAMPAÑA. `campana.anio` es el del ejemplo:
+   * poner «Campaña 2027» de titular es afirmar un año que nadie ha elegido, y
+   * a partir de ahí todo lo que se lea debajo se entiende referido a él.
+   */
+  caso('no se pone «Campaña 2027» sin campaña', true,
+    /estadoCampana === 'creada' \? `Campaña \$\{campana\.anio\} · ` : ''/.test(pantalla))
+  caso('y el recuadro lo dice', true, /'Sin campaña creada'/.test(pantalla))
+
+  /*
+   * --- SIN BASE DE DATOS NO SE ESPERA A NADIE ---
+   *
+   * «Sin saber» solo tiene sentido mientras hay una consulta en marcha. Sin
+   * Supabase —modo demostración, o una hermandad que aún no la ha conectado—
+   * no hay consulta: la pantalla se quedaba en «Comprobando la campaña de la
+   * hermandad…» PARA SIEMPRE, con el botón apagado y un mensaje que no se
+   * resolvía nunca. Lo vi levantando la aplicación, no leyendo el código.
+   */
+  caso('sin base de datos no se queda comprobando', true,
+    /if \(!isSupabaseConfigured\) return 'sin-crear'/.test(srcCampana))
 
   /*
    * LAS TRES SITUACIONES, NO DOS. Durante el segundo que tarda la base en

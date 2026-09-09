@@ -122,4 +122,47 @@ export default async function ({ caso }) {
   // Y el selector de color y el deslizador, que con borde y padding se rompen.
   caso('y el selector de color', true, /:not\(\[type='color'\]\)/.test(css))
   caso('y el deslizador', true, /:not\(\[type='range'\]\)/.test(css))
+
+
+  /*
+   * ==========================================================================
+   * Y DOS COSAS QUE SOLO SE VIERON LEVANTANDO LA APLICACIÓN
+   * ==========================================================================
+   *
+   * Las dos llevaban puestas desde siempre y ninguna prueba las tocaba, porque
+   * no son un error: son cosas que se ven mal. Aparecieron al arrancar la
+   * aplicación de verdad y mirar las pantallas, que es lo que no se había hecho
+   * hasta ahora.
+   */
+  const shell = await readFile('src/components/AppShell.tsx', 'utf8')
+
+  /*
+   * 1. LA MARCA DE LA BARRA DE ARRIBA SALÍA SIEMPRE.
+   *
+   * En escritorio quedaba huérfana: un nazareno de 26 píxeles solo en una barra
+   * blanca ancha, con la marca de verdad ya puesta justo encima en la barra
+   * lateral. Dos veces la misma cosa, y la de arriba a un tamaño en el que el
+   * dibujo se lee como un garabato.
+   *
+   * Va con el botón del menú: los dos existen para cuando la barra lateral está
+   * escondida, y hasta ahora solo uno de los dos lo sabía.
+   */
+  caso('la marca de la barra de arriba se puede ocultar', true,
+    /app-topbar__marca/.test(shell))
+  caso('y está oculta salvo cuando no hay barra lateral', true,
+    /\.app-topbar__marca \{ display: none; \}/.test(css))
+  caso('con la misma regla que el botón del menú', true,
+    /\.app-menu-btn \{ display: inline-flex; \}\n\s*\.app-topbar__marca \{ display: inline-flex; \}/.test(css))
+
+  /*
+   * 2. LAS ETIQUETAS DE ESTADO SE PARTÍAN EN DOS LÍNEAS.
+   *
+   * «Sin cuota emitida» cabía justo, y en la columna del censo se partía: esa
+   * fila quedaba más alta que las demás. Con cincuenta filas seguidas, unas
+   * altas y otras no, la tabla se lee escalonada sin que se sepa por qué.
+   */
+  const pill = (css.match(/\n\.pill \{([\s\S]*?)\n\}/) ?? ['', ''])[1]
+  caso('una etiqueta de estado no se parte en dos líneas', true, /white-space: nowrap/.test(pill))
+  // Y su punto de color no se encoge hasta volverse una raya.
+  caso('y su punto no se encoge', true, /\.pill::before \{ flex: none; \}/.test(css))
 }

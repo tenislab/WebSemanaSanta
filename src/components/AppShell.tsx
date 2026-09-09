@@ -19,7 +19,7 @@ import { contarAvisosQueEsperan } from '../lib/notificaciones'
 import { avisoDelEsquema, mirarElEsquema, type EstadoDelEsquema } from '../lib/versionEsquema'
 import { dondeEstoyDeSoporte, salirDeSoporte } from '../lib/soporte'
 import { IconoMedalla } from './Iconos'
-import { useSuscripcion, moduloPermitidoPorPack } from '../lib/suscripcion'
+import { useSuscripcion, moduloPermitidoPorPack, avisoDePagoFallido } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
 import ReportarFallo from './ReportarFallo'
 
@@ -539,7 +539,22 @@ export default function AppShell() {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
-          <Logo size={26} withText={false} />
+          {/*
+            LA MARCA, SOLO CUANDO NO ESTÁ LA BARRA LATERAL.
+
+            En escritorio salía SIEMPRE, y quedaba huérfana: un nazareno de 26
+            píxeles solo en una barra blanca ancha, con la marca de verdad ya
+            puesta justo encima en la barra lateral. Dos veces la misma cosa, y
+            la de aquí a un tamaño en el que el dibujo se convierte en un
+            garabato.
+
+            Se oculta con la misma regla que el botón del menú de al lado: los
+            dos existen para cuando la barra lateral está escondida, y hasta
+            ahora solo uno de los dos lo sabía.
+          */}
+          <span className="app-topbar__marca">
+            <Logo size={30} withText={false} />
+          </span>
           {/* Ir a cualquier módulo sin buscar el menú: el atajo se enseña aquí
               porque si no, nadie descubre que existe. */}
           <button
@@ -646,6 +661,42 @@ export default function AppShell() {
           const aviso = avisoDelEsquema(esquema)
           return aviso ? (
             <div className="banner-inline banner-inline--warn app-sync-error" role="alert">
+              <span><b>{aviso.titulo}.</b> {aviso.texto}</span>
+            </div>
+          ) : null
+        })()}
+
+        {/*
+          LA TARJETA DE LA SUSCRIPCIÓN HA FALLADO.
+
+          Este aviso es TODO lo que se ganó al atender `invoice.payment_failed`,
+          y conviene tenerlo claro: el agujero nunca fue el acceso —Stripe
+          reintenta unas semanas y, si no cobra, cancela, y esa cancelación ya
+          se atendía—. El agujero era que NADIE SE LO DECÍA A LA HERMANDAD.
+
+          Por eso no bloquea nada. Cortar el panel el primer día que una tarjeta
+          caduca sería dejar sin papeletas a cuatrocientas personas por un
+          trámite de dos minutos, y trataría como morosa a una hermandad que
+          lleva dos años pagando. Se avisa mientras hay tiempo, y el cierre —si
+          llega— lo sigue trayendo Stripe por su cuenta.
+
+          Tampoco se puede cerrar, por lo mismo que el aviso de la base: el
+          problema no se va solo. Se va cuando entra el cobro, y entonces el
+          banner desaparece él solo porque `renovar_suscripcion_por_stripe`
+          limpia la fecha. Un aviso que hay que quitar a mano se queda puesto
+          para siempre.
+
+          Lo ve toda la junta y no solo quien contrató, a propósito: quien está
+          delante de la pantalla un martes cualquiera no suele ser el tesorero,
+          pero sí es quien puede avisarle.
+        */}
+        {(() => {
+          const aviso = avisoDePagoFallido(suscripcion)
+          return aviso ? (
+            <div
+              className={`banner-inline ${aviso.urgente ? 'banner-inline--alerta' : 'banner-inline--warn'} app-sync-error`}
+              role="alert"
+            >
               <span><b>{aviso.titulo}.</b> {aviso.texto}</span>
             </div>
           ) : null
