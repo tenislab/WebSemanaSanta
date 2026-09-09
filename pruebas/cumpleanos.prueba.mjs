@@ -158,4 +158,69 @@ export default async function ({ cargar, caso }) {
   caso('el sesgo usa las funciones que ya había', true,
     /esSuCumpleHoy\(h\.fechaNacimiento\)/.test(src) && /cumpleEsteMes\(h\.fechaNacimiento\)/.test(src))
   caso('y no se escribe otra cuenta aquí', false, /getMonth\(\) \+ 1/.test(src))
+
+
+  /*
+   * ==========================================================================
+   * LOS DÍAS QUE NADIE ABRIÓ LA PANTALLA
+   * ==========================================================================
+   *
+   * Este es el que convertía la función en casi inútil. Las reglas se miran
+   * cuando alguien entra en Comunicados, y en una hermandad eso puede ser una
+   * vez por semana: sin recuperar el hueco, «felicitar el cumpleaños» solo
+   * alcanzaba a quien cumpliera JUSTO el día que alguien abrió esa pantalla.
+   * Se perdían casi todos.
+   */
+  const conHueco = (desde) => ({ ...base, cumpleanos: 'Hoy', cumpleDesde: desde })
+
+  // El 15 cumple uno; el 18 se abre la pantalla por primera vez desde el 14.
+  caso('se recupera a quien cumplió mientras nadie miraba', 'Cumple Hoy',
+    conElRelojEn('2027-03-18', () => nombres(seg.filtrarSegmento(hermanos, conHueco('2027-03-14')))))
+
+  /*
+   * Y EL DÍA `desde` NO SE VUELVE A CONTAR: es el día en que la regla ya se
+   * disparó, así que a quien cumpliera ese día ya se le felicitó. Contarlo otra
+   * vez sería mandarle dos felicitaciones.
+   */
+  caso('a quien cumplió el día que ya se miró no se le repite', '',
+    conElRelojEn('2027-03-18', () => nombres(seg.filtrarSegmento(hermanos, conHueco('2027-03-15')))))
+
+  // Y quien cumple HOY entra igual, con hueco o sin él.
+  caso('quien cumple hoy entra siempre', 'Cumple Hoy',
+    conElRelojEn('2027-03-15', () => nombres(seg.filtrarSegmento(hermanos, conHueco('2027-03-12')))))
+
+  // Sin hueco declarado, se comporta como antes: solo hoy.
+  caso('sin hueco, solo los de hoy', '',
+    conElRelojEn('2027-03-18', () => nombres(seg.filtrarSegmento(hermanos, { ...base, cumpleanos: 'Hoy' }))))
+
+  /*
+   * EL CAMBIO DE AÑO. Del 30 de diciembre al 2 de enero el hueco cruza el 31 y
+   * el 1, y una cuenta hecha con restas de fechas se equivoca ahí. Se recorre
+   * día a día justamente para que esto salga solo.
+   */
+  const enNavidad = [{ id: 'n', nombre: 'Nochevieja', numero: 9, estado: 'Activo', email: 'n@x.es', fechaNacimiento: '1970-12-31' }]
+  caso('el hueco cruza bien el fin de año', 'Nochevieja',
+    conElRelojEn('2027-01-02', () => nombres(seg.filtrarSegmento(enNavidad, conHueco('2026-12-30')))))
+
+  /*
+   * --- Y EL TOPE: CUATRO DÍAS, NO TODOS ---
+   *
+   * Una felicitación tiene fecha de caducidad. «¡Felicidades!» un día tarde se
+   * agradece; nueve días tarde es peor que no mandar nada, porque se lee como
+   * que la hermandad se acordó por casualidad revisando una lista.
+   */
+  const reglas = await cargar('src/lib/reglasAutomaticas.ts')
+  caso('se recuperan cuatro días', 4, reglas.DIAS_QUE_SE_RECUPERAN)
+  const srcReglas = await readFile('src/lib/reglasAutomaticas.ts', 'utf8')
+  caso('y con un hueco mayor no se recupera nada', true,
+    /hueco > 1 && hueco <= DIAS_QUE_SE_RECUPERAN \+ 1/.test(srcReglas))
+  /*
+   * Y SOLO PARA «cumple hoy». En «cumple este mes» no tiene sentido —el mes
+   * entero ya está dentro— y aplicarlo sería felicitar dos veces al mismo.
+   */
+  caso('solo se recupera en el sesgo de «hoy»', true,
+    /regla\.criterios\?\.cumpleanos === 'Hoy' && regla\.ultimaVez/.test(srcReglas))
+  // Y la fecha no se guarda en la regla: es del momento, no del sesgo.
+  const db = await readFile('src/lib/db/reglasAutomaticas.ts', 'utf8')
+  caso('el hueco no se guarda en la regla', false, /cumpleDesde/.test(db))
 }

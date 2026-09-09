@@ -1,5 +1,5 @@
 import type { ReglaAutomatica } from '../reglasAutomaticas'
-import type { CriteriosSegmento } from '../segmentacion'
+import { CRITERIOS_POR_DEFECTO, type CriteriosSegmento } from '../segmentacion'
 
 /**
  * `hermandad_id` no se manda: la pone la base.
@@ -28,7 +28,18 @@ export function rowToRegla(r: Record<string, unknown>): ReglaAutomatica {
     id: r.id as string,
     nombre: (r.nombre as string | null) ?? '',
     cada: ((r.cada as string | null) ?? 'diaria') as ReglaAutomatica['cada'],
-    criterios: ((r.criterios as CriteriosSegmento | null) ?? {}) as CriteriosSegmento,
+    /*
+     * COMPLETADO CON LOS DE FÁBRICA, y esto REPARA lo que ya está guardado.
+     *
+     * Las reglas creadas antes del arreglo tienen en la columna solo
+     * `{ cumpleanos: 'Hoy' }`, y con eso `filtrarSegmento` no sacaba a nadie.
+     * Al leerlas así se completan, y en cuanto se toque cualquier cosa de la
+     * regla se guardan ya enteras. No hace falta que nadie las rehaga.
+     */
+    criterios: {
+      ...CRITERIOS_POR_DEFECTO,
+      ...((r.criterios as Partial<CriteriosSegmento> | null) ?? {}),
+    },
     destinatarios: (r.destinatarios as string | null) ?? '',
     asunto: (r.asunto as string | null) ?? '',
     cuerpo: (r.cuerpo as string | null) ?? '',

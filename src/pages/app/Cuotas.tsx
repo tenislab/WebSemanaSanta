@@ -316,6 +316,47 @@ export default function Cuotas() {
     setConceptoEmision(conceptosCuota[0].nombre)
   }, [conceptosCuota, conceptoEmision])
   const [metodoEmision, setMetodoEmision] = useState<MetodoCobro>('Domiciliación')
+
+  /*
+   * ==========================================================================
+   * COBRAR EN MANO, HERMANO A HERMANO
+   * ==========================================================================
+   *
+   * El caso: alguien se pasa por la casa de hermandad un martes y paga su
+   * cuota en efectivo. Hasta ahora había que buscarlo en la lista de recibos
+   * —que en una hermandad son cientos, de varios ejercicios— y dar por pagado
+   * el suyo a mano, uno por uno si debía varios.
+   *
+   * Y lo que salía mal no era solo el tiempo: `marcarPagada` apuntaba el cobro
+   * CON EL MÉTODO CON EL QUE SE EMITIÓ el recibo. Un recibo domiciliado pagado
+   * en efectivo entraba en el cajón y el apunte decía «banco»: al conciliar el
+   * extracto no aparecía, y la caja descuadraba todos los meses por esa
+   * cantidad.
+   *
+   * Aquí se elige a la persona, se ven TODOS sus recibos pendientes de golpe
+   * —de cualquier ejercicio, que es como llega la gente— y se cobra diciendo
+   * cómo ha pagado de verdad.
+   */
+  const [cobroEnManoId, setCobroEnManoId] = useState<string | null>(null)
+  const [metodoEnMano, setMetodoEnMano] = useState<MetodoCobro>('Efectivo')
+  const [cobradosEnMano, setCobradosEnMano] = useState<number>(0)
+
+  /*
+   * SUS RECIBOS SIN PAGAR, DE CUALQUIER EJERCICIO.
+   *
+   * Sin filtrar por el ejercicio que se esté mirando: quien viene a pagar en
+   * ventanilla suele traer atrasados, y enseñarle solo los de este año sería
+   * cobrarle la mitad y dejarle debiendo sin que nadie se entere.
+   *
+   * Se ordenan del más viejo al más nuevo porque es el orden en que se cobra:
+   * primero lo que lleva más tiempo debiéndose.
+   */
+  const recibosDelQueVieneAPagar = useMemo(() => {
+    if (!cobroEnManoId) return []
+    return cuotas
+      .filter((c) => c.hermanoId === cobroEnManoId && c.estado !== 'Pagada')
+      .sort((a, b) => (a.fechaEmision < b.fechaEmision ? -1 : 1))
+  }, [cuotas, cobroEnManoId])
   // Un año a medio teclear («2», «202») emitiría cuotas de un ejercicio absurdo.
   const ejercicioEnRango = ejercicioEmision >= 2000 && ejercicioEmision <= 2100
   /*
@@ -450,13 +491,34 @@ export default function Cuotas() {
     return { total, cobrado, pendiente, alDia }
   }, [cuotas, ejercicioMirado])
 
-  function marcarPagada(id: string) {
-    setCuotas((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, estado: 'Pagada', fechaPago: hoy(), pagoComunicado: null } : c)),
-    )
-    setSelected((prev) =>
-      prev && prev.id === id ? { ...prev, estado: 'Pagada', fechaPago: hoy(), pagoComunicado: null } : prev,
-    )
+  /**
+   * DA UN RECIBO POR PAGADO.
+   *
+   * ==========================================================================
+   * EL MÉTODO NO ES UN ADORNO: DECIDE EN QUÉ CUENTA ENTRA EL DINERO
+   * ==========================================================================
+   *
+   * `conApunteDeCobro` llama a `cuentaSegunMetodo()`, así que del método sale
+   * si el apunte va a CAJA o al BANCO.
+   *
+   * Y aquí había un fallo: se pasaba `c.metodoCobro`, o sea el método CON EL
+   * QUE SE EMITIÓ. Cuando un hermano venía a pagar en efectivo a la casa de
+   * hermandad su recibo domiciliado, el dinero entraba en el cajón y el apunte
+   * decía «banco». Al conciliar el extracto no aparece, y la caja descuadra por
+   * esa misma cantidad todos los meses.
+   *
+   * Por eso `metodo` se puede pasar: es lo que dice cómo se ha cobrado DE
+   * VERDAD, que no siempre es como se pensaba cobrar.
+   */
+  function marcarPagada(id: string, metodo?: MetodoCobro) {
+    const cambios = {
+      estado: 'Pagada' as const,
+      fechaPago: hoy(),
+      pagoComunicado: null,
+      ...(metodo ? { metodoCobro: metodo, domiciliada: metodo === 'Domiciliación' } : {}),
+    }
+    setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, ...cambios } : c)))
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, ...cambios } : prev))
     // Al hermano le llega a su buzón: se ahorra la llamada de «¿os ha
     // entrado ya mi cuota?», que es la más repetida de secretaría.
     const c = cuotas.find((x) => x.id === id)
@@ -471,7 +533,8 @@ export default function Cuotas() {
           categoria: 'Cuotas Hermanos/as',
           importe: c.importe,
           fecha: hoy(),
-          metodo: c.metodoCobro,
+          // El de VERDAD si se ha dicho; si no, el que traía el recibo.
+          metodo: metodo ?? c.metodoCobro,
         }),
       )
       const texto = `Tu recibo de ${c.concepto} (${formatCurrency(c.importe)}) queda pagado. Gracias.`
@@ -1153,6 +1216,115 @@ export default function Cuotas() {
           </button>
         </div>
       )}
+
+      {/*
+        ====================================================================
+        COBRAR EN MANO — el hermano que se pasa por la casa de hermandad
+        ====================================================================
+
+        Va ARRIBA DEL TODO y no escondido en un cajón porque es lo que se hace
+        con alguien delante esperando: si hay que buscarlo, se acaba dando por
+        pagado el recibo desde la lista y perdiendo el método — que es
+        justamente lo que descuadraba la caja.
+      */}
+      <section className="settings-card" style={{ marginBottom: '1.1rem' }}>
+        <div className="settings-card__head">
+          <h2 className="settings-card__title">Cobrar a un hermano</h2>
+        </div>
+        <p className="form-hint" style={{ marginTop: 0 }}>
+          Para cuando alguien viene a pagar a la casa de hermandad. Búscalo, elige cómo paga y dale a
+          cobrar: se apunta en el libro con la cuenta que toca y le llega el aviso a su área.
+        </p>
+        <div className="form-grid-2">
+          <div className="form-row">
+            <label htmlFor="cobro-en-mano">Hermano</label>
+            <HermanoPicker
+              id="cobro-en-mano"
+              hermanos={hermanos.filter((h) => h.estado !== 'Baja').map((h) => ({
+                id: h.id, nombre: h.nombre, marca: `Nº ${h.numero}`,
+              }))}
+              placeholder="Escribe el nombre o el número"
+              valorId={cobroEnManoId}
+              onSelect={(p) => { setCobroEnManoId(p?.id ?? null); setCobradosEnMano(0) }}
+              textoVacio="Nadie elegido"
+            />
+          </div>
+          <div className="form-row">
+            <label htmlFor="metodo-en-mano">Cómo paga</label>
+            {/*
+              SIN «DOMICILIACIÓN» EN LA LISTA, y es a propósito: quien está
+              delante pagando no está domiciliando nada. Ofrecerlo aquí es
+              ofrecer justo el error que descuadra la caja.
+            */}
+            <select
+              id="metodo-en-mano"
+              value={metodoEnMano}
+              onChange={(e) => setMetodoEnMano(e.target.value as MetodoCobro)}
+            >
+              {METODOS_COBRO.filter((m) => m !== 'Domiciliación').map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {cobroEnManoId && (
+          recibosDelQueVieneAPagar.length === 0 ? (
+            <p className="form-hint form-hint--ok">
+              {cobradosEnMano > 0
+                ? `✓ Cobrado. Ya no le queda ningún recibo pendiente.`
+                : 'No tiene ningún recibo pendiente.'}
+            </p>
+          ) : (
+            <>
+              {cobradosEnMano > 0 && (
+                <p className="form-hint form-hint--ok">
+                  ✓ {cobradosEnMano} recibo{cobradosEnMano === 1 ? '' : 's'} cobrado{cobradosEnMano === 1 ? '' : 's'}.
+                </p>
+              )}
+              <ul className="lista-limpia">
+                {recibosDelQueVieneAPagar.map((c) => (
+                  <li key={c.id} className="assign-box" style={{ marginBottom: '0.5rem' }}>
+                    <div className="assign-box__row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>
+                        <b>{c.concepto}</b>
+                        {' · '}{formatCurrency(c.importe)}
+                        <span className="table-subtle">
+                          {' · '}ejercicio {c.ejercicio ?? new Date(`${c.fechaEmision}T00:00:00`).getFullYear()}
+                          {c.estado === 'Devuelta' && ' · devuelta por el banco'}
+                        </span>
+                      </span>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => { marcarPagada(c.id, metodoEnMano); setCobradosEnMano((n) => n + 1) }}
+                      >
+                        Cobrar {formatCurrency(c.importe)}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {/*
+                Y EL TOTAL, porque quien viene a pagar pregunta «¿cuánto es?»
+                antes que nada, y sumarlo de cabeza con cuatro recibos delante
+                es como se cobra de menos.
+              */}
+              {recibosDelQueVieneAPagar.length > 1 && (
+                <p className="form-hint">
+                  {/*
+                    CON `sumaEuros`, no con un `reduce` a pelo. Sumar 12,10 +
+                    12,20 en coma flotante da 24,299999999999997, y eso acaba
+                    impreso delante de quien está pagando. Hay una prueba que lo
+                    vigila en toda la aplicación, y me pilló aquí.
+                  */}
+                  Debe <b>{formatCurrency(sumaEuros(recibosDelQueVieneAPagar.map((c) => c.importe)))}</b> en{' '}
+                  {recibosDelQueVieneAPagar.length} recibos.
+                </p>
+              )}
+            </>
+          )
+        )}
+      </section>
 
       <section className="stat-grid">
         <div className="stat-tile">

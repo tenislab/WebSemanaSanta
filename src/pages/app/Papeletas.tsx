@@ -36,7 +36,7 @@ import {
   diasHasta,
   renovacionDeHermano,
   sePuedeConvocar,
-  hayCampanaCreada,
+  estadoDeLaCampana,
   type Campana,
   type EstadoRenovacion,
 } from '../../lib/campana'
@@ -308,7 +308,15 @@ export default function Papeletas() {
     return avisos
   }, [ocupadosPorTramo, tramos])
 
-  const abierta = ventanaAbierta(campana)
+  /*
+   * ¿HAY CAMPAÑA DE VERDAD, O SE ESTÁN VIENDO LAS FECHAS DE EJEMPLO?
+   *
+   * Lo necesitan tres cosas de esta pantalla: la banda de renovación, el botón
+   * de convocar y este `abierta`, que decide medio filtrado. Sin esto, las tres
+   * hablaban de una campaña que nadie había creado.
+   */
+  const estadoCampana = estadoDeLaCampana()
+  const abierta = ventanaAbierta(campana, estadoCampana === 'creada')
   const diasRestantes = diasHasta(campana.fechaLimiteRenovacion)
 
   /**
@@ -684,7 +692,7 @@ export default function Papeletas() {
    * fijado ninguna fecha — anunciándole a ochocientas personas un plazo que
    * nadie ha decidido y un año que a lo mejor no es el suyo.
    */
-  const puedeConvocar = sePuedeConvocar(campana, undefined, hayCampanaCreada())
+  const puedeConvocar = sePuedeConvocar(campana, undefined, estadoCampana === 'creada')
 
   async function convocar() {
     if (convocando) return
@@ -905,6 +913,24 @@ export default function Papeletas() {
         </div>
       </div>
 
+      {/*
+        SIN CAMPAÑA CREADA NO SE AFIRMA NADA.
+
+        Aquí ponía «Renovación abierta hasta el 28 feb 2027» a una hermandad que
+        no había creado ninguna campaña: esa fecha es la de ejemplo que trae
+        `getCampana()` cuando no hay nada guardado. Anunciar un plazo que nadie
+        ha fijado, y en negrita, es peor que no decir nada — porque se cree.
+
+        Y mientras la base no ha contestado tampoco se afirma: «no consta» no es
+        «no hay».
+      */}
+      {estadoCampana !== 'creada' ? (
+        <div className="banner-inline banner-inline--warn">
+          {estadoCampana === 'sin-crear'
+            ? <>Todavía no hay campaña creada. Las fechas que se ven abajo son de ejemplo: ponlas en <b>Ajustes de campaña</b> —el año, cuándo abre el plazo y hasta cuándo— y el resto de la pantalla empezará a decir lo vuestro.</>
+            : <>Comprobando la campaña de la hermandad…</>}
+        </div>
+      ) : (
       <div className={`banner-inline ${abierta ? 'banner-inline--accent' : 'banner-inline--warn'}`}>
         {abierta ? (
           <>
@@ -919,6 +945,7 @@ export default function Papeletas() {
           </>
         )}
       </div>
+      )}
 
       {/* Convocatoria: avisar a todos los hermanos de la apertura del plazo */}
       <div className="banner-inline banner-inline--accent" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
@@ -934,9 +961,20 @@ export default function Papeletas() {
               de que pueden sacar su papeleta de 2027» cuando nadie ha fijado
               ese año ni ese plazo es invitar a mandar un correo falso.
             */}
-            {hayCampanaCreada()
+            {/*
+              UN SOLO MENSAJE, NO DOS. Aquí decía una cosa y el párrafo de
+              debajo repetía casi la misma con otras palabras. Dos avisos
+              seguidos diciendo lo mismo se leen como que la pantalla está
+              descuidada, y acaban sin leerse ninguno de los dos.
+
+              Cuando no se puede convocar, el motivo YA lo explica
+              `puedeConvocar.motivo`, que es el que sabe por qué —falta la
+              campaña, aún no ha abierto el plazo o ya se cerró—. Aquí solo se
+              dice lo que se va a hacer cuando sí se pueda.
+            */}
+            {puedeConvocar.puede
               ? <>Avisa a los <b>{destinatariosConvocatoria(hermanos).length}</b> hermanos de que pueden solicitar su papeleta de sitio {campana.anio}.</>
-              : <>Antes de convocar hay que crear la campaña: el año, cuándo abre el plazo y hasta cuándo. Las fechas que se ven ahora son de ejemplo.</>}
+              : puedeConvocar.motivo}
           </span>
         )}
         <button
@@ -953,14 +991,7 @@ export default function Papeletas() {
         </button>
       </div>
 
-      {/*
-        Y POR QUÉ NO SE PUEDE, ESCRITO. Un botón gris sin explicación se lee
-        como «está roto», y lo siguiente es una llamada preguntando qué pasa.
-        Aquí se dice qué falta y dónde se cambia.
-      */}
-      {!puedeConvocar.puede && (
-        <p className="table-subtle" style={{ marginTop: '-0.4rem' }}>{puedeConvocar.motivo}</p>
-      )}
+
 
       {/* Avisos de portada: lo que la secretaría debe mirar de un vistazo */}
       {(stats.pendientePago > 0 || tramosCasiLlenos.length > 0 || solicitudesPendientes.length > 0 || (abierta && stats.porRenovar > 0)) && (

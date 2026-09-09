@@ -46,7 +46,7 @@ import { isSupabaseConfigured, supabase } from './supabase'
 import { useSupabaseTable } from './supabaseSync'
 import { CLAVES_DATOS } from './persistencia'
 import { reglaToRow, rowToRegla } from './db/reglasAutomaticas'
-import type { CriteriosSegmento } from './segmentacion'
+import { CRITERIOS_POR_DEFECTO, type CriteriosSegmento } from './segmentacion'
 
 export interface ReglaAutomatica {
   id: string
@@ -68,6 +68,8 @@ export interface ReglaReclamada {
   destinatarios: string
   asunto: string
   cuerpo: string
+  /** Cuándo se disparó la vez anterior. Vacío = es la primera. */
+  ultimaVez: string | null
 }
 
 /**
@@ -86,7 +88,20 @@ export const REGLAS_DE_FABRICA: Omit<ReglaAutomatica, 'id' | 'activa' | 'ultimaV
   {
     nombre: 'Felicitar el cumpleaños',
     cada: 'diaria',
-    criterios: { cumpleanos: 'Hoy' } as CriteriosSegmento,
+    /*
+     * EL SESGO ENTERO, no solo el trozo que cambia. Y sin `as`.
+     *
+     * Aquí ponía `{ cumpleanos: 'Hoy' } as CriteriosSegmento`, y esa línea hizo
+     * que la función no felicitara a NADIE nunca: a `filtrarSegmento` le
+     * faltaba el `estado` y descartaba a todo el mundo. Cero personas, sin un
+     * error y sin forma de arreglarlo desde la pantalla.
+     *
+     * El `as` fue lo que lo escondió: es exactamente lo que le dice a
+     * TypeScript «calla, que yo sé lo que hago». Partiendo de
+     * `CRITERIOS_POR_DEFECTO` no hace falta, y el compilador vuelve a avisar el
+     * día que falte un campo.
+     */
+    criterios: { ...CRITERIOS_POR_DEFECTO, cumpleanos: 'Hoy' },
     destinatarios: 'Hermanos que cumplen años hoy',
     asunto: '¡Felicidades, {nombre}!',
     cuerpo:
@@ -98,7 +113,7 @@ export const REGLAS_DE_FABRICA: Omit<ReglaAutomatica, 'id' | 'activa' | 'ultimaV
   {
     nombre: 'Felicitación del mes',
     cada: 'mensual',
-    criterios: { cumpleanos: 'EsteMes' } as CriteriosSegmento,
+    criterios: { ...CRITERIOS_POR_DEFECTO, cumpleanos: 'EsteMes' },
     destinatarios: 'Hermanos que cumplen años este mes',
     asunto: 'Este mes cumples años, {nombre}',
     cuerpo:
@@ -125,6 +140,31 @@ export const REGLAS_DE_FABRICA: Omit<ReglaAutomatica, 'id' | 'activa' | 'ultimaV
  */
 export const TOPE_REGLAS = 5
 
+/**
+ * CUÁNTOS DÍAS ATRÁS SE RECUPERAN.
+ *
+ * ============================================================================
+ * POR QUÉ HACE FALTA RECUPERAR NADA
+ * ============================================================================
+ *
+ * Las reglas se miran cuando alguien entra en Comunicados, y en una hermandad
+ * eso puede ser una vez por semana. Sin recuperar, «felicitar el cumpleaños»
+ * solo alcanzaba a quien cumpliera JUSTO el día que alguien abrió esa pantalla:
+ * se perdían casi todos, que es como no tener la función.
+ *
+ * ----------------------------------------------------------------------------
+ * Y POR QUÉ CUATRO Y NO TODOS
+ * ----------------------------------------------------------------------------
+ *
+ * Porque una felicitación tiene fecha de caducidad. «¡Felicidades!» un día
+ * tarde se agradece; nueve días tarde es peor que no mandar nada — se lee como
+ * que la hermandad se acordó por casualidad revisando una lista.
+ *
+ * Cuatro días cubre el fin de semana largo y la semana normal de quien entra
+ * los lunes. Lo que quede fuera de eso se pierde, y se pierde a propósito.
+ */
+export const DIAS_QUE_SE_RECUPERAN = 4
+
 export interface ComoDisparar {
   /** Pide a la base la siguiente regla que toca. `null` = no hay o la tiene otro. */
   reclamar: () => Promise<ReglaReclamada | null>
@@ -147,6 +187,23 @@ export async function dispararReglasDeHoy(como: ComoDisparar): Promise<{ creados
       break     // sin red: mañana será otro día
     }
     if (!regla) break
+
+    /*
+     * SE TAPA EL HUECO DE LOS DÍAS QUE NADIE MIRÓ.
+     *
+     * Si la regla se disparó por última vez hace tres días, hoy tiene que
+     * felicitar también a quien cumplió en esos tres. El sesgo se completa con
+     * la fecha, y `filtrarSegmento` lo entiende como «hoy o desde entonces».
+     *
+     * Con un hueco mayor que el tope no se recupera nada: se felicita solo a
+     * quien cumple hoy. Ver `DIAS_QUE_SE_RECUPERAN`.
+     */
+    if (regla.criterios?.cumpleanos === 'Hoy' && regla.ultimaVez) {
+      const hueco = diasEntre(regla.ultimaVez, hoyDelSistema())
+      if (hueco > 1 && hueco <= DIAS_QUE_SE_RECUPERAN + 1) {
+        regla = { ...regla, criterios: { ...regla.criterios, cumpleDesde: regla.ultimaVez } }
+      }
+    }
 
     try {
       /*
@@ -194,10 +251,17 @@ export async function reclamarReglaDeLaBase(): Promise<ReglaReclamada | null> {
   return {
     id: String(fila.id),
     nombre: String(fila.nombre ?? ''),
-    criterios: (fila.criterios ?? {}) as CriteriosSegmento,
+    /*
+     * SE COMPLETA CON LOS VALORES DE FÁBRICA. La columna es `jsonb`: lo que
+     * llega es lo que hubiera guardado, y las reglas creadas antes de este
+     * arreglo tienen dentro solo `{ cumpleanos: 'Hoy' }`. Sin esto, esas reglas
+     * seguirían sin alcanzar a nadie después de actualizar.
+     */
+    criterios: { ...CRITERIOS_POR_DEFECTO, ...((fila.criterios ?? {}) as Partial<CriteriosSegmento>) },
     destinatarios: String(fila.destinatarios ?? ''),
     asunto: String(fila.asunto ?? ''),
     cuerpo: String(fila.cuerpo ?? ''),
+    ultimaVez: (fila.ultima_vez as string | null) ?? null,
   }
 }
 
@@ -217,4 +281,20 @@ export function useReglasAutomaticas(opciones?: { sinEspejo?: boolean }) {
     'creada_en',
     opciones,
   )
+}
+
+/** Días de `desde` a `hasta`, las dos en `aaaa-mm-dd`. */
+function diasEntre(desde: string, hasta: string): number {
+  const aUTC = (t: string) => {
+    const [a, m, d] = t.slice(0, 10).split('-').map(Number)
+    return Date.UTC(a, (m ?? 1) - 1, d ?? 1)
+  }
+  return Math.round((aUTC(hasta) - aUTC(desde)) / 86_400_000)
+}
+
+/** Hoy en `aaaa-mm-dd`, en hora de aquí. Ver `lib/hoy.ts` para el porqué. */
+function hoyDelSistema(): string {
+  const n = new Date()
+  const dos = (x: number) => String(x).padStart(2, '0')
+  return `${n.getFullYear()}-${dos(n.getMonth() + 1)}-${dos(n.getDate())}`
 }

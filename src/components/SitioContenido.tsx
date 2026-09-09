@@ -10,7 +10,7 @@ import {
   cabenTodavia, precioParaMi, seAgoto, seRebajoParaMi, totalDeLaCesta,
   type ArticuloWeb, type LineaReservaWeb,
 } from '../data/tienda'
-import { diasHasta as diasHastaFecha, getCampana, ventanaAbierta } from '../lib/campana'
+import { diasHasta as diasHastaFecha, getCampana, ventanaAbierta, estadoDeLaCampana } from '../lib/campana'
 import { baseDeRutas } from '../lib/seoWeb'
 import IconoRed from './IconoRed'
 
@@ -966,7 +966,12 @@ function BloquesPortada({
   // Sale solo mientras la ventana está abierta, con los días que quedan: un
   // aviso que sigue puesto en mayo no lo lee nadie el año siguiente.
   const campana = getCampana()
-  const abierta = web.avisoPapeletas && ventanaAbierta(campana)
+  /*
+   * En la web pública, igual: el aviso de «ya puedes sacar tu papeleta» no
+   * puede salir por unas fechas de ejemplo. Ahí lo lee cualquiera.
+   */
+  const hayCampana = estadoDeLaCampana() === 'creada'
+  const abierta = web.avisoPapeletas && ventanaAbierta(campana, hayCampana)
   const diasPapeleta = abierta ? diasHastaFecha(campana.fechaLimiteRenovacion) : -1
   if (!hayCuenta && !hayProximo && cifras.length === 0 && !abierta) return null
   return (

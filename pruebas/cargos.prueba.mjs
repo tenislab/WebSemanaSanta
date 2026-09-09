@@ -235,9 +235,25 @@ export default async function ({ caso, cargar }) {
   const estado = await readFile('src/lib/estadoCuotaHermano.ts', 'utf8')
   caso('su situación de cuota es «no le toca»', true,
     /h\.estado !== 'Baja' && !h\.civil/.test(estado))
-  const seg = await readFile('src/lib/segmentacion.ts', 'utf8')
-  caso('ni le llegan avisos de impago', true,
-    /c\.cuota === 'Pendiente' && situaciones\.get\(h\.id\) !== 'debe'/.test(seg))
+  /*
+   * Y ESTE SE COMPRUEBA EJECUTÁNDOLO, no leyendo el código.
+   *
+   * Antes esta línea buscaba el texto `c.cuota === 'Pendiente'` en el fichero.
+   * Se rompió el día que esa variable pasó a llamarse `cr` —sin que cambiara
+   * nada de lo que hace— y habría seguido en verde el día que alguien cambiara
+   * lo que hace sin tocar el nombre. Un aviso de morosidad al administrativo
+   * contratado es de las cosas que peor sientan, así que se prueba de verdad.
+   */
+  const segm = await cargar('src/lib/segmentacion.ts')
+  const civil = { id: 'civ', nombre: 'Administrativo', numero: 0, estado: 'Activo', email: 'ad@x.es', civil: true }
+  const moroso = { id: 'mor', nombre: 'Debe', numero: 1, estado: 'Activo', email: 'm@x.es' }
+  const situaciones = new Map([['civ', 'noAplica'], ['mor', 'debe']])
+  const aQuienSeReclama = segm.filtrarSegmento(
+    [civil, moroso],
+    { ...segm.CRITERIOS_POR_DEFECTO, cuota: 'Pendiente' },
+    new Map(), new Map(), situaciones,
+  ).map((h) => h.nombre)
+  caso('ni le llegan avisos de impago', ['Debe'], aQuienSeReclama)
   const ficha = await readFile('src/lib/hermanoFicha.ts', 'utf8')
   caso('no cuenta como hermano en las cifras', true, /h\.estado !== 'Baja' && !h\.civil/.test(ficha))
   // Pero SÍ sigue en el listado del censo, para que secretaría lo gestione.

@@ -339,7 +339,23 @@ h1, h2, h3,
 .btn-sm { padding: 0.55rem 1.05rem; font-size: 0.85rem; }
 .btn-block { width: 100%; }
 .btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.btn:disabled { opacity: 0.7; cursor: default; }
+/*
+   UN BOTÓN DESACTIVADO TIENE QUE PARECERLO.
+
+   Estaba a `opacity: 0.7`, y sobre el burdeos del botón principal eso no se
+   nota: seguía siendo el elemento más llamativo de la pantalla, invitando a
+   pulsar algo que no hace nada. Se vio con «Convocar papeletas» desactivado por
+   estar fuera de plazo — parecía que la aplicación no respondía.
+
+   Al principal se le quita el relleno además de bajarle el tono: sin la mancha
+   de color deja de pedir el clic, que es lo único que hacía falta.
+*/
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn-primary:disabled {
+  opacity: 0.75;
+  background: var(--bg-sunken); color: var(--text-muted);
+  border-color: var(--line); box-shadow: none;
+}
 
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
@@ -2222,9 +2238,22 @@ span.logo-mark img { width: 100%; height: 100%; }
   .catalogos-grid { grid-template-columns: 1fr; }
 }
 
+/*
+   LAS BANDAS DE AVISO.
+
+   Tenían dos problemas que se ven juntos en cuanto salen dos seguidas: ninguna
+   se distingue de la otra —mismo beige, mismo borde invisible— y la variante
+   «accent» pintaba el texto en dorado sobre beige claro, que se lee mal y
+   parece descolorido.
+
+   Lo que las ordena es una barra fina a la izquierda con el color de lo que
+   dice cada una: se distinguen de un vistazo sin gritar, que es lo que hace
+   falta en una pantalla donde a veces salen tres a la vez.
+*/
 .banner-inline {
-  border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; font-size: 0.84rem; line-height: 1.5;
+  border-radius: var(--radius-sm); padding: 0.78rem 0.95rem; font-size: 0.84rem; line-height: 1.55;
   border: 1px solid transparent;
+  border-left-width: 3px;
 }
 /* Solo los avisos que llevan un botón se reparten en fila. Poniéndolo a todos,
    un <b> dentro del texto se volvía un elemento flex y salía con huecos
@@ -2234,8 +2263,8 @@ span.logo-mark img { width: 100%; height: 100%; }
 }
 .banner-inline:has(> .btn) > .btn { margin-left: auto; }
 .dash > .banner-inline { margin-bottom: 1.1rem; }
-.banner-inline--warn { background: var(--warn-bg); color: var(--warn-fg); }
-.banner-inline--ok { background: var(--ok-bg); color: var(--ok-fg); }
+.banner-inline--warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: var(--warn-fg); }
+.banner-inline--ok { background: var(--ok-bg); color: var(--ok-fg); border-left-color: var(--ok-fg); }
 .banner-inline select {
   padding: 0.3rem 0.5rem; font: inherit; font-size: 0.84rem; font-weight: 600;
   color: inherit; background: var(--bg-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
@@ -3890,13 +3919,28 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
    ========================================================================= */
 .dash-head__actions { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
 
-.banner-inline--accent { background: var(--info-bg); color: var(--gold); border-color: var(--line-strong); }
+/*
+   EL TEXTO EN `--info-fg` Y NO EN `--gold`. El dorado es un color de acento
+   —para una barra, un icono, un número— y sobre el beige claro del propio aviso
+   se queda sin contraste: se leía descolorido, como si estuviera desactivado.
+   El dorado se queda donde sí luce, que es la barra de la izquierda.
+*/
+.banner-inline--accent {
+  background: var(--info-bg); color: var(--info-fg);
+  border-color: var(--line); border-left-color: var(--gold);
+}
 
 /* El aviso de «estos domiciliados no entran en la remesa». Va plegado porque en
    una hermandad pueden ser cuarenta nombres y no puede tapar la pantalla; pero
    el titular —cuántos son y cuánto dinero— se ve siempre, que es lo que hace
    falta para enterarse. */
-.banner-inline--alerta { border-left: 3px solid var(--warn-fg); }
+/* La más fuerte de las cuatro: lleva fondo, no solo la barra. Se usa poco y a
+   propósito — el aviso de soporte, la tarjeta que ha fallado— y si se pareciera
+   a las demás no serviría para eso. */
+.banner-inline--alerta {
+  background: var(--warn-bg); color: var(--warn-fg);
+  border-left: 3px solid var(--warn-fg);
+}
 .cuotas-sin-iban { display: block; margin-bottom: 1.1rem; }
 .cuotas-sin-iban > summary { cursor: pointer; line-height: 1.5; }
 .cuotas-sin-iban__lista {

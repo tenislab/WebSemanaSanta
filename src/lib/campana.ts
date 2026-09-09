@@ -139,6 +139,37 @@ export function hayCampanaCreada(): boolean {
   }
 }
 
+/** Si ya contestó la base. Módulo, no estado: lo consultan varias pantallas. */
+let seLePreguntoALaBase = false
+
+/**
+ * EN QUÉ SITUACIÓN ESTÁ LA CAMPAÑA. Tres, no dos.
+ *
+ *   'creada'    — la hermandad la tiene puesta. Lo normal.
+ *   'sin-crear' — la base ha contestado y no hay ninguna.
+ *   'sin-saber' — todavía no ha contestado.
+ *
+ * ============================================================================
+ * POR QUÉ HACE FALTA LA TERCERA
+ * ============================================================================
+ *
+ * Porque sin ella, durante el segundo que tarda la base en contestar, a una
+ * hermandad que SÍ tiene su campaña se le decía «todavía no habéis creado la
+ * campaña de papeletas». Es un mensaje que asusta y que además es falso, y sale
+ * justo al abrir la pantalla, que es cuando más se lee.
+ *
+ * «No consta» y «no hay» no son lo mismo, y confundirlos es el mismo fallo que
+ * ya estaba resuelto en `constaLaSuscripcion()`: a quien no le consta no se le
+ * puede decir que no ha pagado.
+ *
+ * Mientras no se sepa NO se ofrece convocar —ante la duda no se manda un correo
+ * a ochocientas personas— pero tampoco se afirma nada.
+ */
+export function estadoDeLaCampana(): 'creada' | 'sin-crear' | 'sin-saber' {
+  if (hayCampanaCreada()) return 'creada'
+  return seLePreguntoALaBase ? 'sin-crear' : 'sin-saber'
+}
+
 /**
  * Avisa a las pantallas abiertas de que la campaña ha cambiado.
  *
@@ -176,6 +207,16 @@ export function saveCampana(campana: Campana) {
  */
 export async function cargarCampanaDeLaBase(): Promise<void> {
   const c = await traerPlantilla<Partial<Campana>>('campana')
+  /*
+   * SE APUNTA QUE YA SE PREGUNTÓ, conteste lo que conteste.
+   *
+   * Sin esto no se puede distinguir «esta hermandad no ha creado campaña» de
+   * «todavía no ha llegado la respuesta», y son cosas muy distintas: a la
+   * segunda no se le puede decir «no habéis creado la campaña», porque a lo
+   * mejor sí la tiene y solo va lenta la red. Ver `estadoDeLaCampana()`.
+   */
+  seLePreguntoALaBase = true
+  window.dispatchEvent(new Event(EVENTO))
   if (!c || typeof c !== 'object' || c.anio === undefined) return
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...CAMPANA_POR_DEFECTO, ...c }))
   window.dispatchEvent(new Event(EVENTO))
@@ -210,8 +251,27 @@ export function diasHasta(iso: string): number {
   return Math.round((new Date(`${iso}T00:00:00`).getTime() - hoy.getTime()) / 86_400_000)
 }
 
-/** ¿Sigue abierta la ventana de renovación? (hasta la fecha límite). */
-export function ventanaAbierta(campana: Campana): boolean {
+/**
+ * ¿Sigue abierta la ventana de renovación? (hasta la fecha límite).
+ *
+ * ============================================================================
+ * EL TERCER PARÁMETRO NO ES DECORATIVO: SIN ÉL ESTO MENTÍA
+ * ============================================================================
+ *
+ * `getCampana()` nunca devuelve vacío: sin campaña creada devuelve la de
+ * fábrica, con fechas de ejemplo. Y hoy caemos dentro de ese plazo inventado.
+ *
+ * Así que una hermandad recién montada veía «Renovación abierta hasta el 28 feb
+ * 2027» en su pantalla de inicio y en Papeletas — un plazo que nadie había
+ * fijado, dicho en negrita, y por tanto creído.
+ *
+ * `= true` por defecto para no arrastrarlo por las pruebas de fechas, que
+ * hablan de campañas que existen. Lo que sujeta los sitios de verdad es una
+ * prueba que RECORRE `src` y exige que todas las llamadas lo pasen: sin ella,
+ * olvidarlo en una pantalla nueva no daría ningún error.
+ */
+export function ventanaAbierta(campana: Campana, hayCampana = true): boolean {
+  if (!hayCampana) return false
   return diasHasta(campana.fechaLimiteRenovacion) >= 0
 }
 
@@ -220,7 +280,21 @@ export function ventanaAbierta(campana: Campana): boolean {
  * año anterior? Los que participaron pueden desde `fechaInicioParticiparon`;
  * el resto desde `fechaInicioNoParticiparon`. Ambos hasta la fecha límite.
  */
-export function ventanaAbiertaPara(campana: Campana, participoElAnoAnterior: boolean): boolean {
+export function ventanaAbiertaPara(
+  campana: Campana,
+  participoElAnoAnterior: boolean,
+  /*
+   * SIN CAMPAÑA CREADA, CERRADA. Ver `ventanaAbierta` para el porqué entero.
+   *
+   * Aquí duele más que en ninguna otra parte: esta función es la que decide si
+   * al HERMANO se le enseña «Solicitar mi papeleta de sitio» en su área. Con las
+   * fechas de ejemplo se le ofrecía pedir sitio para una Semana Santa que su
+   * hermandad no ha convocado — y eso no lo ve la junta, lo ven los
+   * ochocientos.
+   */
+  hayCampana = true,
+): boolean {
+  if (!hayCampana) return false
   const inicio = participoElAnoAnterior ? campana.fechaInicioParticiparon : campana.fechaInicioNoParticiparon
   return diasHasta(inicio) <= 0 && diasHasta(campana.fechaLimiteRenovacion) >= 0
 }

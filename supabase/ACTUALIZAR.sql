@@ -7428,6 +7428,31 @@ alter table comunicados add column if not exists envio_intentos int not null def
 /* Qué falló la última vez, para poder decirlo en pantalla en vez de callar. */
 alter table comunicados add column if not exists envio_error text;
 
+/*
+ * A CUÁNTOS SE LES MANDÓ YA, PARA NO ESCRIBIRLES DOS VECES.
+ *
+ * Cuando el comunicado lleva «Hola {nombre}» hay que mandarlo de uno en uno, y
+ * ochocientos correos tardan unos minutos con la pestaña abierta. Si se cierra
+ * a mitad —o se va la red, o se duerme el portátil— el candado caduca a la
+ * media hora y otro navegador lo coge otra vez… y empieza por el primero.
+ * Trescientas personas recibirían la convocatoria dos veces.
+ *
+ * Con esto se apunta por dónde iba, y el reintento se salta a los que ya
+ * tienen el suyo.
+ *
+ * LO QUE ESTO NO GARANTIZA, dicho claro: los destinatarios se ordenan por su
+ * identificador para que la lista sea la misma entre un intento y otro, pero si
+ * alguien se da de alta EN MEDIO de los dos intentos, la lista cambia y el
+ * corte se mueve. Es un caso raro —minutos— y el destrozo es un correo
+ * repetido, no uno perdido. Se acepta a cambio de no llevar una tabla con las
+ * ochocientas direcciones de cada envío.
+ */
+alter table comunicados add column if not exists envio_enviados int not null default 0;
+
+comment on column comunicados.envio_enviados is
+  'Cuántos correos salieron ya de este comunicado. Si el envío se corta a mitad, '
+  'el reintento se salta a esos en vez de escribirles otra vez.';
+
 comment on column comunicados.enviando_desde is
   'Un navegador lo tiene cogido para mandarlo. Vacío = libre. Impide que dos '
   'personas que entran a la vez lo manden dos veces.';
@@ -7456,7 +7481,7 @@ comment on column comunicados.envio_intentos is
  * ---------------------------------------------------------------------------
  */
 create or replace function reclamar_comunicado_programado()
-returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int)
+returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int, ya_enviados int)
 language sql volatile security definer set search_path = public as $$
   update comunicados c
      set enviando_desde = now(),
@@ -7487,7 +7512,7 @@ language sql volatile security definer set search_path = public as $$
       limit 1
       for update skip locked
    )
-  returning c.id, c.titulo, c.cuerpo, c.destinatarios, c.envio_intentos
+  returning c.id, c.titulo, c.cuerpo, c.destinatarios, c.envio_intentos, c.envio_enviados
 $$;
 
 grant execute on function reclamar_comunicado_programado() to authenticated;
@@ -7507,7 +7532,9 @@ language sql volatile security definer set search_path = public as $$
          fecha_envio = to_char(current_date, 'YYYY-MM-DD'),
          alcance = p_alcance,
          enviando_desde = null,
-         envio_error = null
+         envio_error = null,
+         -- Cerrado y a cero: si algún día se reenviara a mano, empieza limpio.
+         envio_enviados = 0
    where id = p_id and hermandad_id = hermandad_actual()
 $$;
 
@@ -7545,6 +7572,27 @@ grant execute on function soltar_comunicado_fallido(uuid, text) to authenticated
 create index if not exists comunicados_programados_idx
   on comunicados (hermandad_id, fecha_programada)
   where estado = 'Programado';
+
+/**
+ * APUNTA POR DÓNDE VA EL ENVÍO.
+ *
+ * Se llama cada pocos correos, no en cada uno: ochocientas escrituras a la base
+ * para acompañar a ochocientos correos duplicarían el trabajo sin ganar nada
+ * —perder cinco de ochocientos por redondeo es aceptable, y perder cinco es
+ * mandar cinco repetidos, no dejar a nadie sin el suyo—.
+ *
+ * `greatest` para que no pueda ir hacia atrás: si dos navegadores se pisaran,
+ * el que va más adelantado manda. Retroceder aquí es reenviar.
+ */
+create or replace function apuntar_avance_del_envio(p_id uuid, p_enviados int)
+returns void
+language sql volatile security definer set search_path = public as $$
+  update comunicados
+     set envio_enviados = greatest(envio_enviados, p_enviados)
+   where id = p_id and hermandad_id = hermandad_actual()
+$$;
+
+grant execute on function apuntar_avance_del_envio(uuid, int) to authenticated;
 
 -- =============================================================================
 --   REGLAS-AUTOMATICAS.SQL — Felicitar el cumpleaños (y demás) sin que nadie se acuerde
@@ -7678,12 +7726,32 @@ create index if not exists reglas_activas_idx
  * que abra el panel.
  */
 create or replace function reclamar_regla_de_hoy()
-returns table (id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text)
+returns table (
+  id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text,
+  /*
+   * CUÁNDO SE DISPARÓ LA VEZ ANTERIOR, o vacío si es la primera.
+   *
+   * Es el dato que permite RECUPERAR LOS DÍAS QUE NADIE ABRIÓ, y sin él la
+   * función de felicitar se quedaba a medias: las reglas se miran cuando
+   * alguien entra en Comunicados, y en una hermandad eso puede ser una vez por
+   * semana. Sin recuperar el hueco se perdían casi todos los cumpleaños — que
+   * es como no tener la función.
+   *
+   * Ver `dispararReglasDeHoy()`, que decide cuánto hueco vale la pena tapar.
+   */
+  ultima_vez date
+)
 language sql volatile security definer set search_path = public as $$
-  update reglas_automaticas r
-     set ultima_vez = current_date
-   where r.id = (
-     select x.id from reglas_automaticas x
+  /*
+   * SE GUARDA EL VALOR ANTERIOR ANTES DE PISARLO.
+   *
+   * `update ... returning` devuelve lo NUEVO, y aquí hace falta lo viejo: la
+   * fecha de la última vez es justo lo que se va a machacar. Por eso el
+   * `select` va en un CTE aparte, que lo lee antes de que el `update` lo toque.
+   */
+  with elegida as (
+     select x.id, x.ultima_vez as antes
+       from reglas_automaticas x
       where x.hermandad_id = hermandad_actual()
         and x.activa
         -- No se ha disparado hoy. `is null` es la primera vez de todas.
@@ -7693,8 +7761,12 @@ language sql volatile security definer set search_path = public as $$
       order by x.creada_en
       limit 1
       for update skip locked
-   )
-  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo
+  )
+  update reglas_automaticas r
+     set ultima_vez = current_date
+    from elegida e
+   where r.id = e.id
+  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo, e.antes
 $$;
 
 grant execute on function reclamar_regla_de_hoy() to authenticated;

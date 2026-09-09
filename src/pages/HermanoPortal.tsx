@@ -50,7 +50,7 @@ import {
   cuerposPresentes,
 } from '../lib/tramos'
 import { repartoCompleto, repartoPorTramo, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
-import { useCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana } from '../lib/campana'
+import { useCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana, estadoDeLaCampana } from '../lib/campana'
 import {
   useSolicitudesPapeleta,
   MODALIDADES,
@@ -293,6 +293,14 @@ export default function HermanoPortal() {
      que tarde la red. Con la lectura de una vez, el hermano veía la de fábrica
      —otro año y otro plazo— y ahí se quedaba toda la sesión. */
   const campana = useCampana()
+  /*
+   * ¿HAY CAMPAÑA DE VERDAD? Es lo que decide si al hermano se le enseña
+   * «Solicitar mi papeleta de sitio». Sin campaña creada, `getCampana()` da las
+   * fechas de ejemplo, y se le estaba ofreciendo pedir sitio para una Semana
+   * Santa que su hermandad no ha convocado. Esto no lo ve la junta: lo ven los
+   * ochocientos.
+   */
+  const hayCampana = estadoDeLaCampana() === 'creada'
   // El precio de la hermandad, no el de este navegador (ver hermandadSettings).
   const precioBase = hermandadPrincipal.precioPapeleta
   // El modelo con el que la hermandad imprime sus papeletas. Se trae de la
@@ -2233,13 +2241,13 @@ export default function HermanoPortal() {
                           mensaje, y no había nada que pudiera hacer. */}
                       El año pasado saliste en{' '}
                       <b>{etiquetaTramo(tramos.find((t) => t.id === renovacion.sitioAnterior!.tramoId)) || 'tu tramo'}</b>. La renovación
-                      está {ventanaAbiertaPara(campana, true) ? 'abierta' : 'cerrada'}
-                      {ventanaAbiertaPara(campana, true)
+                      está {ventanaAbiertaPara(campana, true, hayCampana) ? 'abierta' : 'cerrada'}
+                      {ventanaAbiertaPara(campana, true, hayCampana)
                         ? ` hasta el ${formatDate(new Date(`${campana.fechaLimiteRenovacion}T00:00:00`))}`
                         : ''}
                       .
                     </p>
-                    {ventanaAbiertaPara(campana, true) ? (
+                    {ventanaAbiertaPara(campana, true, hayCampana) ? (
                       <div className="assign-box__row">
                         <button className="btn btn-primary" onClick={renovarSitio}>
                           Renovar mi sitio
@@ -2284,7 +2292,7 @@ export default function HermanoPortal() {
                       </p>
                       <p className="form-hint">Enviada el {miSolicitud.fecha} · pendiente de revisión.</p>
                     </div>
-                  ) : ventanaAbiertaPara(campana, participoAnoAnterior) ? (
+                  ) : ventanaAbiertaPara(campana, participoAnoAnterior, hayCampana) ? (
                     <form className="assign-box" onSubmit={enviarSolicitudPapeleta}>
                       <label>Solicitar mi papeleta de sitio</label>
                       {miSolicitud && miSolicitud.estado === 'Rechazada' && (

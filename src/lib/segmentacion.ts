@@ -34,6 +34,27 @@ export interface CriteriosSegmento {
    * es lo que hace que valga la pena por sí solo.
    */
   cumpleanos?: 'Todos' | 'Hoy' | 'EsteMes'
+  /**
+   * RECUPERAR LOS DÍAS QUE NADIE MIRÓ. Solo con `cumpleanos: 'Hoy'`.
+   *
+   * ==========================================================================
+   * POR QUÉ EXISTE
+   * ==========================================================================
+   *
+   * Las reglas automáticas se miran cuando alguien entra en Comunicados, y en
+   * una hermandad eso puede ser una vez por semana. Sin esto, «felicitar el
+   * cumpleaños» solo alcanzaba a quien cumpliera justo el día que alguien
+   * abrió esa pantalla — o sea, se perdían casi todos.
+   *
+   * Con una fecha aquí, «cumple hoy» pasa a ser «cumple hoy O cumplió desde
+   * este día», y una sola visita a la semana los recoge todos.
+   *
+   * NO LA PONE NADIE A MANO. La rellena `dispararReglasDeHoy()` con la fecha
+   * en que la regla se disparó por última vez, y no se guarda en la regla: es
+   * un dato del momento, no del sesgo. Por eso el editor de sesgos no la
+   * enseña.
+   */
+  cumpleDesde?: string
   /** Etiqueta concreta, o '' para cualquiera. */
   etiqueta: string
   /**
@@ -135,10 +156,45 @@ export function filtrarSegmento(
    */
   situaciones: Map<string, SituacionCuota> = new Map(),
 ): Hermano[] {
+  /*
+   * ==========================================================================
+   * LO QUE FALTE, SE COMPLETA. Y ESTO NO ES UNA COMODIDAD: ES UN FRENO.
+   * ==========================================================================
+   *
+   * EL FALLO QUE LO TRAJO, que estuvo puesto y era mudo:
+   *
+   * Las reglas automáticas guardan su sesgo en una columna `jsonb`, así que lo
+   * que llega aquí es lo que hubiera en esa columna — no necesariamente un
+   * `CriteriosSegmento` entero. Las dos reglas de fábrica guardaban solo
+   * `{ cumpleanos: 'Hoy' }`.
+   *
+   * Y con `estado` sin poner, la primera línea de abajo DESCARTA A TODO EL
+   * MUNDO: `undefined !== 'Cualquiera'` es cierto, no es `'Todos'`, y entonces
+   * compara `h.estado !== undefined`, que también es cierto para todos.
+   *
+   * Resultado: «Felicitar el cumpleaños» decía siempre «hoy no toca a nadie» y,
+   * encendida, no habría felicitado jamás. Cero personas, sin un error, sin un
+   * aviso, y sin forma de arreglarlo desde la pantalla.
+   *
+   * ---------------------------------------------------------------------------
+   * POR QUÉ SE ARREGLA AQUÍ Y NO SOLO EN QUIEN LLAMA
+   * ---------------------------------------------------------------------------
+   *
+   * Porque quien llama son ya seis sitios y el séptimo se escribirá algún día.
+   * Un sesgo al que le falta un campo tiene un significado obvio —«ese criterio
+   * no se mira»— y era el único que esta función NO le daba: le daba «no sale
+   * nadie», que es la respuesta más peligrosa de las posibles, porque no se
+   * distingue de «hoy no cumple nadie».
+   *
+   * Y el `as CriteriosSegmento` que escribí en las reglas de fábrica fue lo que
+   * le tapó la boca a TypeScript. Ese ya no está; esto es lo que hace que
+   * tampoco importe si vuelve.
+   */
+  const cr: CriteriosSegmento = { ...CRITERIOS_POR_DEFECTO, ...c }
   return hermanos.filter((h) => {
     // Las bajas nunca reciben salvo que se pidan explícitamente.
-    if (c.estado !== 'Cualquiera' && (c.estado === 'Todos' ? h.estado === 'Baja' : h.estado !== c.estado)) return false
-    if (c.cuota === 'AlDia' && situaciones.get(h.id) !== 'alDia') return false
+    if (cr.estado !== 'Cualquiera' && (cr.estado === 'Todos' ? h.estado === 'Baja' : h.estado !== cr.estado)) return false
+    if (cr.cuota === 'AlDia' && situaciones.get(h.id) !== 'alDia') return false
     /*
      * «Pendiente» es el sesgo con el que se manda el aviso a quien debe, y es
      * lo más parecido a un aviso de morosidad que hay en la aplicación.
@@ -154,12 +210,12 @@ export function filtrarSegmento(
      * porque no se le ha pedido nada. Reclamarle sería reclamar un descuido de
      * la tesorería.
      */
-    if (c.cuota === 'Pendiente' && situaciones.get(h.id) !== 'debe') return false
-    if (c.edad !== 'Todos') {
+    if (cr.cuota === 'Pendiente' && situaciones.get(h.id) !== 'debe') return false
+    if (cr.edad !== 'Todos') {
       const e = edadDe(h.fechaNacimiento)
       if (e == null) return false
-      if (c.edad === 'Mayores' && e < 18) return false
-      if (c.edad === 'Menores' && e >= 18) return false
+      if (cr.edad === 'Mayores' && e < 18) return false
+      if (cr.edad === 'Menores' && e >= 18) return false
     }
     /*
      * EL CUMPLEAÑOS.
@@ -173,17 +229,27 @@ export function filtrarSegmento(
      * que no cumpla hoy, es que no se sabe. Felicitar a quien no toca es peor
      * que no felicitar.
      */
-    if (c.cumpleanos && c.cumpleanos !== 'Todos') {
+    if (cr.cumpleanos && cr.cumpleanos !== 'Todos') {
       if (!h.fechaNacimiento) return false
-      if (c.cumpleanos === 'Hoy' && !esSuCumpleHoy(h.fechaNacimiento)) return false
-      if (c.cumpleanos === 'EsteMes' && !cumpleEsteMes(h.fechaNacimiento)) return false
+      if (cr.cumpleanos === 'Hoy') {
+        /*
+         * «Hoy» O «desde el día que se miró por última vez», si se ha pasado
+         * esa fecha. Ver `cumpleDesde` arriba.
+         */
+        const hoyLeToca = esSuCumpleHoy(h.fechaNacimiento)
+        const enElHueco = cr.cumpleDesde
+          ? cumpleEntre(h.fechaNacimiento, cr.cumpleDesde)
+          : false
+        if (!hoyLeToca && !enElHueco) return false
+      }
+      if (cr.cumpleanos === 'EsteMes' && !cumpleEsteMes(h.fechaNacimiento)) return false
     }
-    if (c.etiqueta) {
+    if (cr.etiqueta) {
       const suyas = h.etiquetas ?? []
       const automaticas = roles.get(h.id) ?? []
-      if (!suyas.includes(c.etiqueta) && !automaticas.includes(c.etiqueta)) return false
+      if (!suyas.includes(cr.etiqueta) && !automaticas.includes(cr.etiqueta)) return false
     }
-    if (c.cargo) {
+    if (cr.cargo) {
       /*
        * El cargo puede venir de la ficha del censo o de su fila de personal, y
        * cuando están las dos manda la de personal —es la que decide qué ve al
@@ -199,19 +265,46 @@ export function filtrarSegmento(
       // lo que se le pone a quien no lleva ninguno. Si contara, «solo a la
       // junta» sería «a todo el censo», que es exactamente lo contrario.
       const esDeJunta = suyo !== '' && suyo !== 'Hermano de a pie'
-      if (c.cargo === '__junta') {
+      if (cr.cargo === '__junta') {
         if (!esDeJunta) return false
-      } else if (suyo !== c.cargo) {
+      } else if (suyo !== cr.cargo) {
         return false
       }
     }
-    for (const cond of c.campos ?? []) {
+    for (const cond of cr.campos ?? []) {
       if (!cond.valor) continue
       if ((h.campos?.[cond.campoId] ?? '') !== cond.valor) return false
     }
-    if (c.soloConEmail && !(h.email && h.email.includes('@'))) return false
+    if (cr.soloConEmail && !(h.email && h.email.includes('@'))) return false
     return true
   })
+}
+
+/**
+ * ¿CUMPLIÓ ENTRE `desde` (SIN CONTARLO) Y HOY (SIN CONTARLO)?
+ *
+ * El día `desde` NO cuenta porque es el día en que la regla ya se disparó: a
+ * quien cumpliera ese día ya se le felicitó. Y hoy tampoco, porque de eso se
+ * encarga `esSuCumpleHoy()` — así ninguno de los dos se cuenta dos veces.
+ *
+ * Se compara día y mes, no la fecha entera: un cumpleaños se repite cada año.
+ * Y se recorre día a día en vez de comparar rangos porque el hueco es de tres o
+ * cuatro días y el cambio de año lo resuelve solo: del 30 de diciembre al 2 de
+ * enero, avanzar un día cada vez pasa por el 31 y el 1 sin ninguna cuenta rara.
+ */
+function cumpleEntre(fechaNacimiento: string | undefined, desdeIso: string, hoy = new Date()): boolean {
+  if (!fechaNacimiento) return false
+  const [a, m, d] = desdeIso.slice(0, 10).split('-').map(Number)
+  if (!a || !m || !d) return false
+  const dia = new Date(a, m - 1, d)
+  const finito = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  // Tope de seguridad: si la fecha viniera rara, no se recorren mil días.
+  for (let i = 0; i < 40; i++) {
+    dia.setDate(dia.getDate() + 1)
+    if (dia >= finito) return false
+    if (esSuCumpleHoy(fechaNacimiento, dia)) return true
+  }
+  return false
 }
 
 /** Etiqueta legible del segmento, para mostrarla como destinatario del comunicado. */

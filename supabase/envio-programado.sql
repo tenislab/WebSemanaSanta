@@ -83,6 +83,31 @@ alter table comunicados add column if not exists envio_intentos int not null def
 /* Qué falló la última vez, para poder decirlo en pantalla en vez de callar. */
 alter table comunicados add column if not exists envio_error text;
 
+/*
+ * A CUÁNTOS SE LES MANDÓ YA, PARA NO ESCRIBIRLES DOS VECES.
+ *
+ * Cuando el comunicado lleva «Hola {nombre}» hay que mandarlo de uno en uno, y
+ * ochocientos correos tardan unos minutos con la pestaña abierta. Si se cierra
+ * a mitad —o se va la red, o se duerme el portátil— el candado caduca a la
+ * media hora y otro navegador lo coge otra vez… y empieza por el primero.
+ * Trescientas personas recibirían la convocatoria dos veces.
+ *
+ * Con esto se apunta por dónde iba, y el reintento se salta a los que ya
+ * tienen el suyo.
+ *
+ * LO QUE ESTO NO GARANTIZA, dicho claro: los destinatarios se ordenan por su
+ * identificador para que la lista sea la misma entre un intento y otro, pero si
+ * alguien se da de alta EN MEDIO de los dos intentos, la lista cambia y el
+ * corte se mueve. Es un caso raro —minutos— y el destrozo es un correo
+ * repetido, no uno perdido. Se acepta a cambio de no llevar una tabla con las
+ * ochocientas direcciones de cada envío.
+ */
+alter table comunicados add column if not exists envio_enviados int not null default 0;
+
+comment on column comunicados.envio_enviados is
+  'Cuántos correos salieron ya de este comunicado. Si el envío se corta a mitad, '
+  'el reintento se salta a esos en vez de escribirles otra vez.';
+
 comment on column comunicados.enviando_desde is
   'Un navegador lo tiene cogido para mandarlo. Vacío = libre. Impide que dos '
   'personas que entran a la vez lo manden dos veces.';
@@ -111,7 +136,7 @@ comment on column comunicados.envio_intentos is
  * ---------------------------------------------------------------------------
  */
 create or replace function reclamar_comunicado_programado()
-returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int)
+returns table (id uuid, titulo text, cuerpo text, destinatarios text, intentos int, ya_enviados int)
 language sql volatile security definer set search_path = public as $$
   update comunicados c
      set enviando_desde = now(),
@@ -142,7 +167,7 @@ language sql volatile security definer set search_path = public as $$
       limit 1
       for update skip locked
    )
-  returning c.id, c.titulo, c.cuerpo, c.destinatarios, c.envio_intentos
+  returning c.id, c.titulo, c.cuerpo, c.destinatarios, c.envio_intentos, c.envio_enviados
 $$;
 
 grant execute on function reclamar_comunicado_programado() to authenticated;
@@ -162,7 +187,9 @@ language sql volatile security definer set search_path = public as $$
          fecha_envio = to_char(current_date, 'YYYY-MM-DD'),
          alcance = p_alcance,
          enviando_desde = null,
-         envio_error = null
+         envio_error = null,
+         -- Cerrado y a cero: si algún día se reenviara a mano, empieza limpio.
+         envio_enviados = 0
    where id = p_id and hermandad_id = hermandad_actual()
 $$;
 
@@ -200,3 +227,24 @@ grant execute on function soltar_comunicado_fallido(uuid, text) to authenticated
 create index if not exists comunicados_programados_idx
   on comunicados (hermandad_id, fecha_programada)
   where estado = 'Programado';
+
+/**
+ * APUNTA POR DÓNDE VA EL ENVÍO.
+ *
+ * Se llama cada pocos correos, no en cada uno: ochocientas escrituras a la base
+ * para acompañar a ochocientos correos duplicarían el trabajo sin ganar nada
+ * —perder cinco de ochocientos por redondeo es aceptable, y perder cinco es
+ * mandar cinco repetidos, no dejar a nadie sin el suyo—.
+ *
+ * `greatest` para que no pueda ir hacia atrás: si dos navegadores se pisaran,
+ * el que va más adelantado manda. Retroceder aquí es reenviar.
+ */
+create or replace function apuntar_avance_del_envio(p_id uuid, p_enviados int)
+returns void
+language sql volatile security definer set search_path = public as $$
+  update comunicados
+     set envio_enviados = greatest(envio_enviados, p_enviados)
+   where id = p_id and hermandad_id = hermandad_actual()
+$$;
+
+grant execute on function apuntar_avance_del_envio(uuid, int) to authenticated;

@@ -126,12 +126,32 @@ create index if not exists reglas_activas_idx
  * que abra el panel.
  */
 create or replace function reclamar_regla_de_hoy()
-returns table (id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text)
+returns table (
+  id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text,
+  /*
+   * CUÁNDO SE DISPARÓ LA VEZ ANTERIOR, o vacío si es la primera.
+   *
+   * Es el dato que permite RECUPERAR LOS DÍAS QUE NADIE ABRIÓ, y sin él la
+   * función de felicitar se quedaba a medias: las reglas se miran cuando
+   * alguien entra en Comunicados, y en una hermandad eso puede ser una vez por
+   * semana. Sin recuperar el hueco se perdían casi todos los cumpleaños — que
+   * es como no tener la función.
+   *
+   * Ver `dispararReglasDeHoy()`, que decide cuánto hueco vale la pena tapar.
+   */
+  ultima_vez date
+)
 language sql volatile security definer set search_path = public as $$
-  update reglas_automaticas r
-     set ultima_vez = current_date
-   where r.id = (
-     select x.id from reglas_automaticas x
+  /*
+   * SE GUARDA EL VALOR ANTERIOR ANTES DE PISARLO.
+   *
+   * `update ... returning` devuelve lo NUEVO, y aquí hace falta lo viejo: la
+   * fecha de la última vez es justo lo que se va a machacar. Por eso el
+   * `select` va en un CTE aparte, que lo lee antes de que el `update` lo toque.
+   */
+  with elegida as (
+     select x.id, x.ultima_vez as antes
+       from reglas_automaticas x
       where x.hermandad_id = hermandad_actual()
         and x.activa
         -- No se ha disparado hoy. `is null` es la primera vez de todas.
@@ -141,8 +161,12 @@ language sql volatile security definer set search_path = public as $$
       order by x.creada_en
       limit 1
       for update skip locked
-   )
-  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo
+  )
+  update reglas_automaticas r
+     set ultima_vez = current_date
+    from elegida e
+   where r.id = e.id
+  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo, e.antes
 $$;
 
 grant execute on function reclamar_regla_de_hoy() to authenticated;

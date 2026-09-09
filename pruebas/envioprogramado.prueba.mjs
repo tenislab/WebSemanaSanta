@@ -57,7 +57,7 @@ export default async function ({ cargar, caso }) {
   }
   const uno = (id, extra = {}) => ({
     id, titulo: `Comunicado ${id}`, cuerpo: 'Texto', destinatarios: 'Todos los hermanos',
-    intentos: 1, ...extra,
+    intentos: 1, yaEnviados: 0, ...extra,
   })
 
   // --- EL CASO NORMAL ---
@@ -70,6 +70,41 @@ export default async function ({ cargar, caso }) {
     caso('sin soltarlo como fallido', 0, b.hechos.soltados.length)
     // Y pregunta una vez más para ver si hay otro: así se mandan varios seguidos.
     caso('sigue preguntando hasta que no queda ninguno', 2, b.hechos.reclamados)
+  }
+
+  /*
+   * ==========================================================================
+   * UN ENVÍO CORTADO A MITAD NO EMPIEZA OTRA VEZ POR EL PRIMERO
+   * ==========================================================================
+   *
+   * Con «Hola {nombre}» hay que mandar de uno en uno, y ochocientos correos
+   * tardan unos minutos con la pestaña abierta. Si se cierra a mitad —o se
+   * duerme el portátil— el candado caduca a la media hora y otro navegador lo
+   * coge. Sin apuntar por dónde iba, empezaría por el primero: trescientas
+   * personas con la convocatoria repetida.
+   */
+  {
+    const b = banco({ cola: [uno('c1', { yaEnviados: 2 })], gente: ['a@x.es', 'b@x.es', 'c@x.es', 'd@x.es'] })
+    const res = await m.mandarLosProgramados(b.como)
+    caso('se salta a los que ya recibieron el suyo', 2, b.hechos.enviados[0].cuantos)
+    /*
+     * Y EL ALCANCE FINAL LOS CUENTA A TODOS. Si solo contara los de este
+     * intento, un comunicado que salió en dos tandas quedaría registrado con la
+     * mitad de la gente — y ese número es el que se lee luego en la lista.
+     */
+    caso('pero el alcance final los cuenta a todos', [{ id: 'c1', alcance: 4 }], b.hechos.cerrados)
+    caso('y se cuenta como mandado una sola vez', 1, res.mandados)
+  }
+  {
+    /*
+     * Y SI EL INTENTO ANTERIOR YA HABÍA LLEGADO AL FINAL, se cierra sin mandar
+     * nada. Es distinto del segmento vacío —aquí sí había gente— pero acaba
+     * igual, y sobre todo NO vuelve a escribir a nadie.
+     */
+    const b = banco({ cola: [uno('c1', { yaEnviados: 3 })], gente: ['a@x.es', 'b@x.es', 'c@x.es'] })
+    await m.mandarLosProgramados(b.como)
+    caso('si ya se había mandado a todos, no se repite', 0, b.hechos.enviados.length)
+    caso('y se cierra con el alcance de antes', [{ id: 'c1', alcance: 3 }], b.hechos.cerrados)
   }
 
   // --- VARIOS DE GOLPE ---

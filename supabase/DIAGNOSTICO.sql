@@ -339,6 +339,7 @@ with esperado (tabla, columna) as (
     ('activar_suscripcion_por_usuario'),
     ('activar_suscripcion_propia'),
     ('anular_venta'),
+    ('apuntar_avance_del_envio'),
     ('avisar_reserva_lista'),
     ('avisos_que_esperan'),
     ('baja_de_la_web'),

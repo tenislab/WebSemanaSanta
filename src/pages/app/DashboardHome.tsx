@@ -19,7 +19,7 @@ import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { documentoToRow, rowToDocumento } from '../../lib/db/documentos'
 import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
 import { useCargoDeLaSesion } from '../../lib/permisos'
-import { getCampana, renovacionDeHermano, ventanaAbierta } from '../../lib/campana'
+import { getCampana, renovacionDeHermano, ventanaAbierta, estadoDeLaCampana } from '../../lib/campana'
 import { sumaEuros, formatCurrency } from '../../lib/format'
 import { puedeVerModulo } from '../../lib/permisos'
 import { useSuscripcion, moduloPermitidoPorPack } from '../../lib/suscripcion'
@@ -135,6 +135,12 @@ export default function DashboardHome() {
 
   const { stats, actividad, alertas } = useMemo(() => {
     const campana = getCampana()
+    /*
+     * ¿HAY CAMPAÑA DE VERDAD? Sin ella `getCampana()` devuelve la de fábrica
+     —con fechas de ejemplo que hoy caen dentro de plazo—, y esta pantalla
+     * anunciaba «Renovación abierta» de una campaña que nadie había creado.
+     */
+    const hayCampana = estadoDeLaCampana() === 'creada'
     const papeletasCampana = papeletas.filter((p) => p.anio === campana.anio)
 
     // Miembros = todos menos los que se han ido. «Nuevo» es miembro: ese
@@ -155,7 +161,7 @@ export default function DashboardHome() {
     const stats = [
       { label: 'Hermanos activos', value: String(activos), trend: nuevos > 0 ? `+${nuevos} nuevos` : 'Censo al día', tone: 'ok' as const, modulo: 'hermanos' },
       { label: 'Cuotas pendientes', value: String(cuotasPendientes), trend: `${pctPendientes}% del total`, tone: cuotasPendientes > 0 ? ('warn' as const) : ('ok' as const), modulo: 'cuotas' },
-      { label: `Papeletas ${campana.anio}`, value: String(papeletasEmitidas), trend: ventanaAbierta(campana) ? 'Renovación abierta' : 'Renovación cerrada', tone: 'neutral' as const, modulo: 'papeletas' },
+      { label: `Papeletas ${campana.anio}`, value: String(papeletasEmitidas), trend: ventanaAbierta(campana, hayCampana) ? 'Renovación abierta' : 'Renovación cerrada', tone: 'neutral' as const, modulo: 'papeletas' },
       { label: 'Saldo conciliado', value: formatCurrency(saldo), trend: porConciliar > 0 ? `${porConciliar} por conciliar` : 'Todo conciliado', tone: saldo >= 0 ? ('ok' as const) : ('warn' as const), modulo: 'tesoreria' },
     ]
 
@@ -251,7 +257,7 @@ export default function DashboardHome() {
       })
     if (cuotasPendientes > 0)
       alertas.push({ text: `${cuotasPendientes} cuotas siguen pendientes de cobro`, level: 'warn', to: '/app/cuotas', modulo: 'cuotas' })
-    if (porRenovar > 0 && ventanaAbierta(campana))
+    if (porRenovar > 0 && ventanaAbierta(campana, hayCampana))
       alertas.push({ text: `${porRenovar} hermanos por renovar su sitio antes de la fecha límite`, level: 'warn', to: '/app/papeletas', modulo: 'papeletas' })
     if (contratosPorVencer > 0)
       alertas.push({ text: `${contratosPorVencer} contratos vencidos o a punto de vencer`, level: 'warn', to: '/app/archivo', modulo: 'archivo' })

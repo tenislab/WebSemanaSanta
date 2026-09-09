@@ -44,7 +44,7 @@ import { correoDisponible, enviarCorreo, enviarCorreoUnoAUno, getAjustesCorreo }
 import { llevaMarcas, personalizar, sePuedePersonalizar, vistaPrevia, MARCAS } from '../../lib/personalizar'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
 import {
-  mandarLosProgramados, reclamarDeLaBase, cerrarEnLaBase, soltarEnLaBase,
+  mandarLosProgramados, reclamarDeLaBase, cerrarEnLaBase, soltarEnLaBase, apuntarAvanceEnLaBase,
   type ComunicadoReclamado,
 } from '../../lib/envioProgramado'
 import {
@@ -657,9 +657,10 @@ export default function Comunicados() {
        * cumple ninguno— no se crea nada. Un comunicado a cero personas por día
        * llenaría la lista hasta enterrar los de verdad.
        */
-      cuantos: (r) => filtrarSegmento(
-        hermanos, r.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota,
-      ).length,
+      cuantos: (r) => cuantosSon(resolverDestinatario({
+        destinatarios: r.destinatarios,
+        criterios: r.criterios,
+      })),
       crear: async (r) => {
         const hoy = hoyIso()
         const nuevo: Comunicado = {
@@ -758,7 +759,21 @@ export default function Comunicados() {
             const { texto, html } = cuerpoCorreo(asunto, cuerpo.split('\n\n'))
             return { para: d.email, asunto, texto, html }
           })
-          const u = await enviarCorreoUnoAUno(mensajes)
+          /*
+           * SE VA APUNTANDO POR DÓNDE VA, cada veinticinco.
+           *
+           * Si se cierra la pestaña a mitad de ochocientos, el candado caduca a
+           * la media hora y otro navegador lo coge — y sin esto empezaría por el
+           * primero: trescientas personas con la convocatoria repetida.
+           *
+           * Cada veinticinco y no cada uno porque ochocientas escrituras a la
+           * base para acompañar a ochocientos correos duplican el trabajo sin
+           * ganar nada: perder veinticinco por redondeo es mandar veinticinco
+           * repetidos en un caso raro, no dejar a nadie sin el suyo.
+           */
+          const u = await enviarCorreoUnoAUno(mensajes, (hechos) => {
+            if (hechos % 25 === 0) void apuntarAvanceEnLaBase(c.id, c.yaEnviados + hechos)
+          })
           return { enviados: u.enviados, error: u.error }
         }
         const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
@@ -1515,9 +1530,21 @@ export default function Comunicados() {
                * número no hay forma de saber si es que solo cumplen tres o es
                * que el resto no tiene la fecha puesta en su ficha.
                */
-              const alcanza = filtrarSegmento(
-                hermanos, r.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota,
-              ).length
+              /*
+               * SE CUENTA CON EL MISMO CAMINO QUE SE MANDA.
+               *
+               * Aquí se contaba solo con `filtrarSegmento`, y al enviar se usa
+               * `resolverDestinatario`, que además añade `personalDelSegmento`:
+               * la junta que tiene cuenta de acceso pero no ficha en el censo.
+               *
+               * O sea que el número que se enseñaba antes de encender la regla
+               * era MÁS BAJO que la gente a la que le iba a llegar. Justo el
+               * dato que se mira para atreverse a encenderla.
+               */
+              const alcanza = cuantosSon(resolverDestinatario({
+                destinatarios: r.destinatarios,
+                criterios: r.criterios,
+              }))
               return (
                 <li key={r.id} className="assign-box" style={{ marginBottom: '0.6rem' }}>
                   <div className="assign-box__row" style={{ justifyContent: 'space-between' }}>

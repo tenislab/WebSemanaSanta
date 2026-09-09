@@ -58,6 +58,15 @@ export interface ComunicadoReclamado {
   cuerpo: string
   destinatarios: string
   intentos: number
+  /**
+   * CUÁNTOS CORREOS SALIERON YA EN UN INTENTO ANTERIOR.
+   *
+   * Cero casi siempre. Deja de serlo cuando un envío de ochocientos se cortó a
+   * mitad —se cerró la pestaña, se durmió el portátil— y el candado caducó: sin
+   * este número, el reintento empezaría por el primero y trescientas personas
+   * recibirían la convocatoria dos veces.
+   */
+  yaEnviados: number
 }
 
 /**
@@ -90,7 +99,13 @@ export interface ComoMandar {
   reclamar: () => Promise<ComunicadoReclamado | null>
   /** A quién va este comunicado. Es lo que sabe la pantalla y no sabe la base. */
   destinatarios: (c: ComunicadoReclamado) => Promise<{ email: string; nombre: string; numero?: number | null }[]>
-  /** Mandarlo. Devuelve a cuántos ha llegado. */
+  /**
+   * Mandarlo. Devuelve a cuántos ha llegado.
+   *
+   * La lista llega YA SIN los que recibieron el suyo en un intento anterior, y
+   * ordenada siempre igual: eso es lo que hace que saltarse los primeros sea
+   * saltarse a los mismos.
+   */
   enviar: (
     c: ComunicadoReclamado,
     a: { email: string; nombre: string; numero?: number | null }[],
@@ -140,7 +155,16 @@ export async function mandarLosProgramados(como: ComoMandar): Promise<ResultadoP
     if (!c) break
 
     try {
-      const gente = await como.destinatarios(c)
+      const todos = await como.destinatarios(c)
+      /*
+       * SE ORDENA SIEMPRE IGUAL Y SE SALTAN LOS QUE YA TIENEN EL SUYO.
+       *
+       * El orden por identificador no es cosmético: es lo único que hace que
+       * «los primeros 312» signifiquen los mismos 312 en el segundo intento. Sin
+       * ordenar, la lista podría venir en otro orden y el corte se movería.
+       */
+      const ordenados = [...todos].sort((a, b) => a.email.localeCompare(b.email))
+      const gente = c.yaEnviados > 0 ? ordenados.slice(c.yaEnviados) : ordenados
 
       /*
        * SIN NADIE A QUIEN MANDÁRSELO NO ES UN FALLO, PERO TAMPOCO UN ÉXITO.
@@ -151,8 +175,14 @@ export async function mandarLosProgramados(como: ComoMandar): Promise<ResultadoP
        * gente, y dejarlo colgado es peor, porque se queda vencido para siempre
        * encendiendo el numerito del menú.
        */
+      /*
+       * Sin nadie a quien mandárselo se cierra. Ojo: aquí caben DOS casos que
+       * acaban igual y por motivos distintos — que el segmento esté vacío (hoy
+       * no cumple nadie) y que el intento anterior ya llegara al final justo
+       * antes de cortarse. Los dos se cierran, que es lo correcto.
+       */
       if (gente.length === 0) {
-        await como.cerrar(c.id, 0)
+        await como.cerrar(c.id, c.yaEnviados)
         r.mandados++
         continue
       }
@@ -173,7 +203,7 @@ export async function mandarLosProgramados(como: ComoMandar): Promise<ResultadoP
         continue
       }
 
-      await como.cerrar(c.id, envio.enviados)
+      await como.cerrar(c.id, c.yaEnviados + envio.enviados)
       r.mandados++
       r.personas += envio.enviados
     } catch (e) {
@@ -227,6 +257,7 @@ export async function reclamarDeLaBase(): Promise<ComunicadoReclamado | null> {
     cuerpo: String(fila.cuerpo ?? ''),
     destinatarios: String(fila.destinatarios ?? ''),
     intentos: Number(fila.intentos ?? 1),
+    yaEnviados: Number(fila.ya_enviados ?? 0),
   }
 }
 
@@ -238,4 +269,10 @@ export async function cerrarEnLaBase(id: string, alcance: number): Promise<void>
 export async function soltarEnLaBase(id: string, motivo: string): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return
   await supabase.rpc('soltar_comunicado_fallido', { p_id: id, p_error: motivo })
+}
+
+/** Apunta por dónde va el envío, para que un corte no lo repita desde el principio. */
+export async function apuntarAvanceEnLaBase(id: string, enviados: number): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return
+  await supabase.rpc('apuntar_avance_del_envio', { p_id: id, p_enviados: enviados })
 }

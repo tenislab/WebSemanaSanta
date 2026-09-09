@@ -122,6 +122,62 @@ export default async function ({ cargar, caso }) {
    * encuentra dos reglas que no ha puesto se pregunta qué más hay hecho a sus
    * espaldas.
    */
+  /*
+   * ==========================================================================
+   * LO PRIMERO: QUE ALCANCEN A ALGUIEN. ESTO ESTUVO ROTO Y ERA MUDO.
+   * ==========================================================================
+   *
+   * Las dos reglas de fábrica guardaban solo `{ cumpleanos: 'Hoy' }`, y con el
+   * `estado` sin poner `filtrarSegmento` DESCARTABA A TODO EL MUNDO. O sea:
+   * añadías «Felicitar el cumpleaños», te decía siempre «hoy no toca a nadie»,
+   * la encendías, y no felicitaba jamás. Cero personas, sin un error, sin un
+   * aviso y sin forma de arreglarlo desde la pantalla.
+   *
+   * Y todo lo demás de este fichero pasaba en verde: comprobaba que el texto
+   * llevara `{nombre}`, que nacieran apagadas, que no mandaran correo… todo
+   * cierto, y la función muerta. Lo que faltaba era EJECUTAR el sesgo en vez de
+   * leerlo, que es lo que hace este caso.
+   */
+  const seg = await cargar('src/lib/segmentacion.ts')
+  const hoy = new Date()
+  const dosDigitos = (n) => String(n).padStart(2, '0')
+  const censo = [
+    {
+      id: 'a', nombre: 'Cumple Hoy', numero: 1, estado: 'Activo', email: 'a@x.es',
+      fechaNacimiento: `1980-${dosDigitos(hoy.getMonth() + 1)}-${dosDigitos(hoy.getDate())}`,
+    },
+    { id: 'b', nombre: 'Otro', numero: 2, estado: 'Activo', email: 'b@x.es', fechaNacimiento: '1990-01-01' },
+  ]
+  for (const r of m.REGLAS_DE_FABRICA) {
+    caso(`la regla «${r.nombre}» alcanza a alguien de verdad`, true,
+      seg.filtrarSegmento(censo, r.criterios).length > 0)
+  }
+
+  /*
+   * Y UN SESGO AL QUE LE FALTAN CAMPOS NO PUEDE VOLVER A DEJAR A NADIE FUERA.
+   *
+   * Es la raíz, y se arregla en `filtrarSegmento`: los criterios viajan en una
+   * columna `jsonb`, así que lo que llega es lo que hubiera guardado. Que le
+   * falte un campo tiene un significado obvio —«ese criterio no se mira»— y era
+   * el único que la función NO le daba: le daba «no sale nadie», que es la
+   * respuesta más peligrosa, porque no se distingue de «hoy no cumple nadie».
+   */
+  caso('un sesgo con solo el cumpleaños ya funciona', 1,
+    seg.filtrarSegmento(censo, { cumpleanos: 'Hoy' }).length)
+  caso('y un sesgo vacío saca a todos, no a ninguno', 2, seg.filtrarSegmento(censo, {}).length)
+
+  /*
+   * Y NINGUNA REGLA DE FÁBRICA LLEVA EL SESGO A MEDIAS. El `as
+   * CriteriosSegmento` que había escrito era lo que le tapaba la boca a
+   * TypeScript; sin él, el compilador avisa. Esto lo vigila también en
+   * ejecución, por si alguien vuelve a ponerlo.
+   */
+  const camposDeUnSesgo = Object.keys(seg.CRITERIOS_POR_DEFECTO)
+  caso('las reglas de fábrica llevan el sesgo entero', [],
+    m.REGLAS_DE_FABRICA
+      .filter((r) => camposDeUnSesgo.some((k) => !(k in r.criterios)))
+      .map((r) => r.nombre))
+
   caso('hay dos reglas de fábrica', 2, m.REGLAS_DE_FABRICA.length)
   caso('una diaria y otra mensual', ['diaria', 'mensual'], m.REGLAS_DE_FABRICA.map((r) => r.cada).sort())
   /*
@@ -208,6 +264,20 @@ export default async function ({ cargar, caso }) {
    * tres o si es que el resto no tiene la fecha en su ficha.
    */
   caso('se enseña a cuánta gente alcanzaría hoy', true, /hoy alcanzaría a \$\{alcanza\}/.test(pantalla))
+  /*
+   * Y SE CUENTA CON EL MISMO CAMINO QUE SE MANDA.
+   *
+   * Se contaba solo con `filtrarSegmento`, y al enviar se usa
+   * `resolverDestinatario`, que además añade `personalDelSegmento`: la junta
+   * que tiene cuenta de acceso pero no ficha en el censo. O sea que el número
+   * que se enseñaba antes de encender la regla era MÁS BAJO que la gente a la
+   * que le iba a llegar — y ese número es justo el que se mira para atreverse a
+   * encenderla.
+   */
+  caso('el alcance se cuenta como se manda', true,
+    /const alcanza = cuantosSon\(resolverDestinatario\(\{/.test(pantalla))
+  caso('y al dispararla, igual', true,
+    /cuantos: \(r\) => cuantosSon\(resolverDestinatario\(\{/.test(pantalla))
   caso('y se dice cuando no toca a nadie', true, /hoy no toca a nadie/.test(pantalla))
   /*
    * Y EL TEXTO SE VE **Y SE EDITA** SIN ABRIR NADA.

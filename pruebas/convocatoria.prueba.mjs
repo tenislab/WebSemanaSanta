@@ -221,10 +221,49 @@ export default async function ({ caso, cargar }) {
    * fallo volvería tal cual. Esta línea es la que lo impide.
    */
   caso('la pantalla pregunta antes de convocar', true,
-    /sePuedeConvocar\(campana, undefined, hayCampanaCreada\(\)\)/.test(pantalla))
-  // Y el texto del recuadro tampoco invita a convocar lo que no existe.
-  caso('sin campaña, el recuadro no invita a nada', true,
-    /Antes de convocar hay que crear la campaña/.test(pantalla))
+    /sePuedeConvocar\(campana, undefined, estadoCampana === 'creada'\)/.test(pantalla))
+  /*
+   * Y EL RECUADRO DICE UNA SOLA COSA, NO DOS.
+   *
+   * Aquí el aviso salía DOS VECES: el recuadro decía «antes de convocar hay que
+   * crear la campaña» y justo debajo un párrafo repetía casi lo mismo con otras
+   * palabras. Dos avisos seguidos diciendo lo mismo se leen como una pantalla
+   * descuidada, y acaban sin leerse ninguno de los dos.
+   *
+   * Ahora el motivo lo da `puedeConvocar.motivo`, que es el que sabe por qué
+   * —falta la campaña, no ha abierto el plazo o ya se cerró— y el recuadro solo
+   * dice lo que se va a hacer cuando sí se pueda.
+   */
+  caso('el motivo se dice una sola vez', true,
+    /\{puedeConvocar\.puede\s*\n\s*\? <>Avisa a los[\s\S]{0,200}?: puedeConvocar\.motivo\}/.test(pantalla))
+  caso('y no queda el párrafo repetido de debajo', false,
+    /<p className="table-subtle"[^>]*>\{puedeConvocar\.motivo\}<\/p>/.test(pantalla))
+
+  /*
+   * --- Y NO SE AFIRMA «RENOVACIÓN ABIERTA» CON FECHAS DE EJEMPLO ---
+   *
+   * Arriba de esa misma pantalla ponía «Renovación ABIERTA hasta el 28 feb
+   * 2027» a una hermandad que no había creado ninguna campaña: esa fecha es la
+   * de ejemplo que trae `getCampana()` cuando no hay nada guardado. Anunciar un
+   * plazo que nadie ha fijado, y en negrita, es peor que no decir nada — porque
+   * se cree.
+   */
+  caso('la banda de renovación no habla si no hay campaña', true,
+    /estadoCampana !== 'creada' \? \(/.test(pantalla))
+  caso('y distingue «no hay» de «todavía no consta»', true,
+    /estadoCampana === 'sin-crear'[\s\S]{0,400}?Comprobando la campaña/.test(pantalla))
+
+  /*
+   * LAS TRES SITUACIONES, NO DOS. Durante el segundo que tarda la base en
+   * contestar, a una hermandad que SÍ tiene campaña se le decía «todavía no
+   * habéis creado la campaña»: un mensaje que asusta, que es falso, y que sale
+   * justo al abrir la pantalla, que es cuando más se lee.
+   *
+   * Es el mismo fallo que ya estaba resuelto en `constaLaSuscripcion()`: a
+   * quien no le consta no se le puede decir que no ha pagado.
+   */
+  caso('hay tres situaciones de campaña', true, /export function estadoDeLaCampana/.test(srcCampana))
+  caso('y se apunta cuándo contestó la base', true, /seLePreguntoALaBase = true/.test(srcCampana))
   caso('el botón se apaga', true, /disabled=\{convocando \|\| !puedeConvocar\.puede\}/.test(pantalla))
   /*
    * Y LA FUNCIÓN TAMBIÉN COMPRUEBA, no solo el botón. Un botón desactivado es
@@ -234,8 +273,81 @@ export default async function ({ caso, cargar }) {
    */
   caso('y la función se planta aunque la llamen por otro lado', true,
     /if \(!puedeConvocar\.puede\) \{[\s\S]{0,120}?return/.test(pantalla))
-  // Y no se queda en gris sin explicar: eso se lee como «está roto».
-  caso('se explica por qué no se puede', true, /\{puedeConvocar\.motivo\}<\/p>/.test(pantalla))
+  /*
+   * Y NO SE QUEDA EN GRIS SIN EXPLICAR: eso se lee como «está roto». El motivo
+   * va dentro del propio recuadro, en el sitio donde antes se invitaba a
+   * convocar — no en un párrafo aparte que repitiera lo mismo.
+   */
+  caso('se explica por qué no se puede', true, /: puedeConvocar\.motivo\}/.test(pantalla))
+  caso('y el botón se apaga de verdad', true, /disabled=\{convocando \|\| !puedeConvocar\.puede\}/.test(pantalla))
+
+
+  /*
+   * ==========================================================================
+   * Y NINGUNA PANTALLA PUEDE OLVIDARSE DE PREGUNTAR SI HAY CAMPAÑA
+   * ==========================================================================
+   *
+   * Esto no es una comprobación más: es la que impide que el fallo vuelva por
+   * otra puerta. Se arregló en Papeletas y seguía puesto en otras CUATRO —el
+   * inicio del panel, el área del hermano (dos sitios) y la web pública— porque
+   * cada una llama a `ventanaAbierta()` por su cuenta.
+   *
+   * El del área del hermano era el peor con diferencia: le ofrecía «Solicitar
+   * mi papeleta de sitio» a los ochocientos, para una Semana Santa que su
+   * hermandad no había convocado.
+   *
+   * El tercer parámetro tiene valor por defecto —`true`— para no arrastrarlo
+   * por las pruebas de fechas, así que olvidarlo NO da ningún error: compila,
+   * pasa las pruebas y miente en pantalla. Por eso se recorre el código.
+   */
+  const { readdir: leerCarpeta } = await import('node:fs/promises')
+  const { join: unirRuta } = await import('node:path')
+  async function* archivos(dir) {
+    for (const e of await leerCarpeta(dir, { withFileTypes: true })) {
+      const ruta = unirRuta(dir, e.name)
+      if (e.isDirectory()) yield* archivos(ruta)
+      else if (/\.tsx?$/.test(e.name)) yield ruta
+    }
+  }
+  const olvidadizas = []
+  for await (const ruta of archivos('src')) {
+    // El propio fichero que las define no cuenta.
+    if (ruta.endsWith('lib/campana.ts')) continue
+    const texto = await readFile(ruta, 'utf8')
+    /*
+     * Se cuentan las comas del PRIMER NIVEL de la llamada: `ventanaAbierta(x)`
+     * tiene cero y le falta el aviso; `ventanaAbiertaPara(x, true)` tiene una y
+     * también. Se recorta en el paréntesis que cierra para no confundirse con
+     * lo que venga detrás.
+     */
+    for (const m of texto.matchAll(/ventanaAbierta(Para)?\(/g)) {
+      let i = m.index + m[0].length
+      let hondo = 1
+      let comas = 0
+      while (i < texto.length && hondo > 0) {
+        const ch = texto[i]
+        if (ch === '(') hondo++
+        else if (ch === ')') hondo--
+        else if (ch === ',' && hondo === 1) comas++
+        i++
+      }
+      const minimas = m[1] ? 2 : 1        // «Para» lleva un argumento más
+      if (comas < minimas) {
+        olvidadizas.push(`${ruta}: ${texto.slice(m.index, m.index + 60).split('\n')[0]}`)
+      }
+    }
+  }
+  caso('ninguna pantalla se olvida de preguntar si hay campaña', [], olvidadizas)
+
+  /*
+   * Y QUE LAS DOS FUNCIONES SEPAN DECIR QUE NO. Lo de arriba comprueba que se
+   * les pregunta; esto, que la respuesta sirve de algo.
+   */
+  const C2 = { ...C, fechaInicioParticiparon: '2020-01-01', fechaLimiteRenovacion: '2099-01-01' }
+  caso('sin campaña, la ventana está cerrada', false, campana.ventanaAbierta(C2, false))
+  caso('y con campaña, abierta', true, campana.ventanaAbierta(C2, true))
+  caso('al hermano no se le ofrece nada sin campaña', false, campana.ventanaAbiertaPara(C2, true, false))
+  caso('y con campaña sí', true, campana.ventanaAbiertaPara(C2, true, true))
 
   await bienvenida({ caso })
 }
@@ -316,6 +428,8 @@ async function bienvenida({ caso }) {
   caso('y con su número ya asignado', true, /numero: suNumero/.test(hermanos))
   // Nunca a un duplicado rechazado.
   caso('no se le da la bienvenida a un duplicado', true, /if \(!duplicado\) \{/.test(hermanos))
+
+
 
 
 }

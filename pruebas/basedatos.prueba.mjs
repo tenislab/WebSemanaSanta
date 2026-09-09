@@ -4457,6 +4457,40 @@ async function elCertificadoDeAntiguedad({ sql, caso }) {
   caso('un comunicado enviado ya no se reparte', '', await pedir())
 
   /*
+   * 3 bis. Y SE APUNTA POR DÓNDE VA EL ENVÍO.
+   *
+   * Ochocientos correos personalizados tardan minutos con la pestaña abierta.
+   * Si se cierra a mitad, el candado caduca a la media hora y otro navegador lo
+   * coge: sin esto empezaría por el primero y trescientas personas recibirían
+   * la convocatoria dos veces.
+   */
+  await sql(`delete from comunicados where hermandad_id = ${H}`)
+  await sql(`insert into comunicados
+      (id, numero, titulo, cuerpo, canal, destinatarios, estado, fecha_creacion,
+       fecha_programada, autor, hermandad_id)
+     values ('dd000000-0000-0000-0000-0000000000dd', 93, 'Uno largo', 'x', 'Email',
+             'Todos los hermanos', 'Programado', '2027-01-01',
+             to_char(current_date, 'YYYY-MM-DD'), 'x', ${H})`)
+  await comoElNavegador(`apuntar_avance_del_envio('dd000000-0000-0000-0000-0000000000dd', 312)`)
+  caso('se apunta por dónde iba', '312', numero(await sql(
+    `select envio_enviados from comunicados where hermandad_id = ${H}`)))
+  caso('y el reintento se lo lleva sabiéndolo', '312', numero(await sql(
+    `begin; set local role authenticated; set local request.jwt.claim.sub = ${USEC};
+       select ya_enviados from reclamar_comunicado_programado(); commit;`)))
+  /*
+   * Y NO PUEDE IR HACIA ATRÁS. Si dos navegadores se pisaran, el que va más
+   * adelantado manda: retroceder aquí es volver a escribirle a gente que ya
+   * tiene el suyo.
+   */
+  await comoElNavegador(`apuntar_avance_del_envio('dd000000-0000-0000-0000-0000000000dd', 50)`)
+  caso('y no retrocede', '312', numero(await sql(
+    `select envio_enviados from comunicados where hermandad_id = ${H}`)))
+  // Al cerrarlo se pone a cero: si algún día se reenvía a mano, empieza limpio.
+  await comoElNavegador(`cerrar_comunicado_enviado('dd000000-0000-0000-0000-0000000000dd', 812)`)
+  caso('y al cerrarlo vuelve a cero', '0', numero(await sql(
+    `select envio_enviados from comunicados where hermandad_id = ${H}`)))
+
+  /*
    * 4. UNO PROGRAMADO PARA MÁS ADELANTE NO SALE HOY.
    *
    * Parece obvio y es la mitad del sentido de programar: si saliera igual, la
@@ -4568,6 +4602,21 @@ async function elCertificadoDeAntiguedad({ sql, caso }) {
       (id, hermandad_id, nombre, cada, criterios, destinatarios, asunto, cuerpo, activa)
      values ('cc000000-0000-0000-0000-0000000000cc', ${H}, 'Felicitar el cumpleaños', 'diaria',
              '{"cumpleanos":"Hoy"}'::jsonb, 'Los que cumplen hoy', '¡Felicidades!', 'Hola', true)`)
+
+  /*
+   * 0. Y DEVUELVE CUÁNDO SE DISPARÓ LA VEZ ANTERIOR.
+   *
+   * Es lo que permite recuperar los días que nadie abrió la pantalla. Tiene que
+   * ser el valor de ANTES, no el de después: `update ... returning` devuelve lo
+   * nuevo, así que se lee en un CTE aparte antes de pisarlo. Si esto devolviera
+   * la fecha de hoy, el hueco sería siempre cero y no se recuperaría nunca
+   * nada — en verde y sin que se notara.
+   */
+  await sql(`update reglas_automaticas set ultima_vez = current_date - 3 where hermandad_id = ${H}`)
+  caso('devuelve la fecha de la vez anterior, no la de hoy', '3', numero(await sql(
+    `begin; set local role authenticated; set local request.jwt.claim.sub = ${USEC};
+       select (current_date - ultima_vez)::text from reclamar_regla_de_hoy(); commit;`)))
+  await sql(`update reglas_automaticas set ultima_vez = null where hermandad_id = ${H}`)
 
   /* 1. LA PRIMERA SE LA LLEVA; LAS OTRAS DOS, NO. */
   caso('la primera persona que entra se lleva la regla', 'Felicitar el cumpleaños', await pedirRegla())
@@ -4726,12 +4775,36 @@ async function elCertificadoDeAntiguedad({ sql, caso }) {
   caso('sin columnas no dice nada', [], await faltan({}))
 
   /*
-   * Y LO PUEDE LLAMAR EL NAVEGADOR. Es `security definer` porque lee el
-   * catálogo, que un usuario normal no ve entero; si no estuviera concedida, la
-   * comprobación fallaría en silencio y —por cómo está escrito
-   * `loQueNoEncaja()`— se dejaría pasar la restauración sin mirar.
+   * ==========================================================================
+   * Y LLAMÁNDOLA COMO LA LLAMA EL NAVEGADOR, NO COMO SUPERUSUARIO
+   * ==========================================================================
+   *
+   * Todo lo de arriba la llamaba con la cuenta de administración, que se salta
+   * los permisos. Eso comprueba que la CONSULTA es correcta y no comprueba lo
+   * único que la aplicación necesita: que se pueda llamar desde una sesión
+   * normal.
+   *
+   * Es exactamente el descuido que dejó la tabla de las reglas automáticas sin
+   * poder escribirse —probada entera como superusuario, rota para todo el
+   * mundo— así que aquí se hace de las dos formas.
+   *
+   * Y si esto fallara, no daría error visible: `loQueNoEncaja()` deja pasar la
+   * restauración cuando no puede preguntar (y es lo correcto, está razonado
+   * allí). O sea que el freno se quedaría desarmado en silencio, justo en la
+   * operación que borra los datos de la hermandad.
    */
-  caso('el navegador puede preguntarlo', 'true', solo(await sql(
+  const preguntarComoNavegador = async (columnas, usuario = USEC) => (await sql(
+    `begin; set local role authenticated; set local request.jwt.claim.sub = ${usuario};
+       select tabla || '.' || columna from columnas_que_faltan_para_restaurar(
+         '${JSON.stringify(columnas)}'::jsonb) order by 1;
+     rollback;`)).split('\n').map((x) => x.trim())
+    .filter((x) => x && !ETIQUETAS_DE_PSQL.test(x))
+
+  caso('el navegador la puede llamar', [],
+    await preguntarComoNavegador({ hermanos: ['id', 'nombre'] }))
+  caso('y le contesta lo mismo que a un administrador', ['hermanos.columna_del_futuro'],
+    await preguntarComoNavegador({ hermanos: ['id', 'columna_del_futuro'] }))
+  caso('el permiso está concedido', 'true', solo(await sql(
     `select has_function_privilege('authenticated', p.oid, 'execute')::text
        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname = 'columnas_que_faltan_para_restaurar'`)))
