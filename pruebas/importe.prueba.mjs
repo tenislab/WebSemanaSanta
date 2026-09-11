@@ -32,6 +32,32 @@ export default async function ({ cargar, caso }) {
   )
 
   /*
+   * EL SEPARADOR DE MILES, EN TODOS.
+   *
+   * `es-ES` por defecto se lo salta en los números de CUATRO cifras: da
+   * «2420,00 €» pero «10.431,55 €». Para una frase suelta es la norma, pero
+   * esta aplicación es casi toda columnas de dinero, y ahí eso se lee dudando:
+   * `2420,00` encima de `10.431,55` puede ser dos mil o veinticuatro mil.
+   *
+   * Se vio pintando el estado de cuentas —el papel que se lleva al cabildo—:
+   * la primera partida sin separador y la de debajo con él. Leyendo el código
+   * no se ve, porque ahí `es-ES` parece justo lo correcto.
+   */
+  /*
+   * El espacio de antes del € es DURO (U+00A0), no el de la barra espaciadora:
+   * lo pone `Intl` para que el símbolo no se quede solo al final de una línea.
+   * Se normaliza antes de comparar, porque pegar aquí un carácter invisible
+   * hace que la prueba parezca fallar diciendo dos cosas idénticas.
+   */
+  const como = (n) => m.formatCurrency(n).replace(/\s/g, ' ')
+
+  caso('los miles llevan su punto desde la primera cifra', ['1.000,00 €', '2.420,00 €', '9.999,99 €'],
+    [1000, 2420, 9999.99].map(como))
+  caso('y los de tres cifras no se lo inventan', ['950,00 €', '0,50 €'], [950, 0.5].map(como))
+  // Los millones también, que salen en el estado de cuentas de una grande.
+  caso('y los millones llevan los dos', '1.234.567,89 €', como(1234567.89))
+
+  /*
    * EL MENOS TIPOGRÁFICO. Tesorería no escribe el guion del teclado: pone «−»
    * (U+2212) delante de los gastos. Sin contemplarlo, TODOS los gastos se
    * exportarían en positivo y el Excel sumaría la caja al revés — un error que

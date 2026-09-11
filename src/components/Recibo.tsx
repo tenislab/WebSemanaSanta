@@ -1,6 +1,6 @@
 import { LogoMark } from './Logo'
 import type { Hermano } from '../data/hermanos'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import type { Cuota } from '../data/cuotas'
 import { formatCurrency, maskIban } from '../lib/format'
 import { hayDatosDeEjemplo } from '../lib/demo'
@@ -23,9 +23,7 @@ interface ReciboProps {
  * Configuración, y los del hermano al que se emite.
  */
 export default function Recibo({ cuota, hermano, hermandad }: ReciboProps) {
-  const direccionHermandad = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad]
-    .filter(Boolean)
-    .join(', ')
+  const direccionHermandad = direccionEnUnaLinea(hermandad)
 
   return (
     <div className="recibo-doc print-doc">

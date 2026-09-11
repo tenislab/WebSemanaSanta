@@ -252,3 +252,32 @@ export async function saveHermandadSettings(settings: HermandadSettings): Promis
   }
   return { ok: true }
 }
+
+/**
+ * LA DIRECCIÓN DE LA HERMANDAD, EN UNA LÍNEA, PARA LOS PAPELES.
+ *
+ * Los ocho documentos que se imprimen —recibo, certificado, factura,
+ * justificante, estado de cuentas, cuenta de resultados, memoria e informe—
+ * llevan esta línea en la cabecera, y cada uno la montaba por su cuenta. El
+ * resultado: TRES la escribían con provincia y CINCO sin ella. La misma
+ * hermandad, el mismo día, con dos direcciones distintas según qué papel
+ * imprimiera.
+ *
+ * Y LA PROVINCIA NO SE REPITE. En las capitales, ciudad y provincia son la
+ * misma palabra, así que salía «C/ Pureza, 53, 41010, Sevilla, Sevilla». No es
+ * un fallo de nadie —las dos casillas están bien rellenas— pero en un papel
+ * sellado parece un error, y en el que va hacia fuera más.
+ *
+ * Se compara sin acentos ni mayúsculas: quien escribe «CÁDIZ» en una casilla y
+ * «Cadiz» en la otra quiere decir lo mismo.
+ */
+export function direccionEnUnaLinea(h: HermandadSettings): string {
+  const iguales = (a: string, b: string) => {
+    const limpio = (x: string) => x.trim().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    return limpio(a) !== '' && limpio(a) === limpio(b)
+  }
+  const partes = [h.direccion, h.codigoPostal, h.ciudad]
+  if (h.provincia && !iguales(h.provincia, h.ciudad)) partes.push(h.provincia)
+  return partes.map((p) => (p ?? '').trim()).filter(Boolean).join(', ')
+}

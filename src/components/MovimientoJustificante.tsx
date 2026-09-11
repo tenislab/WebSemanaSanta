@@ -1,5 +1,5 @@
 import { LogoMark } from './Logo'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import type { Movimiento } from '../data/movimientos'
 import { formatCurrency } from '../lib/format'
 import { hayDatosDeEjemplo } from '../lib/demo'
@@ -12,9 +12,7 @@ export default function MovimientoJustificante({
   movimiento: Movimiento
   hermandad: HermandadSettings
 }) {
-  const direccionHermandad = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad]
-    .filter(Boolean)
-    .join(', ')
+  const direccionHermandad = direccionEnUnaLinea(hermandad)
 
   return (
     <div className="recibo-doc print-doc">

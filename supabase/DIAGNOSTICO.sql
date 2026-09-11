@@ -502,6 +502,90 @@ select * from (
   union all
 
   /*
+   * UNA FILA DE TITULAR SIN HERMANDAD.
+   *
+   * Se mete a mano, y hay motivo: durante un tiempo estas mismas instrucciones
+   * decían «insert into titulares (auth_user_id) values ('<uuid>')». Esa fila
+   * entra sin hermandad, y entonces esa cuenta es titular de NADA: entra, no le
+   * da error, y no ve absolutamente nada —ni su censo ni el de nadie—, porque
+   * todas las políticas comparan contra su hermandad, que es nula.
+   *
+   * Visto desde la pantalla parece que la aplicación está vacía o rota. Se
+   * arregla con `select crear_hermandad_manual('titular@sudominio.es', 'Hdad.
+   * de Triana')`, que pone la fila como debe estar.
+   *
+   * `to_regclass` antes de nombrarla: en una base que no ha pasado nunca por
+   * `multi-hermandad.sql` la tabla no existe, y nombrarla reventaría la consulta
+   * entera al planificarla — justo cuando más falta hace este diagnóstico.
+   */
+  select
+    'TITULAR SIN HERMANDAD'                       as "Qué pasa",
+    'titulares'                                   as "Tabla",
+    'usa crear_hermandad_manual: esa cuenta no ve nada' as "Columna"
+  where to_regclass('public.titulares') is not null
+    and coalesce((xpath('/row/n/text()', query_to_xml(
+          'select count(*) as n from titulares where hermandad_id is null',
+          false, true, '')))[1]::text::int, 0) > 0
+
+  union all
+
+  /*
+   * FUNCIONES DE MANTENIMIENTO QUE PUEDE LLAMAR CUALQUIERA.
+   *
+   * La otra línea de este diagnóstico que no habla de algo roto sino de algo
+   * ABIERTO. Postgres da permiso de ejecución a PUBLIC en cuanto se crea una
+   * función: no poner `grant` no restringe nada, hay que quitarlo a mano. Así
+   * que cada una de estas lleva su `revoke` escrito… desde el día que se
+   * escribió.
+   *
+   * Y ahí está el problema. Una hermandad que ejecutó el fichero ANTES de que
+   * ese `revoke` existiera se quedó con la función abierta. Si el fichero entra
+   * en `ACTUALIZAR.sql`, se arregla al actualizar. Si va a mano —como
+   * `tareas-programadas.sql`, que necesita `pg_cron`— no le llega nunca.
+   *
+   * Con `sellar_esquema` abierta, cualquiera que entre en la web puede dejarle
+   * a la hermandad la base marcada como «versión 1» y la aplicación pidiendo
+   * para siempre una actualización que ya hizo.
+   *
+   * Se arregla volviendo a pegar el fichero que la creó (lo dice la fila).
+   */
+  select
+    'CUALQUIERA PUEDE LLAMARLA'        as "Qué pasa",
+    f.nombre                           as "Tabla",
+    'vuelve a pegar el SQL que la creó' as "Columna"
+  from (values
+    ('abrir_pago_tarjeta'),
+    ('activar_suscripcion'),
+    ('activar_suscripcion_por_usuario'),
+    ('adoptar_datos_sin_hermandad'),
+    ('cancelar_suscripcion_por_stripe'),
+    ('canjear_recuperacion_hermano'),
+    ('cobrar_pago_tarjeta'),
+    ('crear_hermandad_manual'),
+    ('crear_hermandad_manual_base'),
+    ('datos_para_avisar_reserva'),
+    ('fijar_sesion_pago'),
+    ('limpiar_errores_cliente'),
+    ('limpiar_registro_viejo'),
+    ('limpiar_suscriptores_sin_confirmar'),
+    ('limpiar_visitas_viejas'),
+    ('llave_para_confirmar'),
+    ('marcar_pago_fallido_por_stripe'),
+    ('pedir_recuperacion_hermano'),
+    ('renovar_suscripcion_por_stripe'),
+    ('resguardo_de_reserva'),
+    ('sellar_esquema'),
+    ('sembrar_permisos_de_fabrica')
+  ) as f(nombre)
+  join pg_proc p on p.proname = f.nombre
+  join pg_namespace n on n.oid = p.pronamespace and n.nspname = 'public'
+  where to_regrole('anon') is not null
+    and (has_function_privilege('anon', p.oid, 'EXECUTE')
+      or has_function_privilege('authenticated', p.oid, 'EXECUTE'))
+
+  union all
+
+  /*
    * Y POR QUÉ VERSIÓN VA ESTA BASE.
    *
    * El `case` no es adorno: si `esquema_gobergo` no existe —una base que no ha

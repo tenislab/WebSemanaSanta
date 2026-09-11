@@ -24,15 +24,14 @@
  */
 import { LogoMark } from './Logo'
 import { hayDatosDeEjemplo } from '../lib/demo'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import { referenciaCertificado, type Certificado } from '../data/certificados'
 
 export default function CertificadoAntiguedad({ certificado: c, hermandad }: {
   certificado: Certificado
   hermandad: HermandadSettings
 }) {
-  const direccion = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad]
-    .filter(Boolean).join(', ')
+  const direccion = direccionEnUnaLinea(hermandad)
   const donde = hermandad.ciudad || ''
   const anios = c.aniosDeAntiguedad
 

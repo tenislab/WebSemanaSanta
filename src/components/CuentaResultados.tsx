@@ -20,7 +20,7 @@
  * a la conversación en la que se explicó.
  */
 import { LogoMark } from './Logo'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import { formatCurrency } from '../lib/format'
 import { comoSeLeeElResultado, variacion, type CuentaPyG, type LineaPyG } from '../lib/perdidasYGanancias'
 import { comoSeLeeElReparto } from '../lib/repartos'
@@ -78,8 +78,7 @@ export default function CuentaResultados({
   const hayAjustes = cuenta.reglasAplicadas.length > 0
   const cols = hayAjustes ? 6 : 5
 
-  const direccion = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad, hermandad.provincia]
-    .filter(Boolean).join(', ')
+  const direccion = direccionEnUnaLinea(hermandad)
 
   return (
     <div className={`recibo-doc print-doc estado-cuentas pyg ${className}`.trim()}>

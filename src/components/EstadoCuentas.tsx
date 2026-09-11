@@ -1,5 +1,5 @@
 import { LogoMark } from './Logo'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import type { Movimiento } from '../data/movimientos'
 import { CATEGORIAS_INGRESO, CATEGORIAS_GASTO } from '../data/movimientos'
 import { sumaEuros, formatCurrency } from '../lib/format'
@@ -64,9 +64,7 @@ export default function EstadoCuentas({
   const beneficio = totalIngresos - totalGastos
   const saldoFinal = saldoInicial + beneficio
 
-  const direccionHermandad = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad, hermandad.provincia]
-    .filter(Boolean)
-    .join(', ')
+  const direccionHermandad = direccionEnUnaLinea(hermandad)
 
   return (
     <div className={`recibo-doc print-doc estado-cuentas ${className}`.trim()}>

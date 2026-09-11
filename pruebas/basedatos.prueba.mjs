@@ -19,7 +19,7 @@
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises'
+import { readFile, readdir, writeFile, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -38,6 +38,17 @@ async function hayPostgres() {
   } catch {
     return false
   }
+}
+
+/** Todos los ficheros de código de una carpeta, recorriéndola entera. */
+async function todosLosFicherosDe(carpeta) {
+  const salida = []
+  for (const e of await readdir(carpeta, { withFileTypes: true })) {
+    const ruta = join(carpeta, e.name)
+    if (e.isDirectory()) salida.push(...(await todosLosFicherosDe(ruta)))
+    else if (/\.(ts|tsx)$/.test(e.name)) salida.push(ruta)
+  }
+  return salida
 }
 
 async function sql(texto) {
@@ -323,6 +334,29 @@ export default async function ({ caso }) {
   caso('y ve la columna que falta', true, /tramos\|hora_citacion/.test(conFallo))
   await sql("alter table tramos add column hora_citacion text")
 
+  /*
+   * Y VE UNA FUNCIÓN DE MANTENIMIENTO QUE SE QUEDÓ ABIERTA.
+   *
+   * Esto solo se puede ver desde aquí. En el código de hoy cada una lleva su
+   * `revoke`, así que aquí todo está bien; pero una hermandad que ejecutó el
+   * fichero ANTES de que ese `revoke` existiera se quedó con la función
+   * abierta, y si el fichero va a mano —como `tareas-programadas.sql`, que
+   * necesita `pg_cron`— el arreglo no le llega nunca. El diagnóstico es lo
+   * único que se ejecuta en su base.
+   *
+   * Con `sellar_esquema` abierta, cualquiera que entre en la web puede dejarle
+   * la base marcada como «versión 1» y la aplicación pidiéndole para siempre
+   * una actualización que ya hizo.
+   */
+  await sql('grant execute on function sellar_esquema(integer) to anon')
+  const conAgujero = await sql(diag)
+  caso('y ve una función de mantenimiento abierta a cualquiera', true,
+    /CUALQUIERA PUEDE LLAMARLA\|sellar_esquema/.test(conAgujero))
+  await sql('revoke all on function sellar_esquema(integer) from public, anon, authenticated')
+  // Y al cerrarla se calla: si avisara siempre, el aviso no querría decir nada.
+  caso('y al cerrarla se calla', false,
+    /CUALQUIERA PUEDE LLAMARLA/.test(await sql(diag)))
+
   // Los permisos de tabla, que Supabase da de fábrica: van después de crear
   // las tablas, y sin ellos todo falla con «permission denied» antes de que
   // ninguna política llegue a decidir nada.
@@ -342,6 +376,9 @@ export default async function ({ caso }) {
   await losFormulariosPublicosTienenFreno({ sql, caso })
   await sePuedeDeshacerElBorradoDeUnMensaje({ sql, caso })
   await loDeMantenimientoNoLoTocaUnVisitante({ sql, caso })
+  await lasDoceQueLlamaElNavegador({ sql, caso })
+  await cadaFuncionAbiertaTieneSuMotivo({ sql, caso })
+  await ningunaFilaSePuedeQuedarSinDuena({ sql, caso })
   await hermanoDeDosHermandades({ sql, caso })
   await elWebhookDeStripeActivaLaSuscripcion({ sql, caso })
   await elMandatoSepaLoFirmaElPropioHermano({ sql, caso })
@@ -2081,6 +2118,694 @@ async function elFormularioYaNoLaPide({ caso }) {
  * Se ejecuta de verdad, empujando las tres, porque un contador que se lee bien
  * puede contar mal.
  */
+
+
+
+/*
+ * NINGUNA FILA SE PUEDE QUEDAR SIN DUEÑA.
+ *
+ * Casi todas las tablas llevan `hermandad_id` con `default hermandad_actual()`.
+ * No es comodidad: el navegador NO MANDA esa columna —no la conoce, y si la
+ * mandara no habría que creérsela—, así que sin el defecto la fila entra sin
+ * hermandad y la rechaza la política. Eso es exactamente lo que le pasaba a
+ * `reglas_automaticas` y lo que le pasaba a `mensajes_web`: el «deshacer» del
+ * buzón fallaba SIEMPRE.
+ *
+ * Pero hay nueve tablas que NO llevan el defecto, y está bien que no lo lleven:
+ * en ellas `hermandad_actual()` sería la respuesta equivocada. `titulares` se
+ * escribe al crear una hermandad, cuando quien la crea todavía no pertenece a
+ * ninguna. `soporte_sesion` se escribe para una hermandad que NO es la de quien
+ * pregunta, que es justo de lo que va la suplantación. Y las demás las escriben
+ * funciones que ya saben de qué hermandad hablan.
+ *
+ * Así que la regla no es «todas con defecto», es esta: una tabla sin defecto
+ * NO PUEDE ESCRIBIRLA EL NAVEGADOR DIRECTAMENTE. Y eso sí se puede comprobar.
+ */
+async function ningunaFilaSePuedeQuedarSinDuena({ sql, caso }) {
+  const sinDefecto = (await sql(`
+    select c.table_name
+      from information_schema.columns c
+      join information_schema.tables t
+        on t.table_schema = c.table_schema and t.table_name = c.table_name
+       and t.table_type = 'BASE TABLE'
+     where c.table_schema = 'public'
+       and c.column_name = 'hermandad_id'
+       and c.column_default is null
+     order by 1`)).split('\n').map((x) => x.trim()).filter(Boolean)
+
+  caso('hay tablas sin defecto que revisar', true, sinDefecto.length > 5)
+
+  /*
+   * 1. QUE NO LAS ESCRIBA EL NAVEGADOR.
+   *
+   * Esta es la que habría cazado lo de `mensajes_web` antes de que llegara a
+   * una hermandad. Se busca en el código del navegador un `from('x').insert` o
+   * `.upsert` sobre cualquiera de estas tablas.
+   *
+   * Si algún día hace falta de verdad, el arreglo no es apuntarla aquí: es
+   * ponerle el defecto a la tabla, o mandar la fila por una función.
+   */
+  const fuentes = await todosLosFicherosDe('src')
+  const codigo = (await Promise.all(fuentes.map((f) => readFile(f, 'utf8')))).join('\n')
+  const queEscribeElNavegador = sinDefecto.filter((t) =>
+    new RegExp(`from\\(\\s*['"\`]${t}['"\`]\\s*\\)\\s*\\n?\\s*\\.(insert|upsert)`).test(codigo))
+  caso('el navegador no escribe en ninguna tabla sin defecto', '', queEscribeElNavegador.join(', '))
+
+  /*
+   * 2. Y QUE, SI UNA FUNCIÓN SE OLVIDA DE PONERLA, PETE.
+   *
+   * Una fila con la hermandad nula no da error: entra, y a partir de ahí no la
+   * ve nadie nunca porque todas las políticas comparan contra
+   * `hermandad_actual()`. Existe y es invisible, que es la peor de las dos
+   * cosas. Con `not null` se cae en el momento, con el nombre de la tabla
+   * delante.
+   *
+   * `titulares` es la excepción, y es vieja: hay bases con una fila de titular
+   * sin hermandad metida a mano, y ponerle `not null` a la columna haría que
+   * `ACTUALIZAR.sql` se parase en esa base. De esa fila avisa el diagnóstico.
+   */
+  const admitenNulo = (await sql(`
+    select c.table_name
+      from information_schema.columns c
+      join information_schema.tables t
+        on t.table_schema = c.table_schema and t.table_name = c.table_name
+       and t.table_type = 'BASE TABLE'
+     where c.table_schema = 'public'
+       and c.column_name = 'hermandad_id'
+       and c.column_default is null
+       and c.is_nullable = 'YES'
+     order by 1`)).split('\n').map((x) => x.trim()).filter(Boolean)
+  caso('una fila sin hermandad no entra en ninguna de esas tablas', ['titulares'], admitenNulo)
+
+  /*
+   * 3. Y LA FILA MALA DE `titulares` NO ES UNA FUGA.
+   *
+   * El fichero avisa de que no se haga a mano, porque en su día una fila de
+   * titular sin hermandad metía a esa cuenta en la hermandad de otra gente —la
+   * primera de la tabla— con su censo delante. Eso ya no pasa, y aquí queda
+   * comprobado para que no vuelva a pasar: se mete la fila mala a propósito y
+   * se mira qué ve.
+   */
+  const AJENA = "'e9999999-9999-9999-9999-999999999999'"
+  const MALO = 'e8888888-8888-8888-8888-888888888888'
+  const BUENO = 'e7777777-7777-7777-7777-777777777777'
+  await sql(`
+    insert into hermandades (id, nombre) values (${AJENA}, 'Hdad. de otra gente')
+      on conflict (id) do nothing;
+    insert into auth.users (id, email) values ('${MALO}', 'malo@x.es'), ('${BUENO}', 'bueno@x.es')
+      on conflict (id) do nothing;
+    delete from titulares where auth_user_id in ('${MALO}', '${BUENO}');
+    insert into titulares (auth_user_id, hermandad_id) values ('${BUENO}', ${AJENA});
+    -- La fila mala: titular sin hermandad, como la metía el fichero antiguo.
+    insert into titulares (auth_user_id) values ('${MALO}');
+  `)
+  const comoElMalo = async (consulta) => (await sql(`
+    begin;
+      set local role authenticated;
+      set local "request.jwt.claim.sub" = '${MALO}';
+      ${consulta}
+    rollback;`)).split('\n').filter((l) => !/^(BEGIN|SET|ROLLBACK|COMMIT)$/.test(l.trim())).join('').trim()
+
+  caso('un titular sin hermandad no hereda la de nadie', '',
+    await comoElMalo('select hermandad_actual();'))
+  // Y no ve el censo de la hermandad ajena, que es lo que se filtraba.
+  await sql(`
+    delete from hermanos where hermandad_id = ${AJENA} and numero = 999;
+    insert into hermanos (hermandad_id, numero, nombre, dni) values (${AJENA}, 999, 'Ficha ajena', '00000999Y');
+  `)
+  caso('ni el censo de la hermandad de otra gente', '0',
+    await comoElMalo('select count(*) from hermanos;'))
+
+  /*
+   * Y EL DIAGNÓSTICO LO DICE. Es lo único que se ejecuta en la base de una
+   * hermandad, así que es donde se puede ver que esa fila está ahí.
+   */
+  const diag = await readFile('supabase/DIAGNOSTICO.sql', 'utf8')
+  caso('el diagnóstico avisa de la fila de titular sin hermandad', true,
+    /TITULAR SIN HERMANDAD/.test(await sql(diag)))
+  await sql(`delete from titulares where auth_user_id = '${MALO}'`)
+  caso('y al quitarla se calla', false, /TITULAR SIN HERMANDAD/.test(await sql(diag)))
+
+  await sql(`
+    delete from titulares where auth_user_id in ('${MALO}', '${BUENO}');
+    delete from hermanos where hermandad_id = ${AJENA} and numero = 999;
+  `)
+}
+
+/*
+ * QUIÉN PUEDE LLAMAR A QUÉ, UNA POR UNA.
+ *
+ * Postgres da permiso de ejecución a PUBLIC en cuanto se crea una función. No
+ * escribir ningún `grant` NO restringe nada: hay que quitarlo a mano. Es justo
+ * al revés de lo que parece, así que la lista de funciones que puede llamar un
+ * visitante de la calle crece sola, sin que nadie lo decida, cada vez que se
+ * escribe una función nueva.
+ *
+ * Ya pasó: `sellar_esquema` y `limpiar_errores_cliente` estaban abiertas, y con
+ * la primera un visitante podía dejarle a toda hermandad la base marcada como
+ * «versión 1» y la aplicación pidiendo para siempre una actualización ya hecha.
+ *
+ * Arreglar esas dos no arregla la clase. Esto sí: aquí está escrita, una por
+ * una, TODAS las que un visitante puede llamar y POR QUÉ. Si alguien escribe
+ * una función nueva, esta prueba se cae y hay que venir a decidir si la web
+ * pública la necesita o si lleva `revoke`. No se puede olvidar, porque no hay
+ * nada que acordarse de hacer.
+ *
+ * Y encima se comprueba de verdad: las que cambian datos se llaman COMO
+ * VISITANTE contra filas de otra hermandad, para ver que no las toca.
+ */
+async function cadaFuncionAbiertaTieneSuMotivo({ sql, caso }) {
+  /*
+   * 1. LO QUE NECESITA LA WEB PÚBLICA. Quien entra en la web de una hermandad
+   *    no ha iniciado sesión: si esto no estuviera abierto, la web no
+   *    funcionaría.
+   */
+  const LA_WEB_PUBLICA = {
+    campanas_de_la_web: 'las campañas que salen publicadas en la web',
+    catalogo_web: 'la tienda de la web',
+    disponible_de: 'cuánto queda de un producto, para la tienda de la web',
+    crear_reserva_web: 'apartar un producto desde la web, sin cobrar',
+    contar_visita: 'el contador de visitas de la web (valida que la hermandad exista)',
+    hermandad_de_la_web: 'los datos de contacto de una web PUBLICADA',
+    hermandad_de_la_tienda: 'de quién es la tienda de ese enlace, si está publicada',
+    hermandades_publicas: 'el buscador de hermandades de la portada',
+    suscribirse_a_la_web: 'apuntarse al boletín desde la web',
+    confirmar_suscripcion: 'el enlace de confirmación del correo (va por llave)',
+    baja_de_la_web: 'el enlace de baja del correo (va por llave)',
+    resolver_email_hermano: 'el hermano entra con su DNI (con freno: 25 intentos cada media hora)',
+    crear_hermandad: 'darse de alta; por dentro exige sesión',
+    crear_hermandad_base: 'lo mismo, y levanta excepción sin sesión',
+    version_del_esquema: 'por qué versión va la base, para avisar de actualizar',
+    mis_novedades: 'los avisos de versión; sin sesión solo los del canal estable',
+  }
+
+  /*
+   * 2. LO QUE USAN LAS POLÍTICAS. Estas TIENEN que estar abiertas, y no es un
+   *    descuido: una política de RLS se evalúa CON EL ROL DE QUIEN PREGUNTA.
+   *    Si a `auth_es_hermano()` se le quita el permiso, la política que la usa
+   *    no falla — falla la consulta entera del hermano, y se queda sin ver sus
+   *    propios datos.
+   */
+  const LAS_POLITICAS = {
+    auth_es_hermano: 'la usan las políticas para separar hermano de personal',
+    auth_es_personal: 'ídem',
+    hermandad_actual: 'la base del aislamiento; la usan casi todas las políticas',
+    hermano_propio_id: 'para que un hermano solo vea su ficha',
+    mi_cargo: 'los permisos por cargo',
+    modulo_permitido: 'qué módulos tiene contratados esa hermandad',
+    puedo_ver_documento: 'el archivo documental',
+    puedo_abrir_el_adjunto: 'los adjuntos del almacén',
+    es_soporte: 'la suplantación de soporte',
+    es_titular: 'quién lleva la hermandad',
+  }
+
+  /*
+   * 3. LO DEL PANEL. Se llaman con sesión, pero están abiertas a `anon` porque
+   *    quitarles el permiso no aporta nada: TODAS salen de `hermandad_actual()`
+   *    o de `auth.uid()`, que para un visitante son nulos. Sin sesión no
+   *    devuelven nada y no tocan nada.
+   *
+   *    Esa es la parte delicada: la protección es que `x = null` nunca es
+   *    cierto. Funciona, pero es fina — el día que alguien añada un «or
+   *    hermandad_actual() is null» para que le funcione un cron, se abre. Por
+   *    eso las que cambian datos se prueban abajo llamándolas como visitante.
+   */
+  const EL_PANEL = {
+    avisos_que_esperan: 'el contador del menú',
+    mi_suscripcion: 'la suscripción de la hermandad de quien pregunta',
+    mi_tutor: 'el tutor del hermano que pregunta',
+    mi_hermandad_id: 'la hermandad de quien pregunta',
+    quien_soy_ahora: 'el nombre que se enseña arriba',
+    columnas_que_faltan_para_restaurar: 'el ensayo antes de restaurar una copia',
+    soporte_donde_estoy: 'el cartel de «estás viendo la hermandad tal»',
+    soporte_hermandades: 'la lista de soporte; por dentro exige ser soporte',
+    soporte_entrar: 'entrar como esa hermandad; levanta excepción si no es soporte',
+    soporte_salir: 'salir; borra por `auth.uid()`, que sin sesión es nulo',
+  }
+
+  /*
+   * 4. LOS TRABAJOS DE FONDO. Los llama el navegador de la hermandad que está
+   *    mandando, no un servidor: por eso no se les puede quitar el permiso a
+   *    `authenticated`. Todos llevan `where ... and hermandad_id =
+   *    hermandad_actual()`, así que para un visitante no hay fila que cuadre.
+   */
+  const LOS_TRABAJOS = {
+    reclamar_comunicado_programado: 'coge el siguiente comunicado a mandar, de SU hermandad',
+    apuntar_avance_del_envio: 'va apuntando por dónde iba el envío',
+    cerrar_comunicado_enviado: 'lo marca enviado al acabar',
+    soltar_comunicado_fallido: 'lo suelta si falló, para que se reintente',
+    reclamar_regla_de_hoy: 'coge la regla automática que toca hoy',
+    devolver_regla: 'la devuelve si no se pudo mandar',
+  }
+
+  const CLASIFICADAS = { ...LA_WEB_PUBLICA, ...LAS_POLITICAS, ...EL_PANEL, ...LOS_TRABAJOS }
+
+  /*
+   * --- QUÉ FUNCIONES DEJA ABIERTAS EL SQL.
+   *
+   * Se saca DEL PROPIO SQL y no de la base, a propósito. La base de estas
+   * pruebas la comparten todas y arrastra lo que alguien haya ejecutado a mano
+   * alguna vez: preguntándole a ella, esta comprobación hablaría de la historia
+   * de esa base y no de lo que dice el código de hoy.
+   *
+   * (Que la base de una hermandad de verdad se haya quedado con una función
+   * abierta es otro problema, y de ese avisa `DIAGNOSTICO.sql`, que es lo único
+   * que se ejecuta allí.)
+   *
+   * Una función está CERRADA a propósito si lleva `revoke` y no lleva después
+   * un `grant` a `anon` o `authenticated`. Ese doble paso —revocar a todos y
+   * luego dárselo a quien toca— es el patrón normal de lo que sí necesita la
+   * web pública, así que un `revoke` a secas no basta para darla por cerrada.
+   */
+  const piezas = (await readdir('supabase')).filter((f) =>
+    f.endsWith('.sql')
+    && !['TODO-EN-UNO.sql', 'ACTUALIZAR.sql', 'DIAGNOSTICO.sql'].includes(f)
+    && !f.startsWith('PRUEBA-'))
+
+  /*
+   * SOLO LAS `SECURITY DEFINER`, y la distinción es la que importa: una función
+   * normal corre con los permisos de QUIEN LLAMA, así que a un visitante lo
+   * paran las políticas de la tabla igual que si consultara a pelo. Una
+   * `security definer` corre con los del dueño de la base y SE SALTA LAS
+   * POLÍTICAS: ahí dentro no hay red, y lo único que protege es lo que la
+   * propia función compruebe.
+   *
+   * Por eso `dar_de_baja_hermano` o `vaciar_hermandad_para_restaurar` no están
+   * en esta lista aunque nadie les haya quitado el permiso: no son `definer`.
+   *
+   * Y solo se cuenta como CERRADA la que tiene `revoke` a `anon` (o a `public`,
+   * que incluye a anon) y no recupera el permiso con un `grant` posterior. Ese
+   * doble paso es el patrón de lo que sí necesita la web pública, así que un
+   * `revoke` a secas no basta para darla por cerrada. Y un `grant` solo a
+   * `authenticated` no abre nada a un visitante: hace falta sesión.
+   */
+  const definer = new Set()
+  const revocadaAAnon = new Set()
+  const dadaAAnon = new Set()
+  for (const f of piezas) {
+    const t = await readFile(`supabase/${f}`, 'utf8')
+    for (const m of t.matchAll(/create (?:or replace )?function\s+(\w+)\s*\(/gi)) {
+      const cabecera = t.slice(m.index, t.indexOf('$$', m.index) + 2)
+      if (/returns\s+trigger/i.test(cabecera)) continue
+      if (/security\s+definer/i.test(cabecera)) definer.add(m[1])
+    }
+    for (const m of t.matchAll(/revoke\s+(?:all|execute)[^;]*?on function\s+(\w+)\s*\([^)]*\)\s*from\s+([^;]+);/gi)) {
+      if (/\banon\b|\bpublic\b/i.test(m[2])) revocadaAAnon.add(m[1])
+    }
+    for (const m of t.matchAll(/grant\s+execute\s+on function\s+(\w+)\s*\([^)]*\)\s*to\s+([^;]+);/gi)) {
+      if (/\banon\b/i.test(m[2])) dadaAAnon.add(m[1])
+    }
+  }
+  const abiertas = [...definer]
+    .filter((f) => dadaAAnon.has(f) || !revocadaAAnon.has(f))
+    .sort()
+
+  // Si el buscador dejara de encontrarlas, esto diría que sí a todo.
+  caso('hay funciones abiertas que revisar', true, abiertas.length > 30)
+
+  /*
+   * LA QUE IMPORTA. Si esto se cae, alguien ha escrito una función nueva y hay
+   * que venir aquí a decidir: o la necesita la web pública y se apunta con su
+   * motivo, o lleva `revoke all ... from public, anon, authenticated`.
+   */
+  const sinMotivo = abiertas.filter((f) => !CLASIFICADAS[f])
+  caso('ninguna función abierta a un visitante está sin clasificar', '', sinMotivo.join(', '))
+
+  /*
+   * Y al revés: si una de la lista ya no está abierta, la lista miente. Una
+   * lista que miente es peor que no tenerla, porque se lee y se cree.
+   */
+  const yaNoEstan = Object.keys(CLASIFICADAS).filter((f) => !abiertas.includes(f))
+  caso('y la lista no tiene nombres de más', '', yaNoEstan.join(', '))
+
+  // --- Y ahora de verdad: llamarlas como visitante y ver que no tocan nada.
+  const HX = "'a0000000-0000-0000-0000-0000000000a1'"
+  await sql(`
+    delete from comunicados where hermandad_id = ${HX} and titulo = 'Para la prueba de permisos';
+    insert into comunicados (hermandad_id, numero, titulo, cuerpo, estado, destinatarios)
+      values (${HX}, 9901, 'Para la prueba de permisos', 'texto', 'Borrador', 'Todos');
+    delete from reglas_automaticas where hermandad_id = ${HX} and nombre = 'Regla de permisos';
+    insert into reglas_automaticas (hermandad_id, nombre, criterios, destinatarios, asunto, cuerpo, ultima_vez)
+      values (${HX}, 'Regla de permisos', '{}'::jsonb, 'Todos', 'a', 'b', current_date);
+  `)
+  const idCom = (await sql(`select id from comunicados where hermandad_id = ${HX} and titulo = 'Para la prueba de permisos'`)).trim()
+  const idReg = (await sql(`select id from reglas_automaticas where hermandad_id = ${HX} and nombre = 'Regla de permisos'`)).trim()
+
+  const deVisitante = async (consulta) => {
+    try { await sql(`begin; set local role anon; ${consulta} commit;`); return 'pasó' }
+    catch { return 'falló' }
+  }
+
+  /*
+   * Lo que se mira NO es si la llamada da error —no lo da, actualiza cero
+   * filas—, sino si la fila de la otra hermandad ha cambiado. Un comunicado
+   * marcado «Enviado» por alguien de fuera no se manda nunca y nadie se
+   * enteraría: el aviso diría que ya salió.
+   */
+  await deVisitante(`select cerrar_comunicado_enviado('${idCom}', 999);`)
+  caso('un visitante no puede marcar enviado el comunicado de otra hermandad', 'Borrador',
+    (await sql(`select estado from comunicados where id = '${idCom}'`)).trim())
+
+  await deVisitante(`select soltar_comunicado_fallido('${idCom}', 'lo rompo yo');`)
+  caso('ni escribirle un error', '',
+    (await sql(`select coalesce(envio_error, '') from comunicados where id = '${idCom}'`)).trim())
+
+  await deVisitante(`select apuntar_avance_del_envio('${idCom}', 12345);`)
+  caso('ni mentirle en cuántos van enviados', '0',
+    (await sql(`select envio_enviados from comunicados where id = '${idCom}'`)).trim())
+
+  /*
+   * Y la regla automática: devolverla la haría dispararse OTRA VEZ hoy, o sea
+   * mandarle el mismo correo por segunda vez a toda la hermandad.
+   */
+  await deVisitante(`select devolver_regla('${idReg}');`)
+  caso('ni hacer que una regla vuelva a dispararse hoy', 'true',
+    (await sql(`select (ultima_vez = current_date)::text from reglas_automaticas where id = '${idReg}'`)).trim())
+
+  // Y las dos que COGEN trabajo no le dan nada a quien no tiene hermandad.
+  caso('a un visitante no se le da ningún comunicado que mandar', '',
+    (await sql('begin; set local role anon; select id from reclamar_comunicado_programado(); rollback;'))
+      .split('\n').filter((l) => !/^(BEGIN|SET|ROLLBACK|COMMIT)$/.test(l.trim())).join('').trim())
+  caso('ni ninguna regla que disparar', '',
+    (await sql('begin; set local role anon; select id from reclamar_regla_de_hoy(); rollback;'))
+      .split('\n').filter((l) => !/^(BEGIN|SET|ROLLBACK|COMMIT)$/.test(l.trim())).join('').trim())
+
+  await sql(`
+    delete from comunicados where id = '${idCom}';
+    delete from reglas_automaticas where id = '${idReg}';
+  `)
+}
+
+/*
+ * LAS DOCE FUNCIONES QUE LLAMA EL NAVEGADOR Y NADIE HABÍA EJECUTADO.
+ *
+ * El navegador llama a cuarenta funciones de la base. Veintiocho se ejecutaban
+ * aquí contra un Postgres de verdad; DOCE no se ejecutaban en ninguna parte.
+ * Existían, se leían, y nadie había comprobado nunca qué hacen.
+ *
+ * Y lo que importa de ellas no es que devuelvan algo: es QUIÉN puede llamarlas
+ * y qué les deja ver. Todas son `security definer`, o sea que **se saltan las
+ * políticas**: dentro de ellas no hay red. Si una se equivoca en el filtro, no
+ * la para nada.
+ *
+ * Por eso cada una se llama AQUÍ CON EL ROL QUE LA LLAMA DE VERDAD:
+ *
+ *   · `anon` si la llama la web pública, donde no hay sesión ninguna;
+ *   · `authenticated` si la llama el panel.
+ *
+ * Esto es la lección de la semana. `reglas_automaticas` estuvo rota porque se
+ * probó como superusuario, que se salta RLS y dice que sí a todo. Un rol
+ * equivocado en una prueba de SQL no da un fallo: da un verde.
+ */
+async function lasDoceQueLlamaElNavegador({ sql, caso }) {
+  const HA = "'a0000000-0000-0000-0000-0000000000a1'"  // la hermandad de esta prueba
+  const HB = "'b0000000-0000-0000-0000-0000000000b2'"  // otra, para el aislamiento
+  const TIT = '90000001-0000-0000-0000-000000000001'   // titular de A
+  const HNO = '90000002-0000-0000-0000-000000000002'   // hermano de A, sin cargo
+  const SOP = '90000003-0000-0000-0000-000000000003'   // cuenta de soporte
+
+  await sql(`
+    insert into hermandades (id, nombre, activa) values
+      (${HA}, 'Hdad. de las doce', true),
+      (${HB}, 'Hdad. de al lado',  true)
+      on conflict (id) do nothing;
+    insert into auth.users (id, email) values
+      ('${TIT}', 'titular@doce.es'),
+      ('${HNO}', 'hermano@doce.es'),
+      ('${SOP}', 'soporte@doce.es')
+      on conflict (id) do nothing;
+    insert into titulares (hermandad_id, auth_user_id) values (${HA}, '${TIT}')
+      on conflict do nothing;
+    delete from hermanos where hermandad_id = ${HA} and numero = 901;
+    insert into hermanos (hermandad_id, numero, nombre, dni, auth_user_id)
+      values (${HA}, 901, 'Hermano de a pie', '00000901X', '${HNO}');
+    delete from suscripciones where hermandad_id in (${HA}, ${HB});
+    delete from suscriptores_web where hermandad_id in (${HA}, ${HB});
+    delete from web_publica where hermandad_id in (${HA}, ${HB});
+    delete from hermandad_settings where hermandad_id in (${HA}, ${HB});
+    insert into hermandad_settings (hermandad_id, nombre_legal, direccion, telefono, email)
+      values (${HA}, 'Real Hdad. de las Doce', 'C/ Larga 1', '954 12 12 12', 'secretaria@doce.es'),
+             (${HB}, 'Hdad. de al lado',       'C/ Corta 2', '954 34 34 34', 'otra@allado.es');
+  `)
+
+  /*
+   * `psql` escupe también el BEGIN, los SET y el ROLLBACK de la transacción, y
+   * el estado de cada INSERT. Lo que interesa es la fila que devuelve la
+   * función, así que se quita todo lo demás: comparar contra la salida entera
+   * haría que la prueba dependiera de cuántos `set local` lleve el andamiaje.
+   */
+  const soloElDato = (salida) => salida
+    .split('\n')
+    .filter((l) => !/^(BEGIN|COMMIT|ROLLBACK|SET|INSERT \d|UPDATE \d|DELETE \d|SELECT \d|DO)$/.test(l.trim()))
+    .join('\n')
+    .trim()
+
+  /** Como la web pública: sin sesión de ninguna clase. */
+  const comoVisitante = async (consulta) => {
+    try { return { ok: true, dato: soloElDato(await sql(`begin; set local role anon; ${consulta} rollback;`)) } }
+    catch (e) { return { ok: false, dato: String(e?.stderr ?? e) } }
+  }
+  /** Igual, pero dejando escrito lo que haga: para poder mirar la fila luego. */
+  const comoVisitanteEnFirme = async (consulta) => {
+    try { return { ok: true, dato: soloElDato(await sql(`begin; set local role anon; ${consulta} commit;`)) } }
+    catch (e) { return { ok: false, dato: String(e?.stderr ?? e) } }
+  }
+
+  /** Como el panel: con sesión, haciéndose pasar por esa cuenta. */
+  const comoCuenta = async (uid, consulta) => {
+    try {
+      return { ok: true, dato: soloElDato(await sql(`
+        begin;
+          set local role authenticated;
+          set local "request.jwt.claim.sub" = '${uid}';
+          ${consulta}
+        rollback;`)) }
+    } catch (e) { return { ok: false, dato: String(e?.stderr ?? e) } }
+  }
+  /** Igual, pero dejando lo que haga escrito (para mirar la fila después). */
+  const comoCuentaEnFirme = async (uid, consulta) => {
+    try {
+      return { ok: true, dato: soloElDato(await sql(`
+        begin;
+          set local role authenticated;
+          set local "request.jwt.claim.sub" = '${uid}';
+          ${consulta}
+        commit;`)) }
+    } catch (e) { return { ok: false, dato: String(e?.stderr ?? e) } }
+  }
+
+  // ---------------------------------------------------------------- 1 y 2
+  /*
+   * `es_titular()` y `mi_hermandad_id()`. Son los cimientos: de la primera
+   * cuelgan las dos de la suscripción, y de la segunda cuelga el aislamiento
+   * entero. Si dijeran que sí de más, no se notaría aquí — se notaría en que
+   * un hermano puede cancelarle la suscripción a su hermandad.
+   */
+  caso('el titular es titular', 'true', (await comoCuenta(TIT, 'select es_titular()::text;')).dato)
+  caso('un hermano no es titular', 'false', (await comoCuenta(HNO, 'select es_titular()::text;')).dato)
+  caso('un visitante no es titular', 'false', (await comoVisitante('select es_titular()::text;')).dato)
+
+  caso('el titular sabe cuál es su hermandad', 'a0000000-0000-0000-0000-0000000000a1',
+    (await comoCuenta(TIT, 'select mi_hermandad_id();')).dato)
+  caso('el hermano también, y es la misma', 'a0000000-0000-0000-0000-0000000000a1',
+    (await comoCuenta(HNO, 'select mi_hermandad_id();')).dato)
+  // Para el visitante NO es un error: es «no tengo ninguna». Devolver algo
+  // aquí sería darle a quien entra de la calle la hermandad de otro.
+  caso('un visitante no tiene hermandad', '', (await comoVisitante('select mi_hermandad_id();')).dato)
+
+  // ---------------------------------------------------------------- 3 y 4
+  /*
+   * ACTIVAR Y CANCELAR LA SUSCRIPCIÓN. Esto es el muro de pago, y las dos son
+   * `security definer`: si el filtro fallara, cualquiera con cuenta podría
+   * activarse la suscripción gratis o cancelarle la de su hermandad.
+   */
+  caso('el titular activa la suscripción de su hermandad', true,
+    (await comoCuentaEnFirme(TIT, "select activar_suscripcion_propia('todo','anual');")).ok)
+  caso('y queda activa de verdad', 'true|todo|anual',
+    (await sql(`select activa||'|'||pack||'|'||periodo from suscripciones where hermandad_id = ${HA}`)).trim())
+
+  const hnoActiva = await comoCuenta(HNO, "select activar_suscripcion_propia('todo','anual');")
+  caso('un hermano no puede activarla', false, hnoActiva.ok)
+  caso('y se le dice por qué', true, /Solo quien lleva la hermandad/.test(hnoActiva.dato))
+  caso('un visitante tampoco', false,
+    (await comoVisitante("select activar_suscripcion_propia('todo','anual');")).ok)
+
+  caso('un hermano no puede cancelarla', false,
+    (await comoCuenta(HNO, 'select cancelar_suscripcion_propia();')).ok)
+  caso('y sigue activa después del intento', 'true',
+    (await sql(`select activa::text from suscripciones where hermandad_id = ${HA}`)).trim())
+  caso('el titular sí puede cancelarla', true,
+    (await comoCuentaEnFirme(TIT, 'select cancelar_suscripcion_propia();')).ok)
+  /*
+   * Y LA FILA NO SE BORRA, se marca inactiva: cuándo se dio de alta y cuándo se
+   * fue es justo lo que hay que poder mirar el día que alguien reclama.
+   */
+  caso('la fila se queda, marcada inactiva', 'false',
+    (await sql(`select activa::text from suscripciones where hermandad_id = ${HA}`)).trim())
+
+  // El pack que llega del navegador no se toma tal cual: la pantalla ofrece
+  // tres, pero la pantalla se puede saltar.
+  await comoCuentaEnFirme(TIT, "select activar_suscripcion_propia('gratis-total','para-siempre');")
+  caso('un pack inventado no se cuela', 'todo|mensual',
+    (await sql(`select pack||'|'||periodo from suscripciones where hermandad_id = ${HA}`)).trim())
+
+  // ---------------------------------------------------------------- 5 y 6
+  /*
+   * LA WEB PÚBLICA. Las dos llevan `where publicada`, y ahí está todo: una web
+   * a medio hacer NO puede soltar el nombre legal, la dirección, el teléfono y
+   * el correo de la hermandad a quien acierte el enlace. Eso es exactamente lo
+   * que se filtraría si algún día se quita ese filtro para «poder ver la
+   * previa».
+   */
+  await sql(`
+    insert into web_publica (hermandad_id, slug, publicada) values
+      (${HA}, 'doce-publicada', true),
+      (${HB}, 'allado-borrador', false);
+  `)
+  caso('el visitante ve los datos de una web publicada', 'Real Hdad. de las Doce',
+    (await comoVisitante("select nombre_legal from hermandad_de_la_web('doce-publicada');")).dato)
+  caso('una web sin publicar no suelta nada', '',
+    (await comoVisitante("select nombre_legal from hermandad_de_la_web('allado-borrador');")).dato)
+  caso('un enlace inventado tampoco', '',
+    (await comoVisitante("select nombre_legal from hermandad_de_la_web('no-existe');")).dato)
+
+  caso('la tienda de una web publicada sabe de quién es', 'a0000000-0000-0000-0000-0000000000a1',
+    (await comoVisitante("select hermandad_de_la_tienda('doce-publicada');")).dato)
+  caso('la de una web sin publicar, no', '',
+    (await comoVisitante("select hermandad_de_la_tienda('allado-borrador');")).dato)
+
+  // ---------------------------------------------------------------- 7
+  /*
+   * `hermandades_publicas()` es la lista del buscador de la portada, y la pide
+   * gente que no ha iniciado sesión. Enseña nombre, ciudad, colores y escudo —
+   * cosas de cartel— y NADA MÁS. Que no se le añada nunca el correo ni el
+   * teléfono por comodidad: aquí es donde se vería.
+   */
+  const lista = await comoVisitante(`select string_agg(nombre, ', ' order by nombre) from hermandades_publicas() where id in (${HA}, ${HB});`)
+  caso('el visitante ve la lista de hermandades', 'Hdad. de al lado, Hdad. de las doce', lista.dato)
+  // Y se mira LO QUE DEVUELVE, no lo que se recuerda que devolvía: el día que
+  // alguien le añada el correo «para el buscador», esto lo dice.
+  const queDevuelve = (await sql(`
+    select pg_get_function_result(oid) from pg_proc where proname = 'hermandades_publicas'`)).trim()
+  caso('y solo cosas de cartel: ni correo ni teléfono ni dirección', true,
+    !/email|correo|telefono|direccion|cif|dni/i.test(queDevuelve))
+
+  // Una hermandad dada de baja desaparece de la lista: si no, seguiría
+  // saliendo en la portada con su escudo como si nada.
+  await sql(`update hermandades set activa = false where id = ${HB}`)
+  caso('una hermandad inactiva se cae de la lista', 'Hdad. de las doce',
+    (await comoVisitante(`select string_agg(nombre, ', ') from hermandades_publicas() where id in (${HA}, ${HB});`)).dato)
+  await sql(`update hermandades set activa = true where id = ${HB}`)
+
+  // ---------------------------------------------------------------- 8, 9 y 10
+  /*
+   * EL BOLETÍN: apuntarse, confirmar y darse de baja. Las tres las llama la web
+   * pública sin sesión, y las dos últimas van POR LLAVE, sin decir de qué
+   * hermandad: la llave son dos uuid pegados, así que no se adivina, pero por
+   * eso mismo tiene que hacer falta la llave ENTERA y exacta.
+   */
+  caso('un visitante se puede apuntar al boletín', 'true',
+    (await comoVisitanteEnFirme(`select suscribirse_a_la_web(${HA}, 'Rosa@Ejemplo.ES ', 'Rosa')::text;`)).dato)
+  caso('y el correo queda en minúsculas y sin espacios', 'rosa@ejemplo.es',
+    (await sql(`select email from suscriptores_web where hermandad_id = ${HA} order by alta_en desc limit 1`)).trim())
+  caso('sin confirmar todavía', 'false',
+    (await sql(`select confirmado::text from suscriptores_web where hermandad_id = ${HA} order by alta_en desc limit 1`)).trim())
+
+  caso('un correo que no es un correo no entra', 'false',
+    (await comoVisitante(`select suscribirse_a_la_web(${HA}, 'esto no es un correo', 'X')::text;`)).dato)
+  caso('ni una hermandad que no existe', 'false',
+    (await comoVisitante("select suscribirse_a_la_web('c0000000-0000-0000-0000-0000000000c3', 'a@b.es', 'X')::text;")).dato)
+
+  /*
+   * Y APUNTARSE NO ES PODER LEER LA LISTA. Es lo que se filtraría: quien puede
+   * insertar en el boletín de una hermandad no puede sacar de ahí los correos
+   * de los demás.
+   */
+  const intentaLeer = await comoVisitante(`select count(*) from suscriptores_web where hermandad_id = ${HA};`)
+  caso('apuntarse no deja leer la lista', false, intentaLeer.ok)
+  /*
+   * Y LA BASE LE NIEGA LA TABLA ENTERA, no le devuelve cero filas. Es mejor
+   * así: si el permiso estuviera dado y solo lo parara una política, el día que
+   * alguien tocara la política se verían los correos. Aquí no hay política que
+   * tocar — no tiene el permiso.
+   */
+  caso('y no es que salgan cero: es que no tiene permiso', true,
+    /permission denied/i.test(intentaLeer.dato))
+
+  const llave = (await sql(`select llave from suscriptores_web where hermandad_id = ${HA} and email = 'rosa@ejemplo.es'`)).trim()
+  caso('la llave no se adivina: sesenta y cuatro caracteres', 64, llave.length)
+  caso('una llave equivocada no confirma a nadie', 'false',
+    (await comoVisitante("select confirmar_suscripcion('llave-inventada')::text;")).dato)
+  caso('la llave buena confirma', 'true',
+    (await comoVisitanteEnFirme(`select confirmar_suscripcion('${llave}')::text;`)).dato)
+  // Confirmar dos veces no es un error —la gente pulsa el enlace del correo
+  // más de una vez— pero no puede mover la fecha de la primera vez.
+  const primera = (await sql(`select confirmado_en from suscriptores_web where llave = '${llave}'`)).trim()
+  await comoVisitanteEnFirme(`select confirmar_suscripcion('${llave}')::text;`)
+  caso('confirmar dos veces no cambia la fecha', primera,
+    (await sql(`select confirmado_en from suscriptores_web where llave = '${llave}'`)).trim())
+
+  caso('una llave equivocada no da de baja a nadie', 'false',
+    (await comoVisitante("select baja_de_la_web('llave-inventada')::text;")).dato)
+  caso('y no se ha ido nadie', '1',
+    (await sql(`select count(*) from suscriptores_web where llave = '${llave}'`)).trim())
+  caso('la llave buena da de baja', 'true',
+    (await comoVisitanteEnFirme(`select baja_de_la_web('${llave}')::text;`)).dato)
+  caso('y esa fila ya no está', '0',
+    (await sql(`select count(*) from suscriptores_web where llave = '${llave}'`)).trim())
+  // Darse de baja dos veces —el enlace del correo sigue ahí— no puede reventar.
+  caso('darse de baja dos veces no revienta', 'false',
+    (await comoVisitante(`select baja_de_la_web('${llave}')::text;`)).dato)
+
+  // ---------------------------------------------------------------- 11
+  /*
+   * `mis_novedades()` decide qué avisos de versión ve cada hermandad. Lo del
+   * canal piloto SOLO lo ven las del piloto: enseñárselo a las demás es
+   * anunciarles algo que su base todavía no tiene.
+   */
+  await sql(`
+    delete from novedades where clave in ('prueba-estable', 'prueba-piloto');
+    insert into novedades (clave, descripcion, desde_canal) values
+      ('prueba-estable', 'Para todas',  'estable'),
+      ('prueba-piloto',  'Solo piloto', 'piloto');
+    update hermandades set canal = 'estable' where id = ${HA};
+  `)
+  caso('una hermandad del canal estable no ve lo del piloto', 'prueba-estable',
+    (await comoCuenta(TIT, "select string_agg(m, ',' order by m) from mis_novedades() m where m like 'prueba-%';")).dato)
+  await sql(`update hermandades set canal = 'piloto' where id = ${HA}`)
+  caso('una del piloto ve las dos', 'prueba-estable,prueba-piloto',
+    (await comoCuenta(TIT, "select string_agg(m, ',' order by m) from mis_novedades() m where m like 'prueba-%';")).dato)
+  await sql(`update hermandades set canal = 'estable' where id = ${HA}`)
+
+  // ---------------------------------------------------------------- 12
+  /*
+   * `soporte_donde_estoy()` es el cartel de «estás viendo la hermandad tal».
+   * Si dijera vacío estando dentro, quien da soporte estaría tocando los datos
+   * de una hermandad de verdad creyendo que está en la suya.
+   */
+  await sql(`
+    delete from soporte_sesion where auth_user_id = '${SOP}';
+    insert into soporte_sesion (auth_user_id, hermandad_id, hasta)
+      values ('${SOP}', ${HA}, now() + interval '1 hour');
+  `)
+  caso('soporte sabe en qué hermandad está', 'Hdad. de las doce',
+    (await comoCuenta(SOP, 'select soporte_donde_estoy();')).dato)
+  caso('el titular no está suplantando a nadie', '',
+    (await comoCuenta(TIT, 'select soporte_donde_estoy();')).dato)
+  // Y CADUCA. Una sesión de soporte que no caduca es una puerta abierta.
+  await sql(`update soporte_sesion set hasta = now() - interval '1 minute' where auth_user_id = '${SOP}'`)
+  caso('una sesión de soporte caducada ya no vale', '',
+    (await comoCuenta(SOP, 'select soporte_donde_estoy();')).dato)
+
+  // A limpiar, que esta base la comparten todas las pruebas.
+  await sql(`
+    delete from soporte_sesion where auth_user_id = '${SOP}';
+    delete from novedades where clave in ('prueba-estable', 'prueba-piloto');
+    delete from suscriptores_web where hermandad_id in (${HA}, ${HB});
+    delete from web_publica where hermandad_id in (${HA}, ${HB});
+  `)
+}
+
 /*
  * LO QUE SOLO DEBE TOCAR EL MANTENIMIENTO.
  *

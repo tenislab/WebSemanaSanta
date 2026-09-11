@@ -1,4 +1,25 @@
-const currency = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
+/*
+ * EL SEPARADOR DE MILES, SIEMPRE.
+ *
+ * `es-ES` por defecto se lo salta en los números de CUATRO cifras: 2420,00 €
+ * pero 10.431,55 €. Para una frase suelta está bien —es la norma— pero esta
+ * aplicación es casi toda columnas de dinero, y en una columna eso se lee
+ * dudando: `2420,00` al lado de `10.431,55` puede ser dos mil o veinticuatro.
+ *
+ * Se vio en el estado de cuentas, que es el papel que se lleva al cabildo: la
+ * primera partida sin separador y la siguiente con él, una debajo de la otra.
+ * Y no se veía leyendo el código, porque ahí `es-ES` parece lo correcto.
+ *
+ * Cambia eso y nada más: no toca la coma decimal, ni los dos decimales, ni el
+ * símbolo detrás.
+ *
+ * Va `true` y no `'always'` porque los tipos de TypeScript de esta versión
+ * todavía declaran la opción como booleana. Son la misma cosa —comprobado
+ * ejecutándolo: los dos dan `2.420,00 €`— y `true` compila.
+ */
+const currency = new Intl.NumberFormat('es-ES', {
+  style: 'currency', currency: 'EUR', useGrouping: true,
+})
 
 /**
  * UN IMPORTE, EN EUROS Y CÉNTIMOS. Nada de fracciones de céntimo.

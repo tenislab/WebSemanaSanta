@@ -1,5 +1,5 @@
 import { LogoMark } from './Logo'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import { hayDatosDeEjemplo } from '../lib/demo'
 
 export default function InformeImpreso({
@@ -19,9 +19,7 @@ export default function InformeImpreso({
   filas: (string | number)[][]
   className?: string
 }) {
-  const direccionHermandad = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad]
-    .filter(Boolean)
-    .join(', ')
+  const direccionHermandad = direccionEnUnaLinea(hermandad)
 
   return (
     <div className={`recibo-doc print-doc informe-doc ${className}`.trim()}>

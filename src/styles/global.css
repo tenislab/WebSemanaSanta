@@ -2338,6 +2338,30 @@ span.logo-mark img { width: 100%; height: 100%; }
   display: flex; align-items: center; justify-content: center;
 }
 .recibo-doc__logo img { width: 100%; height: 100%; object-fit: contain; }
+/*
+  EL ESCUDO DE LA HERMANDAD, CUANDO NO HAY ESCUDO.
+  
+  Si la hermandad no ha subido el suyo, en su lugar va el nazareno de la marca,
+  y este recuadro es morado con el trazo en oro — por eso la caja pone
+  `color: var(--oro-300)` ahí arriba.
+
+  Pero `.logo-mark` se pinta con `var(--accent)`, que en tema CLARO es
+  `var(--morado-700)`… o sea el mismísimo color del fondo de esta caja. Mismo
+  hexadecimal: el trazo no es que se viera poco, es que no se veía en absoluto,
+  y en su sitio salía un cuadrado morado macizo.
+
+  Estaba así en los OCHO documentos que se imprimen —recibo, certificado,
+  factura, justificante, estado de cuentas, cuenta de resultados, memoria e
+  informe—, que son justo los que la hermandad sella y entrega, y donde un
+  borrón donde va el escudo parece un fallo de la imprenta.
+
+  Y no se veía en tema oscuro, donde `--accent` sí es oro. Igual que el zigzag
+  de los desplegables: mal en un contexto de dos, y quien mira mira uno.
+
+  `inherit` y no el token directo: así esta caja decide el color de su
+  contenido una sola vez, y si algún día cambia el fondo, el trazo la sigue.
+*/
+.recibo-doc__logo .logo-mark { color: inherit; }
 .recibo-doc__brand-text { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.8rem; color: var(--text-muted); min-width: 0; }
 .recibo-doc__brand-text b { color: var(--text); font-size: 0.94rem; font-weight: 600; }
 .recibo-doc__meta { text-align: right; display: flex; flex-direction: column; gap: 0.2rem; flex: none; }

@@ -18,7 +18,7 @@
  * el ejercicio, meses después, con las facturas ya entregadas.
  */
 import { LogoMark } from './Logo'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import { formatCurrency } from '../lib/format'
 import { hayDatosDeEjemplo } from '../lib/demo'
 import { fechaEs } from '../lib/leerTabla'
@@ -60,8 +60,7 @@ export default function FacturaTienda({
   lineas: LineaVenta[] | null | undefined
   hermandad: HermandadSettings
 }) {
-  const direccion = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad]
-    .filter(Boolean).join(', ')
+  const direccion = direccionEnUnaLinea(hermandad)
   const tramos = desgloseIvaPorTipo(lineas ?? [])
   const suma = sumaDelDesglose(tramos)
   const cent = (n: number) => Math.round(n * 100)

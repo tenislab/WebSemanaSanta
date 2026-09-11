@@ -67,6 +67,17 @@ const FORMAS = ['Efectivo', 'Transferencia', 'Bizum', 'Tarjeta'] as const
 
 export default function Campanas() {
   const [pestana, setPestana] = useState<Pestana>('campanas')
+  /*
+   * EL BOTÓN DE CREAR VA ARRIBA A LA DERECHA, como en todas las demás
+   * pantallas. Estaba dentro del panel, o sea en una TERCERA fila por debajo de
+   * los chips y pegado a la izquierda: la única pantalla de la aplicación donde
+   * la acción principal no estaba donde uno la busca. Archivo y Comunicados
+   * usan estos mismos chips y su botón sí va arriba.
+   *
+   * Por eso el «estoy creando» vive aquí y no dentro de cada panel: el botón
+   * está fuera de los dos, y tiene que poder abrirle el cajón al que toque.
+   */
+  const [creando, setCreando] = useState(false)
   return (
     <div className="dash">
       <div className="dash-head dash-head--row">
@@ -78,6 +89,11 @@ export default function Campanas() {
             son el trabajo largo: lo que dura meses y no cabe en la agenda de{' '}
             <Link to="/app/eventos" className="dash-head__link">Eventos</Link>.
           </p>
+        </div>
+        <div className="dash-head__actions">
+          <button type="button" className="btn btn-primary" onClick={() => setCreando(true)}>
+            {pestana === 'campanas' ? '+ Nueva campaña' : '+ Nuevo proyecto'}
+          </button>
         </div>
       </div>
 
@@ -106,8 +122,16 @@ export default function Campanas() {
       </div>
 
       {pestana === 'campanas'
-        ? <div id="panel-campanas" role="tabpanel" aria-labelledby="tab-campanas"><PanelCampanas /></div>
-        : <div id="panel-proyectos" role="tabpanel" aria-labelledby="tab-proyectos"><PanelProyectos /></div>}
+        ? (
+          <div id="panel-campanas" role="tabpanel" aria-labelledby="tab-campanas">
+            <PanelCampanas creando={creando} setCreando={setCreando} />
+          </div>
+        )
+        : (
+          <div id="panel-proyectos" role="tabpanel" aria-labelledby="tab-proyectos">
+            <PanelProyectos creando={creando} setCreando={setCreando} />
+          </div>
+        )}
     </div>
   )
 }
@@ -117,14 +141,17 @@ export default function Campanas() {
 /*  CAMPAÑAS                                                                  */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
-function PanelCampanas() {
+/** El botón de crear está en la cabecera, fuera de los dos paneles, así que
+ *  cada panel recibe el estado en vez de tenerlo suyo. */
+type PropsDePanel = { creando: boolean; setCreando: (v: boolean) => void }
+
+function PanelCampanas({ creando, setCreando }: PropsDePanel) {
   const [campanas, setCampanas] = useRecaudaciones()
   const [movimientos, setMovimientos] = useSupabaseTable<Movimiento>(
     'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES,
     movimientoToRow, rowToMovimiento,
   )
   const [editando, setEditando] = useState<Recaudacion | null>(null)
-  const [creando, setCreando] = useState(false)
   const [aportandoA, setAportandoA] = useState<Recaudacion | null>(null)
 
   // Las abiertas primero: son las que se miran. Las cerradas quedan de consulta.
@@ -143,11 +170,6 @@ function PanelCampanas() {
 
   return (
     <>
-      <div className="dash-head__actions objetivos__acciones">
-        <button type="button" className="btn btn-primary" onClick={() => setCreando(true)}>
-          + Nueva campaña
-        </button>
-      </div>
 
       {ordenadas.length === 0 && (
         <p className="objetivos__vacio">
@@ -520,7 +542,7 @@ function FormularioAportacion({ campana, onApuntar, onCerrar }: {
 /*  PROYECTOS                                                                 */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
-function PanelProyectos() {
+function PanelProyectos({ creando, setCreando }: PropsDePanel) {
   const [proyectos, setProyectos] = useProyectos()
   const [tareas, setTareas] = useTareasProyecto()
   const [campanas] = useRecaudaciones()
@@ -529,7 +551,6 @@ function PanelProyectos() {
     movimientoToRow, rowToMovimiento,
   )
   const [editando, setEditando] = useState<Proyecto | null>(null)
-  const [creando, setCreando] = useState(false)
 
   const hoy = hoyIso()
   const ordenados = useMemo(() => ordenDeProyectos(proyectos, hoy), [proyectos, hoy])
@@ -544,11 +565,6 @@ function PanelProyectos() {
 
   return (
     <>
-      <div className="dash-head__actions objetivos__acciones">
-        <button type="button" className="btn btn-primary" onClick={() => setCreando(true)}>
-          + Nuevo proyecto
-        </button>
-      </div>
 
       {ordenados.length === 0 && (
         <p className="objetivos__vacio">

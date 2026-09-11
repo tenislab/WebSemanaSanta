@@ -106,7 +106,7 @@ las de cableado, y cada una lleva escrito por qué.
 
 ---
 
-## Fase 3 — Levantar la aplicación y mirarla
+## Fase 3 — Levantar la aplicación y mirarla ✅
 
 **El problema.** 72 ficheros de `src/` no salen en ninguna prueba. Los tres
 fallos de estética de esta semana —el zigzag, el escudo huérfano, los carteles
@@ -128,9 +128,36 @@ leer el código.
 **Cómo se sabe que está hecho:** cada uno de esos ficheros se ha visto pintado
 al menos una vez, y lo que se encontró está arreglado o apuntado.
 
+### Lo que salió al hacerla
+
+**3.1 — La puerta.** `public/mirar.html`, que Vite copia tal cual y sobrevive al
+build. Siembra ejecutando `sembrarDemoLlena()` —la función del botón «Entrar en
+la demo»— con un `localStorage` de mentira, así no se queda vieja. Se le pide la
+pantalla con `?ir=` y el tema con `?tema=`.
+
+**3.2 — Los papeles.** Tres fallos en los ocho documentos que la hermandad
+imprime y entrega: el **escudo era un cuadrado morado macizo** (el trazo salía
+del color exacto del fondo en tema claro), el **separador de miles faltaba en
+los importes de cuatro cifras** (`2420,00 €` encima de `10.431,55 €` en el
+estado de cuentas), y la **misma hermandad tenía dos direcciones** según qué
+papel imprimía (tres con provincia, cinco sin ella; y repetía «Sevilla,
+Sevilla» en las capitales). Los tres solo se veían mirando el documento, no
+leyendo el código.
+
+**3.3 — Las pantallas.** Un hallazgo: en **Campañas el botón de crear estaba
+enterrado en el panel** en vez de en la cabecera, la única pantalla donde la
+acción principal no estaba donde en todas las demás.
+
+Y una **falsa alarma que enseñó más que el hallazgo**: las capturas a ancho de
+móvil salían con el contenido cortado, como si desbordara. Medido dentro de un
+iframe de 390 y 420 px reales, **cabía** (`scrollW` 375 y 405). El corte era de
+mi manera de fotografiar —`--window-size` en Chrome headless no fija el viewport
+de maquetación—, no de la aplicación. Medir antes de tocar evitó «arreglar» una
+maquetación que estaba bien.
+
 ---
 
-## Fase 4 — Probar como el navegador, no como el dueño de la base
+## Fase 4 — Probar como el navegador, no como el dueño de la base ✅
 
 **El problema.** El superusuario se salta RLS, así que una prueba de SQL hecha
 así **dice que sí a todo**. Así se coló lo de `reglas_automaticas` y así se
@@ -158,6 +185,49 @@ coló lo de `mensajes_web`.
 **Cómo se sabe que está hecho:** ninguna función que llame el navegador queda
 sin ejecutarse en las pruebas, y cada `security definer` abierta tiene escrito
 por qué lo está.
+
+### Lo que salió al hacerla
+
+**4.1 — Las doce, ejecutadas con el rol de verdad.** Nada estaba roto, pero
+ahora está comprobado lo que importa de cada una: que `hermandad_de_la_web` y
+`hermandad_de_la_tienda` llevan `where publicada` —una web a medio hacer no
+suelta el nombre legal, la dirección, el teléfono y el correo a quien acierte
+el enlace—, que `hermandades_publicas` solo devuelve cosas de cartel
+*mirando lo que devuelve y no lo que se recuerda*, que activar y cancelar la
+suscripción es cosa del titular y no de cualquier hermano, y que apuntarse al
+boletín no da permiso para leerlo.
+
+**4.2 — Las cuarenta y dos, clasificadas una por una.** El recuento bueno son
+42, no 44: mi primera medición no distinguía `security definer` de las normales,
+y la distinción es la que importa — una función normal corre con los permisos de
+quien llama, así que a un visitante lo paran las políticas igual que si
+consultara a pelo.
+
+Y salió algo que no estaba buscando. La lista la saqué primero de la base de las
+pruebas, que la comparten todas y arrastra lo que alguien haya ejecutado a mano:
+me dijo que `limpiar_registro_viejo` estaba abierta cuando en el fichero lleva su
+`revoke`. Leyendo por qué, apareció el fallo de verdad: **el `revoke` existe
+desde el día que se escribió, y una hermandad que ejecutó el fichero antes se
+quedó con la función abierta**. Si el fichero va en `ACTUALIZAR.sql` se arregla
+al actualizar; `tareas-programadas.sql` no va, porque necesita `pg_cron` y se
+pega a mano, así que a esas bases el arreglo no les llega nunca.
+
+O sea: aquí puede estar todo bien y en la base de una hermandad estar mal. De
+eso avisa ahora `DIAGNOSTICO.sql`, que es lo único que se ejecuta allí.
+
+**4.3 — Las nueve tablas sin defecto están bien, y por qué.** `titulares` se
+escribe al crear una hermandad, cuando quien la crea no pertenece a ninguna;
+`soporte_sesion` se escribe para una hermandad que no es la de quien pregunta.
+La regla no es «todas con defecto», es que **una tabla sin defecto no la puede
+escribir el navegador** — y eso es justo lo que habría cazado el fallo de
+`mensajes_web`.
+
+**Y dos guardias míos no vigilaban nada.** El del diagnóstico: romperlo no
+rompía ninguna prueba. Y el de las escrituras del navegador: había escapado de
+más y la expresión buscaba una barra en vez de un paréntesis. Los dos se
+arreglaron y los dos saltan. Es la tercera y la cuarta vez esta semana, y la
+conclusión es siempre la misma: **un guardia sin romper no es un guardia, es un
+comentario.**
 
 ---
 
@@ -203,12 +273,10 @@ de una hermandad, un martes, con alguien delante.
 ## El orden, y por qué
 
 1. **Fase 1** — hecha.
-2. **Fase 4** (probar como el navegador) — es de donde salieron dos de los seis
-   fallos, y es la que da más por menos trabajo.
-3. **Fase 3** (levantar y mirar) — la más barata de todas y la que más cosas
-   encuentra por hora.
+2. **Fase 4** (probar como el navegador) — hecha.
+3. **Fase 3** (levantar y mirar) — hecha.
 4. **Fase 5** (actualizaciones) — la que más daño hace cuando falla, porque
-   falla en producción y a mitad.
+   falla en producción y a mitad. **La siguiente.**
 5. **Fase 2** (pruebas que ejecuten) — la más larga; se hace poco a poco, y
    sobre todo cada vez que se toque algo.
 6. **Fase 6** (producción) — continua, no tiene final.

@@ -1,5 +1,5 @@
 import { LogoMark } from './Logo'
-import type { HermandadSettings } from '../lib/hermandadSettings'
+import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import type { Memoria } from '../lib/memoria'
 
 /**
@@ -34,9 +34,7 @@ export default function MemoriaEjercicio({
   generadoEl: string
   className?: string
 }) {
-  const direccion = [hermandad.direccion, hermandad.codigoPostal, hermandad.ciudad, hermandad.provincia]
-    .filter(Boolean)
-    .join(', ')
+  const direccion = direccionEnUnaLinea(hermandad)
 
   return (
     <div className={`recibo-doc print-doc estado-cuentas memoria-doc ${className}`.trim()}>
