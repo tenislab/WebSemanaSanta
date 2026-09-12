@@ -204,6 +204,23 @@ export default async function ({ cargar, caso }) {
     caso('con céntimos, sin decimales de más', 0.5, r.loQueFalta(999.5, 1000))
   }
 
+  /*
+   * 5b. Lo que sobra: para AVISAR al apuntar un donativo que se pasa del
+   * objetivo. Se pidió «que no se pueda añadir más dinero del que falta; sí se
+   * puede, pero se añade a otros proyectos». Se avisa, nunca se rechaza: null
+   * quiere decir «nada que avisar».
+   */
+  {
+    caso('cabe entero: nada que avisar', null, r.loQueSobra(300, 500, 1000))
+    caso('justo lo que falta: nada que avisar', null, r.loQueSobra(500, 500, 1000))
+    caso('se pasa: dice en cuánto', 200, r.loQueSobra(700, 500, 1000))
+    caso('objetivo ya cumplido: sobra todo', 50, r.loQueSobra(50, 0, 1000))
+    caso('sin objetivo no hay de qué pasarse', null, r.loQueSobra(700, 0, 0))
+    caso('sin cifra aún (caja vacía → NaN) no avisa', null, r.loQueSobra(NaN, 500, 1000))
+    caso('cifra cero no avisa', null, r.loQueSobra(0, 500, 1000))
+    caso('céntimos sin colas de coma flotante', 0.1, r.loQueSobra(0.3, 0.2, 1000))
+  }
+
   /* 6. La frase de estado, que cambia según tres cosas a la vez. */
   {
     const base = { id: 'A', nombre: 'X', descripcion: '', objetivo: 1000, fechaInicio: '2026-01-01', estado: 'abierta', enLaWeb: false, creadaEn: '' }

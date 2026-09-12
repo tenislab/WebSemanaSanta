@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Ver en móvil</title>
+<meta name="robots" content="noindex">
+<style>
+  html,body{margin:0;background:#333;display:grid;place-items:start center;font-family:system-ui}
+  iframe{width:390px;height:844px;border:0;background:#fff;margin:8px;box-shadow:0 2px 20px rgba(0,0,0,.4)}
+</style></head>
+<body>
+<iframe id="f"></iframe>
+<script>
+  /* Para VER la aplicación a ancho de móvil de verdad: un iframe de 390 px crea
+     su propio viewport, así que las media queries se disparan como en un móvil
+     —cosa que `--window-size` de Chrome headless no hace—. La ruta y el tema
+     llegan por la URL de esta página. */
+  var p = new URLSearchParams(location.search)
+  var ir = p.get('ir') || '/app'
+  var tema = p.get('tema') || 'light'
+  document.getElementById('f').src = '/mirar.html?ir=' + encodeURIComponent(ir) + '&tema=' + tema
+</script>
+</body></html>

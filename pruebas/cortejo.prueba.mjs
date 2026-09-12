@@ -108,6 +108,33 @@ export default async function ({ cargar, caso }) {
     repartoDeCuerpo('Cristo', [T('z', 'Cristo', 'Cirio', 0)], [P('p1', 'a', 'z')], hDe, new Set())[0].estado)
 
   /*
+   * ENTREGADA NO ES PAGADA, Y LA FILA LO TIENE QUE DECIR.
+   *
+   * Llegó como «no funciona el tic de confirma asistencia». Sí funcionaba: es
+   * el pase de lista del día de salida —entrega la papeleta y, si el hermano
+   * llega sin haber pagado, le cobra en mano y lo apunta en Tesorería—. Lo que
+   * pasaba es que *Pagada* y *Entregada* se metían en el mismo saco y las dos
+   * se pintaban «Confirmada»: al pulsar el tic, el distintivo de la fila
+   * seguía diciendo lo mismo y el clic quedaba mudo.
+   *
+   * Se comprueba con el reparto de verdad, porque es el que da el estado que
+   * pinta la fila. La incidencia sigue mandando por encima de las dos: si hay
+   * algo abierto, eso es lo que hay que ver.
+   */
+  caso('pagada queda confirmada', 'Confirmada',
+    repartoDeCuerpo('Cristo', tramos, [P('p1', 'a', 't1', 'Pagada')], hDe, new Set())[0].estado)
+  caso('y entregada se distingue de pagada', 'Entregada',
+    repartoDeCuerpo('Cristo', tramos, [P('p1', 'a', 't1', 'Entregada')], hDe, new Set())[0].estado)
+  caso('la incidencia manda por encima de la entrega', 'Con incidencia',
+    repartoDeCuerpo('Cristo', tramos, [P('p1', 'a', 't1', 'Entregada')], hDe, new Set(['p1']))[0].estado)
+  // Y sigue contando para el aforo: entregada es una plaza ocupada, no un hueco.
+  caso('entregada ocupa plaza', 1,
+    repartoDeCuerpo('Cristo', tramos, [P('p1', 'a', 't1', 'Entregada')], hDe, new Set())
+      .filter((x) => x.estado !== 'Excede aforo').length)
+
+  await losDosControlesDelDiaDeSalida({ caso })
+
+  /*
    * LAS PAPELETAS PROPIAS DE LA HERMANDAD.
    *
    * Nacieron para lo que NO sale en el cortejo (la simbólica de quien no
@@ -182,4 +209,55 @@ export default async function ({ cargar, caso }) {
     caso(`${via} lo vuelve a comprobar`, true,
       /^[\s\S]{0,220}if \(!saleEnElCortejo\(hermanoId\)\) return/.test(cuerpo))
   }
+}
+
+/**
+ * LOS DOS CONTROLES DEL DÍA DE SALIDA NO HACEN LO MISMO.
+ *
+ * Llegó así, con dos capturas: «no funciona el tic de confirma asistencia, el
+ * de abajo sí; es tontería tenerlo dos veces». Y no era ni una cosa ni la
+ * otra: el ✓ de la fila ENTREGA la papeleta (y cobra en mano al que llega sin
+ * pagar, que es el dinero del sobre de la puerta), y el de abajo es la
+ * ASISTENCIA, para el histórico y el reparto del año que viene. Se leían como
+ * uno repetido porque los dos eran un ✓ verde sin rótulo.
+ *
+ * Aquí se comprueba lo que hace que no se confundan: que la fila dice cuál es
+ * cuál, que el tic no se vuelve a ofrecer si ya está entregada, y que el
+ * bloque de asistencia dice que no es la entrega. Y sobre todo: que el cobro
+ * en mano sigue ahí, que es lo que de verdad hace el de arriba.
+ */
+async function losDosControlesDelDiaDeSalida({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile('src/pages/app/Cortejo.tsx', 'utf8')
+
+  // El distintivo de la fila distingue entregada de confirmada.
+  const pill = src.slice(src.indexOf('function estadoPillClass('), src.indexOf('const CheckIcon'))
+  caso('el distintivo de entregada no es el de confirmada', true,
+    /'Entregada'/.test(pill) && !/'Entregada' \|\| estado === 'Confirmada'/.test(pill))
+
+  // La fila dice qué hace el tic, antes de tocarlo.
+  const roster = src.slice(src.indexOf('Entrega de papeletas'), src.indexOf('excedidos.length > 0'))
+  caso('la fila explica que el ✓ entrega la papeleta', true, /entrega la papeleta/.test(roster))
+  caso('y que si no ha pagado se le cobra en mano', true, /cobra en mano/.test(roster))
+  caso('y manda la asistencia abajo', true, /más abajo/.test(roster) && /Asistencia/.test(roster))
+  // Entregada ya: el tic no se ofrece otra vez.
+  caso('el tic no se repite si ya está entregada', true,
+    /\{a\.estado !== 'Entregada' && \(/.test(roster))
+  caso('pero la incidencia se puede seguir registrando', true, /Registrar incidencia/.test(roster))
+
+  // Y el bloque de asistencia dice que NO es la entrega.
+  const asistencia = src.slice(src.indexOf('<label>Asistencia'), src.indexOf('<AsistenciaTramo'))
+  caso('asistencia dice que no es la entrega', true, /no es la entrega de la papeleta/.test(asistencia))
+  caso('y para qué sirve', true, /histórico/.test(asistencia))
+
+  /*
+   * LO QUE NO SE PUEDE PERDER: el cobro en mano. Es lo único que hace el tic
+   * de arriba y no hace ningún otro control de la pantalla; si se quitara
+   * «porque está repetido», el dinero de la puerta volvería a no verlo nadie.
+   */
+  const presente = src.slice(src.indexOf('function marcarPresente('), src.indexOf('function registrarIncidencia('))
+  caso('marcar presente deja la papeleta entregada', true, /estado: 'Entregada'/.test(presente))
+  caso('y si no estaba pagada, la apunta en Tesorería', true, /apuntarPapeleta\(p, p\.metodoPago \?\? 'Efectivo', hoyTexto\)/.test(presente))
+  caso('y no la vuelve a cobrar si ya estaba pagada', true,
+    /p\.estado !== 'Pagada' && p\.estado !== 'Entregada'/.test(presente))
 }

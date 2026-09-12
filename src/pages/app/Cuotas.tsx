@@ -1560,12 +1560,27 @@ export default function Cuotas() {
                     decir lo único que hay que hacer: emitir el ejercicio.
                   */}
                   {cuotas.length === 0 ? (
-                    <>
-                      Todavía no se ha emitido ningún recibo.{' '}
-                      <button type="button" className="btn btn-outline btn-sm" onClick={abrirEmision}>
-                        Emitir el ejercicio entero
-                      </button>
-                    </>
+                    /*
+                      SIN CONCEPTO, EL BOTÓN NO LLEVA A EMITIR SINO A DEFINIR LA
+                      CUOTA. Antes, «Emitir el ejercicio entero» abría un cajón
+                      donde no se podía emitir —falta el nombre y el importe de la
+                      cuota—: prometía algo que no cumplía, y quedaba en «no me
+                      deja». Con la cuota ya definida, el botón sí emite.
+                    */
+                    !catalogoListo ? (
+                      <>
+                        Para emitir las cuotas, antes hay que decir cuánto se paga: define la cuota
+                        —su nombre e importe— en{' '}
+                        <Link to="/app/configuracion" className="dash-head__link">Configuración → Catálogos y cuotas</Link>.
+                      </>
+                    ) : (
+                      <>
+                        Todavía no se ha emitido ningún recibo.{' '}
+                        <button type="button" className="btn btn-outline btn-sm" onClick={abrirEmision}>
+                          Emitir el ejercicio entero
+                        </button>
+                      </>
+                    )
                   ) : query.trim() ? (
                     <>No hay recibos que coincidan con «{query.trim()}».</>
                   ) : (
@@ -2077,7 +2092,27 @@ export default function Cuotas() {
             <button className="btn btn-ghost" onClick={() => setEmisionOpen(false)}>
               Cancelar
             </button>
-            <button className="btn btn-primary" onClick={confirmarEmision} disabled={!catalogoListo || pendientesDeEmitir.length === 0 || !ejercicioValido}>
+            {/*
+              UN BOTÓN APAGADO TIENE QUE DECIR POR QUÉ. Sin esto, quien pulsaba
+              «Emitir el ejercicio entero» y llegaba aquí se encontraba un botón
+              muerto sin saber qué le faltaba —normalmente, definir la cuota—. El
+              motivo va en el `title` (al pasar por encima) y lo cuenta también,
+              y con más detalle, el recuadro del cuerpo del cajón.
+            */}
+            <button
+              className="btn btn-primary"
+              onClick={confirmarEmision}
+              disabled={!catalogoListo || pendientesDeEmitir.length === 0 || !ejercicioValido}
+              title={
+                !catalogoListo
+                  ? 'Antes hay que definir la cuota (su nombre e importe) en Configuración → Catálogos y cuotas.'
+                  : !ejercicioValido
+                    ? 'El año del ejercicio no es válido.'
+                    : pendientesDeEmitir.length === 0
+                      ? 'No hay a quién emitírsela: todos los hermanos activos ya la tienen.'
+                      : undefined
+              }
+            >
               Emitir {pendientesDeEmitir.length} cuota{pendientesDeEmitir.length === 1 ? '' : 's'}
             </button>
           </>

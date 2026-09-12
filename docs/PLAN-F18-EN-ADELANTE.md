@@ -17,7 +17,7 @@ Continúa la numeración de `docs/HOJA-DE-RUTA.md`, que llega hasta F17.
 | Fase | Qué es | Estado de partida | Depende de |
 |---|---|---|---|
 | **F18** | Comunicados que se mandan solos | **hecho, entero** — ver el apéndice | F15 (dominio) para el correo |
-| **F19** | Editor de SEO | **casi**: falta el SEO por página y desplegar `api/w.ts` |  |
+| **F19** | Editor de SEO | **hecho** salvo desplegar `api/w.ts` (ops, no código) — ver apéndice |  |
 | **F20** | La copia, cifrada al descargar | **hecho** — ver el apéndice | nada |
 | **F21** | Lo que quedaba de antes | trámites y F15 | el banco, el dominio |
 | **F22** | Deuda técnica | — | nada |
@@ -474,6 +474,24 @@ diez por vuelta como cinturón.
 **Lo que queda de F18.2**, si algún día se quiere puntualidad de reloj: llevar
 la resolución del segmento a la base sin duplicarla, y entonces `pg_cron`. El
 candado ya está puesto y no habría que tocarlo.
+
+### El SEO por página — **hecho** (F19)
+
+Al medirlo estaba más hecho de lo que decía esta tabla: `api/w.ts` ya servía
+cada noticia, titular y culto con su título, su descripción, su imagen y sus
+datos estructurados, y el sitemap ya los listaba. Quedaban dos cosas, las dos
+invisibles hasta compartir el enlace:
+
+- **La derivación floja.** Una noticia sin entradilla se compartía con el lema
+  de toda la web. Ahora, si la entradilla falta, coge el primer párrafo del
+  cuerpo. Una sola función pura (`textoParaCompartir`) que usan igual el
+  servidor y el editor, con guardia que lo exige.
+- **El editor no revisaba las páginas.** Ahora avisa —agregado, no una a una—
+  de las que se comparten sin texto propio y de las que Google corta por
+  largas, en la misma sección «Revisión» de la portada.
+
+Lo único que queda de F19 es **desplegar `api/w.ts` y `api/seo.ts`**, que es
+ops (redeploy en Vercel con las variables), no código.
 
 ### Los controles sin vestir — **hecho** (F23)
 

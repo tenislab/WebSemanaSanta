@@ -175,4 +175,72 @@ export default async function ({ cargar, caso }) {
   caso('y avisa cuando se pasa', true, /titulo\.length > LARGO_TITULO && ' — Google cortará el resto\.'/.test(web))
   // Y el de la descripción sigue ahí: esto se añadió, no se sustituyó.
   caso('la descripción sigue teniendo el suyo', true, /de 160 caracteres/.test(web))
+
+  /*
+   * ==========================================================================
+   * SEO POR PÁGINA: LO QUE SE COMPARTE MAL SIN QUE NADIE LO VEA
+   * ==========================================================================
+   *
+   * Hasta aquí, todo mira la PORTADA. Pero cada noticia, cada titular y cada
+   * culto se comparte por su cuenta, y una noticia sin entradilla se compartía
+   * con el lema de la hermandad —«Fe, tradición y caridad»— que no dice nada de
+   * la noticia. Nadie se enteraba: el editor no lo miraba.
+   *
+   * Y SE AVISA EN BLOQUE. Con veinte noticias, un aviso por cada una sería la
+   * retahíla de cien reproches que este fichero entero se niega a tener.
+   */
+  const conNoticias = (noticias) => ({ ...buena, noticias })
+
+  // Una publicada sin entradilla y sin cuerpo: se comparte sin texto propio.
+  const sinTexto = conNoticias([
+    { id: 'a', titulo: 'Con texto', fecha: '2026-02-01', resumen: 'Una entradilla normal.', publicada: true },
+    { id: 'b', titulo: 'Vacía', fecha: '2026-02-02', resumen: '', publicada: true, parrafos: [] },
+  ])
+  caso('una página sin texto propio se avisa', true, ids(sinTexto).includes('paginas-sin-texto'))
+  caso('diciendo que sale la descripción de toda la web', true,
+    /de toda la web/.test(m.revisarSeo(sinTexto, HDAD).find((a) => a.id === 'paginas-sin-texto')?.texto ?? ''))
+  caso('y no es grave: se comparte, solo que con el texto de la portada', false,
+    m.revisarSeo(sinTexto, HDAD).find((a) => a.id === 'paginas-sin-texto')?.grave)
+
+  /*
+   * PERO SI TIENE CUERPO, NO. Una noticia sin entradilla pero con párrafos se
+   * comparte con su primer párrafo, así que no le falta texto propio. Avisar
+   * sería un reproche falso, y un aviso falso enseña a ignorar los de verdad.
+   */
+  const soloCuerpo = conNoticias([
+    { id: 'c', titulo: 'Con cuerpo', fecha: '2026-02-03', resumen: '', publicada: true,
+      parrafos: [{ id: 'p', subtitulo: '', texto: 'El Domingo de Ramos hace su estación de penitencia.' }] },
+  ])
+  caso('con cuerpo no se avisa de falta de texto', false, ids(soloCuerpo).includes('paginas-sin-texto'))
+
+  // La sin publicar no cuenta: no la comparte nadie todavía.
+  const soloBorrador = conNoticias([
+    { id: 'd', titulo: 'Borrador', fecha: '2026-02-04', resumen: '', publicada: false, parrafos: [] },
+  ])
+  caso('una noticia sin publicar no dispara el aviso', false, ids(soloBorrador).includes('paginas-sin-texto'))
+
+  // Un texto tan largo que Google lo corta.
+  const largaPieza = conNoticias([
+    { id: 'e', titulo: 'Larga', fecha: '2026-02-05', resumen: 'x'.repeat(200), publicada: true },
+  ])
+  caso('una página con texto larguísimo se avisa', true, ids(largaPieza).includes('paginas-largas'))
+
+  /*
+   * LO AGREGADO: DIEZ PÁGINAS ROTAS, UN SOLO AVISO. Es lo que separa esto de la
+   * retahíla: da igual que fallen tres o treinta, se dice una vez y con el
+   * número.
+   */
+  const diezVacias = conNoticias(
+    Array.from({ length: 10 }, (_, i) => ({ id: `v${i}`, titulo: `V${i}`, fecha: '2026-02-02', resumen: '', publicada: true, parrafos: [] })),
+  )
+  const avisosDiez = m.revisarSeo(diezVacias, HDAD).filter((a) => a.id === 'paginas-sin-texto')
+  caso('diez páginas rotas no son diez avisos', 1, avisosDiez.length)
+  caso('sino uno que dice cuántas', true, /10 páginas/.test(avisosDiez[0]?.texto ?? ''))
+
+  // Y los dos nuevos dicen qué hacer, como todos.
+  const ambos = m.revisarSeo(conNoticias([
+    { id: 'x', titulo: 'Vacía', fecha: '2026-02-02', resumen: '', publicada: true, parrafos: [] },
+    { id: 'y', titulo: 'Larga', fecha: '2026-02-03', resumen: 'x'.repeat(200), publicada: true },
+  ]), HDAD).filter((a) => a.id.startsWith('paginas'))
+  caso('los avisos de página dicen qué hacer', [], ambos.filter((a) => !a.queHacer || a.queHacer.length < 20).map((a) => a.id))
 }

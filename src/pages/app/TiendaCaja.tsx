@@ -404,7 +404,14 @@ export default function TiendaCaja() {
                         <b>{l.producto.nombre}</b>{' '}
                         <small className="portal__card-mini__sub">{l.producto.codigo}</small>
                       </span>
-                      <b>{formatCurrency(precio * l.cantidad)}</b>
+                      {/* El total de la línea con su rótulo, para que no se
+                          confunda con el precio por unidad de abajo. Se
+                          recalcula solo al cambiar las unidades, con el precio
+                          que hubiera —el de la ficha o el rebajado a mano—. */}
+                      <span>
+                        <small className="portal__card-mini__sub">Total</small>{' '}
+                        <b>{formatCurrency(precio * l.cantidad)}</b>
+                      </span>
                     </div>
                     <div className="caja__linea-mandos">
                       <label>
@@ -420,7 +427,12 @@ export default function TiendaCaja() {
                         />
                       </label>
                       <label>
-                        <span className="portal__card-mini__label">Precio</span>
+                        {/* «/ud.» a la vista: esta caja es el precio POR UNIDAD
+                            y se leía como el de la línea. Con dos unidades a
+                            doce, ver «Precio 12» y arriba «24,00 €» hacía dudar
+                            de cuál era cuál. El total de la línea, arriba, lleva
+                            su propio rótulo. */}
+                        <span className="portal__card-mini__label">Precio/ud.</span>
                         {/* Rebajar a mano: «te lo dejo en diez». Vacío = el de
                             la ficha, con su descuento si lo hay. */}
                         <input

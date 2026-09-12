@@ -941,12 +941,21 @@ export default function Papeletas() {
         Y mientras la base no ha contestado tampoco se afirma: «no consta» no es
         «no hay».
       */}
-      {estadoCampana !== 'creada' ? (
-        <div className="banner-inline banner-inline--warn">
-          {estadoCampana === 'sin-crear'
-            ? <>Todavía no hay campaña creada. Las fechas que se ven abajo son de ejemplo: ponlas en <b>Ajustes de campaña</b> —el año, cuándo abre el plazo y hasta cuándo— y el resto de la pantalla empezará a decir lo vuestro.</>
-            : <>Comprobando la campaña de la hermandad…</>}
+      {estadoCampana === 'sin-crear' ? (
+        /*
+          UN SOLO AVISO, Y CON EL BOTÓN AL LADO. Antes salían dos: este y el de
+          convocatoria de abajo, que repetía «primero hay que crear la campaña»
+          con un botón apagado. Dos bandas seguidas diciendo lo mismo sobrecargan
+          la cabecera. Se deja uno, corto, y con el botón que lleva a crearla —así
+          la banda no solo dice qué falta, sino que resuelve. El de convocatoria
+          ya solo aparece cuando hay campaña de verdad.
+        */
+        <div className="banner-inline banner-inline--warn" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <span>Todavía no habéis creado la campaña. Las fechas de abajo son de ejemplo; ponle el año y el plazo.</span>
+          <button className="btn btn-primary btn-sm" onClick={() => setAjustesOpen(true)}>Ajustes de campaña</button>
         </div>
+      ) : estadoCampana === 'sin-saber' ? (
+        <div className="banner-inline banner-inline--warn">Comprobando la campaña de la hermandad…</div>
       ) : (
       <div className={`banner-inline ${abierta ? 'banner-inline--accent' : 'banner-inline--warn'}`}>
         {abierta ? (
@@ -967,12 +976,12 @@ export default function Papeletas() {
       {/*
         Convocatoria: avisar a todos los hermanos de la apertura del plazo.
 
-        MIENTRAS NO CONSTA, ESTE RECUADRO NO SALE. La banda de arriba ya dice
-        que se está comprobando; poner aquí otro que diga lo mismo son dos
-        avisos seguidos con el mismo texto — y dos avisos iguales se leen como
-        ninguno. En cuanto contesta la base, aparece.
+        SOLO CON CAMPAÑA CREADA. Sin campaña, el aviso de arriba ya dice lo que
+        hay que hacer (crearla) y trae su botón; repetirlo aquí con otro botón
+        apagado eran dos bandas seguidas para lo mismo. Y mientras la base no
+        contesta tampoco sale: «no consta» no es «no hay».
       */}
-      {estadoCampana !== 'sin-saber' && (
+      {estadoCampana === 'creada' && (
       <div className="banner-inline banner-inline--accent" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {convocatoria && convocatoria.anio === campana.anio ? (
           <span>

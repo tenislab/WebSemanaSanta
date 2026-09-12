@@ -206,6 +206,27 @@ export function loQueFalta(recaudado: number, objetivo: number): number {
 }
 
 /**
+ * CUÁNTO SE PASA UNA APORTACIÓN DEL OBJETIVO, o `null` si no se pasa.
+ *
+ * Es solo para AVISAR, no para frenar. Llegó pedido «que no se pueda apuntar
+ * más de lo que falta», y se decidió que no: pasarse del objetivo es la mejor
+ * noticia que puede dar una campaña (la barra se para en el 100 %, pero el
+ * número sigue subiendo a propósito), y a nadie se le rechaza un donativo por
+ * generoso. Lo que sí conviene es que quien apunta 500 € en una campaña a la
+ * que le faltan 20 € lo vea antes de darle a «Apuntar», por si era una
+ * confusión de campaña o de importe.
+ *
+ * Sin objetivo fijado no hay nada de lo que pasarse. Y con el objetivo ya
+ * cumplido (`falta` = 0), TODO lo que entre es «de más», y se dice.
+ */
+export function loQueSobra(cifra: number, falta: number, objetivo: number): number | null {
+  if (!(objetivo > 0)) return null
+  if (!(Number.isFinite(cifra) && cifra > 0)) return null
+  if (cifra <= falta) return null
+  return Math.round((cifra - falta) * 100) / 100
+}
+
+/**
  * Cómo se lee el estado de una campaña en una frase.
  *
  * Se separa de la pantalla para poder comprobarlo, y porque la frase cambia

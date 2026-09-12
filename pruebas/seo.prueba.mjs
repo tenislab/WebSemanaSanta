@@ -98,7 +98,9 @@ export default async function ({ cargar, caso }) {
    * su dirección y sus cultos— en vez de como una empresa con un nombre raro.
    */
   caso('la hermandad es una organización religiosa', true, tipos.includes('ReligiousOrganization'))
-  caso('la sede es un lugar', true, tipos.includes('Place'))
+  // La sede solo es un `Place` si la web dice una dirección: ya no se hereda
+  // la de Configuración (ver más abajo, y `contactoPublico.ts`).
+  caso('sin dirección escrita no se inventa la sede', false, tipos.includes('Place'))
   caso('los cultos con fecha son eventos', 1, tipos.filter((t) => t === 'Event').length)
 
   /*
@@ -152,9 +154,40 @@ export default async function ({ cargar, caso }) {
   caso('con dos escalones', 2, migasT.itemListElement.length)
   const org = ld['@graph'][0]
   caso('con su nombre', 'Hdad. de la Vera-Cruz', org.name)
-  caso('su teléfono', '954 00 00 00', org.telephone)
-  caso('su ciudad', 'Sevilla', org.address.addressLocality)
   caso('y sus redes', 'https://instagram.com/veracruz', org.sameAs[0])
+
+  /*
+   * EL CONTACTO NO SE HEREDA DE CONFIGURACIÓN, TAMPOCO PARA GOOGLE.
+   *
+   * Esto es lo más público que tiene la web: acaba en la ficha del buscador, y
+   * de ahí no hay quien lo saque. Llegó dos veces —«el contacto de la web pone
+   * mis datos» y «sigue apareciendo mi ubicación por defecto»— y la segunda fue
+   * porque solo se había avisado, no quitado.
+   *
+   * `base` es una web SIN contacto escrito, y `hermandad` tiene dirección,
+   * teléfono y correo: si algo de eso aparece aquí, se está publicando el dato
+   * interno por la puerta de atrás.
+   */
+  caso('sin teléfono en la web, no se le da a Google', undefined, org.telephone)
+  caso('ni el correo', undefined, org.email)
+  caso('ni la dirección', undefined, org.address)
+  caso('y tampoco la ciudad o el código postal por su cuenta', false,
+    JSON.stringify(ld).includes('Sevilla') || JSON.stringify(ld).includes('41010'))
+  caso('ni hay Place de la sede', false, ld['@graph'].some((x) => x['@type'] === 'Place'))
+
+  // Y escrito en la web, sí: es lo que alguien ha decidido publicar.
+  const ldContacto = m.datosEstructurados(
+    { ...base, direccion: 'C/ Pureza, 53, Sevilla', telefono: '955 11 22 33', email: 'secretaria@vera-cruz.es' },
+    hermandad, cultos, 'https://veracruz.es',
+  )
+  const conContacto = ldContacto['@graph'][0]
+  caso('lo escrito en la web sí se publica', '955 11 22 33', conContacto.telephone)
+  caso('con su correo', 'secretaria@vera-cruz.es', conContacto.email)
+  caso('y su dirección', 'C/ Pureza, 53, Sevilla', conContacto.address.streetAddress)
+  caso('pero la ciudad no se rellena con la de Configuración', undefined, conContacto.address.addressLocality)
+  // Y entonces sí hay sede que enseñar.
+  caso('con dirección escrita, la sede es un lugar', true,
+    ldContacto['@graph'].some((x) => x['@type'] === 'Place'))
   // Un logo en `data:` no le sirve a Google.
   caso('el escudo en data: no se manda', undefined, m.datosEstructurados({ ...base, logoDataUrl: 'data:image/png;base64,xx' }, hermandad, [], 'https://x.es')['@graph'][0].logo)
   caso('el escudo con URL sí', 'https://x.es/e.png', m.datosEstructurados({ ...base, logoDataUrl: 'https://x.es/e.png' }, hermandad, [], 'https://x.es')['@graph'][0].logo)
@@ -249,4 +282,52 @@ export default async function ({ cargar, caso }) {
   caso('y lo que no está', 'es', m.idiomaSeguro(undefined))
   caso('unas comillas no salen al HTML', 'es', m.idiomaSeguro('es" onload="alert(1)'))
   caso('ni un signo de mayor', 'es', m.idiomaSeguro('es><script>'))
+
+  /*
+   * ==========================================================================
+   * SEO POR PÁGINA: EL TEXTO CON EL QUE SE COMPARTE CADA UNA
+   * ==========================================================================
+   *
+   * Cada noticia y cada titular se comparte por su cuenta, con SU título y SU
+   * texto. Eso ya lo servía `api/w.ts`; lo que se afina aquí es de dónde sale
+   * la descripción cuando la entradilla está vacía, y que el editor y el
+   * servidor la deriven IGUAL —de la misma función— para que no digan cosas
+   * distintas.
+   */
+  caso('la entradilla manda sobre el cuerpo', 'La entradilla',
+    m.textoParaCompartir('La entradilla', [{ id: 'p', subtitulo: '', texto: 'El cuerpo, más largo.' }]))
+  // El caso que antes caía al lema de la hermandad: sin entradilla, coge el
+  // primer párrafo del cuerpo — que dice algo de la noticia, no de la web.
+  caso('sin entradilla coge el primer párrafo', 'El Viernes Santo sale la hermandad.',
+    m.textoParaCompartir('', [{ id: 'a', subtitulo: '', texto: '  ' }, { id: 'b', subtitulo: 'Salida', texto: 'El Viernes Santo sale la hermandad.' }]))
+  // Y si no hay ni una ni otro, vacío: entonces `cabeceraHtml` cae al lema de
+  // la web, que es lo prudente cuando no hay nada mejor.
+  caso('sin nada, vacío', '', m.textoParaCompartir('', []))
+  caso('los espacios no cuentan como entradilla', '', m.textoParaCompartir('   ', undefined))
+
+  /*
+   * LAS PÁGINAS QUE GOOGLE INDEXA POR SEPARADO. Son las mismas que promete el
+   * sitemap: noticias PUBLICADAS, titulares CON FICHA y cultos escritos. Se
+   * comprueba contra `rutasDeLaWeb` para que las dos listas no se separen.
+   */
+  const paginas = m.paginasParaSeo(base)
+  const rutasPieza = m.rutasDeLaWeb(base).map((r) => r.ruta).filter((x) => x !== '/' && x !== '/noticias')
+  caso('hay una página SEO por cada enlace suelto del sitemap', rutasPieza.length, paginas.length)
+  // La noticia sin publicar no cuenta, y el titular sin ficha tampoco.
+  caso('la noticia sin publicar no entra', false, paginas.some((p) => p.titulo === 'Sin publicar'))
+  caso('el titular sin ficha no entra', false, paginas.some((p) => p.titulo === 'Sin ficha'))
+  caso('el titular con ficha sí, con su texto', 'Su historia.',
+    paginas.find((p) => p.titulo === 'Ntro. Padre Jesús')?.descripcion)
+
+  /*
+   * Y EL SERVIDOR USA ESTA MISMA DERIVACIÓN. Si `api/w.ts` volviera a armar la
+   * descripción a mano, el editor avisaría de una cosa y se publicaría otra —
+   * que es el fallo del que va toda esta tanda.
+   */
+  const { readFile } = await import('node:fs/promises')
+  const apiW = await readFile('api/w.ts', 'utf8')
+  caso('la noticia se sirve con la derivación compartida', true,
+    /descripcion:\s*textoParaCompartir\(n\.resumen, n\.parrafos\)/.test(apiW))
+  caso('y el titular también', true,
+    /descripcion:\s*textoParaCompartir\(t\.descripcion \|\| t\.autoria, t\.parrafos\)/.test(apiW))
 }

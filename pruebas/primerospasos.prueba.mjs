@@ -170,6 +170,26 @@ async function retraerNoEsApartar({ caso }) {
   caso('plegada sigue diciendo lo siguiente', true, /guia__siguiente/.test(g))
   caso('y con su botón para ir', true, /resumen\.siguiente\.donde/.test(g))
 
+  /*
+   * PLEGADA ES UNA FRANJA, NO UNA TARJETA PEQUEÑA (fase A del plan de
+   * interfaz). Plegada seguía enseñando epígrafe, título grande, frase, barra
+   * y botones —200 px— y dejaba las cifras del día por debajo del pliegue.
+   * Se comprueba que la rama plegada devuelve antes que la tarjeta y que en
+   * ella no hay ni epígrafe ni título grande; y que lo que sí tiene que
+   * seguir estando (cuánto lleváis, lo siguiente, los dos botones) está.
+   */
+  const plegada = g.slice(g.indexOf('if (plegada) {'), g.indexOf('return (\n    <section className="guia" aria-labelledby'))
+  caso('la rama plegada existe y devuelve antes que la tarjeta', true, plegada.length > 0 && /return \(/.test(plegada))
+  caso('plegada no lleva epígrafe', false, /className="eyebrow"/.test(plegada))
+  caso('ni título grande', false, /<h2/.test(plegada))
+  caso('pero sí cuánto lleváis', true, /\{resumen\.hechos\} de \{resumen\.total\}/.test(plegada))
+  // Los imprescindibles que quedan NO van en la franja: con ellos no cabía en
+  // una línea en un portátil, y ya se ven al abrirla.
+  caso('sin los imprescindibles, que no caben y ya se ven abierta', false, /faltanImprescindibles/.test(plegada))
+  caso('y lo siguiente con su botón', true, /guia__siguiente/.test(plegada) && /Empezar aquí/.test(plegada))
+  caso('y los dos botones (los mismos que abierta)', true, /\{botones\}/.test(plegada))
+  caso('con su clase propia para la franja', true, /guia--plegada/.test(plegada))
+
   // Que el lector de pantalla sepa si está abierta o cerrada.
   caso('el botón dice si está abierta', true, /aria-expanded=\{!plegada\}/.test(g))
 }

@@ -417,6 +417,10 @@ export default function Hermanos() {
   const [motivoCert, setMotivoCert] = useState('')
   const [expidiendo, setExpidiendo] = useState(false)
   const [errorCert, setErrorCert] = useState<string | null>(null)
+  /* Expedir un certificado se pide poco, y su formulario —con el aviso de los
+     firmantes y el «para qué lo pide»— ocupaba media ficha siempre. Se abre
+     al decir que se va a expedir. */
+  const [expidiendoAbierto, setExpidiendoAbierto] = useState(false)
   const { certificados, recargar: recargarCertificados } = useCertificadosDe(selected?.id ?? null)
 
   /*
@@ -444,6 +448,8 @@ export default function Hermanos() {
     }
     setCertificado(r.certificado)
     setMotivoCert('')
+    // Expedido: el formulario se cierra. Dejarlo abierto invita a expedir dos.
+    setExpidiendoAbierto(false)
     recargarCertificados()
   }
 
@@ -683,6 +689,11 @@ export default function Hermanos() {
     setIbanDraft(selected?.iban ?? '')
     setIbanError(null)
     setIbanSaved(false)
+    // Al cambiar de hermano, el formulario de expedir se cierra: abierto en la
+    // ficha de otra persona es un certificado a punto de salir a nombre de
+    // quien no lo pidió.
+    setExpidiendoAbierto(false)
+    setErrorCert(null)
     setContacto({
       email: selected?.email ?? '',
       telefono: selected?.telefono && selected.telefono !== 'Sin datos' ? selected.telefono : '',
@@ -1839,6 +1850,90 @@ export default function Hermanos() {
               existiera.
             */}
             {/*
+              LOS DATOS, ARRIBA Y DE UN VISTAZO.
+
+              Llegó dicho así: «el apartado de hermano se puede mejorar, tanto
+              texto al principio». Y era verdad: para ver el DNI o el
+              cumpleaños había que pasar por delante de las cuotas, del
+              historial de la estación y de los dos párrafos del certificado.
+              La ficha hacía dos trabajos a la vez —ser ficha y ser manual— y
+              ganaba el manual.
+
+              Los datos que se consultan de un vistazo van primero; lo que se
+              lee —las explicaciones— se queda debajo o plegado.
+            */}
+            <dl className="ficha__list ficha__list--dos">
+              <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>
+              {selected.fechaNacimiento && (
+                <div>
+                  <dt>Cumpleaños</dt>
+                  <dd>
+                    {diaYMes(selected.fechaNacimiento)}
+                    {edadDe(selected.fechaNacimiento) !== null && ` · ${edadDe(selected.fechaNacimiento)} años`}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>Entra a su área con</dt>
+                <dd>
+                  {/*
+                    LA CONTRASEÑA YA NO SE ENSEÑA, y era lo peor de todo: se
+                    imprimía en claro en la ficha, así que bastaba con abrirla
+                    para poder entrar como esa persona.
+                    Ahora ni se guarda ni se sabe: se le manda de un solo uso
+                    al darle de alta y él la cambia. Si la pierde, se le manda
+                    una nueva a su correo desde la propia pantalla de acceso.
+
+                    El «qué hacer si la ha perdido» se pliega: hace falta el día
+                    que llama por eso, no cada vez que se abre una ficha.
+                  */}
+                  su DNI y su contraseña.{' '}
+                  <details className="ficha-ayuda">
+                    <summary>¿Y si no la recuerda?</summary>
+                    Puede pedir una nueva él mismo desde <code>/hermano</code>, con «He olvidado
+                    mi contraseña». La contraseña no se guarda en ningún sitio, así que aquí no
+                    se puede consultar.
+                  </details>
+                </dd>
+              </div>
+              {/*
+                LA FAMILIA, POR LOS DOS LADOS.
+
+                No estaba en la ficha, ni en un sentido ni en el otro, y es lo
+                primero que se pregunta al tener delante a un menor: «¿este de
+                quién es?». Había que salir a buscarlo.
+
+                Se pintan los dos lados porque el vínculo es uno solo mirado
+                desde sitios distintos: `tutorId` dice de quién depende, y los
+                que lo tienen a él en su `tutorId` son los que lleva.
+              */}
+              {tutorDe(selected) && (
+                <div>
+                  <dt>A cargo de</dt>
+                  <dd>
+                    <Link to={`/app/hermanos?ficha=${tutorDe(selected)!.id}`}>
+                      {tutorDe(selected)!.nombre}
+                    </Link>
+                    {tutorDe(selected)!.numero > 0 ? ` · nº ${tutorDe(selected)!.numero}` : ''}
+                  </dd>
+                </div>
+              )}
+              {losQueLleva(selected).length > 0 && (
+                <div>
+                  <dt>Lleva a</dt>
+                  <dd>
+                    {losQueLleva(selected).map((h, i) => (
+                      <span key={h.id}>
+                        {i > 0 && ', '}
+                        <Link to={`/app/hermanos?ficha=${h.id}`}>{h.nombre}</Link>
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            {/*
               SUS CUOTAS, QUE ES LO PRIMERO QUE SE MIRA.
 
               Llegó dicho como «no puedes ver si alguien tiene la cuota en
@@ -1936,52 +2031,89 @@ export default function Hermanos() {
                 </p>
               ) : (
                 <>
+                  {/*
+                    UNA LÍNEA Y UN BOTÓN, NO DOS PÁRRAFOS.
+
+                    Esto era lo que más texto ponía en la ficha: dos párrafos de
+                    qué es y a quién acredita, el aviso de los firmantes, el
+                    campo «Para qué lo pide» con su explicación y el botón — y
+                    todo eso SIEMPRE, delante del DNI y del cumpleaños, se
+                    fuera a expedir o no. No se ha borrado nada: lo que
+                    explica se pliega, y lo que hace falta para expedir aparece
+                    al decir que se va a expedir.
+                  */}
                   <p className="table-subtle">
                     Acredita que es hermano/a desde <b>{selected.antiguedad}</b> y con qué número.
-                    Queda registrado con su número de orden, para poder responder por él si se lo
-                    piden a la hermandad.
+                    {' '}
+                    <details className="ficha-ayuda">
+                      <summary>¿Qué es esto?</summary>
+                      Es el papel que pide un hermano cuando tiene que acreditar ante alguien que
+                      lo es y desde cuándo: para entrar en otra hermandad, para el consejo, para
+                      una bolsa de caridad, para el varal que va por antigüedad. Queda registrado
+                      con su número de orden, para poder responder por él si se lo piden a la
+                      hermandad.
+                    </details>
                   </p>
-                  {/*
-                    SI NO HAY QUIÉN FIRME, SE DICE ANTES DE EXPEDIRLO.
-                    El papel sale igual —con la línea y el título, como en
-                    papel— pero quien lo expide tiene que saber que va a salir
-                    sin nombres, y dónde se arregla. Enterarse al imprimirlo,
-                    con la persona esperando, es enterarse tarde.
-                  */}
-                  {sinFirmantes.length > 0 && (
-                    <p className="form-hint">
-                      Nadie figura como{' '}
-                      {sinFirmantes.map((cargo, i) => (
-                        <span key={cargo}>
-                          {i > 0 && ' ni como '}<b>{cargo}</b>
-                        </span>
-                      ))}
-                      {' '}en el censo, así que{' '}
-                      {sinFirmantes.length === 1 ? 'esa línea saldrá' : 'esas líneas saldrán'} sin nombre.
-                      Se pone en la ficha de quien lleve el cargo.
-                    </p>
-                  )}
-                  {errorCert && <div className="banner-inline banner-inline--warn" role="alert">{errorCert}</div>}
-                  <div className="form-row">
-                    <label htmlFor="motivoCert">Para qué lo pide</label>
-                    <input
-                      id="motivoCert"
-                      value={motivoCert}
-                      onChange={(e) => setMotivoCert(e.target.value)}
-                      placeholder="Solicitar el ingreso en otra hermandad, bolsa de caridad…"
-                    />
-                    <p className="form-hint">
-                      Sale escrito en el certificado y queda en el registro. Puedes dejarlo en
-                      blanco: entonces dice «para que conste donde proceda».
-                    </p>
+                  {!expidiendoAbierto ? (
+                    <button className="btn btn-outline btn-sm" onClick={() => setExpidiendoAbierto(true)}>
+                      Expedir certificado…
+                    </button>
+                  ) : (
+                  <div className="assign-box">
+                    {/*
+                      SI NO HAY QUIÉN FIRME, SE DICE ANTES DE EXPEDIRLO.
+                      El papel sale igual —con la línea y el título, como en
+                      papel— pero quien lo expide tiene que saber que va a salir
+                      sin nombres, y dónde se arregla. Enterarse al imprimirlo,
+                      con la persona esperando, es enterarse tarde. Y aquí es
+                      «antes de expedirlo»: en el momento en que hace falta, no
+                      cada vez que se abre una ficha.
+                    */}
+                    {sinFirmantes.length > 0 && (
+                      <p className="form-hint">
+                        Nadie figura como{' '}
+                        {sinFirmantes.map((cargo, i) => (
+                          <span key={cargo}>
+                            {i > 0 && ' ni como '}<b>{cargo}</b>
+                          </span>
+                        ))}
+                        {' '}en el censo, así que{' '}
+                        {sinFirmantes.length === 1 ? 'esa línea saldrá' : 'esas líneas saldrán'} sin nombre.
+                        Se pone en la ficha de quien lleve el cargo.
+                      </p>
+                    )}
+                    {errorCert && <div className="banner-inline banner-inline--warn" role="alert">{errorCert}</div>}
+                    <div className="form-row">
+                      <label htmlFor="motivoCert">Para qué lo pide</label>
+                      <input
+                        id="motivoCert"
+                        value={motivoCert}
+                        onChange={(e) => setMotivoCert(e.target.value)}
+                        placeholder="Solicitar el ingreso en otra hermandad, bolsa de caridad…"
+                      />
+                      <p className="form-hint">
+                        Sale escrito en el certificado. En blanco dice «para que conste donde
+                        proceda».
+                      </p>
+                    </div>
+                    <div className="assign-box__row">
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => void expedirCertificado()}
+                        disabled={expidiendo}
+                      >
+                        {expidiendo ? 'Expidiendo…' : 'Expedir certificado'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setExpidiendoAbierto(false)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => void expedirCertificado()}
-                    disabled={expidiendo}
-                  >
-                    {expidiendo ? 'Expidiendo…' : 'Expedir certificado'}
-                  </button>
+                  )}
 
                   {/* Lo primero que hace la secretaría cuando le piden uno es
                       mirar si ya se lo dio, y con qué número. */}
@@ -2002,68 +2134,6 @@ export default function Hermanos() {
               )}
             </section>
 
-            <dl className="ficha__list ficha__list--dos">
-              <div><dt>DNI / NIE</dt><dd>{selected.dni}</dd></div>
-              {selected.fechaNacimiento && (
-                <div>
-                  <dt>Cumpleaños</dt>
-                  <dd>
-                    {diaYMes(selected.fechaNacimiento)}
-                    {edadDe(selected.fechaNacimiento) !== null && ` · ${edadDe(selected.fechaNacimiento)} años`}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt>Entra a su área con</dt>
-                <dd>
-                  {/*
-                    LA CONTRASEÑA YA NO SE ENSEÑA, y era lo peor de todo: se
-                    imprimía en claro en la ficha, así que bastaba con abrirla
-                    para poder entrar como esa persona.
-                    Ahora ni se guarda ni se sabe: se le manda de un solo uso
-                    al darle de alta y él la cambia. Si la pierde, se le manda
-                    una nueva a su correo desde la propia pantalla de acceso.
-                  */}
-                  su DNI y su contraseña. Si no la recuerda, puede pedir una
-                  nueva desde <code>/hermano</code>, con «He olvidado mi contraseña».
-                </dd>
-              </div>
-              {/*
-                LA FAMILIA, POR LOS DOS LADOS.
-
-                No estaba en la ficha, ni en un sentido ni en el otro, y es lo
-                primero que se pregunta al tener delante a un menor: «¿este de
-                quién es?». Había que salir a buscarlo.
-
-                Se pintan los dos lados porque el vínculo es uno solo mirado
-                desde sitios distintos: `tutorId` dice de quién depende, y los
-                que lo tienen a él en su `tutorId` son los que lleva.
-              */}
-              {tutorDe(selected) && (
-                <div>
-                  <dt>A cargo de</dt>
-                  <dd>
-                    <Link to={`/app/hermanos?ficha=${tutorDe(selected)!.id}`}>
-                      {tutorDe(selected)!.nombre}
-                    </Link>
-                    {tutorDe(selected)!.numero > 0 ? ` · nº ${tutorDe(selected)!.numero}` : ''}
-                  </dd>
-                </div>
-              )}
-              {losQueLleva(selected).length > 0 && (
-                <div>
-                  <dt>Lleva a</dt>
-                  <dd>
-                    {losQueLleva(selected).map((h, i) => (
-                      <span key={h.id}>
-                        {i > 0 && ', '}
-                        <Link to={`/app/hermanos?ficha=${h.id}`}>{h.nombre}</Link>
-                      </span>
-                    ))}
-                  </dd>
-                </div>
-              )}
-            </dl>
 
             {/*
               CORREGIR LA FICHA.

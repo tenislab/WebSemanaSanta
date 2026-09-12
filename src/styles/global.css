@@ -1724,11 +1724,26 @@ span.logo-mark img { width: 100%; height: 100%; }
 /* Plegada: lo que toca ahora, en una línea. Sin esto, retraer deja un cajón
    cerrado que no dice nada — y un cajón que no dice nada no se vuelve a abrir. */
 .guia__siguiente {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 0.8rem; flex-wrap: wrap; margin: 0;
+  display: inline-flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0;
   font-size: 0.92rem; color: var(--text-muted);
 }
 .guia__siguiente b { color: var(--text); font-weight: 600; }
+
+/* Plegada de verdad: una franja de una línea (dos en móvil) con la barra
+   fina encima. Antes, plegada seguía siendo una tarjeta de 200 px que dejaba
+   las cifras del día por debajo del pliegue. */
+.guia--plegada { padding: 0 1rem 0.6rem; margin-bottom: 1.2rem; overflow: hidden; }
+.guia--plegada .guia__barra { height: 4px; margin: 0 -1rem 0.6rem; border-radius: 0; }
+.guia__franja {
+  display: flex; align-items: center; gap: 0.5rem 1rem; flex-wrap: wrap;
+  font-size: 0.9rem; color: var(--text-muted);
+}
+.guia__franja .guia__acciones { margin-left: auto; gap: 0.1rem; }
+/* En la franja, retraer/apartar son enlaces discretos: el botón que pesa es «Empezar aquí». */
+.guia__franja .btn-ghost { padding: 0.25rem 0.45rem; font-size: 0.85rem; border-color: transparent; color: var(--text-muted); }
+.guia__franja .btn-ghost:hover { color: var(--text); }
+.guia__cuenta { white-space: nowrap; }
+.guia__cuenta b { color: var(--text); font-weight: 600; }
 
 .guia__pasos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
 .guia__paso {
@@ -4845,6 +4860,20 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
    de leer. El nombre es neutro a propósito; antes la de cuotas se llamaba
    `ficha-asistencia`, que era mentira y dejaba dos secciones distintas
    respondiendo al mismo selector. */
+/* La ayuda que se pliega dentro de la ficha: el «¿qué es esto?» del
+   certificado, el «¿y si no la recuerda?» del acceso. Va en línea con el texto
+   para que no parta el párrafo en dos, y abierta se sangra un poco para que se
+   vea dónde empieza y dónde acaba lo que explica. */
+.ficha-ayuda { display: inline; }
+.ficha-ayuda > summary {
+  display: inline; cursor: pointer; color: var(--gold);
+  text-decoration: underline; text-decoration-style: dotted;
+}
+.ficha-ayuda > summary::marker, .ficha-ayuda > summary::-webkit-details-marker { content: none; display: none; }
+.ficha-ayuda[open] > summary { font-weight: 600; }
+.ficha-ayuda[open] { display: block; margin-top: 0.35rem; }
+.ficha-ayuda[open] > summary { display: block; margin-bottom: 0.2rem; }
+
 .ficha-bloque { margin: 1.2rem 0; }
 .ficha-bloque h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
 .ficha-bloque__filas { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; }
@@ -8498,8 +8527,18 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
    lo que lee el lector de pantalla de todas formas.
    --------------------------------------------------------------------------- */
 
-.objetivos { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
-.objetivos__acciones { margin-bottom: 1rem; }
+/*
+  Rejilla de campañas y proyectos. Las tarjetas tienen un ancho CÓMODO Y ACOTADO
+  (320–420 px) y se alinean a la izquierda, en vez de `1fr`, que estiraba cada
+  columna a partes iguales: con una sola tarjeta salía a un cuarto del ancho,
+  pegada arriba a la izquierda y con un hueco enorme al lado, como si faltara
+  algo. Con el tope, una tarjeta sola se ve del mismo tamaño que cuando hay
+  cuatro, y `min(100%, 320px)` evita que se desborde en el móvil.
+*/
+.objetivos {
+  display: grid; gap: 1rem; justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 420px));
+}
 .objetivos__vacio {
   color: var(--text-muted); font-size: 0.9rem; line-height: 1.6;
   max-width: 62ch; margin: 1.4rem 0;

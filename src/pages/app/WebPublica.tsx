@@ -101,7 +101,10 @@ import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import { pedirActivarDominio } from '../../lib/reporteFallo'
 import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { problemaDeTelefono } from '../../lib/telefono'
-import { contactoQueSePublica, avisoDeDatoPersonal, type DatoPublicado } from '../../lib/contactoPublico'
+import {
+  contactoQueSePublica, avisoDeDatoPersonal, comoSeExplica, loQueHayEnConfiguracion,
+  type DatoPublicado,
+} from '../../lib/contactoPublico'
 import { ibanValido, porQueNoValeElIban } from '../../lib/iban'
 
 /**
@@ -385,11 +388,15 @@ interface AvisoWeb {
  */
 const COMPROBACIONES_WEB = 12
 
-function avisosDeLaWeb(web: WebPublica, hermandad: HermandadSettings): AvisoWeb[] {
+function avisosDeLaWeb(web: WebPublica): AvisoWeb[] {
   const avisos: AvisoWeb[] = []
-  const dir = web.direccion || hermandad.direccion
-  const tel = web.telefono || hermandad.telefono
-  const email = web.email || hermandad.email
+  // Lo que se publica es lo escrito en la pestaña de Contacto, sin heredar
+  // nada de Configuración (ver `contactoPublico.ts`). Por eso lo que se avisa
+  // aquí es que FALTA, no que está heredado: antes una web sin contacto propio
+  // no avisaba de nada porque contaba el dato interno como puesto.
+  const dir = web.direccion
+  const tel = web.telefono
+  const email = web.email
 
   if (!dir) avisos.push({ id: 'dir', texto: 'Tu web no dice dónde estáis: falta la dirección de la sede.', pestana: 'contacto', grave: true })
   if (!tel && !email) avisos.push({ id: 'contacto', texto: 'No hay forma de contactar: pon al menos un teléfono o un correo.', pestana: 'contacto', grave: true })
@@ -584,7 +591,7 @@ export default function WebPublica() {
   })
 
   const enlace = `${window.location.origin}/w/${web.slug}`
-  const avisos = avisosDeLaWeb(web, hermandad)
+  const avisos = avisosDeLaWeb(web)
   /**
    * Secciones que todavía no tienen nada. Se marcan con un punto en el raíl:
    * enseña lo que queda por hacer sin echar la bronca por escrito.
@@ -606,11 +613,11 @@ export default function WebPublica() {
     if (web.boletines.length === 0) s.add('boletines')
     if (!web.donativos.bizum.trim() && !web.donativos.iban.trim() && !web.donativos.enlacePasarela.trim()) s.add('donativos')
     if (!web.loteria.numero.trim()) s.add('loteria')
-    if (!(web.direccion || hermandad.direccion) && !(web.telefono || hermandad.telefono)) s.add('contacto')
+    if (!web.direccion && !web.telefono) s.add('contacto')
     if (!web.seo.descripcion.trim()) s.add('compartir')
     if (!web.pie.textoLegal.trim()) s.add('marco')
     return s
-  }, [web, hermandad])
+  }, [web])
   // Los próximos cultos del módulo de Eventos, para verlos ya en la vista previa.
   const cultosCalendario = useMemo(() => cultosDelCalendario(), [])
 
@@ -4582,18 +4589,33 @@ function CompartirTab({
 }
 
 /**
- * Lo que se publica en un campo de contacto que se ha dejado vacío.
+ * Un campo de contacto vacío: lo que NO se publica, y el atajo para llenarlo.
  *
- * Va escrito y a la vista, no de «placeholder». Un placeholder es texto gris:
- * se lee como un ejemplo de lo que podrías poner, nunca como lo que ya está
- * publicado. Con esa confusión se publicó el correo y el móvil personales del
- * secretario en la web, con los campos aparentemente vacíos.
+ * La web ya no hereda el contacto de Configuración (ver `contactoPublico.ts`):
+ * vacío es vacío. Así que aquí se dice eso —y, si en Configuración hay algo,
+ * se ofrece copiarlo de un clic. Lo copiado queda ESCRITO en el campo, a la
+ * vista, en vez de publicarse por debajo como antes.
  */
-function LoQueSePublica({ dato }: { dato: DatoPublicado }) {
-  if (dato.origen !== 'hermandad') return null
+function LoQueSePublica({ dato, deConfiguracion, onCopiar }: {
+  dato: DatoPublicado
+  /** Lo que hay en Configuración para este campo, para ofrecerlo. */
+  deConfiguracion: string
+  onCopiar: (valor: string) => void
+}) {
+  if (dato.origen === 'web') return null
   return (
     <p className="form-hint">
-      Ahora se publica <b>{dato.valor}</b>, que es lo que hay en <Link to="/app/configuracion">Configuración</Link>.
+      {comoSeExplica(dato)}
+      {deConfiguracion && (
+        <>
+          {' '}En <Link to="/app/configuracion">Configuración</Link> hay «{deConfiguracion}».{' '}
+          {/* El valor va en el texto, que se parte solo; el botón se queda
+              corto para que quepa en media columna sin pisar al de al lado. */}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onCopiar(deConfiguracion)}>
+            Usar ese
+          </button>
+        </>
+      )}
     </p>
   )
 }
@@ -4601,7 +4623,7 @@ function LoQueSePublica({ dato }: { dato: DatoPublicado }) {
 /* ------------------------------ Contacto ------------------------------ */
 function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: HermandadSettings; editar: EditarFn }) {
   function editarRed(id: string, c: Partial<RedWeb>) { editar('redes', (xs) => xs.map((r) => (r.id === id ? { ...r, ...c } : r))) }
-  const publicado = contactoQueSePublica(web, hermandad)
+  const publicado = contactoQueSePublica(web)
   const direccion = publicado.direccion.valor
   const mapa = urlMapaIncrustado(web.mapaUrl, direccion)
   // Un enlace que no es de Google Maps no se incrusta a propósito: un iframe a
@@ -4612,11 +4634,26 @@ function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: H
     <>
       <section className="settings-card">
         <div className="settings-card__head"><h2 className="settings-card__title">Dónde estáis y cómo contactar</h2></div>
-        <p className="form-hint">Si dejas un campo vacío, se publica lo que haya en <Link to="/app/configuracion">Configuración</Link>.</p>
+        {/*
+          La web publica SOLO esto, y vacío no publica nada. Antes heredaba lo
+          de Configuración —que es interno, el de los recibos— y así acabó
+          publicado el móvil y el gmail personales del secretario sin que nadie
+          lo hubiera decidido. Si los datos de Configuración SON los que se
+          quieren publicar, el botón de cada campo los copia aquí.
+        */}
+        <p className="form-hint">
+          Esto es lo único que se publica. Un campo vacío <b>no publica nada</b>: lo de{' '}
+          <Link to="/app/configuracion">Configuración</Link> es interno —identifica a la hermandad
+          en los recibos— y no sale a la web por su cuenta.
+        </p>
         <div className="form-row">
           <label htmlFor="direccion">Dirección</label>
           <input id="direccion" type="text" value={web.direccion} onChange={(e) => editar('direccion', e.target.value)} placeholder="Calle, número, ciudad" />
-          <LoQueSePublica dato={publicado.direccion} />
+          <LoQueSePublica
+            dato={publicado.direccion}
+            deConfiguracion={loQueHayEnConfiguracion(hermandad, 'direccion')}
+            onCopiar={(v) => editar('direccion', v)}
+          />
         </div>
         <div className="form-grid-2">
           <div className="form-row">
@@ -4624,13 +4661,21 @@ function ContactoTab({ web, hermandad, editar }: { web: WebPublica; hermandad: H
             <input id="telefono" type="tel" inputMode="tel" value={web.telefono} onChange={(e) => editar('telefono', e.target.value)} placeholder="954 00 00 00" />
             {/* Primero QUÉ se publica y luego el reparo: un aviso sobre un dato
                 que todavía no se ha dicho se lee dos veces. */}
-            <LoQueSePublica dato={publicado.telefono} />
+            <LoQueSePublica
+              dato={publicado.telefono}
+              deConfiguracion={loQueHayEnConfiguracion(hermandad, 'telefono')}
+              onCopiar={(v) => editar('telefono', v)}
+            />
             <AvisoDeCampo texto={problemaDeTelefono(web.telefono) ?? avisoDeDatoPersonal(publicado.telefono, 'telefono')} />
           </div>
           <div className="form-row">
             <label htmlFor="email">Correo</label>
             <input id="email" type="email" value={web.email} onChange={(e) => editar('email', e.target.value)} placeholder="secretaria@…" />
-            <LoQueSePublica dato={publicado.email} />
+            <LoQueSePublica
+              dato={publicado.email}
+              deConfiguracion={loQueHayEnConfiguracion(hermandad, 'email')}
+              onCopiar={(v) => editar('email', v)}
+            />
             <AvisoDeCampo texto={avisoDeDatoPersonal(publicado.email, 'email')} />
           </div>
         </div>

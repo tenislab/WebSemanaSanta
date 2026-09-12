@@ -258,20 +258,39 @@ export default async function ({ caso, cargar }) {
    * plazo que nadie ha fijado, y en negrita, es peor que no decir nada — porque
    * se cree.
    */
-  caso('la banda de renovación no habla si no hay campaña', true,
-    /estadoCampana !== 'creada' \? \(/.test(pantalla))
-  caso('y distingue «no hay» de «todavía no consta»', true,
-    /estadoCampana === 'sin-crear'[\s\S]{0,400}?Comprobando la campaña/.test(pantalla))
-  // La explicación entera va en la banda, que es la que manda.
-  caso('la banda explica qué hay que crear y dónde', true,
-    /Ajustes de campaña<\/b>/.test(pantalla) && /el año, cuándo abre el plazo/.test(pantalla))
   /*
-   * Y MIENTRAS NO CONSTA, EL RECUADRO DE CONVOCAR NO SALE. Con él salían dos
-   * avisos seguidos con el MISMO texto —«Comprobando la campaña…» dos veces—,
-   * y dos avisos iguales se leen como ninguno.
+   * TRES ESTADOS, TRES RAMAS, en este orden: sin crear → sin saber → creada.
+   * La banda de renovación («Renovación abierta/cerrada hasta el…») es la ÚLTIMA
+   * rama, la de «creada»: solo habla cuando la campaña existe de verdad.
    */
-  caso('sin saberlo todavía, no sale el recuadro de convocar', true,
-    /\{estadoCampana !== 'sin-saber' && \(/.test(pantalla))
+  const bandas = pantalla.slice(
+    pantalla.indexOf("estadoCampana === 'sin-crear' ? ("),
+    pantalla.indexOf('Convocatoria: avisar a todos los hermanos'),
+  )
+  caso('la banda de renovación no habla si no hay campaña', true,
+    bandas.indexOf('Renovación <b>') > bandas.indexOf(") : estadoCampana === 'sin-saber' ? ("))
+  caso('y distingue «no hay» de «todavía no consta»', true,
+    /estadoCampana === 'sin-crear' \? \(/.test(bandas)
+    && /estadoCampana === 'sin-saber' \? \([\s\S]{0,200}?Comprobando la campaña/.test(bandas))
+  /*
+   * La banda de «sin crear» no solo dice qué falta: TRAE EL BOTÓN que lo
+   * arregla. Antes era un texto largo con «Ajustes de campaña» en negrita y,
+   * debajo, otra banda entera repitiendo lo mismo con un botón apagado. Ahora es
+   * una sola, corta, y el botón abre los ajustes de verdad.
+   */
+  caso('la banda explica qué hay que crear y dónde', true,
+    /ponle el año y el plazo/.test(bandas)
+    && /onClick=\{\(\) => setAjustesOpen\(true\)\}>Ajustes de campaña<\/button>/.test(bandas))
+  /*
+   * Y EL RECUADRO DE CONVOCAR SOLO SALE CON CAMPAÑA CREADA. Mientras no consta,
+   * salían dos avisos seguidos con el MISMO texto —«Comprobando…» dos veces—; y
+   * sin campaña, salía repitiendo «primero hay que crearla» con un botón
+   * apagado debajo de la banda que ya lo decía. Dos avisos iguales se leen como
+   * ninguno.
+   */
+  caso('sin campaña de verdad, no sale el recuadro de convocar', true,
+    /\{estadoCampana === 'creada' && \(/.test(pantalla)
+    && !/\{estadoCampana !== 'sin-saber' && \(/.test(pantalla))
   /*
    * Y EL AÑO NO SE AFIRMA SIN CAMPAÑA. `campana.anio` es el del ejemplo:
    * poner «Campaña 2027» de titular es afirmar un año que nadie ha elegido, y

@@ -1,7 +1,8 @@
 # Guía para la primera hermandad
 
 Esto no es un manual. Es lo que hay que saber para empezar sin nadie al lado,
-y —más importante— **lo que todavía no conviene tocar**.
+y —más importante— **lo que todavía no conviene tocar**. El manual del día a
+día, con cómo se hace cada cosa, está en [MANUAL.md](MANUAL.md).
 
 Se escribe sin adornos. Una guía que promete de más se paga el primer día.
 

@@ -1,24 +1,29 @@
 /**
- * Qué datos de contacto sale publicados en la web, y de dónde vienen.
+ * Qué datos de contacto salen publicados en la web.
  *
- * En el editor de la web los tres campos —dirección, teléfono y correo— se
- * pueden dejar vacíos, y entonces se publica lo que haya en Configuración.
- * Eso estaba escrito en una línea encima de los campos, y el valor heredado se
- * enseñaba como «placeholder».
+ * LA REGLA, Y POR QUÉ CAMBIÓ.
  *
- * No bastaba. Un placeholder es texto gris: todo el mundo lo lee como un
- * ejemplo de lo que podrías escribir, no como lo que ya está publicado. El
- * resultado fue una web con el correo personal y el móvil personal del
- * secretario a la vista de cualquiera, con los tres campos aparentemente
- * vacíos y sin que nadie hubiera decidido publicar eso.
+ * Antes, un campo vacío en el editor de la web publicaba lo que hubiera en
+ * Configuración. Llegó dicho así: «el contacto de la web pone mis datos, no
+ * los de la hermandad» — y era verdad: su dirección, su móvil y su gmail, a la
+ * vista de cualquiera. Se intentó arreglar avisando (enseñar debajo del campo
+ * lo que se estaba publicando, en vez de como placeholder gris), y aun así
+ * volvió: «sigue apareciendo mi ubicación por defecto». El aviso lo cuenta,
+ * pero no lo quita.
  *
- * Así que aquí se calcula LO QUE SE VE en la web, para poder enseñarlo tal
- * cual debajo de cada campo, y se avisa cuando lo que se va a publicar tiene
- * pinta de ser de una persona y no de la hermandad.
+ * Así que ya no se hereda. Configuración es INTERNO —identifica legalmente a
+ * la hermandad en los recibos— y la web es PÚBLICA; que lo público herede lo
+ * interno sin que nadie lo elija es exactamente lo que publica un móvil
+ * personal. Ahora la web publica SOLO lo que se escribe en su pestaña de
+ * Contacto, y vacío no publica nada.
+ *
+ * Lo cómodo no se pierde: el editor ofrece copiar el dato de Configuración de
+ * un clic (`loQueHayEnConfiguracion`), y entonces queda escrito en el campo de
+ * la web —a la vista, y decidido por alguien.
  */
 
-/** De dónde sale el valor que se publica. */
-export type Origen = 'web' | 'hermandad' | 'nada'
+/** De dónde sale el valor que se publica. Ya no hay herencia: o se escribió, o no hay. */
+export type Origen = 'web' | 'nada'
 
 export interface DatoPublicado {
   /** Lo que ve quien entra en la web. Cadena vacía si no se publica nada. */
@@ -26,28 +31,40 @@ export interface DatoPublicado {
   origen: Origen
 }
 
-function elegir(propio: string, heredado: string): DatoPublicado {
+function elegir(propio: string): DatoPublicado {
   if (propio.trim()) return { valor: propio.trim(), origen: 'web' }
-  if (heredado.trim()) return { valor: heredado.trim(), origen: 'hermandad' }
   return { valor: '', origen: 'nada' }
 }
 
 /**
  * Lo que se publica en «Contacto», campo por campo.
  *
- * Es la MISMA regla que pinta la web (`web.x || hermandad.x`). Si algún día
+ * Es la MISMA regla que pinta la web (`web.x`, sin herencia). Si algún día
  * cambia una, tiene que cambiar la otra: por eso hay una prueba que compara
  * las dos contra los mismos datos en vez de leer el código.
  */
 export function contactoQueSePublica(
   web: { direccion: string; telefono: string; email: string },
-  hermandad: { direccion: string; telefono: string; email: string },
 ): { direccion: DatoPublicado; telefono: DatoPublicado; email: DatoPublicado } {
   return {
-    direccion: elegir(web.direccion, hermandad.direccion),
-    telefono: elegir(web.telefono, hermandad.telefono),
-    email: elegir(web.email, hermandad.email),
+    direccion: elegir(web.direccion),
+    telefono: elegir(web.telefono),
+    email: elegir(web.email),
   }
+}
+
+/**
+ * El dato de Configuración, para OFRECERLO en el editor —no para publicarlo.
+ *
+ * Devuelve cadena vacía si no hay nada que ofrecer. El editor lo enseña detrás
+ * de un botón: copiarlo lo escribe en el campo de la web, y a partir de ahí se
+ * publica porque alguien lo ha decidido.
+ */
+export function loQueHayEnConfiguracion(
+  hermandad: { direccion: string; telefono: string; email: string },
+  campo: 'direccion' | 'telefono' | 'email',
+): string {
+  return hermandad[campo].trim()
 }
 
 /**
@@ -81,12 +98,13 @@ export function telefonoDeMovil(tel: string): boolean {
 /**
  * El aviso que se enseña debajo del campo, o null si no hay nada que decir.
  *
- * Solo avisa de lo HEREDADO: si alguien escribe su gmail a propósito en el
- * campo de la web, ya ha decidido. Lo que se quiere cazar es el dato que se
- * publica sin que nadie lo haya mirado.
+ * Avisa de lo que SE VA A PUBLICAR, escrito a mano o copiado de Configuración
+ * de un clic. Antes solo avisaba de lo heredado —«si lo escribe, ya lo ha
+ * decidido»—, pero desde que copiar es un botón, «decidido» puede ser un clic
+ * despistado, y el dato termina igual de público.
  */
 export function avisoDeDatoPersonal(d: DatoPublicado, campo: 'email' | 'telefono'): string | null {
-  if (d.origen !== 'hermandad' || !d.valor) return null
+  if (!d.valor) return null
   if (campo === 'email' && correoDePersona(d.valor)) {
     return 'Ese correo parece personal, no de la hermandad. En la web lo ve cualquiera.'
   }
@@ -96,9 +114,8 @@ export function avisoDeDatoPersonal(d: DatoPublicado, campo: 'email' | 'telefono
   return null
 }
 
-/** Cómo se explica el origen debajo del campo. */
+/** Cómo se explica debajo del campo lo que se publica. */
 export function comoSeExplica(d: DatoPublicado): string {
   if (d.origen === 'web') return ''
-  if (d.origen === 'hermandad') return `Ahora se publica ${d.valor}, que es lo que hay en Configuración.`
-  return 'No se publica nada en este campo.'
+  return 'Vacío: en la web no aparece nada aquí.'
 }

@@ -353,7 +353,7 @@ function MarcoSuelto({
       </header>
       <main className="sitio__main">{children}</main>
       {/* El mismo pie que la web: si no, la página se quedaba colgando. */}
-      <PieSitio web={web} hermandad={hermandad} titulo={titulo} interactivo />
+      <PieSitio web={web} titulo={titulo} interactivo />
     </SitioMarco>
   )
 }
@@ -508,7 +508,8 @@ function PaginaCulto({
   const marca = marcaDeAgua(web, hermandad.nombreLegal ?? '')
   const proximos = otros.filter((x) => x.id !== c.id).slice(0, 4)
   const faltan = diasHasta(c.fechaIso)
-  const lugar = c.lugar?.trim() || web.direccion || hermandad.direccion || ''
+  // Sin heredar la dirección de Configuración: ver `contactoPublico.ts`.
+  const lugar = c.lugar?.trim() || web.direccion || ''
   return (
     <MarcoSuelto web={web} hermandad={hermandad}>
       <article className="sitio__culto-pagina">

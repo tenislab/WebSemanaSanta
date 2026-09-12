@@ -59,6 +59,9 @@ function tituloCuerpo(cuerpo: Cuerpo): string {
 }
 
 function estadoPillClass(estado: FilaEstado) {
+  // Entregada va aparte de Confirmada a propósito: es el pase de lista hecho,
+  // y si se pintan igual, pulsar el tic no se nota (ver `estadoDe`).
+  if (estado === 'Entregada') return 'pill--info'
   if (estado === 'Confirmada') return 'pill--ok'
   if (estado === 'Con incidencia' || estado === 'Excede aforo') return 'pill--err'
   if (estado === 'Baja') return 'pill--off'
@@ -1096,8 +1099,21 @@ function TramoFicha({
 
       <dl className="ficha__list">
         <div>
-          <dt>Roster, por número de hermano</dt>
+          <dt>{diaDeSalida ? 'Entrega de papeletas · por número de hermano' : 'Roster, por número de hermano'}</dt>
           <dd>
+            {/*
+              LOS DOS CONTROLES DEL DÍA DE SALIDA NO HACEN LO MISMO, y hasta
+              ahora los dos eran un ✓ verde sin rótulo: «no funciona el tic de
+              confirmar asistencia, el de abajo sí» —y era que hacían cosas
+              distintas. Aquí se dice cuál es cuál antes de tocarlos.
+            */}
+            {diaDeSalida && reparto.length > 0 && (
+              <p className="form-hint">
+                El <b>✓</b> de cada fila <b>entrega la papeleta</b>: pasa a «Entregada» y, si el
+                hermano llega sin haber pagado, se le cobra en mano y queda apuntado en Tesorería.
+                Quién asiste de verdad se confirma más abajo, en <b>Asistencia</b>.
+              </p>
+            )}
             {/* No basta con decir que está vacío: hay que decir de dónde sale
                 lo que lo llena. El reparto no se teclea aquí —se calcula solo
                 a partir de las papeletas emitidas—, y sin decirlo parece que
@@ -1137,9 +1153,19 @@ function TramoFicha({
                   )}
                   {diaDeSalida && a.estado !== 'Con incidencia' && a.estado !== 'Excede aforo' && (
                     <span className="row-actions">
-                      <button className="icon-btn" title="Marcar presente" onClick={() => onPresente(a.papeleta.id)}>
-                        <CheckIcon />
-                      </button>
+                      {/* Entregada ya: el tic no se vuelve a ofrecer. Ofrecerlo
+                          otra vez es lo que hacía dudar de si había hecho algo. */}
+                      {a.estado !== 'Entregada' && (
+                        <button
+                          className="icon-btn"
+                          title={a.estado === 'Reservada'
+                            ? 'Entregar la papeleta y cobrarla en mano (queda apuntada en Tesorería)'
+                            : 'Entregar la papeleta (pase de lista)'}
+                          onClick={() => onPresente(a.papeleta.id)}
+                        >
+                          <CheckIcon />
+                        </button>
+                      )}
                       <button className="icon-btn" title="Registrar incidencia" onClick={() => onIncidencia(a.papeleta.id)}>
                         <WarnIcon />
                       </button>
@@ -1164,10 +1190,12 @@ function TramoFicha({
       </dl>
 
       <div className="assign-box">
-        <label>Asistencia · día de salida {edicionActual}</label>
+        <label>Asistencia · quién sale de verdad · día de salida {edicionActual}</label>
         <p className="form-hint">
-          Confírmala aquí o deja que la marque el diputado del tramo desde su área de hermano: se
-          sincroniza al instante en ambos sitios.
+          Esto no es la entrega de la papeleta —eso es el ✓ de arriba—: es <b>quién sale</b>, para
+          el histórico de años y para el reparto del que viene. Confírmala aquí o deja que la
+          marque el diputado del tramo desde su área de hermano: se sincroniza al instante en
+          ambos sitios.
         </p>
         <AsistenciaTramo
           anio={edicionActual}

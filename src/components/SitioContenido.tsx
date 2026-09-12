@@ -256,8 +256,9 @@ export default function SitioContenido({
     if (tipo === 'tienda') return true
     if (tipo === 'contacto')
       return Boolean(
-        web.direccion || hermandad.direccion || web.telefono || hermandad.telefono
-        || web.email || hermandad.email || web.mapaUrl || web.horarios.length > 0,
+        // Sin herencia de Configuración: ver `contactoPublico.ts`. Si nadie ha
+        // escrito el contacto en la web, la página de contacto no se ofrece.
+        web.direccion || web.telefono || web.email || web.mapaUrl || web.horarios.length > 0,
       )
     return true
   }
@@ -395,7 +396,6 @@ export default function SitioContenido({
 
       <PieSitio
         web={web}
-        hermandad={hermandad}
         titulo={titulo}
         interactivo={interactivo}
         activo={seccionActiva === 'pie'}
@@ -528,22 +528,22 @@ function HeroFondo({ web, titulo, interactivo }: { web: WebPublica; titulo: stri
  */
 export function PieSitio({
   web,
-  hermandad,
   titulo,
   interactivo,
   activo,
 }: {
   web: WebPublica
-  hermandad: HermandadSettings
   titulo: string
   /** En la vista previa del panel los enlaces no navegan. */
   interactivo: boolean
   /** Se está editando el pie en el panel: se marca en la vista previa. */
   activo?: boolean
 }) {
-  const dir = web.direccion || hermandad.direccion
-  const tel = web.telefono || hermandad.telefono
-  const email = web.email || hermandad.email
+  // Lo que se publica es lo que se ha escrito en la pestaña de Contacto de la
+  // web, y nada más: Configuración es interna (ver `contactoPublico.ts`).
+  const dir = web.direccion
+  const tel = web.telefono
+  const email = web.email
 
   // Los enlaces pasan por el mismo filtro que el resto de la web: sin URL
   // válida no se pintan, y una columna que se queda sin enlaces desaparece.
@@ -1564,7 +1564,7 @@ function Seccion({
     const conTexto = c.parrafos.filter((p) => p.texto.trim() || p.subtitulo.trim())
     if (!c.entradilla.trim() && c.cifras.length === 0 && conTexto.length === 0
       && c.comoAyudar.length === 0 && c.conQuien.length === 0) return null
-    const correo = c.correo.trim() || web.email || hermandad.email || ''
+    const correo = c.correo.trim() || web.email || ''
     return (
       <section id="caridad" {...props}>
         <h2>{titulo(SECCIONES_INFO.caridad.publico)}</h2>
@@ -1841,9 +1841,9 @@ function Seccion({
     )
   }
   if (tipo === 'contacto') {
-    const dir = web.direccion || hermandad.direccion
-    const tel = web.telefono || hermandad.telefono
-    const email = web.email || hermandad.email
+    const dir = web.direccion
+    const tel = web.telefono
+    const email = web.email
     // Sin ningún dato de contacto la sección no se pinta… salvo que haya
     // formulario: entonces sigue habiendo por dónde escribir a la hermandad.
     if (!dir && !tel && !email && !web.mapaUrl && web.horarios.length === 0 && !web.formularioContacto) return null

@@ -84,6 +84,67 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
 
   const empezando = resumen.hechos === 0
 
+  // Los dos botones son los mismos abierta y plegada: retraer/abrir y apartar.
+  const botones = (
+    <div className="guia__acciones">
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => plegar(!plegada)}
+        aria-expanded={!plegada}
+        aria-controls="guia-pasos"
+      >
+        {plegada ? 'Ver los pasos' : 'Retraer'}
+      </button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={apartar}>
+        Seguir luego
+      </button>
+    </div>
+  )
+
+  // La barra dice cuánto queda de un vistazo, que es lo que se mira al volver.
+  const barra = (
+    <div className="guia__barra" role="img" aria-label={`${resumen.hechos} de ${resumen.total} pasos hechos`}>
+      <span style={{ width: `${resumen.porcentaje}%` }} />
+    </div>
+  )
+
+  if (plegada) {
+    /*
+     * PLEGADA ES UNA FRANJA, no una tarjeta pequeña. La primera versión
+     * plegada seguía enseñando epígrafe, título grande, frase, barra y
+     * botones: medio palmo de pantalla para decir «5 de 10», y encima
+     * empujaba las cifras del día por debajo del pliegue. Aquí cabe en una
+     * línea (dos en móvil): cuánto lleváis, qué toca ahora y los botones.
+     *
+     * Sigue diciendo qué toca AHORA. Esconderlo del todo dejaría un cajón
+     * cerrado que no dice nada, y un cajón que no dice nada no se vuelve a
+     * abrir: sería apartar con otro nombre.
+     */
+    return (
+      <section className="guia guia--plegada" aria-label="Primeros pasos">
+        {barra}
+        <div className="guia__franja">
+          {/* Los imprescindibles que quedan no caben en la línea y ya se ven
+              al abrir: aquí va solo la cuenta. */}
+          <span className="guia__cuenta">
+            <b>Primeros pasos</b> · {resumen.hechos} de {resumen.total}
+          </span>
+          {resumen.siguiente && (
+            <span className="guia__siguiente">
+              Lo siguiente: <b>{resumen.siguiente.titulo}</b>
+              <Link className="btn btn-sm btn-primary" to={resumen.siguiente.donde}>
+                Empezar aquí
+                <span className="sr-only"> — {resumen.siguiente.comoLlegar}</span>
+              </Link>
+            </span>
+          )}
+          {botones}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="guia" aria-labelledby="guia-titulo">
       <div className="guia__cabecera">
@@ -93,9 +154,8 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
             {empezando ? 'Vamos a poner en marcha vuestra hermandad' : '¿Por dónde ibais?'}
           </h2>
           <p className="guia__lead">
-            {/* Plegada, la explicación larga sobra: lo que hace falta es cuánto
-                queda. Abierta, la primera vez, sí hace falta. */}
-            {empezando && !plegada
+            {/* La explicación larga solo la primera vez; después, cuánto queda. */}
+            {empezando
               ? 'Son diez pasos y se hacen en cualquier orden, aunque este es el que menos vueltas da. '
                 + 'No hace falta terminarlo hoy: cada paso se tacha solo en cuanto está hecho.'
               : `Lleváis ${resumen.hechos} de ${resumen.total}.`}
@@ -112,43 +172,11 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
             )}
           </p>
         </div>
-        <div className="guia__acciones">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => plegar(!plegada)}
-            aria-expanded={!plegada}
-            aria-controls="guia-pasos"
-          >
-            {plegada ? 'Ver los pasos' : 'Retraer'}
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={apartar}>
-            Seguir luego
-          </button>
-        </div>
+        {botones}
       </div>
 
-      {/* La barra dice cuánto queda de un vistazo, que es lo que se mira al volver. */}
-      <div className="guia__barra" role="img" aria-label={`${resumen.hechos} de ${resumen.total} pasos hechos`}>
-        <span style={{ width: `${resumen.porcentaje}%` }} />
-      </div>
+      {barra}
 
-      {plegada ? (
-        /*
-         * Plegada sigue diciendo qué toca AHORA. Esconderlo del todo dejaría un
-         * cajón cerrado que no dice nada y que nadie vuelve a abrir; con el
-         * paso que toca a la vista, sigue sirviendo aunque ocupe cuatro líneas.
-         */
-        resumen.siguiente && (
-          <p className="guia__siguiente">
-            <span>Lo siguiente: <b>{resumen.siguiente.titulo}</b></span>
-            <Link className="btn btn-sm btn-primary" to={resumen.siguiente.donde}>
-              Empezar aquí
-              <span className="sr-only"> — {resumen.siguiente.comoLlegar}</span>
-            </Link>
-          </p>
-        )
-      ) : (
       <ol className="guia__pasos" id="guia-pasos">
         {pasos.map((p, i) => {
           const esElQueToca = !p.hecho && resumen.siguiente?.id === p.id
@@ -177,7 +205,6 @@ export default function GuiaPrimerosPasos({ estado }: { estado: EstadoDeLaHerman
           )
         })}
       </ol>
-      )}
     </section>
   )
 }

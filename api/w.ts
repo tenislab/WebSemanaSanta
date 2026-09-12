@@ -229,7 +229,7 @@ async function servir(req: Peticion, res: Respuesta) {
     return
   }
   /* Se pide aquí, no arriba: ver la nota del principio del fichero. */
-  const { cabeceraHtml, idiomaSeguro } = await import('../src/lib/seoWeb')
+  const { cabeceraHtml, idiomaSeguro, textoParaCompartir } = await import('../src/lib/seoWeb')
   const slug = web.slug || slugRuta
 
   // Los datos de la hermandad (nombre legal, dirección, logo) salen de una
@@ -265,7 +265,7 @@ async function servir(req: Peticion, res: Respuesta) {
     const n = (web.noticias ?? []).find((x) => (x.slug?.trim() || '') === slugPieza || x.id === slugPieza)
     if (n) {
       pieza = {
-        titulo: n.titulo, descripcion: n.resumen, imagen: n.fotoDataUrl,
+        titulo: n.titulo, descripcion: textoParaCompartir(n.resumen, n.parrafos), imagen: n.fotoDataUrl,
         ruta: `/n/${slugPieza}`, tipo: 'noticia', fecha: n.fecha || undefined,
       }
     }
@@ -273,7 +273,7 @@ async function servir(req: Peticion, res: Respuesta) {
     const t = (web.titulares ?? []).find((x) => (x.slug?.trim() || '') === slugPieza || x.id === slugPieza)
     if (t) {
       pieza = {
-        titulo: t.nombre, descripcion: t.descripcion || t.autoria, imagen: t.fotoDataUrl,
+        titulo: t.nombre, descripcion: textoParaCompartir(t.descripcion || t.autoria, t.parrafos), imagen: t.fotoDataUrl,
         ruta: `/t/${slugPieza}`, tipo: 'titular',
       }
     }

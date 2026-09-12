@@ -1,4 +1,4 @@
-import type { CultoWeb, WebPublica } from './webPublica'
+import type { CultoWeb, ParrafoPagina, WebPublica } from './webPublica'
 // DEL FICHERO PURO, no de `webPublica`. Esto lo importan las funciones de
 // servidor de `api/`, y `webPublica` arrastra React y el cliente de Supabase
 // —que lee `import.meta.env`, inexistente en el servidor—. Por ahí se cayó la
@@ -104,7 +104,20 @@ export function datosEstructurados(
   pieza?: PiezaSeo,
 ): Record<string, unknown> {
   const nombre = tituloWeb(web, hermandad)
-  const direccion = web.direccion.trim() || hermandad.direccion.trim()
+  /*
+   * EL CONTACTO NO SE HEREDA DE CONFIGURACIÓN, tampoco aquí.
+   *
+   * Esto son los datos estructurados que se le dan a Google: es lo más público
+   * que hay en la web —acaba en la ficha del buscador—. Si el editor de la web
+   * ya no hereda la dirección, el teléfono ni el correo de Configuración (ver
+   * `contactoPublico.ts`), heredarlos aquí sería publicarlos por la puerta de
+   * atrás, y encima en el sitio del que cuesta más sacarlos.
+   *
+   * Del código postal, la ciudad y la provincia, lo mismo: son las de
+   * Configuración —las de la dirección interna— y con una dirección de web
+   * distinta no solo serían personales, serían falsas.
+   */
+  const direccion = web.direccion.trim()
   const grafo: Record<string, unknown>[] = []
 
   /*
@@ -129,9 +142,9 @@ export function datosEstructurados(
   if (logo && !logo.startsWith('data:')) organizacion.logo = logo
   const descripcion = descripcionWeb(web)
   if (descripcion) organizacion.description = descripcion
-  const telefono = web.telefono.trim() || hermandad.telefono.trim()
+  const telefono = web.telefono.trim()
   if (telefono) organizacion.telephone = telefono
-  const email = web.email.trim() || hermandad.email.trim()
+  const email = web.email.trim()
   if (email) organizacion.email = email
   const redes = (web.redes ?? []).map((r) => r.url).filter((u) => /^https?:\/\//.test(u))
   if (redes.length > 0) organizacion.sameAs = redes
@@ -139,9 +152,6 @@ export function datosEstructurados(
     organizacion.address = {
       '@type': 'PostalAddress',
       streetAddress: direccion,
-      ...(hermandad.codigoPostal.trim() ? { postalCode: hermandad.codigoPostal.trim() } : {}),
-      ...(hermandad.ciudad.trim() ? { addressLocality: hermandad.ciudad.trim() } : {}),
-      ...(hermandad.provincia.trim() ? { addressRegion: hermandad.provincia.trim() } : {}),
       addressCountry: 'ES',
     }
   }
@@ -455,6 +465,64 @@ export const LARGO_DESCRIPCION = 160
  * Salir el primero en Google. Ningún editor hace eso. Lo que hace es que la web
  * esté bien puesta y se comparta bien, que es lo que sí depende de nosotros.
  */
+/**
+ * LA DESCRIPCIÓN CON LA QUE SE COMPARTE UNA PÁGINA SUELTA.
+ *
+ * Es el texto PROPIO de la pieza —la entradilla de la noticia, la línea del
+ * titular—, y si ese está vacío, la primera línea de su cuerpo. Lo que NO se
+ * deja es vacío: entonces `cabeceraHtml` cae a la descripción de TODA la web, y
+ * una noticia del vía crucis se comparte diciendo «Fe, tradición y caridad»,
+ * que no dice nada de la noticia.
+ *
+ * Antes se cogía solo la entradilla. Una noticia con un cuerpo largo pero sin
+ * entradilla —que se puede— se compartía con el lema de la hermandad y ya. Con
+ * esto, al menos coge su primer párrafo.
+ */
+export function textoParaCompartir(propio: string, parrafos?: ParrafoPagina[]): string {
+  const p = (propio ?? '').trim()
+  if (p) return p
+  const primero = (parrafos ?? []).find((x) => x.texto.trim())
+  return primero ? primero.texto.trim() : ''
+}
+
+/** Una página suelta de la web, con el texto con el que Google y WhatsApp la enseñan. */
+export interface PaginaSeo {
+  tipo: 'noticia' | 'titular' | 'culto'
+  titulo: string
+  descripcion: string
+}
+
+/**
+ * LAS PÁGINAS QUE GOOGLE INDEXA POR SEPARADO, con el texto de cada una.
+ *
+ * Las mismas que promete el sitemap: noticias publicadas, titulares con ficha y
+ * cultos escritos. La derivación de la descripción es LA MISMA que usa el
+ * servidor en `api/w.ts` —sale de aquí, no se copia— para que lo que el editor
+ * avisa y lo que se publica no puedan decir cosas distintas.
+ */
+export function paginasParaSeo(web: WebPublica): PaginaSeo[] {
+  const paginas: PaginaSeo[] = []
+  for (const n of noticiasPublicadas(web.noticias ?? [])) {
+    paginas.push({ tipo: 'noticia', titulo: n.titulo, descripcion: textoParaCompartir(n.resumen, n.parrafos) })
+  }
+  for (const t of web.titulares ?? []) {
+    // «Con ficha» inline, igual que en `rutasDeLaWeb`: `titularConFicha` vive en
+    // `webPublica`, que arrastra Supabase, y aquí no se puede importar.
+    const conFicha = (t.parrafos ?? []).some((x) => x.texto.trim() || x.subtitulo.trim()) || (t.fotos ?? []).length > 0
+    if (conFicha) {
+      paginas.push({ tipo: 'titular', titulo: t.nombre, descripcion: textoParaCompartir(t.descripcion || t.autoria, t.parrafos) })
+    }
+  }
+  for (const c of web.cultos ?? []) {
+    if (c.titulo?.trim()) {
+      // Un culto no tiene cuerpo: su texto es cuándo y dónde, o el detalle.
+      const propio = [c.fecha, c.lugar].filter((x) => x?.trim()).join(' · ') || c.detalle || ''
+      paginas.push({ tipo: 'culto', titulo: c.titulo, descripcion: propio.trim() })
+    }
+  }
+  return paginas
+}
+
 export function revisarSeo(
   web: WebPublica,
   hermandad: HermandadSettings,
@@ -548,6 +616,40 @@ export function revisarSeo(
       id: 'sin-dominio',
       texto: 'La web no tiene dominio propio, así que el enlace lleva el nuestro dentro.',
       queHacer: 'Con un dominio de la hermandad el enlace se reconoce y se comparte más. El trámite tarda: mejor empezarlo pronto.',
+      grave: false,
+    })
+  }
+
+  /*
+   * --- LAS PÁGINAS SUELTAS ---
+   *
+   * Cada noticia, cada titular y cada culto se comparte y se indexa POR SU
+   * CUENTA. Esa es la parte de SEO que no es de la web entera sino de cada
+   * página, y hasta ahora nadie la miraba: el editor solo revisaba el título y
+   * la descripción de la portada.
+   *
+   * Se avisa EN BLOQUE, no una a una. Con veinte noticias, un aviso por cada
+   * una sería la retahíla de cien reproches que ya se decidió no tener. Uno
+   * solo que diga «tres se comparten sin texto» se lee y se arregla.
+   */
+  const paginas = paginasParaSeo(web)
+  const sinTexto = paginas.filter((p) => !p.descripcion.trim())
+  if (sinTexto.length > 0) {
+    const una = sinTexto.length === 1
+    avisos.push({
+      id: 'paginas-sin-texto',
+      texto: `${sinTexto.length} ${una ? 'página se comparte' : 'páginas se comparten'} sin texto propio: al pegar su enlace sale la descripción de toda la web, no la suya.`,
+      queHacer: 'Ponle a cada una su entradilla (la noticia) o su línea de presentación (el titular). Es lo que se lee al compartir su enlace.',
+      grave: false,
+    })
+  }
+  const largas = paginas.filter((p) => p.descripcion.length > LARGO_DESCRIPCION)
+  if (largas.length > 0) {
+    const una = largas.length === 1
+    avisos.push({
+      id: 'paginas-largas',
+      texto: `${largas.length} ${una ? 'página tiene un texto' : 'páginas tienen un texto'} tan largo que Google lo corta al enseñarlo.`,
+      queHacer: `Deja lo importante en los primeros ${LARGO_DESCRIPCION} caracteres: lo que pase de ahí no se ve.`,
       grave: false,
     })
   }

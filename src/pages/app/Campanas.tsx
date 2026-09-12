@@ -28,6 +28,8 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
 import AvisoDeCampo from '../../components/AvisoDeCampo'
+import HermanoPicker from '../../components/HermanoPicker'
+import type { PersonaAsignable } from '../../lib/asignables'
 import { useSupabaseTable, nuevoId } from '../../lib/supabaseSync'
 import { CLAVES_DATOS } from '../../lib/persistencia'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
@@ -40,7 +42,8 @@ import { hoyIso } from '../../lib/hoy'
 import { fechaEs } from '../../lib/leerTabla'
 import {
   useRecaudaciones, loRecaudado, cuantasAportaciones, comoVa, loQueFalta,
-  comoSeLee, admiteAportaciones, origenDeRecaudacion, type Recaudacion,
+  loQueSobra, comoSeLee, admiteAportaciones, origenDeRecaudacion,
+  type Recaudacion,
 } from '../../lib/recaudaciones'
 import {
   useProyectos, useTareasProyecto, ordenDeProyectos, tareasDelProyecto,
@@ -151,6 +154,14 @@ function PanelCampanas({ creando, setCreando }: PropsDePanel) {
     'movimientos', CLAVES_DATOS.movimientos, MOVIMIENTOS_INICIALES,
     movimientoToRow, rowToMovimiento,
   )
+  // Para buscar al hermano que aporta por nombre o número, sin escribirlo a mano.
+  const [hermanos] = useSupabaseTable<Hermano>(
+    'hermanos', CLAVES_DATOS.hermanos, HERMANOS_INICIALES,
+    hermanoToRow, rowToHermano, 'numero',
+  )
+  const asignables = useMemo<PersonaAsignable[]>(() => hermanos
+    .filter((h) => h.estado !== 'Baja')
+    .map((h) => ({ id: h.id, nombre: h.nombre, marca: `Nº ${h.numero}` })), [hermanos])
   const [editando, setEditando] = useState<Recaudacion | null>(null)
   const [aportandoA, setAportandoA] = useState<Recaudacion | null>(null)
 
@@ -201,6 +212,8 @@ function PanelCampanas({ creando, setCreando }: PropsDePanel) {
       {aportandoA && (
         <FormularioAportacion
           campana={aportandoA}
+          hermanos={asignables}
+          falta={loQueFalta(loRecaudado(movimientos, aportandoA), aportandoA.objetivo)}
           onCerrar={() => setAportandoA(null)}
           onApuntar={(datos) => {
             setMovimientos(conApunteDeCobro(movimientos, datos))
@@ -456,16 +469,30 @@ function FormularioCampana({ campana, onGuardar, onCerrar }: {
  * está en el libro desde el primer segundo, y el tesorero se lo encuentra al
  * conciliar como cualquier otro ingreso.
  */
-function FormularioAportacion({ campana, onApuntar, onCerrar }: {
+function FormularioAportacion({ campana, hermanos, falta, onApuntar, onCerrar }: {
   campana: Recaudacion
+  /** Hermanos activos, para buscar al que aporta por nombre o número. */
+  hermanos: PersonaAsignable[]
+  /** Lo que le queda a la campaña para llegar a su objetivo (0 si ya llegó). */
+  falta: number
   onApuntar: (datos: Parameters<typeof conApunteDeCobro>[1]) => void
   onCerrar: () => void
 }) {
   const [importe, setImporte] = useState('')
+  const [hermanoElegido, setHermanoElegido] = useState<PersonaAsignable | null>(null)
   const [deQuien, setDeQuien] = useState('')
   const [forma, setForma] = useState<string>(FORMAS[0])
   const [fecha, setFecha] = useState(hoyIso())
   const [error, setError] = useState<string | null>(null)
+
+  // Quién aporta: el hermano buscado, o lo que se escriba si es alguien de fuera.
+  const quien = hermanoElegido ? hermanoElegido.nombre : deQuien.trim()
+
+  // Si con esta cifra la campaña se pasa de su objetivo, se avisa según se
+  // escribe. Solo avisa: el dinero entra igual y lo que sobre queda para lo
+  // siguiente. Rechazarlo sería dejar sin apuntar un donativo real.
+  const cifraViva = Number(importe.replace(',', '.'))
+  const sobra = loQueSobra(cifraViva, falta, campana.objetivo)
 
   function enviar(e: FormEvent) {
     e.preventDefault()
@@ -478,8 +505,8 @@ function FormularioAportacion({ campana, onApuntar, onCerrar }: {
       // Una marca por aportación: la campaña se identifica por el trozo de en
       // medio, así que se pueden apuntar veinte donativos sin que se pisen.
       origen: origenDeRecaudacion(campana.id, nuevoId()),
-      concepto: deQuien.trim()
-        ? `${campana.nombre} — ${deQuien.trim()}`
+      concepto: quien
+        ? `${campana.nombre} — ${quien}`
         : `${campana.nombre} — donativo`,
       categoria: CATEGORIA_CAMPANA,
       importe: cifra,
@@ -508,15 +535,38 @@ function FormularioAportacion({ campana, onApuntar, onCerrar }: {
             <input id="apFecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </div>
         </div>
+        {sobra !== null && (
+          <p className="form-hint" role="status">
+            {falta > 0
+              ? <>A la campaña le faltan {formatCurrency(falta)}: con esto se pasa en {formatCurrency(sobra)}.</>
+              : <>La campaña ya llegó a su objetivo.</>}
+            {' '}Se apunta igual; lo que sobre queda para otros proyectos.
+          </p>
+        )}
         <div className="form-row">
-          <label htmlFor="apQuien">De quién (opcional)</label>
-          <input
-            id="apQuien" value={deQuien} maxLength={120}
-            onChange={(e) => setDeQuien(e.target.value)}
-            placeholder="Se escribe en el concepto del apunte"
+          <label htmlFor="apHermano">Hermano que aporta (opcional)</label>
+          <HermanoPicker
+            id="apHermano"
+            hermanos={hermanos}
+            placeholder="Busca por nombre o número"
+            onSelect={setHermanoElegido}
           />
-          <p className="form-hint">Si lo dejas vacío, el apunte dice solo «donativo».</p>
         </div>
+        {!hermanoElegido && (
+          <div className="form-row">
+            <label htmlFor="apQuien">O alguien de fuera (opcional)</label>
+            <input
+              id="apQuien" value={deQuien} maxLength={120}
+              onChange={(e) => setDeQuien(e.target.value)}
+              placeholder="Un vecino, una empresa, una peña…"
+            />
+          </div>
+        )}
+        <p className="form-hint">
+          {quien
+            ? <>El apunte dirá «{campana.nombre} — {quien}».</>
+            : <>Si no pones a nadie, el apunte dice solo «donativo».</>}
+        </p>
         <div className="form-row">
           <label htmlFor="apForma">Cómo ha entrado</label>
           <select id="apForma" value={forma} onChange={(e) => setForma(e.target.value)}>

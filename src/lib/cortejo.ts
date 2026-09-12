@@ -2,7 +2,7 @@ import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import { cuerposPresentes, esAutomatico, gruposAutomaticos, type Cuerpo, type Tramo } from './tramos'
 
-export type EstadoAsignacion = 'Reservada' | 'Confirmada' | 'Con incidencia' | 'Excede aforo'
+export type EstadoAsignacion = 'Reservada' | 'Confirmada' | 'Entregada' | 'Con incidencia' | 'Excede aforo'
 
 export interface Asignacion {
   papeleta: Papeleta
@@ -14,9 +14,20 @@ export interface Asignacion {
   estado: EstadoAsignacion
 }
 
+/*
+ * ENTREGADA NO ES LO MISMO QUE PAGADA, y la fila lo tiene que decir.
+ *
+ * Llegó así: «no funciona el tic de confirmar asistencia». Sí funcionaba —es
+ * el pase de lista: entrega la papeleta y, si el hermano llega sin haber
+ * pagado, le cobra en mano y lo apunta en el libro— pero esto metía *Pagada* y
+ * *Entregada* en el mismo saco y las dos se pintaban «Confirmada». Al pulsar
+ * el tic, la papeleta pasaba de Pagada a Entregada y el distintivo de la fila
+ * seguía diciendo lo mismo: el clic quedaba mudo y parecía roto.
+ */
 function estadoDe(papeleta: Papeleta, incidenciasAbiertas: Set<string>): EstadoAsignacion {
   if (incidenciasAbiertas.has(papeleta.id)) return 'Con incidencia'
-  return papeleta.estado === 'Pagada' || papeleta.estado === 'Entregada' ? 'Confirmada' : 'Reservada'
+  if (papeleta.estado === 'Entregada') return 'Entregada'
+  return papeleta.estado === 'Pagada' ? 'Confirmada' : 'Reservada'
 }
 
 interface Candidato {
