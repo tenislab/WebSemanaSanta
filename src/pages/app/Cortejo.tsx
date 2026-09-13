@@ -23,7 +23,7 @@ import {
   type Cuerpo,
   type Tramo,
 } from '../../lib/tramos'
-import { puedeSalirEnElCortejo, repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
+import { papeletasSinSitio, puedeSalirEnElCortejo, repartoCompleto, repartoPorTramo, type Asignacion, type EstadoAsignacion } from '../../lib/cortejo'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings, type HermandadSettings } from '../../lib/hermandadSettings'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
@@ -156,33 +156,16 @@ export default function Cortejo() {
     [papeletas],
   )
 
-  /**
-   * Papeletas activas cuyo tramo YA NO EXISTE.
-   *
-   * Pasa cuando alguien quita un tramo en Configuración teniendo papeletas
-   * dentro. Antes esos hermanos se evaporaban: no entraban en ningún reparto
-   * (`repartoDeCuerpo` solo reparte sobre tramos que existen), no salían en
-   * «Pendientes» (esa lista solo recoge las 'Solicitada' SIN tramo) ni entre
-   * las anuladas. En Papeletas su fila seguía diciendo «Renovada» tan
-   * tranquila. Ocho personas con su papeleta cobrada, fuera del cortejo, y
-   * nadie se enteraba hasta el día de la salida.
-   *
-   * Aquí se recogen y se enseñan aparte para recolocarlas.
+  /*
+   * La regla vive en `lib/cortejo.ts` para poder ejecutarla con datos en las
+   * pruebas: es una lista de gente que ha pagado y que el reparto no coloca,
+   * así que lo que importa es que no se le escape nadie. Allí está contado
+   * entero el por qué y las dos formas de quedarse sin sitio.
    */
-  const huerfanas = useMemo(() => {
-    // Mientras la lista de tramos no ha llegado de la base de datos, TODAS las
-    // papeletas parecerían huérfanas y saldría un aviso falso alarmante.
-    if (tramos.length === 0) return []
-    const existentes = new Set(tramos.map((t) => t.id))
-    return papeletas.filter(
-      (p) =>
-        p.anio === edicionActual &&
-        p.tramoId !== null &&
-        !existentes.has(p.tramoId) &&
-        p.estado !== 'Anulada' &&
-        p.estado !== 'Renuncia',
-    )
-  }, [papeletas, tramos, edicionActual])
+  const sinSitio = useMemo(
+    () => papeletasSinSitio(papeletas, tramos, edicionActual),
+    [papeletas, tramos, edicionActual],
+  )
 
   const cuerposPresentes = useMemo(() => cuerposDeTramos(tramos), [tramos])
   // El precio de la hermandad, no el de este navegador (ver hermandadSettings).
@@ -222,10 +205,11 @@ export default function Cortejo() {
       const h = hermanoDe(p.hermanoId)
       if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Pendiente' })
     })
-    // Las que apuntan a un tramo que ya no existe salen aquí, igual que las
-    // pendientes: es la única manera de que alguien las vea y las recoloque.
-    // Antes se caían del listado y de todos los repartos, en silencio.
-    huerfanas.forEach((p) => {
+    // Las que no caen en ningún tramo —porque el suyo ya no existe o porque
+    // nunca tuvieron— salen aquí, igual que las pendientes: es la única manera
+    // de que alguien las vea y las recoloque. Antes se caían del listado y de
+    // todos los repartos, en silencio.
+    sinSitio.forEach((p) => {
       const h = hermanoDe(p.hermanoId)
       if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Pendiente' })
     })
@@ -236,7 +220,7 @@ export default function Cortejo() {
         if (h) out.push({ papeleta: p, hermano: h, tramo: null, puesto: null, estado: 'Baja' })
       })
     return out
-  }, [tramos, repartos, pendientes, huerfanas, papeletas, hermanoDe])
+  }, [tramos, repartos, pendientes, sinSitio, papeletas, hermanoDe])
 
   function pasaFiltros(tramo: Tramo | null, filaEstado: FilaEstado, textoBusqueda: string) {
     if (cuerpoFiltro !== 'Todos' && tramo?.cuerpo !== cuerpoFiltro) return false

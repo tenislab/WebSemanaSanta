@@ -10,7 +10,10 @@ export function eventoToRow(e: Evento): Record<string, unknown> {
     hora: e.hora ?? null,
     lugar: e.lugar ?? null,
     descripcion: e.descripcion ?? null,
-    tareas: e.tareas,
+    // `?? []`: un evento del espejo viejo puede no traerlas, y `undefined`
+    // desaparece al serializar el JSON, así que la columna se quedaría con
+    // lo que hubiera antes en vez de vaciarse.
+    tareas: e.tareas ?? [],
     // La repetición NO se mandaba, así que se perdía al recargar: un culto
     // «todos los primeros viernes» volvía a ser una fecha suelta y desaparecía
     // del calendario y de la web en cuanto pasaba ese primer viernes.

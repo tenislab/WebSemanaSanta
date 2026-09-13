@@ -13,6 +13,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { versionDeHoy } from './version-del-esquema.mjs'
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -237,22 +238,23 @@ ${PIEZAS.map(([f, q], i) => `--   ${String(i + 1).padStart(2, ' ')}. ${f.padEnd(
  * Va al FINAL, cuando ya han pasado todas las piezas: sellar antes sería
  * prometer que está puesto algo que igual no llegó a ejecutarse.
  *
- * LA VERSIÓN ES EL NÚMERO DE PIEZAS DEL INSTALADOR. No hay que acordarse de
- * subirla: sube sola al añadir un fichero a la lista, que es exactamente el
- * momento en que las bases existentes se quedan atrasadas. Lo único que hay
- * que hacer a mano es poner el mismo número en `src/lib/versionEsquema.ts`, y
- * si se olvida, `npm test` lo dice. Ver `supabase/version-del-esquema.sql`.
+ * LA VERSIÓN SUBE SOLA CADA VEZ QUE CAMBIA CUALQUIER PIEZA, no solo al añadir
+ * una: la calcula `scripts/version-del-esquema.mjs` a partir de una huella
+ * del contenido de todas, y la guarda en `supabase/VERSION.json`. Antes era el
+ * número de piezas, y editar una que ya existía no la subía: la aplicación no
+ * avisaba a nadie de que había que volver a pegar `ACTUALIZAR.sql`. Ese
+ * fichero explica el resto.
  */
-export function selloDeVersion(cuantasPiezas) {
+export function selloDeVersion(version) {
   return `
 -- =============================================================================
 --   SELLO DE LA VERSIÓN — que la aplicación sepa que esta base está al día
 -- =============================================================================
 --
--- Generado. Es el número de piezas de esta instalación. La aplicación lo lee al
--- arrancar y avisa si va por detrás; ver \`src/lib/versionEsquema.ts\`.
+-- Generado. Sube cada vez que cambia cualquier pieza del SQL. La aplicación lo
+-- lee al arrancar y avisa si va por detrás; ver \`src/lib/versionEsquema.ts\`.
 
-select sellar_esquema(${cuantasPiezas});
+select sellar_esquema(${version});
 `
 }
 
@@ -267,13 +269,17 @@ export async function generar() {
       cuerpo.trimEnd() + '\n',
     )
   }
-  trozos.push(selloDeVersion(PIEZAS.length))
+  // Sin escribir: desde una prueba esto solo calcula. `VERSION.json` lo
+  // escribe el arranque de abajo, que es lo que corre a mano.
+  const { version } = await versionDeHoy(PIEZAS, { escribir: false })
+  trozos.push(selloDeVersion(version))
   return trozos.join('')
 }
 
 // Solo escribe si se ejecuta a mano; importarlo (desde las pruebas) no toca nada.
 if (process.argv[1] && process.argv[1].endsWith('generar-todo-en-uno.mjs')) {
+  const hoy = await versionDeHoy(PIEZAS)
   const salida = await generar()
   await writeFile(join(raiz, 'supabase', 'TODO-EN-UNO.sql'), salida, 'utf8')
-  console.log(`TODO-EN-UNO.sql regenerado: ${PIEZAS.length} ficheros, ${salida.split('\n').length} líneas.`)
+  console.log(`TODO-EN-UNO.sql regenerado: ${PIEZAS.length} ficheros, ${salida.split('\n').length} líneas, versión ${hoy.version}${hoy.cambia ? ' (ha subido: las piezas han cambiado)' : ''}.`)
 }

@@ -168,6 +168,24 @@ es que una regla que se dispara **cree el encargo de redes** en vez de publicar:
 llega el día del cumpleaños del titular, y a quien lleva Instagram le aparece la
 tarea con el texto ya escrito. Se gana casi todo el valor sin depender de Meta.
 
+**HECHO.** Cada regla lleva ahora sus redes y **el texto del post**, y al
+dispararse deja el encargo además del correo. Tres decisiones que no son
+evidentes:
+
+- **Son dos textos, no uno.** El correo va personalizado («Hola Manuel») y un
+  post lo lee cualquiera: con el mismo texto se publicaría el nombre de un
+  hermano en Instagram. Por eso hay un campo aparte, y por eso **no admite
+  marcas** —la regla no se puede encender si las lleva.
+- **Las dos reglas de fábrica no llevan encargo**, y no es un olvido: el
+  cumpleaños de un hermano es un dato suyo.
+- **Si el encargo falla, la regla NO se devuelve.** El correo ya está creado;
+  devolverla haría que mañana se creara otra vez y la felicitación saliera dos
+  veces. El encargo se reparte a mano y listo.
+
+El encargo queda **sin repartir** en «Encargos de redes»: la regla no sabe a
+quién le toca y adivinarlo sería peor. Queda pendiente, si se quiere, un
+responsable fijo por regla.
+
 ---
 
 ## F19 — El editor de SEO

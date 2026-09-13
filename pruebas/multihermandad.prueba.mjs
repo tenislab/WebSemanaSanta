@@ -209,7 +209,28 @@ async function aislamientoAuditoria({ caso }) {
   caso('el acceso por DNI tiene tope', true, /if v_recientes >= 25 then/.test(acceso))
   caso('cuenta DNI distintos, no repeticiones', true, /count\(distinct huella_dni\)/.test(acceso))
   caso('y no guarda ningún DNI en claro', true, /md5\(v_dni/.test(acceso))
-  caso('la tabla de intentos está cerrada', true, /revoke all on intentos_acceso from anon, authenticated;/.test(acceso))
+  /*
+   * LA TABLA DE INTENTOS ESTÁ CERRADA, Y ESTO SE MIRA SIN CONTAR LOS COMENTARIOS.
+   *
+   * Esta comprobación existía y buscaba la línea `revoke all on
+   * intentos_acceso…` en el fichero, a secas. Comentándola con `--` seguía en
+   * verde: el texto está, comentado, y da igual. O sea que vigilaba la línea
+   * escrita y no lo que la línea hace. Lo cazó `scripts/romper.sh` el día que
+   * se metió en el repositorio, que es para lo que está.
+   *
+   * Sigue siendo de las que leen el fichero, y aquí no hay otra: este arnés no
+   * puede ejecutar el `revoke`, porque vuelve a dar los permisos de tabla
+   * después de instalar (lo explica `darLosPermisosDeSupabase`). Lo que se
+   * arregla es la ceguera: se quitan los comentarios ANTES de buscar, así que
+   * comentar la línea ya no cuela.
+   *
+   * Y el candado de debajo —el RLS sin ninguna política, que es el que queda
+   * si este se cayera— sí se ejecuta, con una fila dentro, en
+   * `basedatos.prueba.mjs` («un visitante no ve ni un intento»).
+   */
+  const accesoSinComentarios = acceso.replace(/--[^\n]*/g, '')
+  caso('la tabla de intentos está cerrada', true,
+    /revoke all on intentos_acceso from anon, authenticated;/.test(accesoSinComentarios))
 
   // Y la guía ya no manda hacer el insert que causaba el problema.
   const endurecer = await readFile('supabase/rls-endurecer.sql', 'utf8')

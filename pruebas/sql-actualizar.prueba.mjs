@@ -95,33 +95,41 @@ export default async function ({ caso }) {
   /*
    * --- Y QUE LA REGLA SIGA TENIENDO DIENTES ---
    *
-   * La de arriba se ha aflojado una vez, a propósito y con motivo. Aflojar una
-   * regla y verla en verde es exactamente igual que arreglar el problema, y
-   * desde fuera no se distinguen: las dos cosas se ven como una prueba que
-   * pasa. Así que se le da de comer un caso malo de verdad y se comprueba que
-   * lo escupe.
+   * La de arriba pasa en verde porque la lista de actualizar ES la del
+   * instalador: nada queda fuera y por tanto nadie pisa a nadie. Pero una
+   * regla que solo se ha visto en verde no se distingue de una regla rota.
+   * Así que se le da de comer un caso malo de verdad —una lista con UNA pieza
+   * suelta— y se comprueba que lo escupe.
    *
    * El caso es real: `rls-cargos.sql` define `modulo_permitido()` y lo
-   * redefine después `rls-endurecer.sql`, que NO va en la lista. Meter el
-   * primero sin el segundo dejaría a la base con la versión vieja de la
-   * función que decide quién entra en cada módulo, y sin un solo error.
+   * redefine después `rls-endurecer.sql`. Ejecutar el primero sin el segundo
+   * dejaría a la base con la versión vieja de la función que decide quién
+   * entra en cada módulo, y sin un solo error.
    */
-  const conUnaMala = [...deActualizar]
-  conUnaMala.splice(1, 0, 'rls-cargos.sql')
-  const cazadas = await buscarPisadas(conUnaMala)
-  caso('la regla caza una pieza que sí deja una versión vieja', true,
+  const cazadas = await buscarPisadas(['rls-cargos.sql'])
+  caso('la regla caza una pieza suelta que deja una versión vieja', true,
     cazadas.some((x) => /^rls-cargos\.sql define modulo_permitido/.test(x)))
 
   /*
-   * --- Y EL CASO CONCRETO QUE PASÓ, escrito aparte ---
-   * Aunque la comprobación de arriba ya lo cubre, se deja nombrado: es el que
-   * hay que reconocer si alguien vuelve a proponerlo.
+   * --- EL CASO CONCRETO QUE PASÓ, escrito aparte ---
+   *
+   * `permisos-por-hermandad.sql` redefine `modulo_permitido()`, y
+   * `hermano-con-cargo.sql` la vuelve a definir después con una vía más: el
+   * hermano que lleva un cargo en su propia ficha. Durante meses el primero se
+   * dejaba FUERA de actualizar por eso, y de él solo viajaba el relleno de
+   * «eventos» y «web» en su propio fichero.
+   *
+   * Ahora van LOS DOS, en el orden del instalador: manda la última definición
+   * que se ejecuta, que es la buena, igual que al instalar. Lo que se vigila
+   * es ese orden —si alguien los invierte, el tesorero que además es hermano
+   * se queda fuera de Tesorería otra vez, sin un solo error.
    */
-  caso('permisos-por-hermandad.sql NO va en actualizar', false,
+  caso('permisos-por-hermandad.sql va en actualizar', true,
     deActualizar.includes('permisos-por-hermandad.sql'))
-  // De ese fichero solo hacía falta el relleno de «eventos» y «web», que vive
-  // aparte justamente por esto y no toca ninguna función.
-  caso('pero sí el relleno de eventos y web', true,
+  caso('y hermano-con-cargo.sql va DETRÁS, que es el que manda', true,
+    deActualizar.indexOf('hermano-con-cargo.sql') > deActualizar.indexOf('permisos-por-hermandad.sql'))
+  // El relleno sigue existiendo y sigue sin tocar funciones ni resembrar.
+  caso('y el relleno de eventos y web también', true,
     deActualizar.includes('permisos-eventos-y-web.sql'))
   const relleno = await readFile('supabase/permisos-eventos-y-web.sql', 'utf8')
   caso('y ese relleno no define ninguna función', false, /create (or replace )?function/i.test(relleno))
@@ -158,17 +166,26 @@ export default async function ({ caso }) {
   caso('lleva el almacén de imágenes', true, /insert into storage\.buckets[\s\S]{0,200}'imagenes'/.test(enDisco))
 
   /*
-   * QUE NO SE HAYA CONVERTIDO EN EL INSTALADOR.
+   * ==========================================================================
+   * ES EL INSTALADOR ENTERO, Y ES A PROPÓSITO
+   * ==========================================================================
    *
-   * `ACTUALIZAR.sql` existe para traer SOLO lo que le falta a una base que ya
-   * funciona. El día que se le cuele el esquema entero deja de tener sentido:
-   * son 5.800 líneas que nadie lee, y lo que no se lee no se revisa.
+   * Aquí había una comprobación de lo contrario: «que no se haya convertido en
+   * el instalador», con la idea de que `ACTUALIZAR.sql` trajera SOLO lo que le
+   * falta a una base que ya funciona. Se ha dado la vuelta con motivo, y
+   * medido:
    *
-   * Se comprueba por lo que LLEVA DENTRO y no solo por lo que ocupa. El
-   * tamaño es un indicio flojo —cada arreglo nuevo lo alarga un poco, y una
-   * línea arbitraria acaba moviéndose para que pase la prueba, que es
-   * justamente cómo una prueba deja de servir—. Lo que no puede aparecer
-   * nunca es la creación de las tablas base: eso es el instalador.
+   * Las piezas de base también SE EDITAN. `multi-hermandad.sql` recibió el
+   * `default hermandad_actual()` de `mensajes_web` —el arreglo de «deshacer el
+   * borrado de un mensaje falla siempre»— y como esa pieza no viajaba, una
+   * hermandad que instaló el 29 de agosto y pegó ACTUALIZAR.sql después seguía
+   * con el fallo, con el informe en verde. Lo enseñó la comparación de
+   * catálogos de `actualizardesdevieja.prueba.mjs`.
+   *
+   * Con todas las piezas, en el mismo orden, la base actualizada queda
+   * IDÉNTICA a una recién instalada. Está medido en un Postgres de verdad,
+   * sobre dos instaladores antiguos reales y sobre una base al día ejecutado
+   * dos veces. Así que ahora se exige lo contrario de antes: que estén todas.
    */
   for (const delInstalador of [
     'create table if not exists hermanos',
@@ -176,40 +193,18 @@ export default async function ({ caso }) {
     'create table if not exists papeletas',
     'create table if not exists movimientos',
   ]) {
-    /*
-     * Con el nombre ENTERO, no como prefijo. `movimientos_stock` —la tabla de
-     * la tienda que dice por qué subió o bajó el género— empieza por
-     * «movimientos», y con `includes` a secas hacía saltar esta prueba por una
-     * tabla que sí tiene que estar aquí.
-     */
+    // Con el nombre ENTERO: `movimientos_stock` empieza por «movimientos».
     const suyo = new RegExp(`${delInstalador}\\s*\\(`)
-    caso(`no trae «${delInstalador}»: eso es el instalador`, false, suyo.test(enDisco))
+    caso(`trae «${delInstalador}»: es el instalador entero`, true, suyo.test(enDisco))
   }
 
-  /*
-   * Y QUE SIGA SIENDO UN SUBCONJUNTO, no una copia.
-   *
-   * Aquí había una comprobación de tamaño —«menos de la mitad de líneas que el
-   * instalador»— y la he quitado porque medía lo que no era. Las dos listas
-   * comparten las piezas nuevas: cada arreglo entra en las dos, así que el
-   * instalador crece igual de rápido pero partiendo de mucho más alto, y la
-   * proporción sube sola hasta cruzar cualquier raya que se ponga. Al cruzarla
-   * hoy —4.235 frente a 8.095— la salida honesta no era subir la raya: el
-   * comentario de ahí arriba ya avisa de que mover el listón para que pase la
-   * prueba es justamente cómo una prueba deja de servir.
-   *
-   * Lo que de verdad importa no es cuánto ocupa sino QUÉ TRAE: que sea una
-   * parte de lo que instala el otro y no el otro entero. Eso son las piezas,
-   * y eso no se mueve solo.
-   */
   const piezas = (texto) => texto.split('\n')
     .map((l) => l.match(/^--\s+([A-Z0-9-]+\.SQL) —/)?.[1])
     .filter(Boolean)
   const suyas = piezas(enDisco)
   const delOtro = piezas(await readFile('supabase/TODO-EN-UNO.sql', 'utf8'))
-  caso('el instalador trae más piezas que la actualización', true, delOtro.length > suyas.length)
-  caso('y las de la actualización están todas en el instalador', [],
-    suyas.filter((p) => !delOtro.includes(p)))
+  caso('lleva exactamente las mismas piezas que el instalador, en el mismo orden',
+    delOtro, suyas)
 
   /*
    * --- LA OTRA FORMA DE QUEDARSE FUERA: UNA COLUMNA ---

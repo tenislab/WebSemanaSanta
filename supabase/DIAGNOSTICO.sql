@@ -275,6 +275,8 @@ with esperado (tabla, columna) as (
     ('reglas_automaticas', 'destinatarios'),
     ('reglas_automaticas', 'id'),
     ('reglas_automaticas', 'nombre'),
+    ('reglas_automaticas', 'redes'),
+    ('reglas_automaticas', 'texto_redes'),
     ('reglas_reparto', 'activo'),
     ('reglas_reparto', 'categoria_base'),
     ('reglas_reparto', 'categoria_destino'),
@@ -360,6 +362,8 @@ with esperado (tabla, columna) as (
     ('devolver_regla'),
     ('emitir_certificado'),
     ('entregar_reserva'),
+    ('errores_de_produccion'),
+    ('es_soporte'),
     ('es_titular'),
     ('fijar_sesion_pago'),
     ('hermandad_actual'),
@@ -600,17 +604,17 @@ select * from (
         then 'TU BASE NO SE HA ACTUALIZADO NUNCA'
       when coalesce((xpath('/row/valor/text()', query_to_xml(
              'select valor from esquema_gobergo where clave = ''version''',
-             false, true, '')))[1]::text::int, 0) < 69
+             false, true, '')))[1]::text::int, 0) < 70
         then 'TU BASE VA POR DETRÁS'
       else 'al día'
     end as "Qué pasa",
     'versión del esquema' as "Tabla",
     case
       when to_regclass('public.esquema_gobergo') is null
-        then 'debería ir por la 69: pega ACTUALIZAR.sql'
+        then 'debería ir por la 70: pega ACTUALIZAR.sql'
       else 'va por la ' || coalesce((xpath('/row/valor/text()', query_to_xml(
              'select valor from esquema_gobergo where clave = ''version''',
-             false, true, '')))[1]::text, '?') || ' y debería ir por la 69'
+             false, true, '')))[1]::text, '?') || ' y debería ir por la 70'
     end as "Columna"
 ) todo
 -- Lo que está al día se calla: si sale una sola fila, es que hay algo que ver.

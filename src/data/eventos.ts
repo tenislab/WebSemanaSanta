@@ -45,6 +45,25 @@ export interface Evento {
 }
 
 /**
+ * UN EVENTO GUARDADO POR UNA VERSIÓN ANTERIOR, COMPLETADO.
+ *
+ * `tareas` es una lista, y las listas son el campo peligroso: la pantalla hace
+ * `e.tareas.filter(...)` en cinco sitios y un `undefined` ahí no deja una fila
+ * rara, TIRA LA PANTALLA DE EVENTOS ENTERA —el calendario, el detalle y el
+ * reparto de tareas— con «Algo se ha roto al abrir esta pantalla». Medido
+ * abriendo /app/eventos con los eventos de ejemplo menos ese campo.
+ *
+ * Y llega de verdad: `rowToEvento` ya lo defiende (`Array.isArray(r.tareas)`),
+ * pero el ESPEJO del navegador no pasa por ahí. Lo que escribió una versión de
+ * hace dos años se lee tal cual, y si entonces las tareas no existían, el
+ * campo no está. Una hermandad sin base de datos conectada lo arrastra para
+ * siempre.
+ */
+export function conDefectosEvento(e: Evento): Evento {
+  return Array.isArray(e.tareas) ? e : { ...e, tareas: [] }
+}
+
+/**
  * Eventos de ejemplo: agenda viva alrededor de la fecha de la demo (agosto de
  * 2026) más los grandes hitos de la campaña 2027. Deterministas, sin azar.
  */

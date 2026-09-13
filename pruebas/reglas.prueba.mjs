@@ -24,11 +24,13 @@ export default async function ({ cargar, caso }) {
   const regla = (extra = {}) => ({
     id: 'r1', nombre: 'Felicitar el cumpleaños',
     criterios: { cumpleanos: 'Hoy' }, destinatarios: 'Los que cumplen hoy',
-    asunto: '¡Felicidades, {nombre}!', cuerpo: 'Hola {nombre},', ...extra,
+    asunto: '¡Felicidades, {nombre}!', cuerpo: 'Hola {nombre},',
+    // Sin encargo de redes, que es lo normal: ver más abajo.
+    redes: [], textoRedes: '', ...extra,
   })
 
-  function banco({ cola = [], cuantos = 3, revienta = false } = {}) {
-    const hechos = { creados: [], devueltos: [] }
+  function banco({ cola = [], cuantos = 3, revienta = false, revientaElEncargo = false } = {}) {
+    const hechos = { creados: [], devueltos: [], encargados: [] }
     const pendientes = [...cola]
     return {
       hechos,
@@ -40,6 +42,10 @@ export default async function ({ cargar, caso }) {
           hechos.creados.push(r.id)
         },
         devolver: async (id) => { hechos.devueltos.push(id) },
+        encargar: async (r) => {
+          if (revientaElEncargo) throw new Error('no se pudo encargar')
+          hechos.encargados.push({ id: r.id, redes: r.redes, texto: r.textoRedes })
+        },
       },
     }
   }
@@ -113,6 +119,87 @@ export default async function ({ cargar, caso }) {
     caso('hay un tope de reglas por vuelta', m.TOPE_REGLAS, dadas)
     caso('y son cinco: una hermandad no tiene más', 5, m.TOPE_REGLAS)
     caso('no se crean más que esas', 5, r.creados)
+  }
+
+  /*
+   * ==========================================================================
+   * --- Y EL ENCARGO DE REDES ---
+   * ==========================================================================
+   *
+   * Lo pedía el plan (`PLAN-F18-EN-ADELANTE.md`) y faltaba: «llega el día del
+   * cumpleaños del titular, y a quien lleva Instagram le aparece la tarea con
+   * el texto ya escrito». La regla escribía el correo y ahí se acababa.
+   *
+   * NO PUBLICA NADA SOLA: deja el encargo y lo sube una persona. Publicar de
+   * verdad en Meta pide cuenta de empresa, aplicación revisada y permisos que
+   * caducan solos, y está argumentado en el plan por qué no se entra ahí.
+   */
+  {
+    const conRedes = regla({ redes: ['Instagram'], textoRedes: 'Hoy es la festividad del titular.' })
+    const b = banco({ cola: [conRedes] })
+    const r = await m.dispararReglasDeHoy(b.como)
+    caso('la regla con redes deja su encargo', 1, r.encargos)
+    caso('en las redes que se le pusieron', [['Instagram']], b.hechos.encargados.map((e) => e.redes))
+    caso('y con el texto del post, no el del correo', ['Hoy es la festividad del titular.'],
+      b.hechos.encargados.map((e) => e.texto))
+    // Y el correo se sigue creando: son las dos cosas, no una en lugar de otra.
+    caso('sin dejar de crear el comunicado', 1, r.creados)
+  }
+
+  /*
+   * SIN REDES O SIN TEXTO, NO HAY ENCARGO. Es lo normal: las dos reglas de
+   * fábrica no lo llevan, porque el cumpleaños de un hermano es un dato suyo y
+   * felicitarlo por correo no es publicarlo en Instagram.
+   */
+  {
+    const b = banco({ cola: [regla()] })
+    const r = await m.dispararReglasDeHoy(b.como)
+    caso('sin redes no se encarga nada', 0, r.encargos)
+    caso('ni se llama al encargo', 0, b.hechos.encargados.length)
+  }
+  {
+    // Redes puestas pero sin texto: no hay nada que publicar, así que no se
+    // deja una tarea vacía a nadie.
+    const b = banco({ cola: [regla({ redes: ['Facebook'], textoRedes: '   ' })] })
+    const r = await m.dispararReglasDeHoy(b.como)
+    caso('con redes pero sin texto, tampoco', 0, r.encargos)
+    caso('y el correo sí sale', 1, r.creados)
+  }
+
+  /*
+   * Y SI EL ENCARGO FALLA, LA REGLA NO SE DEVUELVE.
+   *
+   * Es la decisión importante de este trozo. El correo —lo que la regla
+   * prometía— ya está creado. Devolver la regla haría que mañana se volviera a
+   * crear el comunicado y la felicitación saldría DOS VECES: el remedio, peor
+   * que la enfermedad. Se queda sin encargo, que se puede repartir a mano.
+   */
+  {
+    const b = banco({
+      cola: [regla({ redes: ['Instagram'], textoRedes: 'Algo' })],
+      revientaElEncargo: true,
+    })
+    const r = await m.dispararReglasDeHoy(b.como)
+    caso('si el encargo falla, el comunicado sigue hecho', 1, r.creados)
+    caso('y no se cuenta el encargo', 0, r.encargos)
+    caso('y la regla NO se devuelve: repetiría el correo mañana', 0, b.hechos.devueltos.length)
+  }
+
+  /*
+   * UNA REGLA VIEJA —de una base sin las columnas nuevas— NO PUEDE REVENTAR.
+   *
+   * Llega sin `redes` ni `textoRedes`. Si esto reventara al leerlas, la regla
+   * se devolvería y el correo se repetiría mañana: un campo que falta no puede
+   * costar una felicitación duplicada.
+   */
+  {
+    const vieja = regla()
+    delete vieja.redes
+    delete vieja.textoRedes
+    const b = banco({ cola: [vieja] })
+    const r = await m.dispararReglasDeHoy(b.como)
+    caso('una regla sin los campos nuevos se dispara igual', 1, r.creados)
+    caso('sin encargo y sin devolverla', [0, 0], [r.encargos, b.hechos.devueltos.length])
   }
 
   /*
@@ -303,7 +390,36 @@ export default async function ({ cargar, caso }) {
    * con lo que se escribió aquel día.
    */
   caso('no se puede encender con una marca inventada', true,
-    /disabled=\{!r\.activa && !sePuedePersonalizar\(/.test(pantalla))
+    /disabled=\{!r\.activa && \(\s*!sePuedePersonalizar\(/.test(pantalla))
+  /*
+   * NI CON UNA MARCA EN EL TEXTO DEL POST. Ahí no se sustituye nada —un post
+   * es un texto para todos— así que se publicaría literalmente «Hola
+   * {nombre}» en Instagram, con el nombre de nadie y a la vista de todos.
+   */
+  caso('ni con una marca en lo que se publica', true,
+    /\|\| llevaMarcas\(r\.textoRedes\)/.test(pantalla))
+
+  /*
+   * Y EL POST SE DEJA CON EL TEXTO DEL POST, NO CON EL DEL CORREO.
+   *
+   * Esta comprobación lee la pantalla, y es de las que no queda otra: el
+   * cableado de `encargar` está dentro del componente y no se puede llamar sin
+   * montarlo. Va aquí porque lo que vigila NO ES ESTÉTICO: el cuerpo del correo
+   * va personalizado («Hola Manuel»), así que cambiar una cosa por la otra
+   * publicaría el nombre de un hermano en Instagram —o, con la marca sin
+   * sustituir, un «Hola {nombre}» a la vista de todos.
+   *
+   * Y hacía falta: al romperlo a propósito (`texto: r.cuerpo`) NINGUNA de las
+   * comprobaciones de este fichero se enteraba.
+   */
+  const elEncargoDeLaRegla = pantalla.slice(
+    pantalla.indexOf('encargar: async (r) =>'),
+    pantalla.indexOf('devolver: devolverReglaEnLaBase'),
+  )
+  caso('el encargo lleva el texto del post', true, /texto: r\.textoRedes,/.test(elEncargoDeLaRegla))
+  caso('y nunca el cuerpo del correo', false, /texto: r\.cuerpo/.test(elEncargoDeLaRegla))
+  // Con el nombre de la regla por título, que es lo que ve quien lo tenga que hacer.
+  caso('y su título dice de qué es', true, /titulo: r\.nombre,/.test(elEncargoDeLaRegla))
   // Pero sí se puede APAGAR una que ya lo esté: si no, quedaría encendida y sin
   // forma de pararla, que es lo peor de los dos mundos.
   caso('pero una encendida siempre se puede apagar', true, /!r\.activa &&/.test(pantalla))

@@ -267,7 +267,7 @@ for (const t of [...tablasUsadas]) if (!TABLAS.has(t)) tablasUsadas.delete(t)
 
 const filasTablas = [...tablasUsadas].sort().map((x) => `    ('${x}')`).join(',\n')
 
-/* Por qué versión debería ir esta base: el número de piezas del instalador. */
+/* Por qué versión debería ir esta base: la de `supabase/VERSION.json`, que sube con cualquier cambio en las piezas. */
 /*
  * LO QUE NO DEBERÍA PODER LLAMAR UN VISITANTE, Y EN ALGUNAS BASES PUEDE.
  *
@@ -302,7 +302,20 @@ const CERRADAS = [...conRevoke].filter((f) => !conGrantPublico.has(f)).sort()
 const filasCerradas = CERRADAS.map((x) => `    ('${x}')`).join(',\n')
 
 const { PIEZAS } = await import('./generar-todo-en-uno.mjs')
-const VERSION = PIEZAS.length
+const { versionDeHoy } = await import('./version-del-esquema.mjs')
+/*
+ * La versión que hay que exigir: la de `VERSION.json`, que sube cada vez que
+ * cambia cualquier pieza (ver `scripts/version-del-esquema.mjs`). Antes era el
+ * número de piezas, y editar una no la subía.
+ *
+ * SOLO SE LEE, NO SE ESCRIBE. A este generador lo ejecuta una prueba
+ * (`diagnostico.prueba.mjs`, para comprobar que el fichero está al día), y una
+ * prueba no puede escribir `VERSION.json`: la primera versión de esto lo
+ * escribía, y la guardia de «la huella guardada es la de hoy» pasaba en verde
+ * después de tocar una pieza sin pasar ningún generador — la propia suite lo
+ * había pasado por debajo. Escriben la versión los dos generadores del SQL.
+ */
+const VERSION = (await versionDeHoy(PIEZAS, { escribir: false })).version
 
 const sql = `-- =============================================================================
 --

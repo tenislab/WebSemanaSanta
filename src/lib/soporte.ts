@@ -48,6 +48,27 @@ export async function dondeEstoyDeSoporte(): Promise<string | null> {
   }
 }
 
+/**
+ * ¿ESTA CUENTA ES DE SOPORTE? Para enseñarle lo que solo es para ella.
+ *
+ * Es distinto de `dondeEstoyDeSoporte()`: esa contesta `null` mientras NO se
+ * esté suplantando a nadie, que es la mayor parte del tiempo. Una cuenta de
+ * soporte sentada en su propia hermandad sigue siendo de soporte, y es cuando
+ * mira los errores de producción.
+ *
+ * NO LANZA, por lo mismo que la de arriba: sin la pieza `soporte.sql` puesta,
+ * la respuesta correcta es «no».
+ */
+export async function soySoporte(): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase || modoDemoActivo()) return false
+  try {
+    const { data, error } = await supabase.rpc('es_soporte')
+    return !error && data === true
+  } catch {
+    return false
+  }
+}
+
 /** Termina la suplantación. Deja constancia en el registro de esa hermandad. */
 export async function salirDeSoporte(): Promise<void> {
   if (!supabase) return

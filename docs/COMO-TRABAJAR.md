@@ -34,6 +34,25 @@ rotos en esta misma app:
 
 Ninguno lo habría cazado el compilador.
 
+### Y la prueba nueva, rota a propósito
+
+Una prueba que no ha fallado nunca no es una prueba: es un comentario con
+sintaxis. Ha pasado dos veces aquí —un guardia escrito, en verde, que no
+saltaba al romper justo lo que vigilaba—. Así que antes de dar por buena una
+comprobación nueva:
+
+```bash
+scripts/romper.sh "lo que voy a romper" <orden que lo rompe>
+
+# si la rotura toca el SQL, con la base delante:
+PGHOST=/tmp PGPORT=5433 GOBERGO_PG_OBLIGATORIO=1 scripts/romper.sh "…" …
+```
+
+Rompe, corre las pruebas, enseña las que fallan y **deja el árbol como
+estaba**. Devuelve `0` si algo falla (bien: el guardia salta) y `1` si todo
+sigue verde (mal: la prueba no vigila nada). Lo que devuelve está al revés a
+propósito.
+
 ---
 
 ## 2. Cómo se entrega el código
@@ -92,9 +111,18 @@ ha salido mal. Lo imprescindible, en cuatro líneas:
 - La aplicación y la base **se actualizan por separado**, así que siempre hay
   hermandades con la aplicación nueva y la base vieja. Escribir en una columna
   que no existe **pierde la fila entera, en silencio**.
-- Por eso, al añadir un `.sql`: va **a las dos listas** de `scripts/`, se sube
-  `VERSION_ESQUEMA` en `src/lib/versionEsquema.ts` y se regeneran los dos
-  instaladores. `npm test` te lo dice si te saltas alguno.
+- Por eso, al tocar **cualquier** `.sql` —añadir uno o editar uno de siempre—
+  se pasan los tres generadores (`generar-todo-en-uno`, `generar-actualizar`,
+  `generar-diagnostico`). La versión sube sola: sale de una huella del
+  contenido de las piezas y se guarda en `supabase/VERSION.json`. No hay
+  ningún número que subir a mano. `npm test` te lo dice si te saltas el
+  generador (compara la huella guardada con la de las piezas).
+- `ACTUALIZAR.sql` **lleva todas las piezas**, en el orden del instalador. No
+  es un descuido: una lista más corta dejaba fuera los arreglos hechos dentro
+  de piezas antiguas, y una base actualizada así quedaba distinta de una recién
+  instalada sin que nadie lo supiera. `actualizardesdevieja.prueba.mjs` lo mide
+  contra instaladores antiguos reales, guardados en
+  `pruebas/esquemas-anteriores/`.
 - Un cambio arriesgado va **detrás de una bandera** (`src/lib/novedades.ts`),
   se enciende para una hermandad piloto y luego para todas. Apagarlo es una
   línea de SQL, sin desplegar nada.

@@ -28,6 +28,7 @@ import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, personalDelSegmento, type
 import { personalToRow, rowToPersonal } from '../../lib/db/personal'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
+import { tareaRedToRow } from '../../lib/db/tareasRedes'
 import { supabase, isSupabaseConfigured } from '../../lib/supabase'
 import { useEtiquetas } from '../../lib/etiquetas'
 import {
@@ -712,6 +713,32 @@ export default function Comunicados() {
         }
         // Y ya en la pantalla, para que se vea sin recargar.
         setComunicados((prev) => [nuevo, ...prev])
+      },
+      /*
+       * Y EL ENCARGO DE REDES, si la regla lo lleva.
+       *
+       * Queda SIN REPARTIR: la regla no sabe a quién le toca, y adivinarlo
+       * sería peor. Aparece en «Encargos de redes» de esta misma pantalla,
+       * que es donde lo mira quien las lleva, y desde ahí se reparte —igual
+       * que un encargo escrito a mano.
+       *
+       * Lo que se publica es `textoRedes`, NO el cuerpo del correo: ese va
+       * personalizado («Hola Manuel») y un post lo lee cualquiera.
+       */
+      encargar: async (r) => {
+        const nuevas = tareasDeUnEncargo({
+          titulo: r.nombre,
+          texto: r.textoRedes,
+          redes: r.redes,
+          notas: 'Lo ha dejado preparado la regla automática. Falta repartirlo.',
+        })
+        // Esperando y en la base, por lo mismo que el comunicado: `setTareasRedes`
+        // no espera ni avisa si falla, y se perdería el encargo en silencio.
+        if (isSupabaseConfigured && supabase) {
+          const { error } = await supabase.from('tareas_redes').insert(nuevas.map(tareaRedToRow))
+          if (error) throw new Error(error.message)
+        }
+        setTareasRedes((prev) => [...prev, ...nuevas])
       },
       devolver: devolverReglaEnLaBase,
     }).then(() => mandarLosProgramados({
@@ -1569,7 +1596,15 @@ export default function Comunicados() {
                       <input
                         type="checkbox"
                         checked={r.activa}
-                        disabled={!r.activa && !sePuedePersonalizar(`${r.asunto}\n${r.cuerpo}`).puede}
+                        /*
+                         * Ni con una marca en el texto del post: ahí no se
+                         * sustituye nada, así que se publicaría literalmente
+                         * «Hola {nombre}» en Instagram.
+                         */
+                        disabled={!r.activa && (
+                          !sePuedePersonalizar(`${r.asunto}\n${r.cuerpo}`).puede
+                          || llevaMarcas(r.textoRedes)
+                        )}
                         onChange={(e) => setReglas((prev) => prev.map((x) => (
                           x.id === r.id ? { ...x, activa: e.target.checked } : x
                         )))}
@@ -1659,6 +1694,88 @@ export default function Comunicados() {
                       </div>
                     )
                   })()}
+                  {/*
+                    ====================================================
+                    Y EL ENCARGO DE REDES, SI SE QUIERE
+                    ====================================================
+
+                    Lo pedía el plan y faltaba: «llega el día del cumpleaños
+                    del titular, y a quien lleva Instagram le aparece la tarea
+                    con el texto ya escrito». La regla escribía el correo y ahí
+                    se acababa, así que el post había que acordarse de hacerlo.
+
+                    ESTO NO PUBLICA NADA SOLO. Deja el encargo —escribir el
+                    post, subirlo a cada red— y lo hace una persona. Publicar
+                    de verdad en Facebook o Instagram pide la API de Meta:
+                    cuenta de empresa, aplicación revisada por ellos y permisos
+                    que caducan solos, con lo que la hermandad se queda sin
+                    publicar y sin enterarse.
+
+                    Y EL TEXTO ES OTRO, no el del correo: el correo va
+                    personalizado («Hola Manuel») y un post lo lee cualquiera.
+                    Con el mismo texto se publicaría el nombre de un hermano en
+                    Instagram, que es lo último que se quiere.
+                  */}
+                  <div className="assign-box" style={{ marginTop: '0.5rem' }}>
+                    <label>Y además, dejar el encargo de redes</label>
+                    <div className="chips">
+                      {REDES_SOCIALES.map((red) => {
+                        const puesta = r.redes.includes(red)
+                        return (
+                          <button
+                            key={red}
+                            type="button"
+                            className={`chip${puesta ? ' chip--active' : ''}`}
+                            aria-pressed={puesta}
+                            onClick={() => setReglas((prev) => prev.map((x) => (
+                              x.id === r.id
+                                ? { ...x, redes: puesta ? x.redes.filter((y) => y !== red) : [...x.redes, red] }
+                                : x
+                            )))}
+                          >
+                            {red}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {r.redes.length === 0 ? (
+                      <p className="form-hint" style={{ marginBottom: 0 }}>
+                        Sin ninguna red, la regla solo escribe el correo. Es lo normal.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="form-row" style={{ marginTop: '0.6rem' }}>
+                          <label htmlFor={`redes-${r.id}`}>Lo que se publica</label>
+                          <textarea
+                            id={`redes-${r.id}`}
+                            rows={3}
+                            value={r.textoRedes}
+                            placeholder="Hoy es la festividad de nuestro titular…"
+                            onChange={(e) => setReglas((prev) => prev.map((x) => (
+                              x.id === r.id ? { ...x, textoRedes: e.target.value } : x
+                            )))}
+                          />
+                          {llevaMarcas(r.textoRedes) ? (
+                            <p className="form-hint" style={{ color: 'var(--peligro, #b91c1c)' }}>
+                              ⚠ Un post lo lee cualquiera, así que aquí no van marcas como
+                              «{'{nombre}'}»: publicarían el nombre de un hermano. Quita la marca y
+                              escribe el texto tal cual saldrá.
+                            </p>
+                          ) : (
+                            <p className="form-hint">
+                              Un texto para todos, sin marcas. El encargo queda <b>sin repartir</b> en
+                              «Encargos de redes», aquí abajo, y desde ahí se le asigna a quien las lleva.
+                            </p>
+                          )}
+                        </div>
+                        {!r.textoRedes.trim() && (
+                          <p className="form-hint" style={{ marginBottom: 0 }}>
+                            Sin texto no se deja ningún encargo: el correo sí saldrá.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
                   <div className="settings-actions" style={{ marginTop: '0.5rem' }}>
                     {/*
                       NO SE PUEDE ENCENDER CON UNA MARCA MAL ESCRITA. El

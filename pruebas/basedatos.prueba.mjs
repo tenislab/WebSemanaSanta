@@ -17,28 +17,17 @@
  * Si no hay un Postgres a mano, esto se salta y lo dice. No se calla: una
  * prueba que se salta en silencio es peor que no tenerla.
  */
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-import { readFile, readdir, writeFile, mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-
-const correr = promisify(execFile)
-
-/** El puerto donde esta prueba busca su Postgres. Se puede cambiar por entorno. */
-const PUERTO = process.env.GOBERGO_PG_PUERTO ?? '5433'
-const USUARIO = process.env.GOBERGO_PG_USUARIO ?? 'postgres'
-
-async function hayPostgres() {
-  try {
-    await correr('psql', ['-p', PUERTO, '-U', USUARIO, '-tAc', 'select 1'], {
-      env: { ...process.env, PGCONNECT_TIMEOUT: '3' },
-    })
-    return true
-  } catch {
-    return false
-  }
-}
+/*
+ * EL ARNÉS DE POSTGRES ES COMPARTIDO. Vivía aquí dentro y solo lo podía usar
+ * esta prueba; la de actualizar desde una versión antigua
+ * (`actualizardesdevieja.prueba.mjs`) necesita lo mismo, y copiarlo habría
+ * dejado dos arneses que se separan con el tiempo. Ver `pruebas/postgres.mjs`.
+ */
+import {
+  PUERTO, hayPostgres, sql, montarLoQuePoneSupabase, darLosPermisosDeSupabase,
+} from './postgres.mjs'
 
 /** Todos los ficheros de código de una carpeta, recorriéndola entera. */
 async function todosLosFicherosDe(carpeta) {
@@ -49,18 +38,6 @@ async function todosLosFicherosDe(carpeta) {
     else if (/\.(ts|tsx)$/.test(e.name)) salida.push(ruta)
   }
   return salida
-}
-
-async function sql(texto) {
-  const dir = await mkdtemp(join(tmpdir(), 'gobergo-sql-'))
-  const f = join(dir, 'consulta.sql')
-  await writeFile(f, texto)
-  const { stdout } = await correr(
-    'psql',
-    ['-p', PUERTO, '-U', USUARIO, '-v', 'ON_ERROR_STOP=1', '-tA', '-f', f],
-    { maxBuffer: 32 * 1024 * 1024 },
-  )
-  return stdout.trim()
 }
 
 export default async function ({ caso }) {
@@ -91,7 +68,7 @@ export default async function ({ caso }) {
   // Base limpia en cada pasada: si se arrastrara lo de antes, un fallo nuevo
   // podría quedar tapado por una tabla que ya estaba bien.
   await sql('drop schema if exists public cascade; create schema public;')
-  await montarLoQuePoneSupabase({ sql })
+  await montarLoQuePoneSupabase()
 
   const todo = await readFile('supabase/TODO-EN-UNO.sql', 'utf8')
   let instalado = ''
@@ -360,7 +337,7 @@ export default async function ({ caso }) {
   // Los permisos de tabla, que Supabase da de fábrica: van después de crear
   // las tablas, y sin ellos todo falla con «permission denied» antes de que
   // ninguna política llegue a decidir nada.
-  await darLosPermisosDeSupabase({ sql })
+  await darLosPermisosDeSupabase()
   await elHermanoCambiaSuFicha({ sql, caso })
   await elCargoMalEscrito({ sql, caso })
   await actualizarUnaBaseQueYaFunciona({ sql, caso })
@@ -589,8 +566,10 @@ async function lasCosasDeCrecerSinRomperNada({ sql, caso }) {
    * actualizar — y una alarma que salta cuando todo está bien se acaba
    * ignorando también los días que tiene razón.
    */
-  const { PIEZAS } = await import('../scripts/generar-todo-en-uno.mjs')
-  caso('la base dice por qué versión va', String(PIEZAS.length),
+  // La versión ya no es el número de piezas: es la de `VERSION.json`, que sube
+  // con cualquier cambio en ellas (ver `scripts/version-del-esquema.mjs`).
+  const { version: versionDeHoy } = JSON.parse(await readFile('supabase/VERSION.json', 'utf8'))
+  caso('la base dice por qué versión va', String(versionDeHoy),
     ultimo(await sql('select version_del_esquema();')))
 
   /*
@@ -726,6 +705,91 @@ async function lasCosasDeCrecerSinRomperNada({ sql, caso }) {
   `)
   caso('una entrada caducada no vale', 'nada',
     ultimo(await como(intruso, "select coalesce(hermandad_actual()::text, 'nada');")))
+  await sql('delete from soporte_sesion;')
+
+  /*
+   * --- 3 BIS. LOS ERRORES DE PRODUCCIÓN: QUIÉN LOS PUEDE MIRAR ---
+   *
+   * `errores_cliente` recogía lo que revienta en producción y NO HABÍA NINGUNA
+   * PANTALLA QUE LO LEYERA: se guardaba y no lo miraba nadie. La pantalla nueva
+   * lee `errores_de_produccion()`, y lo que se comprueba aquí es su cerradura,
+   * ejecutándola con los dos roles.
+   *
+   * El candado va DENTRO de la función (`where es_soporte()`), no en quién la
+   * puede llamar: está concedida a `authenticated` como las demás. Para una
+   * cuenta normal la respuesta es una lista VACÍA, que es lo correcto —no un
+   * error, que contaría que la función existe.
+   *
+   * Y la tabla sigue sin política de lectura a propósito: `vigilancia.sql` lo
+   * dejó escrito («los fallos son para quien los puede arreglar») y esto no lo
+   * cambia.
+   */
+  {
+    await sql(`
+      insert into errores_cliente (hermandad_id, mensaje, clase, ruta, version_app)
+      values ('${suHermandad}', 'TypeError: x is not a function', 'js', '/app/cuotas', '2026-09-01'),
+             ('${suHermandad}', 'TypeError: x is not a function', 'js', '/app/cuotas', '2026-09-01'),
+             ('${suHermandad}', 'permission denied for table hermanos', 'base', '/app/hermanos', '2026-09-01');
+    `)
+
+    // El titular de la hermandad —que no es soporte— no ve NI UNO.
+    caso('un titular no ve los errores de producción', '0',
+      ultimo(await como(unTitular, 'select count(*) from errores_de_produccion(7);')))
+    /*
+     * Y TAMPOCO LEYENDO LA TABLA A PELO: sigue sin política de lectura.
+     *
+     * OJO CON EL AYUDANTE `como()` DE ESTE BLOQUE: pone la identidad del JWT
+     * pero NO cambia de rol, así que la consulta corre como dueño de la base y
+     * el RLS no se aplica. Mi primera versión de esta comprobación usaba
+     * `como()` y contaba 3 filas — y yo estaba a punto de creerme que la tabla
+     * estaba abierta. Para mirar el RLS hay que ser `authenticated` de verdad.
+     *
+     * La de arriba —la de la función— sí vale con `como()`, porque lo que
+     * comprueba es el candado de DENTRO (`es_soporte()`), que no depende del
+     * rol sino de quién dice ser.
+     */
+    const aPelo = await sql(`
+      begin;
+      set local role authenticated;
+      set local request.jwt.claim.sub = '${unTitular}';
+      select count(*) from errores_cliente;
+      rollback;
+    `)
+    caso('ni leyendo la tabla a pelo, con el rol de verdad', '0', ultimo(aPelo))
+
+    // Dado de alta como soporte, sí: dos fallos distintos, y el de js dos veces.
+    await sql(`insert into soporte_cuentas (auth_user_id, nota) values ('${intruso}', 'prueba') on conflict do nothing;`)
+    caso('una cuenta de soporte sí los ve, agrupados', '2',
+      ultimo(await como(intruso, 'select count(*) from errores_de_produccion(7);')))
+    caso('y agrupa las repeticiones del mismo', '2',
+      ultimo(await como(intruso,
+        "select veces from errores_de_produccion(7) where clase = 'js';")))
+    caso('diciendo en cuántas hermandades pasa', '1',
+      ultimo(await como(intruso,
+        "select hermandades from errores_de_produccion(7) where clase = 'js';")))
+    // La ventana se respeta: nada de hace dos meses aparece en «hoy».
+    await sql(`
+      update errores_cliente set ocurrido_el = now() - interval '30 days'
+       where clase = 'base';
+    `)
+    caso('con la ventana de un día solo sale lo de hoy', '1',
+      ultimo(await como(intruso, 'select count(*) from errores_de_produccion(1);')))
+    caso('y con la de 60 salen los dos', '2',
+      ultimo(await como(intruso, 'select count(*) from errores_de_produccion(60);')))
+    /*
+     * Y UNA VENTANA ABSURDA NO VACÍA LA LISTA. `p_dias = 0` o negativo daría
+     * cero filas, que se lee como «no se rompe nada» — la mentira más cara que
+     * puede contar esta pantalla. Se sujeta entre 1 y 90.
+     */
+    caso('una ventana de cero días se trata como un día', '1',
+      ultimo(await como(intruso, 'select count(*) from errores_de_produccion(0);')))
+    caso('y una negativa, igual', '1',
+      ultimo(await como(intruso, 'select count(*) from errores_de_produccion(-5);')))
+    caso('y pedir mil días no saca más de noventa', '2',
+      ultimo(await como(intruso, 'select count(*) from errores_de_produccion(1000);')))
+
+    await sql(`delete from errores_cliente where hermandad_id = '${suHermandad}';`)
+  }
   await sql('delete from soporte_sesion; delete from soporte_cuentas;')
 
   // --- 4. VACIAR PARA RESTAURAR ---
@@ -876,6 +940,51 @@ async function elBarridoDeDniSeCorta({ sql, caso }) {
   const enUso = fichero || (await readFile('supabase/TODO-EN-UNO.sql', 'utf8'))
   caso('no se guarda el DNI en claro', true, /huella_dni/.test(enUso))
   caso('y la huella lleva dentro la hermandad', true, /md5\(v_dni \|\| ':' \|\| p_hermandad_id/.test(enUso))
+
+  /*
+   * Y LA TABLA DE INTENTOS NO LA VE NADIE DE FUERA. AHORA EJECUTÁNDOLO.
+   *
+   * Esto ya tenía guardia, en `multihermandad.prueba.mjs`, y era de las que
+   * leen el texto: buscaba la línea `revoke all on intentos_acceso…` en el
+   * fichero. Al comentar esa línea con `--`, la prueba SEGUÍA EN VERDE —el
+   * texto está, comentado, y `test()` lo encuentra igual—. Lo cazó
+   * `scripts/romper.sh` el día que se metió en el repositorio, que es
+   * exactamente para lo que está.
+   *
+   * Lo que de verdad importa no es que la línea esté escrita, sino que un
+   * visitante no pueda leer esa tabla, y eso se comprueba con una fila dentro
+   * y contando lo que ve cada rol.
+   *
+   * LA TABLA ESTÁ CERRADA POR DOS SITIOS —el `revoke` y el RLS sin ninguna
+   * política— y aquí se mide el segundo: este arnés vuelve a dar los permisos
+   * de tabla a `anon` y `authenticated` a propósito (ver
+   * `darLosPermisosDeSupabase`, que imita lo que hace Supabase de fábrica)
+   * justamente para poder medir las políticas y no los permisos. Así que el
+   * `revoke` no se puede ver desde aquí, y el candado que sí se prueba es el
+   * que queda si aquel se cayera.
+   *
+   * Con RLS a secas un `select` NO da error: devuelve cero filas. Por eso se
+   * cuenta —es lo único que distingue «no puede verla» de «no hay nada
+   * dentro»— y por eso se mete una fila antes.
+   */
+  await sql('delete from intentos_acceso')
+  await sql(`insert into intentos_acceso (hermandad_id, huella_dni) values ('${hdad}', md5('prueba'))`)
+  const queVe = async (rol) => {
+    try {
+      const salida = await sql(`begin; set local role ${rol}; select count(*) from intentos_acceso; rollback;`)
+      const linea = salida.split('\n').map((l) => l.trim()).find((l) => /^\d+$/.test(l)) ?? ''
+      if (linea === '') return 'sin respuesta'
+      return Number(linea) === 0 ? 'no ve nada' : `ve ${linea}`
+    } catch (e) {
+      // Con el `revoke` en pie —en producción lo está— ni llega a contar.
+      return /permission denied/i.test(String(e?.stderr ?? e)) ? 'no ve nada' : 'error de otra cosa'
+    }
+  }
+  caso('un visitante no ve ni un intento', 'no ve nada', await queVe('anon'))
+  caso('ni un hermano con sesión', 'no ve nada', await queVe('authenticated'))
+  // Y el dueño de la base sí: para eso se guardan, y la función los cuenta.
+  caso('el dueño de la base sí los ve', 1, Number((await sql('select count(*) from intentos_acceso')).trim()))
+  await sql('delete from intentos_acceso')
 }
 
 /**
@@ -1372,134 +1481,7 @@ async function elCargoMalEscrito({ sql, caso }) {
   caso('y le salen los módulos de su cargo', true, /cuotas/.test(bien) && /tesoreria/.test(bien))
 }
 
-/**
- * LO QUE PONE SUPABASE Y UN POSTGRES A SECAS NO TIENE.
- *
- * Esta prueba existe para ejecutar el SQL de verdad, y el SQL de verdad está
- * escrito contra Supabase: usa `auth.uid()` en cuarenta y nueve políticas,
- * `auth.users` en cinco claves ajenas, y `storage.objects` para los adjuntos.
- * Nada de eso viene con Postgres.
- *
- * Sin este andamiaje la prueba se saltaba SIEMPRE —«sin Postgres», decía— o
- * fallaba en la línea 158 con «schema auth does not exist», que es lo mismo
- * que no tenerla. Y es la única prueba del proyecto que comprueba que el SQL
- * se instala: las demás lo leen como texto.
- *
- * Se monta lo MÍNIMO y con la misma forma que Supabase, ni más ni menos:
- *
- *   · `auth.uid()` devuelve lo que haya en `request.jwt.claim.sub`, que es de
- *     donde lo saca Supabase. Así una prueba puede hacerse pasar por una
- *     cuenta con `set local`.
- *   · `auth.users` con las dos columnas que usa el SQL: `id` y `email`.
- *   · `storage.foldername(name)` parte la ruta por barras, igual que allí: de
- *     ahí sale la carpeta con la que las políticas separan una hermandad de
- *     otra.
- *
- * NO se copia el resto de Supabase. Esto no comprueba que Supabase funcione;
- * comprueba que NUESTRO SQL se instale y aguante, que es lo que se rompe.
- */
-async function montarLoQuePoneSupabase({ sql }) {
-  await sql(`
-    create schema if not exists auth;
-    create schema if not exists storage;
 
-    /*
-     * PGCRYPTO VA EN «extensions», COMO EN SUPABASE. No es un detalle.
-     *
-     * Aquí no se instalaba, así que el «create extension if not exists
-     * pgcrypto» de nuestro SQL la instalaba en «public» y todo funcionaba. En
-     * Supabase viene ya instalada de fábrica EN EL ESQUEMA «extensions», así
-     * que ese mismo «if not exists» no hace nada — y una función declarada con
-     * «set search_path = public» no la ve.
-     *
-     * Resultado: «function gen_random_bytes(integer) does not exist» en la
-     * hermandad piloto, con la recuperación de contraseña del hermano rota, y
-     * las pruebas en verde. Montándolo como está allí, se cae aquí primero.
-     */
-    create schema if not exists extensions;
-    create extension if not exists pgcrypto with schema extensions;
-
-    -- Las columnas que usa NUESTRO SQL, con el mismo nombre que allí.
-    -- «last_sign_in_at» la lee el diagnóstico para ordenar las cuentas por la
-    -- última que entró, que casi siempre es la que dio el error.
-    create table if not exists auth.users (
-      id uuid primary key default gen_random_uuid(),
-      email text,
-      raw_user_meta_data jsonb default '{}'::jsonb,
-      last_sign_in_at timestamptz
-    );
-    alter table auth.users add column if not exists last_sign_in_at timestamptz;
-
-    -- La cuenta que está haciendo la consulta. En Supabase sale del token; aquí,
-    -- de un ajuste de sesión, para que una prueba pueda hacerse pasar por alguien.
-    -- Mira los dos sitios: «request.jwt.claim.sub» es de donde lo saca
-    -- Supabase, y «test.uid» es el que usa «supabase/PRUEBA-AISLAMIENTO.sql»,
-    -- que se escribió antes y se ejecuta a mano contra esta misma base.
-    create or replace function auth.uid() returns uuid
-      language sql stable as $$
-        select coalesce(
-          nullif(current_setting('request.jwt.claim.sub', true), ''),
-          nullif(current_setting('test.uid', true), '')
-        )::uuid
-      $$;
-
-    create or replace function auth.jwt() returns jsonb
-      language sql stable as $$
-        select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
-      $$;
-
-    create table if not exists storage.buckets (
-      id text primary key,
-      name text,
-      public boolean default false
-    );
-    create table if not exists storage.objects (
-      id uuid primary key default gen_random_uuid(),
-      bucket_id text references storage.buckets(id),
-      name text,
-      owner uuid
-    );
-    alter table storage.objects enable row level security;
-
-    -- «hermandad/2026/escaneo.pdf» → {hermandad, 2026}. La última parte es el
-    -- fichero y no cuenta: las políticas miran la PRIMERA, que es la carpeta
-    -- de la hermandad.
-    create or replace function storage.foldername(name text) returns text[]
-      language sql immutable as $$
-        select (string_to_array(name, '/'))[1:greatest(array_length(string_to_array(name, '/'), 1) - 1, 0)]
-      $$;
-
-    -- Roles de Supabase: las concesiones del SQL los nombran.
-    do $$ begin
-      if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
-      if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
-      if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if;
-    end $$;
-    grant usage on schema public to anon, authenticated, service_role;
-    grant usage on schema storage to anon, authenticated, service_role;
-    -- Y sobre «auth», que Supabase también lo concede: sin esto, cualquier
-    -- función que llame a auth.uid() sin ser SECURITY DEFINER falla aquí y no
-    -- allí, que es la peor manera de que se rompa una prueba.
-    grant usage on schema auth to anon, authenticated, service_role;
-  `)
-}
-
-/**
- * Y los PERMISOS DE TABLA, que van después de crearlas.
- *
- * Supabase se los da de fábrica a `anon` y `authenticated` sobre todo lo que
- * hay en `public`; las políticas de seguridad son lo que acota después QUÉ
- * filas ve cada uno. Sin este paso, todo falla con «permission denied», que no
- * es lo que se quiere comprobar: se quiere comprobar qué dicen las políticas,
- * no si hay permiso de tabla.
- */
-async function darLosPermisosDeSupabase({ sql }) {
-  await sql(`
-    grant all on all tables in schema public to anon, authenticated, service_role;
-    grant all on all sequences in schema public to anon, authenticated, service_role;
-    grant all on all tables in schema storage to anon, authenticated, service_role;
-  `)
-}
 
 /**
  * QUE EL HERMANO PUEDA CAMBIAR SU FICHA, Y SOLO DE UNA MANERA.

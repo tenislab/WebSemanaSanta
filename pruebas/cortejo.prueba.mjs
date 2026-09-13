@@ -209,6 +209,62 @@ export default async function ({ cargar, caso }) {
     caso(`${via} lo vuelve a comprobar`, true,
       /^[\s\S]{0,220}if \(!saleEnElCortejo\(hermanoId\)\) return/.test(cuerpo))
   }
+  /*
+   * ==========================================================================
+   * NADIE QUE HAYA PAGADO SE QUEDA FUERA DEL LISTADO
+   * ==========================================================================
+   *
+   * El reparto solo coloca a quien tiene un tramo que existe. Todo lo demás se
+   * cae del cortejo EN SILENCIO, y con la papeleta cobrada: es el fallo que ya
+   * se pagó una vez —«ocho personas con su papeleta cobrada, fuera del cortejo,
+   * y nadie se enteraba hasta el día de la salida»— y se tapó solo la mitad.
+   *
+   * La otra mitad, medida en el navegador: una papeleta 'Pagada' de 22 € con
+   * `tramoId: null` no salía en /app/cortejo por ningún lado, y la pantalla
+   * seguía diciendo «22/204 puestos cubiertos». `aceptarSolicitud` la deja así
+   * cuando en el cuerpo que pide el hermano no hay tramos configurados.
+   */
+  const { papeletasSinSitio } = await cargar('src/lib/cortejo.ts')
+  const tramosSS = [T('t1', 'Cristo', 'Cirio', 2), T('t2', 'Cristo', 'Cirio', 2)]
+  const ids = (l) => l.map((p) => p.id).sort()
+
+  caso('la que apunta a un tramo borrado se recoge', ['p1'],
+    ids(papeletasSinSitio([P('p1', 'a', 'tBorrado')], tramosSS, 2027)))
+  caso('y la cobrada sin tramo ninguno, también', ['p2'],
+    ids(papeletasSinSitio([P('p2', 'b', null)], tramosSS, 2027)))
+  caso('la emitida sin tramo tampoco se escapa', ['p3'],
+    ids(papeletasSinSitio([P('p3', 'c', null, 'Asignada')], tramosSS, 2027)))
+  caso('ni la entregada', ['p4'],
+    ids(papeletasSinSitio([P('p4', 'd', null, 'Entregada')], tramosSS, 2027)))
+
+  // Y LO QUE NO DEBE SALIR, que es la otra mitad de servir para algo.
+  caso('la que está en un tramo de verdad no sale', [],
+    ids(papeletasSinSitio([P('p5', 'e', 't1')], tramosSS, 2027)))
+  caso('la «Solicitada» sin tramo tampoco: ya sale en Pendientes', [],
+    ids(papeletasSinSitio([P('p6', 'a', null, 'Solicitada')], tramosSS, 2027)))
+  caso('ni la anulada', [],
+    ids(papeletasSinSitio([P('p7', 'a', null, 'Anulada')], tramosSS, 2027)))
+  caso('ni la renuncia', [],
+    ids(papeletasSinSitio([P('p8', 'a', null, 'Renuncia')], tramosSS, 2027)))
+  caso('ni la de otra edición', [],
+    ids(papeletasSinSitio([{ ...P('p9', 'a', null), anio: 2026 }], tramosSS, 2027)))
+
+  /*
+   * SIN TRAMOS NO AVISA DE NADA. Hay hermandades que reparten por opciones
+   * (mantilla, cirio) y no usan tramos: ahí TODAS las papeletas tienen
+   * `tramoId: null` y un aviso por cada una no dice nada. Y mientras la lista
+   * de tramos no ha llegado de la base de datos está vacía, así que sin esto
+   * saldría un aviso falso alarmante en cada carga.
+   */
+  caso('sin tramos configurados no avisa de nada', [],
+    ids(papeletasSinSitio([P('pa', 'a', null), P('pb', 'b', null)], [], 2027)))
+
+  // Y QUE LA PANTALLA LA USE: con la regla perfecta y el cable suelto, esto
+  // vigila una función que nadie llama.
+  const cortejoSrc = await (await import('node:fs/promises')).readFile('src/pages/app/Cortejo.tsx', 'utf8')
+  caso('la pantalla del cortejo la usa', true,
+    /papeletasSinSitio\(papeletas, tramos, edicionActual\)/.test(cortejoSrc))
+  caso('y mete lo que devuelve en el listado', true, /sinSitio\.forEach/.test(cortejoSrc))
 }
 
 /**
@@ -261,3 +317,4 @@ async function losDosControlesDelDiaDeSalida({ caso }) {
   caso('y no la vuelve a cobrar si ya estaba pagada', true,
     /p\.estado !== 'Pagada' && p\.estado !== 'Entregada'/.test(presente))
 }
+

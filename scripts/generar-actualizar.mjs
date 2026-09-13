@@ -26,6 +26,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises'
 import { PIEZAS as PIEZAS_DEL_INSTALADOR, selloDeVersion } from './generar-todo-en-uno.mjs'
+import { versionDeHoy } from './version-del-esquema.mjs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -37,193 +38,38 @@ const raiz = join(dirname(fileURLToPath(import.meta.url)), '..')
  * Todos cumplen lo mismo: crean lo suyo, no tocan lo de nadie, y se pueden
  * volver a ejecutar sin que pase nada.
  */
-export const PIEZAS_ACTUALIZACION = [
-  /*
-   * EL PRIMERO, y tiene que seguir siéndolo: lo que viene detrás crea
-   * políticas y funciones que nombran estas columnas.
-   *
-   * Son las que se añadían en `schema.sql` con `alter table … add column`,
-   * pensadas justo «para las bases que ya existen»… y que a esas bases no les
-   * llegaban nunca, porque `schema.sql` solo va en el instalador.
-   */
-  ['columnas-que-faltan.sql', 'Columnas que solo llegaban a las bases nuevas (hora de citación, cobros…)'],
-  /*
-   * LA TABLA `suscripciones`, QUE NO ESTABA EN ESTA LISTA Y HACÍA FALTA.
-   *
-   * Es un agujero viejo que se ha destapado al añadir una columna a esa tabla.
-   * `ACTUALIZAR.sql` ESCRIBE en `suscripciones` desde hace tiempo —lo hacen
-   * `activar-la-suscripcion.sql` y `webhook-stripe.sql`, que sí están— pero
-   * nunca garantizaba que la tabla existiera: la crea `suscripcion.sql`, que
-   * solo iba en el instalador.
-   *
-   * O sea que una hermandad que montó su base antes de que existiera la tabla,
-   * y que desde entonces solo ha ido pegando `ACTUALIZAR.sql`, se encontraba
-   * con «relation "suscripciones" does not exist» y la actualización parada a
-   * la mitad. Lo cazó la prueba que compara lo que este fichero escribe con lo
-   * que garantiza (`sql-actualizar.prueba.mjs`).
-   *
-   * Va AQUÍ Y NO JUNTO A LOS DOS QUE LA USAN, aunque leído parecería su
-   * sitio: esta lista tiene que ir en el MISMO ORDEN que el instalador, y
-   * allí la tabla se crea mucho antes. Hay una prueba que lo comprueba. Y no
-   * molesta a nadie estando pronto: es
-   * `create table if not exists` con sus políticas, y volver a ejecutarlo no
-   * hace nada. Lo que define después —`mi_suscripcion()`— lo vuelve a definir
-   * la pieza de la renovación, que va más abajo en esta misma lista: manda la
-   * última, que es la que trae la columna nueva.
-   */
-  ['suscripcion.sql', 'La tabla de la suscripción: que sea de la hermandad y no del navegador'],
-  ['ajustes-de-la-hermandad.sql', 'Los ajustes de cuotas y las etiquetas, guardados en la hermandad'],
-  /*
-   * Redefine `auth_es_hermano()` y `modulo_permitido()`, y de todas las
-   * definiciones de una función manda la última que se ejecuta. Va aquí, justo
-   * en el sitio que le toca en el instalador, y nada de lo que sigue en esta
-   * lista vuelve a tocar ninguna de las dos.
-   *
-   * ESTO FALTABA AQUÍ, Y ES GRAVE. Cualquier hermandad que montó su base ANTES
-   * de que existiera «una persona, una ficha» —el cargo va en la ficha del
-   * hermano, no en una tabla aparte— y desde entonces solo ha ido ejecutando
-   * `ACTUALIZAR.sql`, se ha quedado para siempre con la versión VIEJA de estas
-   * dos funciones, sin ninguna forma de ponerse al día: este fichero no estaba
-   * en la lista.
-   *
-   * Y la vieja versión de `auth_es_hermano()` no sabe que un hermano puede
-   * llevar cargo en su propia ficha. Eso rompe, en silencio y sin un solo
-   * error visible, TODO lo que dependa de «esta cuenta es de gestión, no de
-   * hermano» para cualquiera que sea las dos cosas a la vez:
-   *
-   *   · El tesorero que es hermano no ve bien Tesorería —RLS le trata como
-   *     hermano a secas y le enseña una vista recortada, no la de gestión—.
-   *   · Encargar una tarea a un hermano, o un post de redes, no le llega: la
-   *     política que deja escribir el aviso exige «esta cuenta NO es de
-   *     hermano», y quien reparte tareas suele ser precisamente eso, un
-   *     hermano con cargo.
-   *
-   * Los dos llegaron reportados el mismo día, y son la misma causa.
-   */
-  ['hermano-con-cargo.sql', 'Una persona, una ficha: el cargo va en la ficha del hermano'],
-  ['clave-de-catalogos.sql', 'Que cada hermandad tenga sus propios catálogos (la clave era global)'],
-  ['imagenes.sql', 'El almacén de fotos: que la web no lleve las imágenes dentro'],
-  ['visitas-web.sql', 'El contador de visitas de la web, sin cookies ni Google Analytics'],
-  ['suscriptores-web.sql', 'Avisos por correo para quien sigue a la hermandad sin ser hermano'],
-  ['copias.sql', 'Las copias de seguridad, guardadas solas cada semana'],
-  ['permisos-eventos-y-web.sql', 'Los dos módulos que nunca se sembraron: «eventos» y «web»'],
-  ['lo-que-toca-el-hermano.sql', 'Que el hermano no se ponga la cuota como pagada desde la consola'],
-  ['sin-contrasenas-en-las-solicitudes.sql', 'Fuera la contraseña en claro que guardaba cada solicitud de alta'],
-  ['freno-de-los-formularios.sql', 'Un tope a lo que cualquiera puede meter desde la web pública'],
-  ['cuenta-por-hermandad.sql', 'Ser hermano de dos hermandades: una cuenta por hermandad + DNI'],
-  ['solicitudes-de-papeleta.sql', 'Que la solicitud de papeleta del hermano llegue a la hermandad'],
-  ['activar-la-suscripcion.sql', 'Que el botón de activar la suscripción llegue a la base'],
-  ['numero-de-recibo-unico.sql', 'Que no pueda haber dos recibos con el mismo número'],
-  ['borrar-una-hermandad.sql', 'Que una hermandad se pueda borrar (el registro lo impedía)'],
-  ['documentos-restringidos.sql', 'Que el documento restringido lo sea también en la base'],
-  ['webhook-stripe.sql', 'Que la suscripción se active cuando Stripe confirma el cobro, no antes'],
-  ['mandatos-sepa.sql', 'El mandato SEPA firmado de verdad, por el propio hermano'],
-  ['encargos-redes.sql', 'Encargar un post y que se reparta solo entre la junta'],
-  ['tienda.sql', 'La tienda: productos, ventas, stock y los asientos que generan'],
-  ['tienda-web.sql', 'La tienda en la web: reservar por internet y pagar al recoger'],
-  ['campanas-y-proyectos.sql', 'Campañas de recaudación con su barra, y proyectos a largo plazo'],
-  ['baja-de-hermano.sql', 'La baja de un hermano, entera y sin romper el escalafón'],
-  ['campana-con-partida.sql', 'Enlazar una campaña a sus partidas: la barra se llena sola'],
-  ['certificados.sql', 'El certificado de antigüedad que pide un hermano para acreditarlo fuera'],
-  ['reglas-de-reparto.sql', 'Gastos porcentuales enlazados a una partida, para pérdidas y ganancias'],
-  ['pago-tarjeta.sql', 'Que el hermano pague su cuota o su papeleta con tarjeta'],
-  /*
-   * ESTE FICHERO NO ESTABA EN NINGUNA DE LAS DOS LISTAS, Y ERA UN FALLO VIVO.
-   *
-   * Añade `opciones_papeleta.tramo_id`. Y `src/lib/opcionesPapeleta.ts` ESCRIBE
-   * en esa columna al guardar las papeletas personalizadas de la hermandad.
-   *
-   * O sea que en TODAS las bases —nuevas incluidas, porque tampoco iba en el
-   * instalador— guardar una papeleta personalizada fallaba entera: Postgres no
-   * ignora la columna que no existe, rechaza la sentencia. No se perdía ese
-   * dato, se perdía la fila. Y en pantalla no pasaba nada raro.
-   *
-   * Lo cazó la prueba que comprueba que ningún .sql se queda fuera de las
-   * listas (`pruebas/sql-en-uno.prueba.mjs`), que llevaba tiempo en rojo. Es
-   * exactamente la clase de fallo que el sello de versión existe para hacer
-   * visible, y de hecho apareció montándolo.
-   *
-   * Va aquí, al final, porque necesita que existan `opciones_papeleta` y
-   * `tramos`, y a estas alturas están las dos. Solo añade una columna con
-   * `if not exists` y un comentario: no define ninguna función y se puede
-   * repetir sin que pase nada.
-   */
-  ['papeleta-personalizada-en-el-cortejo.sql', 'Que una papeleta propia de la hermandad ocupe puesto en el cortejo'],
-  /*
-   * LA COLUMNA QUE FALTABA PARA LOS CAMPOS A MEDIDA DE LA HERMANDAD.
-   *
-   * La definición de los campos viajaba (vive en `hermandad_settings`) y el
-   * VALOR de cada hermano no tenía dónde guardarse: se quedaba en el navegador
-   * donde se escribió. Desde cualquier otro ordenador el campo salía dibujado
-   * y vacío, para todo el censo, sin dar ningún error.
-   */
-  ['campos-del-hermano.sql', 'Los campos a medida de la hermandad, guardados en la ficha y no en un navegador'],
-  /*
-   * Y QUE EL VÍNCULO SE VEA POR LOS DOS LADOS. El padre veía a los suyos; el
-   * hijo no veía nada, porque no puede leer la ficha de su tutor —y no debe:
-   * ahí está su IBAN—. Va por función, que sí puede elegir columnas.
-   */
-  ['familia-en-los-dos-lados.sql', 'Que el hijo vea de qué familia es, sin poder leer la ficha entera de su padre'],
-  /*
-   * EL NUMERITO DEL MENÚ. La pantalla de Notificaciones ya lo enseñaba todo;
-   * lo que faltaba es enterarse SIN entrar a mirarla. Va en la base y no en el
-   * navegador porque el numerito sale en TODAS las pantallas, y contarlo aquí
-   * obligaría a cargar cinco tablas en cada una.
-   */
-  ['contador-de-avisos.sql', 'El numerito del menú: cuántas cosas esperan respuesta'],
-  /*
-   * QUE UN COMUNICADO PROGRAMADO SE MANDE. Se podía programar, se guardaba la
-   * fecha y la pantalla lo contaba — y no lo mandaba nadie, nunca. Lo manda la
-   * aplicación (es donde vive la regla de a quién va y donde están las claves
-   * del correo); esto es el candado que impide que dos personas que entran a
-   * la vez lo manden dos veces.
-   */
-  ['envio-programado.sql', 'Que un comunicado programado se mande, y una sola vez'],
-  /*
-   * LAS REGLAS QUE SE DISPARAN SOLAS. Felicitar el cumpleaños sin que nadie se
-   * acuerde. No manda correo: crea el comunicado programado y deja que siga el
-   * camino de arriba, que ya está probado. Nacen APAGADAS a propósito.
-   */
-  ['reglas-automaticas.sql', 'Felicitar el cumpleaños (y demás) sin que nadie se acuerde'],
-  /*
-   * MIRAR SI LA COPIA ENCAJA ANTES DE VACIAR. Restaurar vacía primero y llena
-   * después; si las filas no encajan —una columna que esta base todavía no
-   * tiene, que es el estado NORMAL mientras la hermandad no pega
-   * `ACTUALIZAR.sql`— eso se descubría con las tablas ya vacías.
-   */
-  ['ensayo-de-restauracion.sql', 'Comprobar que la copia encaja antes de vaciar nada'],
-  /*
-   * LA RENOVACIÓN Y LA TARJETA QUE FALLA. El circuito del cobro atendía el alta
-   * y la baja, y le faltaba lo que pasa EN MEDIO: que se cobre cada mes y que
-   * un día la tarjeta no pase. Apunta el día del fallo para poder avisar a la
-   * hermandad ANTES de que Stripe se rinda y la cancele, y de paso rellena
-   * `suscripciones.hasta`, que era una columna que estaba vacía en todas las
-   * filas mientras aparentaba decir hasta cuándo estaba pagada.
-   */
-  ['renovacion-y-fallo-de-cobro.sql', 'Que se apunte la renovación, y que una tarjeta que falla se avise antes de cortar'],
-  /*
-   * --- LO QUE HACE FALTA PARA CRECER SIN ROMPER NADA ---
-   *
-   * Las cinco piezas de abajo no añaden ninguna pantalla: son las que hacen
-   * que se pueda seguir actualizando esto cuando haya cincuenta hermandades en
-   * vez de tres. Cada fichero explica en su cabecera qué problema resuelve.
-   *
-   * EL ORDEN DE LAS CINCO NO ES CASUAL:
-   *
-   *   · `soporte.sql` REDEFINE `hermandad_actual()`, que es la frontera entre
-   *     hermandades. Va después de `multi-hermandad.sql` (que la define) y
-   *     nada de lo que viene detrás puede volver a tocarla. Hay una prueba que
-   *     lo comprueba (`sql-actualizar.prueba.mjs`).
-   *   · `version-del-esquema.sql` VA LA ÚLTIMA, siempre. El sello de la
-   *     versión se pone después de ella, cuando ya ha pasado todo lo demás:
-   *     sellar antes sería prometer que está puesto algo que igual no llegó.
-   */
-  ['vigilancia.sql', 'Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie'],
-  ['canal-de-actualizacion.sql', 'Sacar una novedad a una hermandad piloto antes que a todas'],
-  ['restaurar-copia.sql', 'Poder volcar la copia de UNA hermandad sin tocar a las demás'],
-  ['soporte.sql', 'Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito'],
-  ['version-del-esquema.sql', 'Que la aplicación avise cuando la base se ha quedado atrás'],
-]
+/**
+ * ============================================================================
+ * ACTUALIZAR LLEVA TODAS LAS PIEZAS DEL INSTALADOR. TODAS.
+ * ============================================================================
+ *
+ * Aquí había una lista propia, más corta: «lo nuevo desde que las primeras
+ * hermandades instalaron». Y tenía un agujero que se midió el día que se
+ * cerró: las piezas de base también SE EDITAN —se le añadió a
+ * `multi-hermandad.sql` el `default hermandad_actual()` de `mensajes_web`, que
+ * es lo que arregla «deshacer el borrado de un mensaje falla siempre»— y esas
+ * ediciones no viajaban. Una hermandad que instaló el 29 de agosto y pegó
+ * `ACTUALIZAR.sql` después seguía con el fallo, con el informe en verde.
+ *
+ * Así que ahora la lista ES la del instalador, en su mismo orden. Está medido
+ * en un Postgres de verdad (`pruebas/actualizardesdevieja.prueba.mjs`): sobre
+ * una base nueva, ejecutado dos veces, y sobre dos instaladores antiguos
+ * reales, el catálogo que queda es IDÉNTICO al de instalar hoy desde cero —
+ * tablas, columnas, valores por defecto, políticas, índices, funciones y sus
+ * permisos— y no se toca una fila de datos.
+ *
+ * Y las dos razones por las que antes se dejaba algo fuera ya no valen:
+ *
+ *   · `permisos-por-hermandad.sql` redefine `modulo_permitido()` y
+ *     `hermano-con-cargo.sql` la vuelve a definir después. Con las dos en la
+ *     lista y en el orden del instalador, manda la última, igual que al
+ *     instalar. Es justo lo que comprueba `sql-actualizar.prueba.mjs`.
+ *   · `tareas-programadas.sql` necesita `pg_cron` y no está en el instalador
+ *     tampoco: va suelto, y así sigue.
+ *
+ * Se exporta con el nombre de siempre para que quien lo importa no cambie.
+ */
+export const PIEZAS_ACTUALIZACION = PIEZAS_DEL_INSTALADOR
 
 const CABECERA = `-- =============================================================================
 --
@@ -259,29 +105,27 @@ const CABECERA = `-- ===========================================================
 -- existía, y nada de lo que hay aquí borra ni sobrescribe datos.
 --
 -- -----------------------------------------------------------------------------
--- QUÉ AÑADE
+-- QUÉ LLEVA, EN ORDEN
 -- -----------------------------------------------------------------------------
 --
 ${PIEZAS_ACTUALIZACION.map(([f, q], i) => `--   ${i + 1}. ${f.padEnd(30)} ${q}`).join('\n')}
 --
 -- -----------------------------------------------------------------------------
--- LO QUE ESTE ARCHIVO NO LLEVA, Y POR QUÉ
+-- POR QUÉ ES TAN LARGO: LLEVA TODAS LAS PIEZAS
 -- -----------------------------------------------------------------------------
 --
--- 1. \`permisos-por-hermandad.sql\` NO ESTÁ, y no se debe ejecutar suelto sobre
---    una base al día. Redefine \`modulo_permitido()\`, y \`hermano-con-cargo.sql\`
---    —que SÍ va en esta lista, en el sitio que le toca— la vuelve a definir
---    después con una vía más: el hermano que lleva un cargo en su propia
---    ficha. Manda la última definición que se ejecute, así que el fichero
---    viejo por su cuenta dejaría fuera otra vez al tesorero que además es
---    hermano. De ahí solo hacía falta el relleno de «eventos» y «web», y ese
---    va arriba, en su propio fichero, sin tocar ninguna función.
+-- Lleva las mismas piezas que \`TODO-EN-UNO.sql\`, en el mismo orden. No es un
+-- descuido: una versión más corta —«solo lo nuevo»— dejaba fuera los arreglos
+-- que se hacen DENTRO de piezas antiguas, y una base actualizada así quedaba
+-- distinta de una recién instalada sin que nadie lo supiera. Está comprobado
+-- en un Postgres de verdad que, sobre una base antigua, esto la deja IGUAL que
+-- instalar hoy desde cero, y que no toca ni una fila de datos.
 --
--- 2. \`tareas-programadas.sql\` NO ESTÁ porque necesita la extensión \`pg_cron\`
---    activada antes, y eso se hace a mano: Database → Extensions → pg_cron.
---    Puesta la extensión, ese fichero se ejecuta aparte. Sin él todo funciona;
---    lo único que no pasa solo es la limpieza de visitas viejas y de
---    suscriptores sin confirmar.
+-- Lo único que no lleva es \`tareas-programadas.sql\`, que tampoco está en el
+-- instalador: necesita la extensión \`pg_cron\` activada a mano, en
+-- Database → Extensions → pg_cron, y se ejecuta aparte. Sin él todo funciona;
+-- lo único que no pasa solo es la limpieza de visitas viejas y de
+-- suscriptores sin confirmar.
 --
 -- =============================================================================
 
@@ -415,13 +259,14 @@ export async function generar() {
    * resultado de la última, y ese informe es lo único que distingue «se ha
    * hecho todo» de «se ha hecho la mitad». Hay una prueba que lo exige.
    *
-   * Se sella con el número de piezas DEL INSTALADOR, no con las de esta lista:
+   * Se sella con LA MISMA versión que el instalador —la de `VERSION.json`—:
    * una base que acaba de pasar por aquí queda igual de completa que una recién
-   * instalada, y por tanto tiene que decir el mismo número. Sellar con las 34
-   * de la actualización haría que la aplicación avisara para siempre de que la
-   * base va atrasada justo después de actualizarla.
+   * instalada, y por tanto tiene que decir el mismo número. Si dijera otro, la
+   * aplicación avisaría para siempre de que la base va atrasada justo después
+   * de actualizarla.
    */
-  trozos.push(selloDeVersion(PIEZAS_DEL_INSTALADOR.length))
+  const { version } = await versionDeHoy(PIEZAS_DEL_INSTALADOR, { escribir: false })
+  trozos.push(selloDeVersion(version))
   trozos.push(INFORME)
   return trozos.join('')
 }
@@ -430,6 +275,8 @@ const destino = join(raiz, 'supabase', 'ACTUALIZAR.sql')
 
 // Solo escribe si se llama a mano; `npm test` importa `generar` y compara.
 if (process.argv[1] && process.argv[1].endsWith('generar-actualizar.mjs')) {
+  // Primero la versión (y escribirla si ha subido), y después el fichero con ella.
+  await versionDeHoy(PIEZAS_DEL_INSTALADOR)
   const texto = await generar()
   await writeFile(destino, texto)
   console.log(`ACTUALIZAR.sql regenerado: ${PIEZAS_ACTUALIZACION.length} ficheros, ${texto.split('\n').length} líneas.`)

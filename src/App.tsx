@@ -126,6 +126,10 @@ const cargarPersonal = conReintento(() => import('./pages/app/Personal'))
 const cargarWebPublica = conReintento(() => import('./pages/app/WebPublica'))
 const cargarConfiguracion = conReintento(() => import('./pages/app/Configuracion'))
 const cargarSeguridad = conReintento(() => import('./pages/app/Seguridad'))
+/* Solo la abre una cuenta de soporte, y el candado está en la base: ver
+   `lib/erroresProduccion.ts`. La ruta existe para todos —esconderla no es
+   seguridad— y a quien no es soporte le llega una lista vacía. */
+const cargarErrores = conReintento(() => import('./pages/app/ErroresProduccion'))
 
 const AppShell = lazy(cargarAppShell)
 const DashboardHome = lazy(cargarDashboard)
@@ -146,6 +150,7 @@ const Personal = lazy(cargarPersonal)
 const WebPublica = lazy(cargarWebPublica)
 const Configuracion = lazy(cargarConfiguracion)
 const Seguridad = lazy(cargarSeguridad)
+const ErroresProduccion = lazy(cargarErrores)
 
 /*
  * El orden en que se traen las pestañas del panel cuando no se está haciendo
@@ -341,6 +346,7 @@ export default function App() {
         <Route path="web" element={<WebPublica />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="seguridad" element={<Seguridad />} />
+        <Route path="errores" element={<ErroresProduccion />} />
       </Route>
 
       {/* Cualquier ruta desconocida vuelve a la portada */}

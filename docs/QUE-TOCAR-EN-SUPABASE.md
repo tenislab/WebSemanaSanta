@@ -8,14 +8,17 @@ Con lo que se ha hecho hasta hoy. Ordenado por cuándo hace falta.
 
 **SQL Editor → New query → pegar `supabase/ACTUALIZAR.sql` entero → Run.**
 
-Lleva dentro todo lo que le falta a una base ya instalada, en orden y sin tocar
-ningún dato: los ajustes de cuotas, el almacén de imágenes de la web, el
-contador de visitas, los suscriptores, las copias de seguridad y los permisos de
-«eventos» y «web» del Hermano Mayor.
+Lleva dentro **todas las piezas** del instalador, en su orden, y no toca ningún
+dato. Es largo (unas 12.500 líneas) y es a propósito: una versión más corta
+—«solo lo nuevo»— dejaba fuera los arreglos hechos dentro de piezas antiguas, y
+una base actualizada así quedaba distinta de una recién instalada sin que nadie
+lo supiera. Ahora está medido en un Postgres de verdad, sobre instaladores
+antiguos reales, que después de pegarlo la base queda **idéntica** a una
+instalada hoy desde cero.
 
-Es seguro repetirlo. Al terminar imprime una tabla de diez filas diciendo qué ha
-quedado puesto y qué no. De las que pueden salir en `f`, dos no son un fallo del
-SQL y hay que mirarlas aparte:
+Es seguro repetirlo. Al terminar imprime una tabla diciendo qué ha quedado
+puesto y qué no. De las que pueden salir en `f`, dos no son un fallo del SQL y
+hay que mirarlas aparte:
 
 - **«Limpieza automática (pg_cron…)»** sale en `f` hasta que enciendas la
   extensión a mano: *Database → Extensions → `pg_cron`*, y después pegar

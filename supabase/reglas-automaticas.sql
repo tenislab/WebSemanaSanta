@@ -75,6 +75,24 @@ create table if not exists reglas_automaticas (
   asunto text not null default '',
   cuerpo text not null default '',
   /*
+   * Y EL ENCARGO DE REDES, SI LA REGLA TAMBIÉN LO DEJA.
+   *
+   * `redes` son las redes en las que hay que publicar y `texto_redes` lo que se
+   * publica. Vacíos —lo normal— la regla solo escribe el correo.
+   *
+   * SON DOS TEXTOS DISTINTOS A PROPÓSITO. El correo va personalizado («Hola
+   * Manuel») y un post lo lee todo el mundo: el mismo texto en los dos sitios
+   * publicaría el nombre de un hermano en Instagram, que es lo último que se
+   * quiere. Y de ahí la regla de que `texto_redes` NO lleva marcas.
+   *
+   * Esto NO publica nada solo: deja las tareas del encargo —escribir el post,
+   * subirlo a cada red— y las hace una persona. Entrar en la API de Meta pide
+   * cuenta de empresa, aplicación revisada y permisos que caducan solos; está
+   * argumentado en `docs/PLAN-F18-EN-ADELANTE.md`.
+   */
+  redes jsonb not null default '[]'::jsonb,
+  texto_redes text not null default '',
+  /*
    * APAGADA AL NACER. Ver arriba: es la decisión que separa esto de una
    * máquina de mandar correos sin supervisión.
    */
@@ -93,6 +111,17 @@ create table if not exists reglas_automaticas (
  * es la que se lo arregla, y en una base nueva no hace nada.
  */
 alter table reglas_automaticas alter column hermandad_id set default hermandad_actual();
+
+/*
+ * Y LAS DOS COLUMNAS DEL ENCARGO DE REDES, para la base que ya existía.
+ *
+ * Lo mismo que arriba: `create table if not exists` no toca una tabla que ya
+ * está, así que sin esto una hermandad que pegó el SQL antes se quedaría con la
+ * tabla sin las columnas — y al guardar una regla, la base contestaría que no
+ * existe `redes` y en pantalla se vería un fallo al guardar sin más pista.
+ */
+alter table reglas_automaticas add column if not exists redes jsonb not null default '[]'::jsonb;
+alter table reglas_automaticas add column if not exists texto_redes text not null default '';
 
 alter table reglas_automaticas enable row level security;
 
@@ -150,6 +179,12 @@ create function reclamar_regla_de_hoy()
 returns table (
   id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text,
   /*
+   * El encargo de redes de la regla, si lo lleva. Va aquí y no se consulta
+   * aparte porque quien dispara la regla ya no la vuelve a leer: la fila que
+   * devuelve esta función es TODO lo que tiene para trabajar.
+   */
+  redes jsonb, texto_redes text,
+  /*
    * CUÁNDO SE DISPARÓ LA VEZ ANTERIOR, o vacío si es la primera.
    *
    * Es el dato que permite RECUPERAR LOS DÍAS QUE NADIE ABRIÓ, y sin él la
@@ -187,7 +222,8 @@ language sql volatile security definer set search_path = public as $$
      set ultima_vez = current_date
     from elegida e
    where r.id = e.id
-  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo, e.antes
+  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo,
+            r.redes, r.texto_redes, e.antes
 $$;
 
 grant execute on function reclamar_regla_de_hoy() to authenticated;

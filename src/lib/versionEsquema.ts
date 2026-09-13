@@ -24,23 +24,33 @@
  * desde el navegador— pero dice exactamente qué pasa y qué hay que hacer.
  *
  * ----------------------------------------------------------------------------
- * CUANDO AÑADAS UNA PIEZA .SQL: LO ÚNICO QUE TIENES QUE HACER
+ * CUANDO TOQUES CUALQUIER PIEZA .SQL: LO ÚNICO QUE TIENES QUE HACER
  * ----------------------------------------------------------------------------
  *
- * Sube `VERSION_ESQUEMA` de aquí abajo al nuevo número de piezas.
- *
- * Y si se te olvida, `npm test` te lo dice por su nombre: `version.prueba.mjs`
- * compara este número con la longitud de la lista `PIEZAS` del instalador y
- * falla con el número que tienes que poner. No hay forma de que se cuele.
+ * Ejecutar los generadores (`node scripts/generar-todo-en-uno.mjs` y los
+ * otros dos), que ya había que ejecutar. La versión sube sola: la calcula
+ * `scripts/version-del-esquema.mjs` a partir de una HUELLA del contenido de
+ * todas las piezas y la guarda en `supabase/VERSION.json`, que es de donde
+ * sale el número de aquí abajo. Y si se te olvida, `npm test` te lo dice por
+ * su nombre: hay una prueba que compara la huella guardada con la de las
+ * piezas.
  *
  * ----------------------------------------------------------------------------
- * POR QUÉ EL NÚMERO ES «CUÁNTAS PIEZAS», Y NO UNA VERSIÓN INVENTADA
+ * POR QUÉ UNA HUELLA, Y NO EL NÚMERO DE PIEZAS NI UNA VERSIÓN INVENTADA
  * ----------------------------------------------------------------------------
  *
- * Porque una versión inventada («2.3.1») hay que acordarse de subirla, y el día
- * que se olvida el aviso deja de salir justo cuando hacía falta. El número de
- * piezas sube solo al añadir un fichero, que es exactamente el momento en que
- * la base se queda atrasada. La cuenta la hace el generador, no una persona.
+ * Una versión inventada («2.3.1») hay que acordarse de subirla, y el día que
+ * se olvida el aviso deja de salir justo cuando hacía falta.
+ *
+ * El número de piezas —que es lo que había aquí antes— sube solo al añadir un
+ * fichero, pero NO al editar uno que ya existe. Y las piezas se editan: se le
+ * añaden columnas a una tabla, una función a un fichero de siempre. Ese día
+ * la base se queda atrasada igual, y la aplicación no avisaba a nadie. Pasó
+ * el día en que se cerró este agujero: dos columnas nuevas en
+ * `reglas_automaticas`, versión sin subir, y al guardar una regla la base
+ * contestaba que la columna no existe.
+ *
+ * La huella cambia con cualquier cambio. Eso es todo lo que hace falta.
  *
  * ----------------------------------------------------------------------------
  * LO QUE ESTO **NO** ES
@@ -57,12 +67,14 @@
  */
 import { isSupabaseConfigured, supabase } from './supabase'
 import { modoDemoActivo } from './demo'
+import versionGuardada from '../../supabase/VERSION.json'
 
 /**
- * POR QUÉ VERSIÓN VA ESTA APLICACIÓN. Es el número de ficheros de la lista
- * `PIEZAS` en `scripts/generar-todo-en-uno.mjs`. Ver arriba.
+ * POR QUÉ VERSIÓN VA ESTA APLICACIÓN. Sale de `supabase/VERSION.json`, que
+ * escriben los generadores del SQL cada vez que cambia cualquier pieza. Ver
+ * arriba, y `scripts/version-del-esquema.mjs`.
  */
-export const VERSION_ESQUEMA = 69
+export const VERSION_ESQUEMA: number = versionGuardada.version
 
 export type EstadoDelEsquema =
   /* Todavía no se ha preguntado, o no hay base a la que preguntar. */
@@ -70,10 +82,12 @@ export type EstadoDelEsquema =
   /* La base va al día, o más adelantada que la aplicación (despliegue a medias). */
   | { estado: 'al_dia'; enLaBase: number }
   /*
-   * La base va POR DETRÁS. Es el caso que importa.
-   * `cuantas` son las piezas que le faltan, para poder decirlo con un número.
+   * La base va POR DETRÁS. Es el caso que importa. Se dan los dos números
+   * —por cuál va y cuál necesita— y NO su diferencia: la versión sube uno
+   * por cada cambio en las piezas, así que restar no cuenta piezas ni nada
+   * que se le pueda decir a nadie.
    */
-  | { estado: 'atrasada'; enLaBase: number; cuantas: number }
+  | { estado: 'atrasada'; enLaBase: number; necesita: number }
   /*
    * La base es TAN vieja que ni siquiera tiene el contador. Toda hermandad que
    * montó su base antes de que esto existiera está aquí, y no se le puede decir
@@ -117,7 +131,7 @@ export async function mirarElEsquema(): Promise<EstadoDelEsquema> {
     const enLaBase = typeof data === 'number' ? data : Number(data ?? 0)
     if (!Number.isFinite(enLaBase) || enLaBase <= 0) return { estado: 'sin_sellar' }
     if (enLaBase >= VERSION_ESQUEMA) return { estado: 'al_dia', enLaBase }
-    return { estado: 'atrasada', enLaBase, cuantas: VERSION_ESQUEMA - enLaBase }
+    return { estado: 'atrasada', enLaBase, necesita: VERSION_ESQUEMA }
   } catch {
     return { estado: 'sin_saber' }
   }
@@ -148,7 +162,7 @@ export function avisoDelEsquema(e: EstadoDelEsquema): { titulo: string; texto: s
   return {
     titulo: 'Tu base de datos va por detrás de la aplicación',
     texto:
-      `Le faltan ${e.cuantas} ${e.cuantas === 1 ? 'actualización' : 'actualizaciones'}. `
+      `Tu base va por la versión ${e.enLaBase} y esta aplicación necesita la ${e.necesita}. `
       + 'Mientras tanto hay pantallas que dirán que han guardado sin haber guardado, porque escriben '
       + 'en columnas que tu base todavía no tiene. ' + queHacer,
   }

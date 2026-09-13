@@ -248,3 +248,84 @@ language sql stable security definer set search_path = public as $$
    order by h.nombre
 $$;
 grant execute on function soporte_hermandades() to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- 5. LO QUE SE ESTÁ ROMPIENDO EN PRODUCCIÓN
+-- -----------------------------------------------------------------------------
+
+/**
+ * LOS FALLOS DE `errores_cliente`, AGRUPADOS, PARA QUIEN LOS PUEDE ARREGLAR.
+ *
+ * ============================================================================
+ * POR QUÉ ESTO ESTÁ AQUÍ Y NO EN `vigilancia.sql`
+ * ============================================================================
+ *
+ * Porque hace falta `es_soporte()`, y `vigilancia.sql` se ejecuta ANTES que
+ * este fichero (ver el orden en `scripts/generar-todo-en-uno.mjs`). Poniéndola
+ * allí, la función no existiría todavía y ACTUALIZAR.sql se pararía a mitad en
+ * la base de una hermandad de verdad.
+ *
+ * ============================================================================
+ * Y POR QUÉ SOLO SOPORTE
+ * ============================================================================
+ *
+ * `vigilancia.sql` lo dejó escrito y no se cambia: la tabla no tiene política
+ * de lectura a propósito. «TypeError: Cannot read properties of undefined» no
+ * es información para una secretaria, y sí es un motivo para preocuparse. Los
+ * fallos son para quien los puede arreglar.
+ *
+ * Lo que faltaba —y lo pide la fase 6 del plan de bugs— era poder mirarlos SIN
+ * ABRIR EL PANEL DE SUPABASE con la clave de servicio. Se recogían desde hacía
+ * semanas y no los había mirado nadie ni una vez.
+ *
+ * `where es_soporte()` es el candado, y es el mismo que usa
+ * `soporte_hermandades()` justo arriba: para cualquier otra cuenta la consulta
+ * no devuelve ni una fila. No hace falta `raise`: una lista vacía es la
+ * respuesta correcta y no le cuenta a nadie que esta función existe.
+ *
+ * AGRUPADO POR MENSAJE, que es lo que la hace útil: cincuenta filas del mismo
+ * fallo son UN fallo que le pasa a cincuenta personas, y saber cuántas
+ * hermandades lo sufren es lo que dice si es el ordenador de alguien o es el
+ * código. `mensaje` se guarda ya limpio de números y fechas (lo hace
+ * `src/lib/vigilancia.ts`) justamente para poder agrupar por él.
+ */
+drop function if exists errores_de_produccion(integer);
+create or replace function errores_de_produccion(p_dias integer default 7)
+returns table (
+  mensaje text, clase text, veces bigint, hermandades bigint,
+  ultima timestamptz, ruta text, version_app text, pila text
+)
+language sql stable security definer set search_path = public as $$
+  select e.mensaje,
+         e.clase,
+         count(*) as veces,
+         count(distinct e.hermandad_id) as hermandades,
+         max(e.ocurrido_el) as ultima,
+         /*
+          * DEL ÚLTIMO, no de uno cualquiera: la ruta y la versión del más
+          * reciente son las que dicen si el fallo sigue pasando con el arreglo
+          * puesto. Y la pila, la de ese mismo, que es la que se va a leer.
+          */
+         (array_agg(e.ruta order by e.ocurrido_el desc))[1] as ruta,
+         (array_agg(e.version_app order by e.ocurrido_el desc))[1] as version_app,
+         (array_agg(e.pila order by e.ocurrido_el desc))[1] as pila
+    from errores_cliente e
+   where es_soporte()
+     -- Entre 1 y 90 días, diga lo que diga quien llama: la tabla se limpia a
+     -- los 60, así que pedir más es pedir nada, y pedir 0 o negativo sería
+     -- una lista vacía que se lee como «no se rompe nada».
+     and e.ocurrido_el > now() - (greatest(1, least(coalesce(p_dias, 7), 90)) || ' days')::interval
+   group by e.mensaje, e.clase
+   order by max(e.ocurrido_el) desc
+   limit 200
+$$;
+
+/*
+ * Y NO LA LLAMA UN VISITANTE. Postgres da EXECUTE a PUBLIC al crear una
+ * función, así que sin este `revoke` la podría llamar cualquiera sin sesión:
+ * `es_soporte()` devolvería falso y la lista saldría vacía —el candado
+ * aguanta— pero una función de soporte que se puede llamar desde fuera es una
+ * pista de por dónde probar, y eso se cierra por costumbre y no por miedo.
+ */
+revoke all on function errores_de_produccion(integer) from public, anon;
+grant execute on function errores_de_produccion(integer) to authenticated;

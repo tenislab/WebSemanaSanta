@@ -37,21 +37,31 @@ guarda, dice que se ha guardado, y al recargar está en blanco.
 ### Los pasos
 
 1. Escribe tu `.sql` nuevo en `supabase/`, con `if not exists` en todo. Tiene
-   que poder ejecutarse dos veces sin que pase nada.
-2. Añádelo a **las dos listas**: `PIEZAS` en `scripts/generar-todo-en-uno.mjs`
-   y `PIEZAS_ACTUALIZACION` en `scripts/generar-actualizar.mjs`, **en la misma
-   posición relativa**.
-3. Sube `VERSION_ESQUEMA` en `src/lib/versionEsquema.ts` al nuevo número de
-   piezas.
-4. Regenera:
+   que poder ejecutarse dos veces sin que pase nada. **Y si es una función que
+   devuelve una tabla, con `drop function if exists` delante**: `create or
+   replace` no puede cambiar lo que devuelve, y en una base que ya tiene la
+   versión vieja ACTUALIZAR se para a mitad. Hay una prueba que lo exige.
+2. Añádelo a **una sola lista**: `PIEZAS` en `scripts/generar-todo-en-uno.mjs`,
+   en el sitio que le toque por lo que necesita antes. `ACTUALIZAR.sql` lleva
+   esa misma lista entera, en ese orden: no hay una segunda.
+3. Regenera los tres:
    ```
    node scripts/generar-todo-en-uno.mjs
    node scripts/generar-actualizar.mjs
+   node scripts/generar-diagnostico.mjs
    ```
-5. `npm test`.
+   La versión sube sola: sale de una huella del contenido de todas las piezas
+   y se guarda en `supabase/VERSION.json`. **Editar una pieza de siempre cuenta
+   igual que añadir una** — es justo lo que antes no subía la versión y dejaba
+   a las hermandades sin aviso.
+4. `npm test`. Con un Postgres al lado (`PGHOST=/tmp PGPORT=5433
+   GOBERGO_PG_OBLIGATORIO=1`), porque la prueba que importa aquí es
+   `actualizardesdevieja`: instala dos instaladores antiguos reales, pasa el
+   `ACTUALIZAR.sql` de hoy por encima y exige que el catálogo quede **idéntico**
+   al de instalar desde cero.
 
-Si te saltas el paso 3, `npm test` te lo dice y te da el número exacto. Si te
-saltas el 2 o el 4, también.
+Si te saltas el paso 3, `npm test` te lo dice por su nombre: la huella guardada
+ya no es la de las piezas. Si te saltas el 2, también.
 
 ### Y avisa a las hermandades
 

@@ -46,21 +46,23 @@
 -- se puede hacer desde el lado del navegador, y es muchísimo.
 --
 -- -----------------------------------------------------------------------------
--- CÓMO SE SUBE LA VERSIÓN CUANDO AÑADES UNA PIEZA
+-- CÓMO SUBE LA VERSIÓN
 -- -----------------------------------------------------------------------------
 --
--- No se sube a mano, y ese es el punto. LA VERSIÓN ES EL NÚMERO DE PIEZAS del
--- instalador (`scripts/generar-todo-en-uno.mjs`, la lista `PIEZAS`). Añadir un
--- fichero .sql a esa lista sube la versión sola.
+-- Sola, y con CUALQUIER cambio. `scripts/version-del-esquema.mjs` calcula una
+-- huella del contenido de todas las piezas del instalador y la guarda con la
+-- versión en `supabase/VERSION.json`; al generar los ficheros, si la huella ha
+-- cambiado, la versión sube uno. Editar una pieza cuenta igual que añadirla.
 --
--- Lo único que tienes que hacer tú es poner el mismo número en
--- `src/lib/versionEsquema.ts`. Y si se te olvida, `npm test` te lo dice por su
--- nombre: hay una prueba que compara los dos.
+-- ANTES ERA EL NÚMERO DE PIEZAS, y tenía un agujero que el plan de bugs
+-- apuntaba (fase 5) y que mordió el día que se cerró: editar una pieza que ya
+-- existía —una columna más en una tabla— no subía el número, la aplicación no
+-- avisaba a nadie, y al guardar la base contestaba que la columna no existe.
 --
 -- POR QUÉ ASÍ Y NO CON UN NÚMERO INVENTADO. Porque un número que hay que
 -- acordarse de subir es un número que se olvida, y el día que se olvida el
--- aviso deja de salir justo cuando hacía falta. Derivarlo de la lista de
--- piezas lo hace imposible de olvidar.
+-- aviso deja de salir justo cuando hacía falta. Y `npm test` comprueba que
+-- la huella guardada es la de las piezas: olvidar el generador se nota.
 --
 -- Ejecutar esto dos veces no hace nada. Como todo lo demás.
 -- =============================================================================

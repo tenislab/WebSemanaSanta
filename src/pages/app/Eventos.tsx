@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   EVENTOS_INICIALES,
   REPETICIONES,
+  conDefectosEvento,
   SIN_REPETICION,
   TIPOS_EVENTO,
   textoRepeticion,
@@ -29,13 +30,20 @@ import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 
 export default function Eventos() {
-  const [eventos, setEventos] = useSupabaseTable<Evento>(
+  const [eventosGuardados, setEventos] = useSupabaseTable<Evento>(
     'eventos',
     CLAVES_DATOS.eventos,
     EVENTOS_INICIALES,
     eventoToRow,
     rowToEvento,
   )
+  /*
+   * Se completan al leerlos, no al pintar cada sitio: `e.tareas` se recorre en
+   * cinco lugares de esta pantalla y basta que uno llegue sin la lista para
+   * que se caiga entera. El por qué de que pueda faltar está en
+   * `conDefectosEvento`.
+   */
+  const eventos = useMemo(() => eventosGuardados.map(conDefectosEvento), [eventosGuardados])
   const { user } = useAuth()
   const hermanos = useMemo(() => leerDatos(CLAVES_DATOS.hermanos, HERMANOS_INICIALES), [])
   const hermanosActivos = useMemo(() => hermanos.filter((h) => h.estado !== 'Baja'), [hermanos])

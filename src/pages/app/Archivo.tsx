@@ -38,9 +38,20 @@ function etiquetaFecha(categoria: CategoriaDocumento) {
  * institucional, visible para cualquier hermano autenticado. Sin excepción
  * oculta para ningún cargo: si «Hermano Mayor» no figura en la lista de un
  * documento sensible, tampoco lo ve quien simule ese cargo.
+ *
+ * FALTANDO EL CAMPO CUENTA COMO `null`, y no es un detalle de estilo: la
+ * comparación era `=== null`, así que un documento SIN el campo se iba al
+ * `.includes` de un `undefined` y TIRABA LA PANTALLA DE ARCHIVO ENTERA.
+ * Medido: /app/archivo con los documentos de ejemplo menos `cargosConAcceso`.
+ *
+ * Y puede faltar de verdad. `rowToDocumento` lo mapea con `?? null` —quien lo
+ * escribió ya contaba con que no estuviera— pero el ESPEJO del navegador no
+ * pasa por el mapeo: lo que guardó una versión anterior a que los permisos por
+ * cargo existieran se lee tal cual. Que entonces valga «institucional» es lo
+ * correcto: en aquella versión ningún documento tenía restricción ninguna.
  */
 function canView(doc: Documento, cargo: Cargo) {
-  return doc.cargosConAcceso === null || doc.cargosConAcceso.includes(cargo)
+  return !doc.cargosConAcceso || doc.cargosConAcceso.includes(cargo)
 }
 
 function diasHasta(iso: string) {

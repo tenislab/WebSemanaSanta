@@ -93,10 +93,20 @@ export default async function ({ cargar, caso }) {
   // ---------------------------------------------------------------
   // 6. Quitar un tramo no puede evaporar a quien va dentro
   // ---------------------------------------------------------------
-  caso('las papeletas sin tramo existente se recogen', true, /const huerfanas = useMemo/.test(cortejo))
-  caso('y salen en el listado para recolocarlas', true, /huerfanas\.forEach/.test(cortejo))
+  /*
+   * La regla se mudó a `lib/cortejo.ts` (`papeletasSinSitio`) para poder
+   * ejecutarla con datos: allí se comprueba una por una en
+   * `cortejo.prueba.mjs`. Aquí solo queda el CABLE —que la pantalla la use—,
+   * que es lo que esta auditoría vigila y lo único que no se puede comprobar
+   * desde la función.
+   */
+  caso('las papeletas sin tramo existente se recogen', true,
+    /papeletasSinSitio\(papeletas, tramos, edicionActual\)/.test(cortejo))
+  caso('y salen en el listado para recolocarlas', true, /sinSitio\.forEach/.test(cortejo))
   // Mientras los tramos no han llegado, no se puede decir que sobren todas.
-  caso('sin tramos cargados no se avisa en falso', true, /if \(tramos\.length === 0\) return \[\]/.test(cortejo))
+  const libCortejo = await readFile('src/lib/cortejo.ts', 'utf8')
+  caso('sin tramos cargados no se avisa en falso', true,
+    /if \(tramos\.length === 0\) return \[\]/.test(libCortejo))
   const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
   caso('y Configuración pregunta antes de quitarlo', true, /se quedan sin sitio en el cortejo/.test(cfg))
 }

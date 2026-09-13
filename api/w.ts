@@ -216,8 +216,8 @@ async function servir(req: Peticion, res: Respuesta) {
     : hostLimpio && !esCasa(hostLimpio)
       ? await consulta<{ datos: WebPublica; publicada: boolean }>('web_publica', porDominio)
       : null
-  const web = filas?.[0]?.datos
-  if (!web) {
+  const webGuardada = filas?.[0]?.datos
+  if (!webGuardada) {
     // No hay hermandad detrás de esta dirección: puede ser la puerta principal
     // de Gobergo, o un dominio recién apuntado que todavía no ha configurado
     // nadie. Se devuelve la página tal cual y la aplicación se apaña sola.
@@ -230,6 +230,33 @@ async function servir(req: Peticion, res: Respuesta) {
   }
   /* Se pide aquí, no arriba: ver la nota del principio del fichero. */
   const { cabeceraHtml, idiomaSeguro, textoParaCompartir } = await import('../src/lib/seoWeb')
+  /*
+   * ============================================================================
+   * LA WEB SE COMPLETA ANTES DE MIRARLA, COMO HACE EL NAVEGADOR
+   * ============================================================================
+   *
+   * `web` es el `jsonb` TAL CUAL se guardó, y lo que se guardó puede ser de
+   * hace meses: le faltan los campos que entonces no existían. El navegador
+   * nunca ve eso —`getWebPublica` y `cargarWebPorSlug` pasan por
+   * `conDefectos`— pero aquí se le estaba dando crudo a `cabeceraHtml`.
+   *
+   * Y reventaba. Medido: una web con un culto sin `detalle` (el campo se añadió
+   * en agosto) hace que `datosEstructurados` falle con «Cannot read properties
+   * of undefined (reading 'trim')».
+   *
+   * NO SE VEÍA, y eso es lo peor: el `try/catch` de abajo devuelve el
+   * `index.html` sin cabecera, así que no hay error ni 500 — simplemente la
+   * vista previa de WhatsApp y la ficha de Google de ESA hermandad vuelven a
+   * decir «Gobergo — Software para gestionar tu hermandad». O sea: este
+   * fichero dejaba de hacer lo único que existe para hacer, en silencio.
+   *
+   * SE PIDE A `webPublicaDatos`, NO A `webPublica`. No es un detalle: pedirlo
+   * a `webPublica` se lleva React y el cliente de Supabase al paquete de esta
+   * función, que pasó de 10 KB a 980 KB. Lo cazó la prueba del tamaño en
+   * `servidor.prueba.mjs`, que es exactamente para lo que está.
+   */
+  const { conDefectos } = await import('../src/lib/webPublicaDatos')
+  const web = conDefectos(webGuardada)
   const slug = web.slug || slugRuta
 
   // Los datos de la hermandad (nombre legal, dirección, logo) salen de una

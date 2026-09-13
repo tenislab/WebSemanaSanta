@@ -47,6 +47,7 @@ import { useSupabaseTable } from './supabaseSync'
 import { CLAVES_DATOS } from './persistencia'
 import { reglaToRow, rowToRegla } from './db/reglasAutomaticas'
 import { CRITERIOS_POR_DEFECTO, type CriteriosSegmento } from './segmentacion'
+import type { RedSocial } from '../data/comunicados'
 
 export interface ReglaAutomatica {
   id: string
@@ -56,6 +57,28 @@ export interface ReglaAutomatica {
   destinatarios: string
   asunto: string
   cuerpo: string
+  /*
+   * Y EL ENCARGO DE REDES, SI LA REGLA TAMBIÉN LO DEJA.
+   *
+   * Vacío —lo normal— la regla solo escribe el correo. Con redes y con texto,
+   * al dispararse deja además las tareas del encargo: escribir el post y
+   * subirlo a cada red, cada una con su responsable, como cualquier encargo
+   * hecho a mano.
+   *
+   * NO PUBLICA NADA SOLA. Lo sube una persona: la API de Meta pide cuenta de
+   * empresa, aplicación revisada y permisos que caducan solos, y una hermandad
+   * que se queda sin publicar y sin enterarse está peor que antes. El
+   * argumento entero, en `docs/PLAN-F18-EN-ADELANTE.md`.
+   */
+  redes: RedSocial[]
+  /*
+   * LO QUE SE PUBLICA, Y ES OTRO TEXTO QUE EL DEL CORREO.
+   *
+   * El correo va personalizado («Hola Manuel») y un post lo lee cualquiera:
+   * reusar el mismo texto publicaría el nombre de un hermano en Instagram. Por
+   * eso son dos campos, y por eso este NO admite marcas.
+   */
+  textoRedes: string
   activa: boolean
   ultimaVez: string | null
 }
@@ -68,6 +91,10 @@ export interface ReglaReclamada {
   destinatarios: string
   asunto: string
   cuerpo: string
+  /** Las redes del encargo, vacío si la regla no deja encargo. */
+  redes: RedSocial[]
+  /** Lo que se publica. Vacío = no hay encargo que dejar. */
+  textoRedes: string
   /** Cuándo se disparó la vez anterior. Vacío = es la primera. */
   ultimaVez: string | null
 }
@@ -103,6 +130,14 @@ export const REGLAS_DE_FABRICA: Omit<ReglaAutomatica, 'id' | 'activa' | 'ultimaV
      */
     criterios: { ...CRITERIOS_POR_DEFECTO, cumpleanos: 'Hoy' },
     destinatarios: 'Hermanos que cumplen años hoy',
+    /*
+     * SIN ENCARGO DE REDES, y no es un olvido: el cumpleaños de un hermano es
+     * un dato suyo. Felicitarlo por correo es una cosa y publicarlo en
+     * Instagram es otra muy distinta. Quien quiera un post lo añade a mano, y
+     * escribiendo el texto que se publica —que no es este.
+     */
+    redes: [],
+    textoRedes: '',
     asunto: '¡Felicidades, {nombre}!',
     cuerpo:
       'Hola {nombre},\n\n'
@@ -115,6 +150,8 @@ export const REGLAS_DE_FABRICA: Omit<ReglaAutomatica, 'id' | 'activa' | 'ultimaV
     cada: 'mensual',
     criterios: { ...CRITERIOS_POR_DEFECTO, cumpleanos: 'EsteMes' },
     destinatarios: 'Hermanos que cumplen años este mes',
+    redes: [],
+    textoRedes: '',
     asunto: 'Este mes cumples años, {nombre}',
     cuerpo:
       'Hola {nombre},\n\n'
@@ -172,12 +209,22 @@ export interface ComoDisparar {
   cuantos: (r: ReglaReclamada) => number
   /** Crea el comunicado programado para hoy. */
   crear: (r: ReglaReclamada) => Promise<void>
+  /**
+   * Deja el encargo de redes, si la regla lo lleva.
+   *
+   * Va APARTE de `crear` a propósito: son dos cosas distintas —un correo a los
+   * hermanos y una tarea para quien lleva Instagram— y si el encargo falla, la
+   * felicitación por correo ya está hecha y no se deshace.
+   */
+  encargar: (r: ReglaReclamada) => Promise<void>
   /** No se pudo: se devuelve para que se intente mañana. */
   devolver: (id: string) => Promise<void>
 }
 
-export async function dispararReglasDeHoy(como: ComoDisparar): Promise<{ creados: number; nombres: string[] }> {
-  const r = { creados: 0, nombres: [] as string[] }
+export async function dispararReglasDeHoy(
+  como: ComoDisparar,
+): Promise<{ creados: number; nombres: string[]; encargos: number }> {
+  const r = { creados: 0, nombres: [] as string[], encargos: 0 }
 
   for (let vuelta = 0; vuelta < TOPE_REGLAS; vuelta++) {
     let regla: ReglaReclamada | null = null
@@ -222,6 +269,27 @@ export async function dispararReglasDeHoy(como: ComoDisparar): Promise<{ creados
       await como.crear(regla)
       r.creados++
       r.nombres.push(regla.nombre)
+
+      /*
+       * Y EL ENCARGO DE REDES, SI LA REGLA LO LLEVA.
+       *
+       * DESPUÉS del comunicado y con su propio `try`: el correo es lo que la
+       * regla prometía y ya está hecho. Si el encargo fallara y esto se
+       * devolviera la regla, mañana se volvería a crear el comunicado y la
+       * felicitación saldría DOS VECES — el remedio peor que la enfermedad.
+       * Así que se cuenta y se sigue.
+       */
+      // Con `?.`: una regla que venga de una base sin las columnas nuevas —o de
+      // una versión anterior guardada en el navegador— no trae estos campos, y
+      // reventar aquí devolvería la regla y repetiría el correo mañana.
+      if ((regla.redes?.length ?? 0) > 0 && regla.textoRedes?.trim()) {
+        try {
+          await como.encargar(regla)
+          r.encargos++
+        } catch {
+          // Sin encargo, pero con el correo hecho. Se puede repartir a mano.
+        }
+      }
     } catch {
       /*
        * Y SI FALLA AL CREARLO, SE DEVUELVE. Dejarla marcada perdería la
@@ -261,6 +329,13 @@ export async function reclamarReglaDeLaBase(): Promise<ReglaReclamada | null> {
     destinatarios: String(fila.destinatarios ?? ''),
     asunto: String(fila.asunto ?? ''),
     cuerpo: String(fila.cuerpo ?? ''),
+    /*
+     * La columna es `jsonb`: llega como lista. Y si la base todavía no tiene
+     * las columnas —quien no haya pegado el SQL nuevo— llega `undefined`, y
+     * entonces la regla simplemente no deja encargo. No se rompe por eso.
+     */
+    redes: Array.isArray(fila.redes) ? (fila.redes as RedSocial[]) : [],
+    textoRedes: String(fila.texto_redes ?? ''),
     ultimaVez: (fila.ultima_vez as string | null) ?? null,
   }
 }

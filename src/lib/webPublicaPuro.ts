@@ -1,4 +1,4 @@
-import type { Cartel, CultoWeb, Noticia, Titular } from './webPublica'
+import type { Cartel, CultoWeb, Noticia, Titular } from './webPublicaDatos'
 
 /*
  * Las cuatro funciones de la web pública que TAMBIÉN corren en el servidor.

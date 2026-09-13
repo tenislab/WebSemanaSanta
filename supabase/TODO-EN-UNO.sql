@@ -10966,6 +10966,24 @@ create table if not exists reglas_automaticas (
   asunto text not null default '',
   cuerpo text not null default '',
   /*
+   * Y EL ENCARGO DE REDES, SI LA REGLA TAMBIÉN LO DEJA.
+   *
+   * `redes` son las redes en las que hay que publicar y `texto_redes` lo que se
+   * publica. Vacíos —lo normal— la regla solo escribe el correo.
+   *
+   * SON DOS TEXTOS DISTINTOS A PROPÓSITO. El correo va personalizado («Hola
+   * Manuel») y un post lo lee todo el mundo: el mismo texto en los dos sitios
+   * publicaría el nombre de un hermano en Instagram, que es lo último que se
+   * quiere. Y de ahí la regla de que `texto_redes` NO lleva marcas.
+   *
+   * Esto NO publica nada solo: deja las tareas del encargo —escribir el post,
+   * subirlo a cada red— y las hace una persona. Entrar en la API de Meta pide
+   * cuenta de empresa, aplicación revisada y permisos que caducan solos; está
+   * argumentado en `docs/PLAN-F18-EN-ADELANTE.md`.
+   */
+  redes jsonb not null default '[]'::jsonb,
+  texto_redes text not null default '',
+  /*
    * APAGADA AL NACER. Ver arriba: es la decisión que separa esto de una
    * máquina de mandar correos sin supervisión.
    */
@@ -10984,6 +11002,17 @@ create table if not exists reglas_automaticas (
  * es la que se lo arregla, y en una base nueva no hace nada.
  */
 alter table reglas_automaticas alter column hermandad_id set default hermandad_actual();
+
+/*
+ * Y LAS DOS COLUMNAS DEL ENCARGO DE REDES, para la base que ya existía.
+ *
+ * Lo mismo que arriba: `create table if not exists` no toca una tabla que ya
+ * está, así que sin esto una hermandad que pegó el SQL antes se quedaría con la
+ * tabla sin las columnas — y al guardar una regla, la base contestaría que no
+ * existe `redes` y en pantalla se vería un fallo al guardar sin más pista.
+ */
+alter table reglas_automaticas add column if not exists redes jsonb not null default '[]'::jsonb;
+alter table reglas_automaticas add column if not exists texto_redes text not null default '';
 
 alter table reglas_automaticas enable row level security;
 
@@ -11041,6 +11070,12 @@ create function reclamar_regla_de_hoy()
 returns table (
   id uuid, nombre text, criterios jsonb, destinatarios text, asunto text, cuerpo text,
   /*
+   * El encargo de redes de la regla, si lo lleva. Va aquí y no se consulta
+   * aparte porque quien dispara la regla ya no la vuelve a leer: la fila que
+   * devuelve esta función es TODO lo que tiene para trabajar.
+   */
+  redes jsonb, texto_redes text,
+  /*
    * CUÁNDO SE DISPARÓ LA VEZ ANTERIOR, o vacío si es la primera.
    *
    * Es el dato que permite RECUPERAR LOS DÍAS QUE NADIE ABRIÓ, y sin él la
@@ -11078,7 +11113,8 @@ language sql volatile security definer set search_path = public as $$
      set ultima_vez = current_date
     from elegida e
    where r.id = e.id
-  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo, e.antes
+  returning r.id, r.nombre, r.criterios, r.destinatarios, r.asunto, r.cuerpo,
+            r.redes, r.texto_redes, e.antes
 $$;
 
 grant execute on function reclamar_regla_de_hoy() to authenticated;
@@ -12132,6 +12168,87 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function soporte_hermandades() to authenticated;
 
+-- -----------------------------------------------------------------------------
+-- 5. LO QUE SE ESTÁ ROMPIENDO EN PRODUCCIÓN
+-- -----------------------------------------------------------------------------
+
+/**
+ * LOS FALLOS DE `errores_cliente`, AGRUPADOS, PARA QUIEN LOS PUEDE ARREGLAR.
+ *
+ * ============================================================================
+ * POR QUÉ ESTO ESTÁ AQUÍ Y NO EN `vigilancia.sql`
+ * ============================================================================
+ *
+ * Porque hace falta `es_soporte()`, y `vigilancia.sql` se ejecuta ANTES que
+ * este fichero (ver el orden en `scripts/generar-todo-en-uno.mjs`). Poniéndola
+ * allí, la función no existiría todavía y ACTUALIZAR.sql se pararía a mitad en
+ * la base de una hermandad de verdad.
+ *
+ * ============================================================================
+ * Y POR QUÉ SOLO SOPORTE
+ * ============================================================================
+ *
+ * `vigilancia.sql` lo dejó escrito y no se cambia: la tabla no tiene política
+ * de lectura a propósito. «TypeError: Cannot read properties of undefined» no
+ * es información para una secretaria, y sí es un motivo para preocuparse. Los
+ * fallos son para quien los puede arreglar.
+ *
+ * Lo que faltaba —y lo pide la fase 6 del plan de bugs— era poder mirarlos SIN
+ * ABRIR EL PANEL DE SUPABASE con la clave de servicio. Se recogían desde hacía
+ * semanas y no los había mirado nadie ni una vez.
+ *
+ * `where es_soporte()` es el candado, y es el mismo que usa
+ * `soporte_hermandades()` justo arriba: para cualquier otra cuenta la consulta
+ * no devuelve ni una fila. No hace falta `raise`: una lista vacía es la
+ * respuesta correcta y no le cuenta a nadie que esta función existe.
+ *
+ * AGRUPADO POR MENSAJE, que es lo que la hace útil: cincuenta filas del mismo
+ * fallo son UN fallo que le pasa a cincuenta personas, y saber cuántas
+ * hermandades lo sufren es lo que dice si es el ordenador de alguien o es el
+ * código. `mensaje` se guarda ya limpio de números y fechas (lo hace
+ * `src/lib/vigilancia.ts`) justamente para poder agrupar por él.
+ */
+drop function if exists errores_de_produccion(integer);
+create or replace function errores_de_produccion(p_dias integer default 7)
+returns table (
+  mensaje text, clase text, veces bigint, hermandades bigint,
+  ultima timestamptz, ruta text, version_app text, pila text
+)
+language sql stable security definer set search_path = public as $$
+  select e.mensaje,
+         e.clase,
+         count(*) as veces,
+         count(distinct e.hermandad_id) as hermandades,
+         max(e.ocurrido_el) as ultima,
+         /*
+          * DEL ÚLTIMO, no de uno cualquiera: la ruta y la versión del más
+          * reciente son las que dicen si el fallo sigue pasando con el arreglo
+          * puesto. Y la pila, la de ese mismo, que es la que se va a leer.
+          */
+         (array_agg(e.ruta order by e.ocurrido_el desc))[1] as ruta,
+         (array_agg(e.version_app order by e.ocurrido_el desc))[1] as version_app,
+         (array_agg(e.pila order by e.ocurrido_el desc))[1] as pila
+    from errores_cliente e
+   where es_soporte()
+     -- Entre 1 y 90 días, diga lo que diga quien llama: la tabla se limpia a
+     -- los 60, así que pedir más es pedir nada, y pedir 0 o negativo sería
+     -- una lista vacía que se lee como «no se rompe nada».
+     and e.ocurrido_el > now() - (greatest(1, least(coalesce(p_dias, 7), 90)) || ' days')::interval
+   group by e.mensaje, e.clase
+   order by max(e.ocurrido_el) desc
+   limit 200
+$$;
+
+/*
+ * Y NO LA LLAMA UN VISITANTE. Postgres da EXECUTE a PUBLIC al crear una
+ * función, así que sin este `revoke` la podría llamar cualquiera sin sesión:
+ * `es_soporte()` devolvería falso y la lista saldría vacía —el candado
+ * aguanta— pero una función de soporte que se puede llamar desde fuera es una
+ * pista de por dónde probar, y eso se cierra por costumbre y no por miedo.
+ */
+revoke all on function errores_de_produccion(integer) from public, anon;
+grant execute on function errores_de_produccion(integer) to authenticated;
+
 -- =============================================================================
 --   VERSION-DEL-ESQUEMA.SQL — Que la aplicación avise cuando la base se ha quedado atrás
 -- =============================================================================
@@ -12184,21 +12301,23 @@ grant execute on function soporte_hermandades() to authenticated;
 -- se puede hacer desde el lado del navegador, y es muchísimo.
 --
 -- -----------------------------------------------------------------------------
--- CÓMO SE SUBE LA VERSIÓN CUANDO AÑADES UNA PIEZA
+-- CÓMO SUBE LA VERSIÓN
 -- -----------------------------------------------------------------------------
 --
--- No se sube a mano, y ese es el punto. LA VERSIÓN ES EL NÚMERO DE PIEZAS del
--- instalador (`scripts/generar-todo-en-uno.mjs`, la lista `PIEZAS`). Añadir un
--- fichero .sql a esa lista sube la versión sola.
+-- Sola, y con CUALQUIER cambio. `scripts/version-del-esquema.mjs` calcula una
+-- huella del contenido de todas las piezas del instalador y la guarda con la
+-- versión en `supabase/VERSION.json`; al generar los ficheros, si la huella ha
+-- cambiado, la versión sube uno. Editar una pieza cuenta igual que añadirla.
 --
--- Lo único que tienes que hacer tú es poner el mismo número en
--- `src/lib/versionEsquema.ts`. Y si se te olvida, `npm test` te lo dice por su
--- nombre: hay una prueba que compara los dos.
+-- ANTES ERA EL NÚMERO DE PIEZAS, y tenía un agujero que el plan de bugs
+-- apuntaba (fase 5) y que mordió el día que se cerró: editar una pieza que ya
+-- existía —una columna más en una tabla— no subía el número, la aplicación no
+-- avisaba a nadie, y al guardar la base contestaba que la columna no existe.
 --
 -- POR QUÉ ASÍ Y NO CON UN NÚMERO INVENTADO. Porque un número que hay que
 -- acordarse de subir es un número que se olvida, y el día que se olvida el
--- aviso deja de salir justo cuando hacía falta. Derivarlo de la lista de
--- piezas lo hace imposible de olvidar.
+-- aviso deja de salir justo cuando hacía falta. Y `npm test` comprueba que
+-- la huella guardada es la de las piezas: olvidar el generador se nota.
 --
 -- Ejecutar esto dos veces no hace nada. Como todo lo demás.
 -- =============================================================================
@@ -12293,7 +12412,7 @@ grant execute on function version_del_esquema() to authenticated, anon;
 --   SELLO DE LA VERSIÓN — que la aplicación sepa que esta base está al día
 -- =============================================================================
 --
--- Generado. Es el número de piezas de esta instalación. La aplicación lo lee al
--- arrancar y avisa si va por detrás; ver `src/lib/versionEsquema.ts`.
+-- Generado. Sube cada vez que cambia cualquier pieza del SQL. La aplicación lo
+-- lee al arrancar y avisa si va por detrás; ver `src/lib/versionEsquema.ts`.
 
-select sellar_esquema(69);
+select sellar_esquema(70);

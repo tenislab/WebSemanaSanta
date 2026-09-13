@@ -177,6 +177,61 @@ export function repartoDeCuerpo(
 }
 
 /**
+ * PAPELETAS ACTIVAS QUE NO CAEN EN NINGÚN TRAMO. Las dos formas.
+ *
+ * Está aquí y no dentro de la pantalla para poder ejecutarla con datos: es una
+ * lista de gente que ha pagado y que el reparto no coloca, así que lo que
+ * importa es que no se le escape nadie, y eso solo se comprueba probándola.
+ *
+ * LA PRIMERA FORMA: su tramo YA NO EXISTE. Pasa cuando alguien quita un tramo
+ * en Configuración teniendo papeletas dentro. Esos hermanos se evaporaban: no
+ * entran en ningún reparto (`repartoDeCuerpo` solo reparte sobre tramos que
+ * existen) ni en «Pendientes» (esa lista pide estado 'Solicitada'). En
+ * Papeletas su fila seguía diciendo «Renovada» tan tranquila. Ocho personas
+ * con su papeleta cobrada, fuera del cortejo, y nadie se enteraba hasta el día
+ * de la salida.
+ *
+ * LA SEGUNDA, QUE SE ESCAPABA IGUAL: no tener tramo NINGUNO estando ya emitida
+ * o cobrada. `aceptarSolicitud` deja `tramoId: null` cuando en el cuerpo que
+ * pide el hermano no hay tramos configurados —lo llama «papeleta suelta»— y
+ * desde ahí la papeleta sigue su vida normal: se emite, se cobra en el
+ * mostrador, se apunta en Tesorería. Pero «Pendientes» pide 'Solicitada' y
+ * esta ya es 'Asignada' o 'Pagada', y esta lista pedía `tramoId !== null`. Así
+ * que caía por el hueco entre las dos.
+ *
+ * Medido en el navegador: con una papeleta 'Pagada' de 22 € y `tramoId: null`,
+ * /app/cortejo no la enseñaba en ningún sitio —ni en el reparto, ni en
+ * Pendientes, ni en los contadores— y seguía diciendo «22/204 cubiertos».
+ *
+ * Con tramos configurados, una papeleta activa sin sitio es siempre algo que la
+ * secretaría tiene que ver: o se recoloca, o es suelta a propósito y hace falta
+ * saber quién va a ir sin puesto.
+ *
+ * SIN TRAMOS NO DEVUELVE NADA, y no es pereza: hay hermandades que reparten por
+ * opciones (mantilla, cirio) y no usan tramos, y ahí TODAS las papeletas
+ * tendrían `tramoId: null`. Además, mientras la lista de tramos no ha llegado
+ * de la base de datos está vacía, y sin esto saldría un aviso falso alarmante
+ * en cada carga.
+ */
+export function papeletasSinSitio(
+  papeletas: Papeleta[],
+  tramos: Tramo[],
+  edicion: number,
+): Papeleta[] {
+  if (tramos.length === 0) return []
+  const existentes = new Set(tramos.map((t) => t.id))
+  return papeletas.filter(
+    (p) =>
+      p.anio === edicion
+      && p.estado !== 'Anulada'
+      && p.estado !== 'Renuncia'
+      // Las 'Solicitada' sin tramo ya salen en «Pendientes»: no se duplican.
+      && !(p.tramoId === null && p.estado === 'Solicitada')
+      && (p.tramoId === null || !existentes.has(p.tramoId)),
+  )
+}
+
+/**
  * Reparto de todo el cortejo. El orden de los cuerpos es el de desfile: el
  * orden en que aparecen en la lista de tramos que configuró la hermandad.
  */

@@ -101,6 +101,33 @@ exactamente lo que pasó con las reglas de cumpleaños.
    pasado dos veces que un guardia mío no saltaba al romper lo que vigilaba.
    El script `romper.sh` hace exactamente eso.
 
+**La herramienta ya está en el repositorio: `scripts/romper.sh`.** Antes se
+nombraba aquí como si existiera y vivía en un directorio temporal fuera del
+proyecto, así que en otras manos no estaba. Se usa así:
+
+```
+scripts/romper.sh "lo que voy a romper" <orden que lo rompe>
+
+# si la rotura toca el SQL, con la base delante (si no, esas ~550 pruebas
+# se saltan EN VERDE y la respuesta sería «no salta» sin mirar nada):
+PGHOST=/tmp PGPORT=5433 GOBERGO_PG_OBLIGATORIO=1 scripts/romper.sh "…" …
+```
+
+Devuelve **al revés** que un programa normal: `0` si algo falla (el guardia
+salta, la prueba sirve) y `1` si todo sigue verde (**el guardia no vigila
+nada**). Respalda todo lo que lleva git y restaura desde un `trap`, así que
+deja el árbol como estaba aunque la rotura falle o se corte con Ctrl-C. Tiene
+su prueba, que lo ejecuta de verdad sobre un repositorio de mentira
+(`pruebas/romper.prueba.mjs`).
+
+**Y cazó algo el primer día**, que es el mejor argumento para tenerlo: la
+comprobación de que la tabla `intentos_acceso` está cerrada buscaba la línea
+`revoke all on intentos_acceso…` en el fichero **a secas**. Comentar esa línea
+con `--` la dejaba en verde: el texto sigue ahí, comentado. Ahora se quitan los
+comentarios antes de buscar, y el candado de debajo —el RLS sin ninguna
+política— **se ejecuta** contra Postgres, con una fila dentro y contando lo que
+ve cada rol.
+
 **Cómo se sabe que está hecho:** ninguna comprobación nueva mira texto salvo
 las de cableado, y cada una lleva escrito por qué.
 
@@ -231,29 +258,55 @@ comentario.**
 
 ---
 
-## Fase 5 — Probar la actualización, no la instalación
+## Fase 5 — Probar la actualización, no la instalación ✅
 
 **El problema.** Todas las pruebas montan la base desde cero. En una base nueva
 **no existe la versión vieja**, que es lo único que puede chocar. Por eso
 `cannot change return type` llegó dos veces a producción: aquí no puede pasar
 ni queriendo.
 
-Ya hay una prueba que crea a mano las firmas viejas y pasa `ACTUALIZAR.sql` por
-encima. Falta convertirlo en costumbre.
+**Lo que se hizo, y lo que se encontró al hacerlo:**
 
-**Qué hacer:**
+1. **Dos instaladores antiguos reales, guardados** en
+   `pruebas/esquemas-anteriores/`: el del 29 de agosto (sin sello, como toda
+   base montada antes de que el sello existiera) y el del 8 de septiembre (el
+   primero sellado, versión 62). `actualizardesdevieja.prueba.mjs` instala cada
+   uno en un Postgres de verdad, mete datos, pasa `ACTUALIZAR.sql` por encima
+   —dos veces— y exige **cuatro cosas**: sin error; los datos intactos; el
+   diagnóstico a cero; y **que el catálogo quede IDÉNTICO al de instalar hoy
+   desde cero** (tablas, columnas, valores por defecto, políticas, índices,
+   disparadores, funciones y sus permisos). Esa última es la promesa de
+   `ACTUALIZAR.sql`, y nadie la había medido.
 
-1. Guardar el `TODO-EN-UNO.sql` de las versiones que hay en hermandades de
-   verdad, y probar `ACTUALIZAR.sql` **encima de cada una**.
-2. Que la prueba de actualización corra siempre: instalar viejo → actualizar →
-   actualizar otra vez → `DIAGNOSTICO` a cero.
-3. Arreglar el punto ciego conocido: **la versión es el número de piezas**, así
-   que editar una pieza existente no la sube y la aplicación no avisa a nadie
-   de que hay que volver a ejecutar `ACTUALIZAR.sql`. Hay que separar «cuántas
-   piezas hay» de «qué versión es».
+2. **Y no se cumplía.** A una base del 29 de agosto actualizada le faltaba el
+   `default hermandad_actual()` de `mensajes_web`: el arreglo de la fase 1
+   («deshacer el borrado de un mensaje falla siempre») estaba en
+   `multi-hermandad.sql`, que **no viajaba** en `ACTUALIZAR.sql`. Las piezas de
+   base también se editan, y esas ediciones no llegaban a nadie. La solución de
+   fondo, medida antes de decidirla: **`ACTUALIZAR.sql` lleva ahora todas las
+   piezas del instalador, en su orden.** Sobre una base al día ejecutado dos
+   veces, y sobre las dos antiguas, el catálogo queda idéntico y no se toca una
+   fila. Las dos razones históricas para dejar algo fuera ya no valen (las
+   explica el generador). Al romperlo a propósito —quitando `multi-hermandad`
+   de la lista— saltan ocho comprobaciones, entre ellas tres de permisos de
+   ficheros que nadie había relacionado con esto.
 
-**Cómo se sabe que está hecho:** existe al menos una actualización probada
-desde una versión antigua real, y editar una pieza sube la versión.
+3. **El punto ciego de la versión, cerrado.** La versión era el número de
+   piezas, así que editar una no la subía y la aplicación no avisaba. Mordió el
+   mismo día: dos columnas nuevas en `reglas_automaticas`, versión sin subir.
+   Ahora vive en `supabase/VERSION.json` junto a una **huella** del contenido
+   de todas las piezas; los generadores suben la versión cuando la huella
+   cambia (`scripts/version-del-esquema.mjs`). Editar cuenta igual que añadir.
+   `npm test` comprueba que la huella guardada es la de las piezas: tocar el
+   SQL sin pasar el generador se nota, por su nombre. El aviso ya no dice «te
+   faltan N actualizaciones» —esa cuenta ya no significa nada— sino «tu base
+   va por la 69 y la aplicación necesita la 70».
+
+**Lo que esta prueba NO ve, para que nadie se lo crea:** compara «viejo +
+actualizar» con «instalar hoy». Si un arreglo se quita de una pieza, falta en
+los dos lados y aquí no salta; de eso se ocupan las guardias de cada arreglo.
+Y las hermandades de verdad pueden tener instaladores que no son estos dos: si
+aparece otro, se guarda en la carpeta y la prueba lo recorre sola.
 
 ---
 
@@ -262,11 +315,60 @@ desde una versión antigua real, y editar una pieza sube la versión.
 Todo lo anterior busca fallos aquí. Esto los busca **donde están**: en la base
 de una hermandad, un martes, con alguien delante.
 
-- `errores_cliente` ya recoge lo que revienta en producción. Falta **mirarlo**:
-  un sitio en la aplicación que lo enseñe, y la costumbre de abrirlo.
+- `errores_cliente` ya recoge lo que revienta en producción. **Ya se puede
+  mirar:** `/app/errores` («Errores (soporte)» en el menú de Sistema) los enseña
+  agrupados por mensaje, con cuántas veces han pasado y **en cuántas hermandades
+  distintas** —que es el dato que separa un fallo del código del navegador de
+  alguien—, la ruta y la versión del último, y la pila al pedirla. La ventana se
+  elige: hoy, 7, 30 o 60 días.
+
+  El candado está en la base, no en esconder el enlace: la función
+  `errores_de_produccion()` lleva `where es_soporte()` dentro, así que a
+  cualquier otra cuenta le llega una lista vacía aunque se invente la dirección.
+  Y la tabla sigue sin política de lectura, como decidió `vigilancia.sql`: los
+  fallos son para quien los puede arreglar.
+
+  Lo que queda de esto es **la costumbre de abrirlo**, que no la arregla el
+  código. Avisar por correo depende de F15 (dominio verificado).
 - El canal piloto: desplegar primero a una hermandad, esperar, y luego al
   resto.
 - **Nada de despliegues entre el 1 de marzo y el Domingo de Resurrección.**
+
+---
+
+## Fase 7 — La revisión grande de septiembre de 2026
+
+Un barrido de los fallos que no dan error hasta que le pasan a una hermandad de
+verdad. La receta fue siempre la misma: **sembrar el dato que llega en
+producción y mirar la pantalla**, no leer el código.
+
+### Lo que se barrió, con qué y qué salió
+
+| Barrido | Cómo se midió | Resultado |
+| --- | --- | --- |
+| La web pública con listas a medias | `conDefectos({paginas:[{id}]})` + /w/demo en el navegador | **2 fallos.** La web entera en blanco para el visitante; y `api/w.ts` perdía el SEO en silencio |
+| Las 24 colecciones × 18 pantallas, con un registro mínimo | barrido con Chrome, una pasada | 5 pantallas se caían |
+| Y otra vez con datos REALES menos un campo, campo a campo | los ejemplos de `src/data/` sin una clave cada vez | **2 fallos de verdad:** eventos sin `tareas`, documentos sin `cargosConAcceso`. Los otros tres eran columnas `not null` |
+| El cortejo: quién paga y no sale | papeleta 'Pagada' con `tramoId: null` sembrada en /app/cortejo | **1 fallo.** No salía en ningún sitio y la pantalla decía «22/204 cubiertos» |
+| Los dos resolutores de modelo (papeleta y recibo) | ejecutados con las 29 claves que ofrece la interfaz | limpios |
+| El importador de cuotas | una hoja de 9 filas con basura real (importes negativos, «Cobrado el 3/2», DNI que no existe, año que falta) | limpio: cada caso con su problema o su aviso |
+
+### La lección, que es una y sirve para el futuro
+
+**Los mapeos defienden un camino y el espejo del navegador no pasa por él.**
+`rowToEvento` hace `Array.isArray(r.tareas) ? … : []` y `rowToDocumento` hace
+`?? null`: quien las escribió ya contaba con que el campo faltara. Pero
+`localStorage` se lee con `JSON.parse` y se usa tal cual, y lo que hay ahí lo
+escribió la versión que estuviera puesta el día que se guardó. **Cada defensa
+escrita en un `rowTo…` es un aviso de que el mismo dato llega sin defender por
+el otro lado.**
+
+### Lo visto y NO arreglado, a propósito
+
+Cuatro pantallas se caen al ordenar si falta `fecha`, `fechaAlta`, `nombre` o
+`fechaCreacion` (`localeCompare` de `undefined`). No se toca: son columnas `not
+null` desde el primer día, y ponerle una defensa a lo que no puede pasar es
+esconder el día que pase de verdad.
 
 ---
 
@@ -280,6 +382,8 @@ de una hermandad, un martes, con alguien delante.
 5. **Fase 2** (pruebas que ejecuten) — la más larga; se hace poco a poco, y
    sobre todo cada vez que se toque algo.
 6. **Fase 6** (producción) — continua, no tiene final.
+7. **Fase 7** (la revisión grande) — hecha. Tres fallos arreglados, cada uno
+   con su guardia roto a propósito.
 
 ---
 

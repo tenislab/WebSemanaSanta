@@ -8656,3 +8656,19 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
   .reglas-lista li { flex-direction: column; }
   .reglas-lista__acciones { width: 100%; }
 }
+
+/* El mensaje del fallo necesita ancho para leerse: sin esto, en móvil la
+   columna se estrecha hasta dejar una palabra por línea. La tabla ya se
+   desplaza a lo ancho (.table-card), así que aquí se pide sitio y no se
+   encoge. */
+.errores-mensaje { min-width: 20rem; }
+
+/* La pila de un fallo de producción: solo se abre cuando se pide, y es texto
+   de máquina —comprimido por el empaquetador— así que va monoespaciado, con
+   su propio desplazamiento y sin ensanchar la tabla. */
+.pila-error {
+  margin: 0.5rem 0 0; padding: 0.6rem 0.7rem; max-height: 14rem; overflow: auto;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem;
+  line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-muted);
+}

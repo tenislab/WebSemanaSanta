@@ -19,6 +19,8 @@ export function reglaToRow(r: ReglaAutomatica): Record<string, unknown> {
     destinatarios: r.destinatarios,
     asunto: r.asunto,
     cuerpo: r.cuerpo,
+    redes: r.redes ?? [],
+    texto_redes: r.textoRedes ?? '',
     activa: r.activa,
   }
 }
@@ -43,6 +45,11 @@ export function rowToRegla(r: Record<string, unknown>): ReglaAutomatica {
     destinatarios: (r.destinatarios as string | null) ?? '',
     asunto: (r.asunto as string | null) ?? '',
     cuerpo: (r.cuerpo as string | null) ?? '',
+    // `jsonb`, así que llega como lista. Una base sin las columnas todavía
+    // —quien no haya pegado el SQL nuevo— da `undefined`: sin encargo, y
+    // sin romperse por ello.
+    redes: Array.isArray(r.redes) ? (r.redes as ReglaAutomatica['redes']) : [],
+    textoRedes: (r.texto_redes as string | null) ?? '',
     activa: r.activa === true,
     ultimaVez: (r.ultima_vez as string | null) ?? null,
   }

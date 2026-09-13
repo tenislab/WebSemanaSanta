@@ -17,7 +17,7 @@ import { apuntarCargo } from '../lib/vigilancia'
 import { traerNovedades } from '../lib/novedades'
 import { contarAvisosQueEsperan } from '../lib/notificaciones'
 import { avisoDelEsquema, mirarElEsquema, type EstadoDelEsquema } from '../lib/versionEsquema'
-import { dondeEstoyDeSoporte, salirDeSoporte } from '../lib/soporte'
+import { dondeEstoyDeSoporte, salirDeSoporte, soySoporte } from '../lib/soporte'
 import { IconoMedalla } from './Iconos'
 import { useSuscripcion, moduloPermitidoPorPack, avisoDePagoFallido } from '../lib/suscripcion'
 import PantallaSuscripcion from './PantallaSuscripcion'
@@ -281,10 +281,20 @@ export default function AppShell() {
    */
   const [esquema, setEsquema] = useState<EstadoDelEsquema>({ estado: 'sin_saber' })
   const [suplantando, setSuplantando] = useState<string | null>(null)
+  /*
+   * Y SI ESTA CUENTA ES DE SOPORTE, para enseñarle los errores de producción.
+   *
+   * Es OTRA pregunta que `dondeEstoyDeSoporte`: esa contesta `null` mientras no
+   * se esté suplantando a nadie —casi siempre— y una cuenta de soporte sentada
+   * en su propia hermandad sigue siendo de soporte. Para todo el mundo son dos
+   * llamadas que contestan «no» y ya está.
+   */
+  const [esSoporte, setEsSoporte] = useState(false)
   useEffect(() => {
     void traerNovedades()
     void mirarElEsquema().then(setEsquema)
     void dondeEstoyDeSoporte().then(setSuplantando)
+    void soySoporte().then(setEsSoporte)
   }, [])
   const navigate = useNavigate()
   const location = useLocation()
@@ -372,12 +382,24 @@ export default function AppShell() {
             (!item.modulo || puedeVerModulo(cargo, item.modulo)) &&
             moduloPermitidoPorPack(suscripcion, item.modulo),
         ),
-      })).filter((group) => group.items.length > 0),
+      }))
+        /*
+         * Y EL DE SOPORTE, que no está en `NAV` porque no es de la hermandad.
+         *
+         * Se añade al grupo de Sistema solo si la cuenta es de soporte. Esconder
+         * el enlace NO es lo que protege la pantalla —el candado está en la base,
+         * `where es_soporte()` dentro de la función— pero un enlace que la
+         * secretaria no puede usar no tiene por qué estar en su menú.
+         */
+        .map((group) => (group.label === 'Sistema' && esSoporte
+          ? { ...group, items: [...group.items, { to: '/app/errores', label: 'Errores (soporte)', icon: ic.seguridad }] }
+          : group))
+        .filter((group) => group.items.length > 0),
     // `permisosVersion` no se usa dentro a propósito: es un contador que sube
     // cuando llegan los permisos reales desde la base de datos, y está aquí
     // justamente para recalcular el menú en ese momento.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cargo, permisosVersion, suscripcion],
+    [cargo, permisosVersion, suscripcion, esSoporte],
   )
 
   /** Los destinos que ve este cargo, para la paleta de comandos (Ctrl+K). */
