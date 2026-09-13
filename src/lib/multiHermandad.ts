@@ -181,7 +181,13 @@ export async function hermandadDestino(): Promise<string | null> {
    ------------------------------------------------------------------------ */
 
 /** De qué hermandad es lo que hay copiado ahora mismo en este navegador. */
-const CLAVE_ESPEJO = 'cabildo-hermandad-espejada'
+/**
+ * Qué hermandad tiene espejada este navegador. Se exporta porque la cola de
+ * escritura lo necesita SIN `await`: se apunta desde dentro de un `catch` de
+ * una escritura que ha fallado —a veces sin red— y una consulta más ahí sería
+ * otra espera que también falla. Ver `colaEscritura.ts`.
+ */
+export const CLAVE_ESPEJO = 'cabildo-hermandad-espejada'
 
 /**
  * Lo que se queda al cambiar de hermandad: preferencias de ESTE navegador y
@@ -202,6 +208,20 @@ const NO_ES_DE_LA_HERMANDAD = new Set([
   'cabildo-demo-user',
   'cabildo-sync-error',
   CLAVE_ESPEJO,
+  /*
+   * LA COLA DE ESCRITURA SOBREVIVE AL CIERRE DE SESIÓN, y es a propósito.
+   *
+   * Sin esto, cerrar sesión se llevaría por delante lo que se marcó en la calle
+   * sin cobertura — que es EXACTAMENTE el fallo que la cola viene a arreglar,
+   * entrando por otra puerta. Y el aviso de la aplicación dice «no cierres
+   * sesión hasta que esto desaparezca», así que quien lo haga igualmente no
+   * puede perder la noche por hacerlo.
+   *
+   * Es seguro porque cada entrada lleva SU hermandad y solo se manda cuando esa
+   * es la de la sesión abierta (`loDeEstaHermandad`). Lo de otra se queda
+   * quieto, sin mandarse y sin borrarse.
+   */
+  'cabildo-cola-escritura',
 ])
 
 /**

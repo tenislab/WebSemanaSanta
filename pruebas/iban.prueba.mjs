@@ -105,8 +105,13 @@ async function dondeSeUsa({ cargar, caso }) {
    *    fichero entero. Se para antes de generarlo, donde todavía se puede leer
    *    «te falta un dígito» en vez de un código del banco.
    */
+  // El identificador era «ES12ZZZ12345678», que no es uno: quince caracteres y
+  // unas cifras de control inventadas. Pasaba porque `acreedorIncompleto` solo
+  // miraba que la casilla no estuviera vacía. Ahora se valida, así que aquí va
+  // el que de verdad le toca al NIF B12345674 (con el código de negocio ZZZ,
+  // que es el que dan algunos bancos y NO entra en las cifras de control).
   const acreedor = (iban) => ({
-    nombre: 'Hdad. de Prueba', iban, identificadorAcreedor: 'ES12ZZZ12345678',
+    nombre: 'Hdad. de Prueba', iban, identificadorAcreedor: 'ES11ZZZB12345674',
   })
   caso('con el IBAN de la hermandad bueno, se puede remesar',
     null, sepa.acreedorIncompleto(acreedor('ES9121000418450200051332')))

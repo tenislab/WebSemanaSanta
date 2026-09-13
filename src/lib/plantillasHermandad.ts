@@ -1,5 +1,6 @@
 import { hermandadActualId } from './multiHermandad'
 import { isSupabaseConfigured, supabase } from './supabase'
+import { bloquePendiente, encolarSiEsDeRed } from './colaEscritura'
 
 /**
  * Lo que se guardaba SOLO en el navegador y se perdía al cerrar sesión.
@@ -51,6 +52,21 @@ export type PlantillaGuardable =
 /** Trae una de ellas, o null si no hay base de datos o no está guardada. */
 export async function traerPlantilla<T>(cual: PlantillaGuardable): Promise<T | null> {
   if (!isSupabaseConfigured || !supabase) return null
+  /*
+   * SI HAY ALGO DE ESTA CLAVE ESPERANDO EN LA COLA, NO SE TRAE.
+   *
+   * Es el guardia que salva la madrugada del Viernes Santo, y sin él la cola
+   * no serviría de nada: el diputado marca trescientos hermanos sin cobertura,
+   * la hoja se queda en la cola, y al arrancar la aplicación esto bajaba de la
+   * base la hoja de ANTES de la madrugada y la escribía encima de la buena
+   * —`cargarAsistenciaDeLaBase` hace exactamente eso—. La noche entera,
+   * borrada por la propia copia de seguridad.
+   *
+   * Devolver `null` es «no hay nada que traer», y quien llama ya sabe qué
+   * hacer con eso: dejar lo que tiene. Que es lo correcto, porque lo que tiene
+   * es MÁS NUEVO que la base.
+   */
+  if (bloquePendiente(cual)) return null
   try {
     const { data, error } = await supabase.from('hermandad_settings').select(cual).maybeSingle()
     if (error || !data) return null
@@ -61,17 +77,38 @@ export async function traerPlantilla<T>(cual: PlantillaGuardable): Promise<T | n
   }
 }
 
-/** La guarda. Devuelve si se ha podido, para que la pantalla no mienta. */
+/**
+ * La guarda. Devuelve si se ha podido, para que la pantalla no mienta.
+ *
+ * Y SI NO SE HA PODIDO POR FALTA DE RED, SE APUNTA PARA DESPUÉS.
+ *
+ * Antes esto era un `catch { return false }` a secas, y quien llama usa `void`:
+ * el valor devuelto se tiraba, así que el fallo no llegaba a ninguna parte. En
+ * la asistencia eso es la madrugada del Viernes Santo perdida sin un aviso.
+ * Ver `colaEscritura.ts`.
+ */
 export async function guardarPlantilla(cual: PlantillaGuardable, valor: unknown): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return true
   try {
     const hermandadId = await hermandadActualId()
-    if (!hermandadId) return false
+    // Sin saber de qué hermandad es no se puede escribir, y puede ser porque la
+    // consulta que lo averigua tampoco tiene red: se trata como falta de red.
+    if (!hermandadId) {
+      encolarSiEsDeRed('sin conexión', [{ clase: 'bloque', cual, valor }])
+      return false
+    }
     const { error } = await supabase
       .from('hermandad_settings')
       .upsert({ hermandad_id: hermandadId, [cual]: valor }, { onConflict: 'hermandad_id' })
-    return !error
-  } catch {
+    if (error) {
+      // Un rechazo de la base NO se encola: fallaría igual las mil veces
+      // siguientes. `encolarSiEsDeRed` lo distingue y devuelve false.
+      encolarSiEsDeRed(error.message, [{ clase: 'bloque', cual, valor }])
+      return false
+    }
+    return true
+  } catch (err) {
+    encolarSiEsDeRed(String(err), [{ clase: 'bloque', cual, valor }])
     return false
   }
 }

@@ -246,7 +246,17 @@ hermandad.
 - **Textos legales** revisados (hay plantillas en `src/data/legal.ts`, con los
   huecos marcados entre corchetes).
 - Identificador de Acreedor SEPA y dominio: son trámites que solo puede hacer la
-  hermandad, y son los que más tardan. Conviene empezarlos pronto.
+  hermandad, y son los que más tardan. Conviene empezarlos pronto. **Los dos,
+  paso a paso y con qué preguntarle al banco, en
+  [`LOS-DOS-TRAMITES.md`](LOS-DOS-TRAMITES.md)**: qué pedir con esas palabras,
+  qué papeles llevar, las cuatro preguntas que hay que hacer, y que el
+  identificador que os tocará ya se ve calculado en Configuración mientras
+  llega el del banco.
+- Y la tarde de configuración que no es código —el SQL nuevo, desplegar las dos
+  funciones de servidor, `pg_cron`, las copias automáticas, borrar la hermandad
+  de prueba y las dos plantillas de correo— está en
+  [`LA-TARDE-DE-SUPABASE.md`](LA-TARDE-DE-SUPABASE.md), cada paso con cómo
+  saber que ha salido bien.
 
 ---
 

@@ -20,7 +20,7 @@ Continúa la numeración de `docs/HOJA-DE-RUTA.md`, que llega hasta F17.
 | **F19** | Editor de SEO | **hecho** salvo desplegar `api/w.ts` (ops, no código) — ver apéndice |  |
 | **F20** | La copia, cifrada al descargar | **hecho** — ver el apéndice | nada |
 | **F21** | Lo que quedaba de antes | trámites y F15 | el banco, el dominio |
-| **F22** | Deuda técnica | — | nada |
+| **F22** | Deuda técnica | la cola sin conexión, **hecha**; queda partir `WebPublica.tsx` | nada |
 | **F23** | Acabado visual | **hecho** — ver el apéndice | nada |
 
 **Cerrado ya:** el freno de la convocatoria fuera de plazo, «Hola {nombre}», el
@@ -315,9 +315,19 @@ No se ve desde fuera y por eso no se hace nunca. Dos cosas concretas:
   luego Postgres rechazaba los `insert` uno a uno: la hermandad se quedaba con
   menos datos que antes de «restaurar», con la red de seguridad convertida en la
   causa de la pérdida. Ver el apéndice.
-- **Cola de escritura sin conexión.** El caso real es el Viernes Santo: el
-  diputado de tramo marca asistencia en la calle, sin cobertura. Hoy eso se
-  pierde.
+- ~~**Cola de escritura sin conexión.**~~ **Hecho.** El caso real es el Viernes
+  Santo: el diputado de tramo marca asistencia en la calle, sin cobertura. Se
+  perdía por los DOS caminos de escritura —`guardarPlantilla` hacía
+  `catch { return false }` y quien la llama usa `void`, así que el fallo no
+  llegaba a ninguna parte; y `sincronizar` avisaba pero no reintentaba, y al
+  recargar la lectura de la base pisaba el espejo con lo de antes de la
+  madrugada—. Ahora se apunta en `colaEscritura.ts` y se manda al volver la
+  conexión, al volver a la pestaña o al arrancar. Tres cosas que no eran obvias
+  y están medidas: solo se reintenta el fallo de RED (un rechazo de permisos
+  fallaría igual las mil veces siguientes y taparía lo que sí entra), la cola
+  SOBREVIVE al cierre de sesión (si no, cerrar sesión se llevaba la noche por la
+  otra puerta) y cada entrada lleva su hermandad, porque en el ordenador de la
+  casa de hermandad entra gente distinta.
 
 ---
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { modoDemoActivo } from './demo'
+import { encolar, esFalloDeRed, type Nueva } from './colaEscritura'
 
 /**
  * Id nuevo para cualquier registro que se vaya a crear. Antes se usaba
@@ -419,6 +420,15 @@ async function sincronizar<T extends { id: string }>(
    * el mismo rechazo las tres veces.
    */
   const traducidos: ErrorTraducido[] = []
+  /*
+   * LO QUE NO HA ENTRADO POR FALTA DE RED, para apuntarlo y reintentarlo.
+   *
+   * El caso es la madrugada del Viernes Santo: el diputado entrega papeletas en
+   * la calle, sin cobertura. Antes esto avisaba por pantalla y ahí se acababa;
+   * al recargar, la lectura de la base pisaba el espejo y la noche desaparecía.
+   * Ver `colaEscritura.ts`, que decide qué se reintenta y qué no.
+   */
+  const paraLaCola: Nueva[] = []
   function anotar(operacion: string, prefijo: string, error: { message: string; code?: string }) {
     fallos.push(`${prefijo}: ${error.message}`)
     traducidos.push(traducirErrorDeEscritura(tabla, operacion, error.message, error.code))
@@ -462,11 +472,24 @@ async function sincronizar<T extends { id: string }>(
   try {
     for (const parte of trozos(eliminados, DE_UNA_VEZ_BORRAR)) {
       const { error } = await supabase.from(tabla).delete().in('id', parte.map((e) => e.id))
-      if (error) anotar('borrar', `borrar ${parte.length}`, error)
+      if (error) {
+        anotar('borrar', `borrar ${parte.length}`, error)
+        // A la cola VAN DE UNA EN UNA, aunque aquí se manden de cien en cien.
+        // Un trozo que falla por red no dice cuáles entraron: sueltas, cada
+        // una se reintenta sola y un borrado repetido no hace daño.
+        if (esFalloDeRed(error.message)) {
+          for (const e of parte) paraLaCola.push({ clase: 'fila', tabla, op: 'borrar', filaId: e.id, fila: {} })
+        }
+      }
     }
     for (const parte of trozos(nuevos)) {
       const { error } = await supabase.from(tabla).insert(parte.map(toRow))
-      if (error) anotar('crear', `crear ${parte.length}`, error)
+      if (error) {
+        anotar('crear', `crear ${parte.length}`, error)
+        if (esFalloDeRed(error.message)) {
+          for (const n of parte) paraLaCola.push({ clase: 'fila', tabla, op: 'crear', filaId: n.id, fila: toRow(n) })
+        }
+      }
     }
     /*
      * LAS MODIFICACIONES: SIGUEN SIENDO UNA POR FILA, PERO EN PARALELO.
@@ -495,12 +518,42 @@ async function sincronizar<T extends { id: string }>(
     for (let i = 0; i < posiblesCambios.length; i += A_LA_VEZ) {
       await Promise.all(posiblesCambios.slice(i, i + A_LA_VEZ).map(async (item) => {
         const { error } = await supabase!.from(tabla).update(toRow(item)).eq('id', item.id)
-        if (error) anotar('guardar', `guardar ${item.id}`, error)
+        if (error) {
+          anotar('guardar', `guardar ${item.id}`, error)
+          if (esFalloDeRed(error.message)) {
+            paraLaCola.push({ clase: 'fila', tabla, op: 'guardar', filaId: item.id, fila: toRow(item) })
+          }
+        }
       }))
     }
   } catch (err) {
     fallos.push(String(err))
+    /*
+     * AQUÍ CAE EL CORTE DE RED DE VERDAD, y es el caso que más importa.
+     *
+     * `fetch` LANZA cuando no hay conexión, así que el `try` se rompe en la
+     * primera escritura y las de detrás no se intentan siquiera. O sea: no
+     * basta con encolar la que falló, hay que encolar TODO lo que este guardado
+     * traía — que es lo que tiene la pantalla y lo que se perdería.
+     *
+     * Se mira si de verdad es de red: una excepción que no lo sea (un `toRow`
+     * que revienta, por ejemplo) no se arregla reintentándola.
+     */
+    if (esFalloDeRed(String(err))) {
+      const yaEnLaCola = new Set(paraLaCola.map((n) => (n.clase === 'fila' ? `${n.op}:${n.filaId}` : '')))
+      const sumar = (op: 'crear' | 'guardar' | 'borrar', items: T[]) => {
+        for (const it of items) {
+          if (yaEnLaCola.has(`${op}:${it.id}`)) continue
+          paraLaCola.push({ clase: 'fila', tabla, op, filaId: it.id, fila: op === 'borrar' ? {} : toRow(it) })
+        }
+      }
+      // En el mismo orden en que se habrían hecho: borrar, crear, guardar.
+      sumar('borrar', eliminados)
+      sumar('crear', nuevos)
+      sumar('guardar', posiblesCambios)
+    }
   }
+  if (paraLaCola.length > 0) encolar(paraLaCola)
   if (fallos.length > 0) {
     console.error(`No se pudo sincronizar "${tabla}" con Supabase:`, fallos.join(' · '))
     // Aviso visible: quien está usando la app debe enterarse de que lo que ve

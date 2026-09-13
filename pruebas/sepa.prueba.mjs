@@ -1,13 +1,79 @@
 /** Remesa bancaria: el XML que se le entrega al banco. */
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/sepa.ts')
-  const acreedor = { nombre: 'Hermandad', iban: 'ES9121000418450200051332', identificadorAcreedor: 'ES23000B12345678' }
+  // El identificador era «ES23000B12345678»: ni el NIF es un NIF ni las cifras
+  // de control cuadran. Colaba porque no se validaba. El bueno para B12345674
+  // es ES11000B12345674.
+  const acreedor = { nombre: 'Hermandad', iban: 'ES9121000418450200051332', identificadorAcreedor: 'ES11000B12345674' }
 
   caso('acreedor completo', null, m.acreedorIncompleto(acreedor))
   caso('sin nombre avisa', true, /nombre/i.test(m.acreedorIncompleto({ ...acreedor, nombre: '' })))
   caso('sin IBAN avisa', true, /IBAN/i.test(m.acreedorIncompleto({ ...acreedor, iban: '' })))
   caso('un IBAN con espacios vale', null, m.acreedorIncompleto({ ...acreedor, iban: 'ES91 2100 0418 4502 0005 1332' }))
   caso('sin identificador de acreedor avisa', true, /acreedor/i.test(m.acreedorIncompleto({ ...acreedor, identificadorAcreedor: '' })))
+
+  /*
+   * ==========================================================================
+   * Y QUE EL IDENTIFICADOR SEA UN IDENTIFICADOR
+   * ==========================================================================
+   *
+   * Esto solo miraba que la casilla no estuviera vacía. Medido antes del
+   * arreglo, con el IBAN bueno: pasaban el NIF a secas, una cifra de control
+   * mal copiada, el identificador de OTRA hermandad y literalmente «me lo dijo
+   * el banco». Las cuatro generaban el fichero, y el banco rechaza el fichero
+   * ENTERO —no la línea— con un código que no dice qué pasa. Es exactamente lo
+   * que el aviso del IBAN existe para evitar, y el validador llevaba meses
+   * escrito y probado en `nif.ts` sin que nadie lo llamara aquí.
+   */
+  const conId = (id, nif) => m.acreedorIncompleto({ ...acreedor, identificadorAcreedor: id, nif })
+  caso('el NIF a secas no es un identificador', true, /empieza por ES/.test(conId('B12345674') ?? ''))
+  caso('una cifra de control mal, tampoco', true, /control/.test(conId('ES12000B12345674') ?? ''))
+  caso('y se dice cuál tendría que poner', true, /ES11000B12345674/.test(conId('ES12000B12345674') ?? ''))
+  caso('un texto cualquiera, tampoco', true, conId('me lo dijo el banco') !== null)
+  caso('quince caracteres, tampoco', true, /dieciséis/.test(conId('ES12ZZZ12345678') ?? ''))
+  caso('el bueno pasa', null, conId('ES11000B12345674'))
+  caso('y con el código de negocio del banco, también', null, conId('ES11ZZZB12345674'))
+  caso('escrito con espacios, igual', null, conId('ES11 000 B12345674'))
+
+  /*
+   * ¿Y ES EL DE ESTA HERMANDAD? El identificador lleva el NIF dentro. Copiar
+   * el del gestor o el de la hermandad vecina da uno BIEN FORMADO que pasa
+   * todo lo de arriba, y el banco lo acepta: se cobra en nombre de otro.
+   */
+  caso('el identificador de otra hermandad se caza', true,
+    /es de otro/.test(conId('ES11000B12345674', 'G41000001') ?? ''))
+  caso('y se dice el que le toca a este NIF', true,
+    /ES67000G41000001/.test(conId('ES11000B12345674', 'G41000001') ?? ''))
+  caso('el suyo pasa', null, conId('ES67000G41000001', 'G41000001'))
+  caso('y con otro código de negocio, también', null, conId('ES67ZZZG41000001', 'G41000001'))
+  // Sin el NIF delante no se puede comprobar, y no se inventa: el fichero se
+  // genera igual, que es lo que pasaba hasta ahora en las pantallas que no lo
+  // pasan.
+  caso('sin NIF a mano no se estorba', null, conId('ES11000B12345674'))
+  caso('ni con un NIF que no es un NIF', null, conId('ES11000B12345674', 'no soy un nif'))
+
+  /*
+   * Y EL CABLE: que la pantalla de Cuotas le pase el NIF. Sin eso la
+   * comprobación de «es de otro» está escrita y no mira nada, que es el fallo
+   * que ya se ha colado dos veces en este proyecto.
+   */
+  const cuotasSrc = await (await import('node:fs/promises')).readFile('src/pages/app/Cuotas.tsx', 'utf8')
+  caso('Cuotas le pasa el NIF al acreedor', true, /nif: hermandad\.cif/.test(cuotasSrc))
+
+  /*
+   * Y EL QUE LE TOCA, PROPUESTO EN CONFIGURACIÓN mientras el banco no lo da.
+   * `identificadorQueLeToca` estaba escrito para eso —lo dice su comentario— y
+   * no lo usaba ninguna pantalla: era una función perfecta y muerta. Es el
+   * trámite que más tarda, así que ver el número escrito antes de tenerlo vale
+   * la pena.
+   */
+  const cfgSrc = await (await import('node:fs/promises')).readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  caso('Configuración propone el que le toca', true,
+    /identificadorQueLeToca\(settings\.cif\)/.test(cfgSrc))
+  caso('solo si la casilla está vacía', true,
+    /!settings\.identificadorAcreedor\.trim\(\) && identificadorQueLeToca/.test(cfgSrc))
+  caso('y se puede poner de un clic', true,
+    /update\('identificadorAcreedor', identificadorQueLeToca\(settings\.cif\)\)/.test(cfgSrc))
 
   const deudor = (nombre, mandatoId) => ({
     nombre, mandatoId, numeroHermano: 1, fechaFirma: new Date(2020, 0, 1), iban: 'ES7921000813610123456789',

@@ -20,6 +20,8 @@ import { avisoDelEsquema, mirarElEsquema, type EstadoDelEsquema } from '../lib/v
 import { dondeEstoyDeSoporte, salirDeSoporte, soySoporte } from '../lib/soporte'
 import { IconoMedalla } from './Iconos'
 import { useSuscripcion, moduloPermitidoPorPack, avisoDePagoFallido } from '../lib/suscripcion'
+import { leerCola, resumen as resumenDeLaCola } from '../lib/colaEscritura'
+import { intentarLaCola, montarLaCola } from '../lib/montarLaCola'
 import PantallaSuscripcion from './PantallaSuscripcion'
 import ReportarFallo from './ReportarFallo'
 
@@ -228,6 +230,34 @@ export default function AppShell() {
     }
     window.addEventListener('cabildo-sync-error', alFallar)
     return () => window.removeEventListener('cabildo-sync-error', alFallar)
+  }, [])
+
+  /*
+   * LO QUE ESPERA A QUE VUELVA LA CONEXIÓN.
+   *
+   * Banda aparte de la de los fallos, y no por capricho: no es lo mismo «no se
+   * ha podido guardar» —que pide hacer algo— que «está apuntado y se manda
+   * solo», que pide no cerrar la aplicación y ya está. Meterlo en el aviso de
+   * error haría que quien pasa lista en la calle creyera que ha perdido la
+   * noche justo cuando NO la ha perdido.
+   *
+   * El caso es el Viernes Santo y está contado entero en `colaEscritura.ts`.
+   */
+  const [cola, setCola] = useState<{ cuantas: number; texto: string }>({ cuantas: 0, texto: '' })
+  useEffect(() => {
+    // Lo que hubiera de una sesión anterior: al abrir ya hay que decirlo.
+    setCola({ cuantas: leerCola().length, texto: resumenDeLaCola(leerCola()) })
+    function alCambiarLaCola(e: Event) {
+      const d = (e as CustomEvent<{ cuantas: number; texto: string }>).detail
+      setCola({ cuantas: d?.cuantas ?? 0, texto: d?.texto ?? '' })
+    }
+    window.addEventListener('cabildo-cola', alCambiarLaCola)
+    // Y los tres momentos en que se intenta soltarla.
+    const desmontar = montarLaCola()
+    return () => {
+      window.removeEventListener('cabildo-cola', alCambiarLaCola)
+      desmontar()
+    }
   }, [])
 
   /*
@@ -743,6 +773,26 @@ export default function AppShell() {
                 <pre>{detalleSync}</pre>
               </details>
             )}
+          </div>
+        )}
+
+        {cola.cuantas > 0 && (
+          <div className="banner-inline banner-inline--warn app-sync-error" role="status">
+            <span>
+              <b>Sin conexión con la base de datos.</b>{' '}
+              {cola.texto}{' '}
+              Está apuntado en este dispositivo y se manda solo en cuanto vuelva la conexión.
+              <b> No cierres la aplicación ni cierres sesión</b> hasta que este aviso desaparezca.
+            </span>
+            {/*
+              El botón no es «entendido»: es intentarlo ahora. Este aviso no se
+              puede cerrar a mano a propósito — se va cuando la cola se vacía, y
+              que se pueda tapar es justo lo que haría que alguien cerrara
+              sesión con la madrugada del Viernes Santo dentro.
+            */}
+            <button className="btn btn-ghost btn-sm" onClick={() => { void intentarLaCola() }}>
+              Intentar ahora
+            </button>
           </div>
         )}
 

@@ -87,13 +87,23 @@ function hoy() {
   return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-/** Fecha por defecto del primer cobro: hoy + 15 días (margen de aviso típico de una domiciliación SEPA). */
 /** Meses en castellano para el ajuste de renovación (enero = índice 0). */
 const MESES_LARGOS = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ]
 
+/**
+ * Fecha por defecto del primer cobro: hoy + 15 días.
+ *
+ * Es el margen de aviso de una domiciliación, no el plazo del banco: al hermano
+ * hay que decirle que se le va a cobrar antes de cobrarle. El plazo de
+ * PRESENTACIÓN de la remesa es otra cosa y es más corto — lo propone
+ * `abrirRemesa()` a cinco días— y cada banco pone el suyo.
+ *
+ * (El comentario de esta función estaba quince líneas más arriba, encima de
+ * `MESES_LARGOS`, y parecía describir la lista de meses.)
+ */
 function fechaCobroPorDefecto() {
   const d = new Date()
   d.setDate(d.getDate() + 15)
@@ -803,7 +813,14 @@ export default function Cuotas() {
   )
 
   const acreedor = useMemo(
-    () => ({ nombre: hermandad.nombreLegal, iban: hermandad.iban, identificadorAcreedor: hermandad.identificadorAcreedor }),
+    () => ({
+      nombre: hermandad.nombreLegal,
+      iban: hermandad.iban,
+      identificadorAcreedor: hermandad.identificadorAcreedor,
+      // El NIF va para que se pueda comprobar que el identificador es SUYO y no
+      // el de otra hermandad: el identificador lo lleva dentro. Ver `sepa.ts`.
+      nif: hermandad.cif,
+    }),
     [hermandad],
   )
   const avisoAcreedor = useMemo(() => acreedorIncompleto(acreedor), [acreedor])

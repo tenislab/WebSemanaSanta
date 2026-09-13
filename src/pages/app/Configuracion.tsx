@@ -47,7 +47,7 @@ import { formatDate } from '../../lib/format'
 import { descargarArchivo } from '../../lib/csv'
 import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { problemaDeBizum, problemaDeTelefono } from '../../lib/telefono'
-import { problemaDeCodigoPostal, problemaDeIdentificadorAcreedor, problemaDeNif } from '../../lib/nif'
+import { identificadorQueLeToca, problemaDeCodigoPostal, problemaDeIdentificadorAcreedor, problemaDeNif } from '../../lib/nif'
 import { porQueNoValeElIban, ibanValido } from '../../lib/iban'
 import AvisoFalta from '../../components/AvisoFalta'
 import { contextoActual, requisito, requisitos } from '../../lib/requisitos'
@@ -1072,6 +1072,32 @@ export default function Configuracion() {
             />
             <AvisoDeCampo texto={problemaDeIdentificadorAcreedor(settings.identificadorAcreedor)} />
             <p className="form-hint">Lo asigna tu banco al dar de alta el adeudo directo SEPA. Hace falta para generar la remesa.</p>
+            {/*
+              EL QUE LE TOCA, CALCULADO, MIENTRAS EL BANCO NO LO DÉ.
+              No es adivinar: el identificador es el país + dos cifras de
+              control + un código de negocio + el NIF, y las cifras de control
+              salen del NIF. Así que con el NIF puesto ya se sabe cuál será,
+              salvo que el banco dé un código de negocio distinto del «000».
+              Es el trámite que más tarda de todos, y verlo escrito quita la
+              sensación de estar esperando a algo indescifrable.
+            */}
+            {!settings.identificadorAcreedor.trim() && identificadorQueLeToca(settings.cif) && (
+              <>
+                <p className="form-hint">
+                  Con el NIF <b>{settings.cif}</b>, el que os tocará es{' '}
+                  <b>{identificadorQueLeToca(settings.cif)}</b> —el país, dos cifras de control que
+                  salen del NIF, el código de negocio «000» y el NIF—. Si el banco os da otro código
+                  de negocio, cambian solo esos tres caracteres del medio.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => update('identificadorAcreedor', identificadorQueLeToca(settings.cif))}
+                >
+                  Ponerlo mientras llega el del banco
+                </button>
+              </>
+            )}
           </div>
 
           {/*

@@ -10,11 +10,21 @@
  */
 
 import { ibanValido, limpiarIban, porQueNoValeElIban } from './iban'
+import { identificadorAcreedorValido, identificadorQueLeToca, limpiarNif, problemaDeIdentificadorAcreedor } from './nif'
 
 export interface SepaAcreedor {
   nombre: string
   iban: string
   identificadorAcreedor: string
+  /**
+   * El NIF de la hermandad, para comprobar que el identificador es SUYO.
+   *
+   * Opcional porque no hace falta para generar el fichero: el identificador ya
+   * lleva el NIF dentro. Sirve para cazar el error de copiar el identificador
+   * de otro —del gestor, de la hermandad de al lado— que está bien formado y
+   * por tanto pasa todas las validaciones menos esta.
+   */
+  nif?: string
 }
 
 export interface SepaDeudor {
@@ -121,6 +131,43 @@ export function acreedorIncompleto(acreedor: SepaAcreedor): string | null {
   }
   if (!acreedor.identificadorAcreedor.trim()) {
     return 'Falta el identificador de acreedor SEPA. Lo da el banco, y es gratis.'
+  }
+  /*
+   * Y QUE EL IDENTIFICADOR SEA UN IDENTIFICADOR, por lo mismo que el IBAN.
+   *
+   * Esto solo miraba que la casilla no estuviera vacía, y con eso pasaba
+   * CUALQUIER COSA: el NIF a secas, una cifra de control mal copiada, o
+   * literalmente «me lo dijo el banco». Medido, las cinco. Y el banco rechaza
+   * el fichero ENTERO —no la línea— con un código que no dice qué pasa, que es
+   * justo lo que el aviso del IBAN de arriba existe para evitar.
+   *
+   * El validador ya estaba escrito y probado en `nif.ts`; lo que faltaba era
+   * llamarlo aquí, donde todavía se puede leer «te falta un dígito».
+   */
+  if (!identificadorAcreedorValido(acreedor.identificadorAcreedor)) {
+    return `${problemaDeIdentificadorAcreedor(acreedor.identificadorAcreedor)} `
+      + 'Está en Configuración → La hermandad.'
+  }
+  /*
+   * ¿Y ES EL DE ESTA HERMANDAD? El identificador lleva el NIF dentro, así que
+   * si no coincide con el de la hermandad es el de OTRO: pasa al copiarlo del
+   * gestor o de la hermandad vecina, está bien formado, y el banco lo acepta
+   * —cobra en su nombre y el dinero acaba donde no debe, o el mandato no
+   * cuadra con el acreedor y devuelven los recibos meses después—.
+   *
+   * Es un aviso con nombre y apellidos porque se sabe exactamente cuál le
+   * tocaría: sale del NIF.
+   */
+  const nif = limpiarNif(acreedor.nif ?? '')
+  if (nif) {
+    const suyo = identificadorQueLeToca(nif)
+    const dentro = limpiarNif(acreedor.identificadorAcreedor).slice(-9)
+    if (suyo && dentro !== nif) {
+      return `El identificador de acreedor lleva dentro el NIF ${dentro}, y el de la hermandad `
+        + `es ${nif}: ese identificador es de otro. El que le toca a este NIF empieza por `
+        + `${suyo.slice(0, 4)} y acaba en ${nif} (${suyo}, si el banco no os ha dado otro `
+        + 'código de negocio). Está en Configuración → La hermandad.'
+    }
   }
   return null
 }
