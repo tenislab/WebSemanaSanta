@@ -50,7 +50,7 @@ export default async function ({ caso }) {
       envio.indexOf('noSeSupoDeLosSuscriptores') < envio.indexOf('avisarASuscriptores'))
     caso('y lo dice en vez de callar', true, /no se ha mandado nada/.test(com))
 
-    const web = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+    const web = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
     caso('el panel de suscriptores avisa del fallo', true, /falloAlLeer/.test(web))
 
     const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')

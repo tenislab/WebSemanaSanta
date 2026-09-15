@@ -140,7 +140,10 @@ export default async function ({ cargar, caso }) {
    * aviso de «si lo dejas vacío se publica lo de Configuración» ya sería
    * mentira: lo que hay es un botón para copiarlo.
    */
-  const editor = leer('src/pages/app/WebPublica.tsx')
+  // Entero: son veintitrés pestañas en ficheros aparte (ver fuentes.mjs). Y aquí
+  // importa especialmente, porque estos guardias esperan FALSE: leyendo un solo
+  // fichero se quedarían en verde sin vigilar nada.
+  const editor = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   for (const campo of ['direccion', 'telefono', 'email']) {
     caso(`el campo ${campo} no usa el dato de la hermandad de placeholder`, false,
       editor.includes(`placeholder={hermandad.${campo}`))

@@ -76,7 +76,8 @@ export default async function ({ cargar, caso }) {
     ['src/pages/app/Configuracion.tsx', 'un campo propio, con lo que cada hermano tenga apuntado'],
     ['src/pages/app/WebPublica.tsx', 'el mensaje de alguien que escribió desde la web'],
   ]) {
-    const src = await readFile(fichero, 'utf8')
+    // `fuenteDe`: el editor de la web está partido en varios ficheros.
+    const src = await (await import('./fuentes.mjs')).fuenteDe(fichero)
     caso(`${fichero.split('/').pop()} ofrece deshacer (${quePasa})`, true, /ofrecerDeshacer\(/.test(src))
   }
 

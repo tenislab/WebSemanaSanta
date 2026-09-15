@@ -101,7 +101,7 @@ export default async function ({ caso }) {
   // La vista previa del editor de webs es una FOTO: dentro había once cosas
   // enfocables que no hacían nada, y su h1 «Nuestra Hermandad» convertía el
   // editor en una página con dos títulos de nivel 1.
-  const web = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+  const web = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   caso('la vista previa está inerte', true, web.includes("escenario.current?.setAttribute('inert', '')"))
   caso('y el escenario lleva su referencia', true, /ref=\{escenario\}\n\s*className="cms-preview__stage"/.test(web))
 }

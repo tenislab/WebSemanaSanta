@@ -75,7 +75,7 @@ export default async function ({ caso, cargar }) {
 
   // Y la pantalla hace algo con ese `false`.
   const { readFile } = await import('node:fs/promises')
-  const web = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+  const web = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   caso('la pantalla enseña el enlace a mano', true, web.includes('cms-copiar-a-mano'))
   caso('y ya no llama al portapapeles a pelo', false, /navigator\.clipboard\?\.writeText/.test(web))
 }

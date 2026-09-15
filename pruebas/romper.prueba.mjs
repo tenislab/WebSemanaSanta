@@ -121,16 +121,44 @@ export default async function ({ caso }) {
   }
 
   /*
-   * 3. LA ROTURA FALLA → se restaura de todas formas.
+   * 3. LA ROTURA NO CAMBIA NADA → devuelve 2, y ANTES DEVOLVÍA OTRA COSA.
    *
-   * Aquí es donde se pierde el trabajo si esto está mal hecho: un guion de
-   * romper con una errata dejaba el árbol a medio romper y sin respaldo.
+   * Esto se comprobaba al revés: se pedía que, con una rotura que falla, se
+   * corrieran las pruebas igual y se contestara según lo que dijeran. Y es una
+   * respuesta ENGAÑOSA, medida dos veces en carne propia: un `sed` con una
+   * cadena mal copiada DEVUELVE 0 y no toca nada, así que las pruebas corren
+   * sobre el árbol intacto, salen todas en verde y esto contestaba «NO SALTA»
+   * —o sea, acusaba a la prueba de no vigilar nada cuando lo que había fallado
+   * era la rotura—. Con el fichero ya partido en veintitrés, la cadena que
+   * busca el `sed` falla más a menudo, no menos.
+   *
+   * Así que ahora, si el árbol no ha cambiado, no se contesta: se dice que la
+   * rotura no se aplicó, que es lo único que se sabe.
+   *
+   * Y lo que no cambia: se restaura de todas formas. Aquí es donde se pierde el
+   * trabajo si esto está mal hecho.
    */
   {
     const r = await romper('una rotura que no se aplica', ['false'], CON_FALLO)
-    caso('una rotura que falla no impide correr las pruebas', 0, r.codigo)
-    caso('y se avisa de que la rotura ha dado error', true, r.texto.includes('devuelto error'))
+    caso('una rotura que no cambia nada no se contesta', 2, r.codigo)
+    caso('y se dice por qué', true, r.texto.includes('NO HA CAMBIADO NADA'))
+    caso('nombrando la causa de siempre', true, r.texto.includes('no encuentra su patrón'))
     caso('y el árbol sigue intacto', 'INTACTO\n', r.fichero)
+  }
+
+  /*
+   * 3 bis. LA ROTURA DA ERROR PERO SÍ CAMBIA ALGO → se sigue.
+   *
+   * Es distinto y hay que distinguirlo: un guion de romper que toca el fichero
+   * y luego se cae a medias sí ha cambiado el árbol, así que lo que digan las
+   * pruebas vale y hay que oírlo.
+   */
+  {
+    const rompeYFalla = ['sh', '-c', "printf 'ROTO\\n' > fichero.txt; false"]
+    const r = await romper('rompe y luego se cae', rompeYFalla, CON_FALLO)
+    caso('si cambió algo, se contesta aunque la rotura fallara', 0, r.codigo)
+    caso('y se avisa de que la rotura ha dado error', true, r.texto.includes('devuelto error'))
+    caso('y el árbol se restaura igual', 'INTACTO\n', r.fichero)
   }
 
   /* 4. RESPALDA TODO LO QUE LLEVA GIT, no unas carpetas a mano: también api/. */

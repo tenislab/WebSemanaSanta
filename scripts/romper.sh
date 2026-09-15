@@ -101,7 +101,25 @@ trap 'exit 130' INT TERM
 # La rotura. Si falla, no se para: a veces se rompe con un `sed` que no
 # encuentra nada, y eso también hay que verlo —sale en verde y ya se sabe que
 # la rotura no se aplicó.
+ANTES=$(git status --porcelain)
 "$@" || echo "romper.sh: la orden de romper ha devuelto error; se sigue para ver qué dicen las pruebas." >&2
+
+# ¿HA CAMBIADO ALGO DE VERDAD?
+#
+# Un `sed` que no encuentra su patrón DEVUELVE 0 y no toca nada, así que la
+# comprobación de arriba no lo caza. Y entonces esto corre las pruebas sobre el
+# árbol intacto, salen todas en verde y contesta «NO SALTA» — o sea, acusa a la
+# prueba de no vigilar nada cuando lo que ha fallado es la rotura. Es la
+# respuesta más engañosa que puede dar esta herramienta y ya ha engañado dos
+# veces, las dos por una cadena mal copiada en el `sed`.
+if [ "$(git status --porcelain)" = "$ANTES" ]; then
+  echo "### $DESC"
+  echo "    LA ROTURA NO HA CAMBIADO NADA."
+  echo "    El árbol está igual que antes (un \`sed\` que no encuentra su patrón"
+  echo "    devuelve 0 sin tocar nada). Así no se puede decir si el guardia salta:"
+  echo "    comprueba la cadena que buscas y vuelve."
+  exit 2
+fi
 
 # Lo generado se regenera: si no, romper una pieza de SQL hace fallar la prueba
 # de que el fichero de una pieza está al día, y eso tapa lo que se buscaba.

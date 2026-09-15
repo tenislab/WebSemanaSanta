@@ -153,7 +153,7 @@ export default async function ({ cargar, caso }) {
   caso('y no son una retahíla', true, todos.length <= 6)
 
   // --- Y LA PANTALLA LO ENSEÑA ---
-  const web = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+  const web = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   caso('la pantalla lo usa', true, /revisarSeo\(web, hermandad\)/.test(web))
   caso('lo grave primero', true, /Number\(b\.grave\) - Number\(a\.grave\)/.test(web))
   caso('y dice qué hacer en cada uno', true, /\{a\.queHacer\}/.test(web))

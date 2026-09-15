@@ -20,7 +20,7 @@ Continúa la numeración de `docs/HOJA-DE-RUTA.md`, que llega hasta F17.
 | **F19** | Editor de SEO | **hecho** salvo desplegar `api/w.ts` (ops, no código) — ver apéndice |  |
 | **F20** | La copia, cifrada al descargar | **hecho** — ver el apéndice | nada |
 | **F21** | Lo que quedaba de antes | trámites y F15 | el banco, el dominio |
-| **F22** | Deuda técnica | la cola sin conexión, **hecha**; queda partir `WebPublica.tsx` | nada |
+| **F22** | Deuda técnica | **hecha entera**: la cola sin conexión y el reparto de `WebPublica.tsx` | nada |
 | **F23** | Acabado visual | **hecho** — ver el apéndice | nada |
 
 **Cerrado ya:** el freno de la convocatoria fuera de plazo, «Hola {nombre}», el
@@ -304,9 +304,16 @@ mitad bonita.
 
 No se ve desde fuera y por eso no se hace nunca. Dos cosas concretas:
 
-- **`WebPublica.tsx` tiene 4.573 líneas.** Es, con diferencia, el fichero más
-  grande del proyecto, y es justo donde hay que meter F19. Partirlo **antes** de
-  tocarlo sale más barato que después.
+- ~~**`WebPublica.tsx` tiene 4.573 líneas.**~~ **Hecho.** Había llegado a 4.770,
+  con el segundo fichero del proyecto en 2.900. Ahora son 506 y veinticuatro
+  ficheros en `src/pages/app/web/`, uno por pestaña, con el nombre de su
+  componente: lo que hay que tocar se encuentra por el nombre de la pestaña que
+  enseña el fallo, que es lo único que se sabe cuando llega uno.
+  El reparto es un MOVIMIENTO, no un cambio: las veintitrés pestañas pintadas
+  antes y después dan capturas idénticas byte a byte. Y va con un commit previo
+  que hace robustos los doce guardias que leían la fuente del fichero gordo —al
+  partirlo, los que comprueban que algo NO está se habrían quedado en verde sin
+  vigilar nada.
 - ~~**Restaurar una copia no es atómico.**~~ **Mitigado.** Atómico del todo no
   puede ser sin mandarle megas al servidor, y eso no cambia. Lo que sí se ha
   cerrado es el agujero de verdad: **ahora se comprueba que la copia encaja
@@ -597,9 +604,10 @@ revisión que se deja de mirar. Cuando está todo, lo dice — sin prometer sali
 primero en Google, que es lo que haría dejar de fiarse de todo lo demás.
 
 **Lo que queda de F19:** el SEO por página (cada página con su descripción) es
-un cambio del modelo de datos dentro de `WebPublica.tsx`, que tiene 4.573 líneas
-— y este mismo documento dice que hay que partirlo antes de tocarlo (F22). Y
-desplegar `api/w.ts`, que no es código.
+un cambio del modelo de datos, y el fichero donde había que hacerlo YA ESTÁ
+PARTIDO (F22): va en `src/pages/app/web/PaginasTab.tsx` (125 líneas) y
+`web/CompartirTab.tsx` (237), no en un fichero de casi cinco mil. Y desplegar
+`api/w.ts`, que no es código.
 
 ### Las reglas que se disparan solas — **hecho** (F18.3)
 

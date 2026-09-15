@@ -112,7 +112,7 @@ async function estaEnAjustes({ caso }) {
    * mientras se trabaja. Si algún día se duplicara el formulario aquí, habría
    * dos sitios donde cambiar lo mismo y uno se quedaría atrás.
    */
-  const web = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+  const web = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   caso('el dominio se sigue poniendo en la Web', true, /id="dominio"/.test(web))
   caso('y no se ha duplicado en Ajustes', false, /id="dominio"/.test(cfg))
 }

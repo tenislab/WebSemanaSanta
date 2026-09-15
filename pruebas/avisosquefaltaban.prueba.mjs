@@ -118,7 +118,8 @@ export default async function ({ cargar, caso }) {
   caso('«Leerlo» va a la pestaña del buzón', true, web[0].donde.includes('ir=buzon'))
   caso('y dice cuál abrir', true, web[0].donde.includes('mensaje=m1'))
 
-  const pantalla = leerFuente('src/pages/app/WebPublica.tsx')
+  // El editor de la web vive en varios ficheros; se pide entero (ver fuentes.mjs).
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   caso('la pantalla de la web obedece a la pestaña pedida', true,
     pantalla.includes("params.get('ir')") && pantalla.includes('esPestana(pedida)'))
   caso('y lo pedido manda sobre la pestaña recordada', true,

@@ -23,7 +23,7 @@
 export default async function ({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const foco = await readFile('src/lib/foco.ts', 'utf8')
-  const web = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+  const web = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
 
   // --- El ayudante existe y hace las dos cosas que tiene que hacer.
   caso('el ayudante está en un solo sitio', true, /export function useMoverConElFoco/.test(foco))

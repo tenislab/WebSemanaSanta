@@ -117,7 +117,7 @@ async function avisoDeDominio({ cargar, caso }) {
   caso('y que uno redirija al otro', true, /redirija|no llega/.test(t))
 
   const { readFile } = await import('node:fs/promises')
-  const pantalla = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   caso('la pantalla tiene el botón', true, /Avisar para que lo activen/.test(pantalla))
   caso('y lo llama de verdad', true, /await pedirActivarDominio\(/.test(pantalla))
   // Y ya no manda a la hermandad a hacer algo que no puede hacer.

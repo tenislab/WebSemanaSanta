@@ -221,8 +221,11 @@ export default async function ({ cargar, caso }) {
       ['src/pages/HermanoPortal.tsx', ['problemaDeTelefono']],
       ['src/pages/app/WebPublica.tsx', ['problemaDeTelefono']],
     ]
+    const { fuenteDe } = await import('./fuentes.mjs')
     for (const [fichero, esperados] of sitios) {
-      const src = await readFile(fichero, 'utf8')
+      // `fuenteDe` y no `readFile`: el editor de la web está partido en
+      // veintitrés ficheros y la lista sigue nombrando la pantalla.
+      const src = await fuenteDe(fichero)
       for (const fn of esperados) {
         caso(`${fichero.split('/').pop()} usa ${fn}`, true, src.includes(fn))
       }
@@ -233,7 +236,7 @@ export default async function ({ cargar, caso }) {
     // el alta y en la cuenta de donativos de la web, no.
     for (const f of ['src/pages/app/Configuracion.tsx', 'src/components/AltaHermandad.tsx',
                      'src/pages/app/WebPublica.tsx']) {
-      const src = await readFile(f, 'utf8')
+      const src = await fuenteDe(f)
       caso(`${f.split('/').pop()} comprueba el IBAN`, true, /ibanValido/.test(src))
     }
   }

@@ -237,7 +237,7 @@ async function laLlaveNoSaleDeLaBase({ caso }) {
    * que están todos, así que ahí tiene que estar la salida. Estar solo en
    * Comunicados obliga a empezar a escribir un comunicado para arreglarlo.
    */
-  const editor = await readFile('src/pages/app/WebPublica.tsx', 'utf8')
+  const editor = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
   caso('la lista de suscriptores también lo ofrece', true,
     /pendientes\.length > 0 && \(/.test(editor))
   caso('con la misma función, no con otra copia', true,
