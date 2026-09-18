@@ -8,6 +8,7 @@
  * fallo real en `enviar-correo`: las cabeceras CORS a medias, que no revienta
  * al escribirlas, solo deja de funcionar en el navegador de alguien.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const fuente = await readFile('supabase/functions/webhook-stripe/index.ts', 'utf8')
@@ -28,7 +29,7 @@ export default async function ({ caso }) {
     /`\$\{t\}\.\$\{cuerpoCrudo\}`/.test(fuente))
   caso('el cuerpo se lee como texto antes que como JSON', true,
     /const cuerpoCrudo = await req\.text\(\)/.test(fuente)
-    && fuente.indexOf('req.text()') < fuente.indexOf('JSON.parse(cuerpoCrudo)'))
+    && antesQue(fuente, 'req.text()', 'JSON.parse(cuerpoCrudo)'))
   // La comparación no puede ser un `===` a secas: se quiere una que no
   // delate por dónde difieren dos cadenas mirando cuánto tarda.
   caso('compara la firma sin filtrar por tiempo', true, /function igualesSinFiltrar/.test(fuente))

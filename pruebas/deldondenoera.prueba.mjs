@@ -75,7 +75,7 @@ export default async function ({ caso }) {
    * donde vienen.
    */
   {
-    const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+    const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
     caso('el portal del hermano sigue leyendo lo suyo', true, /getSolicitudes\(\)/.test(portal))
   }
 }

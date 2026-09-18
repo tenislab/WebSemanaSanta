@@ -54,6 +54,26 @@ if (typeof globalThis.localStorage === 'undefined') {
   }
 }
 
+/**
+ * Y un `sessionStorage`, por lo mismo.
+ *
+ * Lo pide la sesión del área del hermano (`pages/portal/sesion.ts`): quién está
+ * dentro se guarda ahí a propósito —en la de sesión y no en la local— para que
+ * cerrar la pestaña cierre la sesión. Sin esto no se podía probar ni leerla ni
+ * guardarla.
+ */
+if (typeof globalThis.sessionStorage === 'undefined') {
+  const datos = new Map()
+  globalThis.sessionStorage = {
+    getItem: (k) => (datos.has(k) ? datos.get(k) : null),
+    setItem: (k, v) => datos.set(k, String(v)),
+    removeItem: (k) => datos.delete(k),
+    clear: () => datos.clear(),
+    key: (i) => [...datos.keys()][i] ?? null,
+    get length() { return datos.size },
+  }
+}
+
 let total = 0
 let fallos = 0
 

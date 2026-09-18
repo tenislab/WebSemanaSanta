@@ -116,7 +116,7 @@ export default async function ({ cargar, caso }) {
     /if \(!ok\) return respuesta\(\{ error: 'No se ha podido apuntar el cobro\.' \}, 502\)/.test(hookLimpio))
 
   /* ---- 6. La pantalla no da nada por cobrado al volver ---- */
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('la vuelta de la pasarela no dice «pagado»', false,
     /pago=hecho[\s\S]{0,400}?[Pp]agada/.test(portal))
 }

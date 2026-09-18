@@ -22,6 +22,7 @@
  * Las dos se rompen añadiendo una tabla nueva y tocando solo un fichero, que es
  * lo que va a pasar. Por eso esto está aquí.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
   const sql = await readFile('supabase/restaurar-copia.sql', 'utf8')
@@ -50,7 +51,7 @@ export default async function ({ cargar, caso }) {
   /* 4. La caja negra: se escribe ANTES de borrar, y en una tabla que no se vacía. */
   caso('queda escrito en el registro', true, /insert into registro_actividad/.test(sql))
   caso('y antes de borrar nada', true,
-    sql.indexOf('insert into registro_actividad') < sql.indexOf('delete from %I'))
+    antesQue(sql, 'insert into registro_actividad', 'delete from %I'))
   caso('en una tabla que la restauración no se lleva por delante', false,
     vaciadas.includes('registro_actividad'))
 
@@ -91,7 +92,7 @@ export default async function ({ cargar, caso }) {
   caso('antes de volcar se descarga lo que hay ahora', true,
     /antes-de-restaurar-\$\{marca\}\.json/.test(conf))
   caso('y se descarga ANTES de volcar', true,
-    conf.indexOf('antes-de-restaurar') < conf.indexOf('volcarCopiaEnLaBase(obj)'))
+    antesQue(conf, 'antes-de-restaurar', 'volcarCopiaEnLaBase(obj)'))
 
   // Y el botón ya no está apagado con base de datos conectada, que era lo honesto antes y ya no.
   const b = await cargar('src/lib/restaurar.ts')

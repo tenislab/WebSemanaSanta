@@ -79,7 +79,7 @@ export default async function ({ cargar, caso }) {
 /** Y que se vea donde se decide el cortejo: en la ficha del hermano. */
 async function laFichaLoEnsena({ caso }) {
   const { readFile } = await import('node:fs/promises')
-  const f = (await readFile('src/pages/app/Hermanos.tsx', 'utf8'))
+  const f = (await (await import('./fuentes.mjs')).fuenteDelCenso())
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 
   caso('la ficha calcula el historial', true, /historialDeAsistencia\(getAsistencias\(\), selected\.id\)/.test(f))

@@ -22,6 +22,7 @@
  * papeletas, los movimientos, el personal, la suscripción—. Aquí se comprueba
  * que ninguna de esas formas vuelve a pasar de largo.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/persistencia.ts')
 
@@ -114,7 +115,7 @@ export default async function ({ cargar, caso }) {
   // Y POR FUERA del proveedor de sesión: si lo que revienta es leer la sesión
   // guardada, un envoltorio por dentro no llegaría a montarse.
   caso('y por fuera del proveedor de sesión', true,
-    main.indexOf('<SiAlgoPetardea>') < main.indexOf('<AuthProvider>'))
+    antesQue(main, '<SiAlgoPetardea>', '<AuthProvider>'))
 
   /*
    * Se le quitan los comentarios antes de mirar. Sin eso, esta prueba fallaba

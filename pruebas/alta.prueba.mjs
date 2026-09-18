@@ -1,4 +1,5 @@
 /** P4: cuándo sale el asistente de alta de la hermandad. */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/altaHermandad.ts')
   const vacia = { cif: '', direccion: '', iban: '' }
@@ -35,7 +36,7 @@ export default async function ({ cargar, caso }) {
    * dirección—.
    */
   const { readFile } = await import('node:fs/promises')
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   /*
    * La creación de cuentas y su mensaje de fallo viven ahora en un módulo
    * compartido, porque hacen falta en DOS pantallas: Hermanos y Personal.
@@ -53,9 +54,18 @@ export default async function ({ cargar, caso }) {
   caso('crear el acceso devuelve también el fallo', true,
     /ResultadoDeAcceso = \{[\s\S]{0,600}?error: string \| null/.test(accesos))
   caso('y la pantalla lo recoge', true, /if \(acceso\.error\) setAvisoAcceso\(acceso\.error\)/.test(hermanos))
-  // En los DOS sitios que dan de alta: la solicitud aceptada y el alta a mano.
+  /*
+   * En los DOS sitios que dan de alta: la solicitud aceptada y el alta a mano.
+   *
+   * Se busca por lo que HACE y no por cómo se llama la función. Al partir el
+   * censo, uno de los dos se mudó a `censo/solicitudesDeAlta.ts` y allí el
+   * aviso llega por un prop, que se llama `onAvisoDeAcceso` y no
+   * `setAvisoAcceso`: con el nombre exacto, este guardia contaba uno y daba
+   * rojo por un cambio que no rompía nada. Lo que no puede perderse es que el
+   * error de crear la cuenta SE CUENTE, se llame como se llame quien lo cuenta.
+   */
   caso('en los dos sitios que dan de alta', 2,
-    (hermanos.match(/if \(acceso\.error\) setAvisoAcceso\(acceso\.error\)/g) || []).length)
+    (hermanos.match(/if \(acceso\.error\) \w+\(acceso\.error\)/g) || []).length)
   caso('y se pinta donde se ve', true, /avisoAcceso && \(/.test(hermanos))
 
   // El mensaje dice las dos cosas que hacen falta: que la ficha SÍ se guardó, y
@@ -83,7 +93,7 @@ export default async function ({ cargar, caso }) {
   // Fuera del cajón no es un detalle: el cajón se cierra al guardar y se
   // llevaría el aviso con él.
   caso('el aviso va antes del primer cajón', true,
-    personal.indexOf('avisoAcceso && (') < personal.indexOf('<Drawer'))
+    antesQue(personal, 'avisoAcceso && (', '<Drawer'))
   // Y hay forma de recuperarse: hasta ahora, si la cuenta no se creaba, no
   // había NINGUNA manera de arreglarlo desde la pantalla.
   caso('se puede reintentar crear la cuenta', true, /Reintentar crear su acceso/.test(personal))

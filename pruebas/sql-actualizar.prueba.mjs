@@ -17,6 +17,7 @@
  * mecánicamente: en el fichero de actualizar solo entra lo que NADIE redefine
  * después.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const { generar, PIEZAS_ACTUALIZACION } = await import('../scripts/generar-actualizar.mjs')
@@ -127,7 +128,7 @@ export default async function ({ caso }) {
   caso('permisos-por-hermandad.sql va en actualizar', true,
     deActualizar.includes('permisos-por-hermandad.sql'))
   caso('y hermano-con-cargo.sql va DETRÁS, que es el que manda', true,
-    deActualizar.indexOf('hermano-con-cargo.sql') > deActualizar.indexOf('permisos-por-hermandad.sql'))
+    antesQue(deActualizar, 'permisos-por-hermandad.sql', 'hermano-con-cargo.sql'))
   // El relleno sigue existiendo y sigue sin tocar funciones ni resembrar.
   caso('y el relleno de eventos y web también', true,
     deActualizar.includes('permisos-eventos-y-web.sql'))

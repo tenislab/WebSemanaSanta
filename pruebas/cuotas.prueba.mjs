@@ -103,8 +103,7 @@ async function elCicloAnual({ cargar, caso }) {
   caso('los ajustes traen la renovación', { dia: 1, mes: 1 }, aj.getAjustesCuotas().renovacion)
 
   // --- La pantalla: que no vuelva a inventarse un concepto ni un ejercicio.
-  const { readFile } = await import('node:fs/promises')
-  const src = await readFile('src/pages/app/Cuotas.tsx', 'utf8')
+  const src = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
   caso('el ejercicio sale de la renovación, no de la campaña', true, /ejercicioVigente\(ajustes\.renovacion\)/.test(src))
   // Por el nombre no vale: el comentario del arreglo lo menciona a propósito.
   // Lo que no puede quedar es la importación, que es la que permite usarlo.
@@ -129,7 +128,7 @@ async function elCicloAnual({ cargar, caso }) {
  */
 async function remesaSinCobrarDosVeces({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
-  const src = await readFile('src/pages/app/Cuotas.tsx', 'utf8')
+  const src = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
 
   // Lo que ya salió en un fichero no entra otra vez por su cuenta.
   caso('la remesa excluye lo ya remesado', true, /if \(c\.remesadaEl\) return false/.test(src))

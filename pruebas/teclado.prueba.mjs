@@ -43,8 +43,11 @@ export default async function ({ caso }) {
     'Hermanos', 'Cuotas', 'Papeletas', 'Tesoreria', 'Inventario', 'Archivo', 'Comunicados', 'Informes',
     'tienda/PanelArticulos', 'tienda/PanelReservas', 'tienda/PanelFacturas',
   ]
+  const { fuenteDe } = await import('./fuentes.mjs')
   for (const m of MODULOS) {
-    const t = await readFile(`src/pages/app/${m}.tsx`, 'utf8')
+    // `fuenteDe`: el censo está partido, y el cuerpo de su tabla —que es quien
+    // lleva el `filaQueAbre`— vive en `censo/FilasDelCenso.tsx`.
+    const t = await fuenteDe(`src/pages/app/${m}.tsx`)
     caso(`${m}: sus filas se abren con el teclado`, true, /\{\.\.\.filaQueAbre\(/.test(t))
     // Lo que se rompe sin querer: que alguien vuelva a poner el onClick suelto.
     caso(`${m}: sin onClick suelto en la fila`, false,

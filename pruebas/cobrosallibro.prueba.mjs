@@ -37,14 +37,23 @@ export default async function ({ cargar, caso }) {
   ]
 
   for (const [nombre, ruta] of PANTALLAS) {
-    const src = sinComentarios(await readFile(ruta, 'utf8'))
+    // `fuenteDe` y no `readFile`: Cuotas está partida en varios ficheros y la
+    // lista sigue nombrando la pantalla, que es lo que se entiende al leerla.
+    const src = sinComentarios(await (await import('./fuentes.mjs')).fuenteDe(ruta))
     const marcaPagada = /estado: 'Pagada'/.test(src)
     if (!marcaPagada) {
       caso(`${nombre} no da nada por cobrado (nada que comprobar)`, true, true)
       continue
     }
+    /*
+     * SE EXIGE LA LLAMADA, no el nombre. Esto era `/conApunteDeCobro/` a
+     * secas, y esa cadena está también en la línea de la importación: el
+     * guardia pasaba con la función traída y sin llamar NUNCA, que es
+     * exactamente el fallo que viene a tapar —cobrar sin apuntar en el libro—.
+     * Salió al renombrar las llamadas a propósito y ver que no saltaba.
+     */
     caso(`${nombre} da algo por cobrado, así que apunta en el libro`, true,
-      /conApunteDeCobro/.test(src))
+      /conApunteDeCobro\s*\(/.test(src))
   }
 
   /*
@@ -52,7 +61,7 @@ export default async function ({ cargar, caso }) {
    * seiscientos cobra el ejercicio entero de golpe. Si esa vía no apunta, el
    * libro se queda sin el 90 % de los ingresos del año.
    */
-  const cuotas = sinComentarios(await readFile('src/pages/app/Cuotas.tsx', 'utf8'))
+  const cuotas = sinComentarios(await (await import('./fuentes.mjs')).fuenteDeLasCuotas())
   const cobroRemesa = cuotas.match(/function simularCobro\(\)[\s\S]*?\n  \}/)?.[0] ?? ''
   caso('la función que cobra la remesa existe', true, cobroRemesa.length > 0)
   caso('y la remesa también apunta en el libro', true, /conApunteDeCobro|apuntarCobros/.test(cobroRemesa))

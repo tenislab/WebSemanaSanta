@@ -99,7 +99,9 @@ async function nadieLaVuelveACopiar({ caso, cargar }) {
   const A_MANO = /estado === 'Pendiente'\s*\|\|[\s\S]{0,120}?estado === '(En mora|Devuelta)'/
 
   for (const f of ARCHIVOS) {
-    const texto = (await readFile(f, 'utf8'))
+    // `fuenteDe` y no `readFile`: el área del hermano y el editor de la web
+    // están partidos en varios ficheros, y la lista sigue nombrando la pantalla.
+    const texto = (await (await import('./fuentes.mjs')).fuenteDe(f))
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '')
     caso(`${f.split('/').pop()} no la escribe a mano`, false, A_MANO.test(texto))

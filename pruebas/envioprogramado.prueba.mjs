@@ -279,7 +279,7 @@ export default async function ({ cargar, caso }) {
     /fecha_programada <= to_char\(current_date/.test(sql))
 
   // --- Y LA PANTALLA LO USA ---
-  const pantalla = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
   caso('Comunicados lo lanza al abrirse', true, /mandarLosProgramados\(\{/.test(pantalla))
   /*
    * Y ESPERA A TENER EL CENSO. Con `hermanos` vacío, el segmento se resolvería

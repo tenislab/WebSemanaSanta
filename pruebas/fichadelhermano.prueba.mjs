@@ -20,7 +20,7 @@
 import { readFileSync } from 'node:fs'
 
 export default async function ({ caso }) {
-  const src = readFileSync('src/pages/app/Hermanos.tsx', 'utf8')
+  const src = await (await import('./fuentes.mjs')).fuenteDelCenso()
   // El cajón de la ficha: desde su cabecera hasta el bloque de corregirla.
   const ficha = src.slice(src.indexOf('</header>'), src.indexOf('<label>Corregir la ficha</label>'))
 

@@ -17,8 +17,7 @@
  * meses por esa misma cantidad — sin que nada diera error.
  */
 export default async function ({ cargar, caso }) {
-  const { readFile } = await import('node:fs/promises')
-  const pantalla = await readFile('src/pages/app/Cuotas.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
 
   /*
    * --- EL MÉTODO DE VERDAD LLEGA AL LIBRO DE CUENTAS ---

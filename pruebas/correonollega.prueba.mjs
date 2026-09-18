@@ -18,6 +18,7 @@
  * Lo que se comprueba aquí: que la función lo DELATE, y que la pantalla sepa
  * decir qué falta y en qué orden.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
   const fn = await readFile('supabase/functions/enviar-correo/index.ts', 'utf8')
@@ -41,7 +42,7 @@ export default async function ({ cargar, caso }) {
    */
   caso('hay una rama de diagnóstico', true, /cuerpoCrudo\.diagnostico === true/.test(fn))
   caso('y va antes del control de sesión', true,
-    fn.indexOf('cuerpoCrudo.diagnostico === true') < fn.indexOf('const permiso = await quienLlama'))
+    antesQue(fn, 'cuerpoCrudo.diagnostico === true', 'const permiso = await quienLlama'))
 
   /*
    * 3. NO DEVUELVE NI UN SECRETO. Esto se mira con lupa: una rama pública que

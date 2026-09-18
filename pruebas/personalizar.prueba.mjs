@@ -173,7 +173,7 @@ export default async function ({ cargar, caso }) {
    * exactamente este: la mitad visible funciona, la invisible falta, y no salta
    * nada—.
    */
-  const pantalla = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
   const correo = await readFile('src/lib/correo.ts', 'utf8')
 
   // --- EL ENVÍO SE PARTE EN DOS CAMINOS, Y ESO IMPORTA ---

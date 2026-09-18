@@ -42,18 +42,30 @@ export default async function ({ caso }) {
    * listas tienen que mirar el `null` antes de creerse el número.
    */
   {
-    const com = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+    const com = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
     caso('Comunicados distingue el fallo', true, /noSeSupoDeLosSuscriptores/.test(com))
-    // Lo importante no es que lo pinte: es que NO MANDE.
+    /*
+     * Lo importante no es que lo pinte: es que NO MANDE. O sea que el freno
+     * tiene que estar ANTES de la llamada que manda.
+     *
+     * Y SE EXIGE QUE ESTÉ, no solo que vaya delante. Esto comparaba las dos
+     * posiciones a secas, y `indexOf` de algo que no está devuelve -1: con el
+     * freno borrado del todo la comparación era `-1 < 5000`, verdadera, y el
+     * guardia se quedaba verde justo cuando la protección había desaparecido.
+     * Salió al romperlo a propósito. Es la misma trampa de siempre —una
+     * comprobación que pasa porque no hay nada que comprobar— y aquí guardaba
+     * el envío del boletín a una lista que no se pudo leer.
+     */
     const envio = com.slice(com.indexOf('if (alcance.aSuscriptores) {'))
-    caso('y con la lista sin leer NO manda el boletín', true,
-      envio.indexOf('noSeSupoDeLosSuscriptores') < envio.indexOf('avisarASuscriptores'))
+    const freno = envio.indexOf('noSeSupoDeLosSuscriptores')
+    const manda = envio.indexOf('avisarASuscriptores')
+    caso('y con la lista sin leer NO manda el boletín', true, freno >= 0 && manda >= 0 && freno < manda)
     caso('y lo dice en vez de callar', true, /no se ha mandado nada/.test(com))
 
     const web = await (await import('./fuentes.mjs')).fuenteDelEditorWeb()
     caso('el panel de suscriptores avisa del fallo', true, /falloAlLeer/.test(web))
 
-    const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+    const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
     caso('el buscador de hermandades avisa del fallo', true, /falloElDirectorio/.test(portal))
     caso('y no le dice al hermano que su hermandad no está', true,
       /no quiere decir que la tuya no esté/.test(portal))

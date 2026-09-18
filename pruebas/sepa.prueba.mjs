@@ -57,8 +57,33 @@ export default async function ({ cargar, caso }) {
    * comprobación de «es de otro» está escrita y no mira nada, que es el fallo
    * que ya se ha colado dos veces en este proyecto.
    */
-  const cuotasSrc = await (await import('node:fs/promises')).readFile('src/pages/app/Cuotas.tsx', 'utf8')
+  const cuotasSrc = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
   caso('Cuotas le pasa el NIF al acreedor', true, /nif: hermandad\.cif/.test(cuotasSrc))
+
+  /*
+   * ==========================================================================
+   * Y EL MANDATO FIRMADO, QUE NO LO VIGILABA NADIE
+   * ==========================================================================
+   *
+   * Un adeudo directo sin mandato firmado del hermano no se puede defender: si
+   * reclama el cargo, no hay orden que enseñarle al banco y el dinero vuelve
+   * con comisión. La pantalla lo exige —y exige que el mandato sea de ESE
+   * IBAN, no de uno anterior— pero NINGUNA prueba lo vigilaba: quitando entero
+   * ese filtro, las 5637 seguían pasando. Salió rompiéndolo a propósito al
+   * partir el fichero.
+   *
+   * Y la referencia que viaja en el fichero (`MndtId`) sale del mandato
+   * guardado. Inventarla es mandar al banco un mandato que no existe.
+   */
+  caso('la remesa exige mandato firmado vigente', true,
+    /if \(!mandatoDe\([^)]*\)\) return false/.test(cuotasSrc))
+  caso('y del IBAN de ahora, no de uno anterior', true,
+    /mandatoDe\(h\.id, h\.iban\)/.test(cuotasSrc))
+  caso('quien no lo ha firmado se le dice, no se le cae en silencio', true,
+    /no ha firmado todav[ií]a el mandato SEPA/.test(cuotasSrc))
+  caso('la referencia del fichero sale del mandato', true,
+    /mandatoId: mandato\.referencia/.test(cuotasSrc))
+  caso('y no se inventa', false, /mandatoId: `?(MND|REF)/.test(cuotasSrc))
 
   /*
    * Y EL QUE LE TOCA, PROPUESTO EN CONFIGURACIÓN mientras el banco no lo da.

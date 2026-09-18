@@ -108,8 +108,9 @@ export default async function ({ cargar, caso }) {
       ['el alta de un cargo', 'src/pages/app/Personal.tsx'],
       ['el alta desde la web', 'src/components/FormulariosWeb.tsx'],
     ]) {
-      const src = await readFile(ruta, 'utf8')
-      caso(`${donde} comprueba el documento`, true, /problemaDeDocumento/.test(src))
+      // `fuenteDe`: el censo está partido en varios ficheros.
+      const src = await (await import('./fuentes.mjs')).fuenteDe(ruta)
+      caso(`${donde} comprueba el documento`, true, /problemaDeDocumento\s*\(/.test(src))
     }
     // Y el de la web ya NO valida contando caracteres, que dejaba pasar la
     // errata de un dígito.

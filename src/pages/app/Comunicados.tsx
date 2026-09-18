@@ -1,5 +1,5 @@
 import { llano } from '../../lib/buscar'
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, useRef } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import Drawer from '../../components/Drawer'
 import AvisoFalta from '../../components/AvisoFalta'
@@ -19,7 +19,6 @@ import {
 } from '../../data/comunicados'
 import { formatDate } from '../../lib/format'
 import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
-import { useTareasRedes, tareasDeUnEncargo, porEncargo, comoVa, loQueHayQueHacer } from '../../lib/tareasRedes'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
 import { getCampana } from '../../lib/campana'
 import { useTramos } from '../../lib/tramos'
@@ -27,9 +26,7 @@ import { conPapeletaDeSitio, etiquetasDe, etiquetasQueSonAutomaticas, indiceRole
 import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, personalDelSegmento, type MiembroPersonal } from '../../lib/personal'
 import { personalToRow, rowToPersonal } from '../../lib/db/personal'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
-import { comunicadoToRow, rowToComunicado, useCuentasSociales } from '../../lib/db/comunicados'
-import { tareaRedToRow } from '../../lib/db/tareasRedes'
-import { supabase, isSupabaseConfigured } from '../../lib/supabase'
+import { comunicadoToRow, rowToComunicado } from '../../lib/db/comunicados'
 import { useEtiquetas } from '../../lib/etiquetas'
 import {
   CRITERIOS_POR_DEFECTO,
@@ -40,19 +37,9 @@ import {
   type CriteriosSegmento,
 } from '../../lib/segmentacion'
 import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
-import { agregarAvisoAVarios, agregarAvisoHermano, getPreferenciasAvisos, quiereAviso } from '../../lib/avisosHermano'
-import { correoDisponible, enviarCorreo, enviarCorreoUnoAUno, getAjustesCorreo } from '../../lib/correo'
-import { llevaMarcas, personalizar, sePuedePersonalizar, vistaPrevia, MARCAS } from '../../lib/personalizar'
+import { llevaMarcas, sePuedePersonalizar, vistaPrevia, MARCAS } from '../../lib/personalizar'
 import { getHermandadSettings } from '../../lib/hermandadSettings'
-import {
-  mandarLosProgramados, reclamarDeLaBase, cerrarEnLaBase, soltarEnLaBase, apuntarAvanceEnLaBase,
-  type ComunicadoReclamado,
-} from '../../lib/envioProgramado'
-import {
-  dispararReglasDeHoy, reclamarReglaDeLaBase, devolverReglaEnLaBase,
-  useReglasAutomaticas, REGLAS_DE_FABRICA, type ReglaAutomatica,
-} from '../../lib/reglasAutomaticas'
-import { avisarPorCorreo, cuerpoCorreo } from '../../lib/avisosCorreo'
+import { useReglasAutomaticas } from '../../lib/reglasAutomaticas'
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { filaQueAbre } from '../../lib/foco'
 import { hoyIso } from '../../lib/hoy'
@@ -62,60 +49,29 @@ import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { copiarAlPortapapeles } from '../../lib/portapapeles'
 import {
   COLOR_RED,
-  enlaceDeLaCuenta,
   accionDePublicar,
-  sePuedeCompartirConElMovil,
-  normalizarUsuario,
   sePasaDeLargo,
   textoParaRedes,
   LIMITE_X,
 } from '../../lib/redesSociales'
 import IconoRed from '../../components/IconoRed'
-import { getWebPublica } from '../../lib/webPublica'
-import { baseDeLaWeb } from '../../lib/seoWeb'
 import {
-  avisarASuscriptores, getSuscriptores, losQueFaltanPorConfirmar, losQueSePuedenAvisar,
+  getSuscriptores, losQueFaltanPorConfirmar, losQueSePuedenAvisar,
   reenviarConfirmaciones, type Suscriptor,
 } from '../../lib/suscriptoresWeb'
 import { hermandadActualId } from '../../lib/multiHermandad'
+import type { Alcance } from './comunicados/alcance'
+import { useLosProgramadosQueYaTocaban } from './comunicados/losProgramados'
+import { mandarElComunicado } from './comunicados/mandarElComunicado'
+import PanelDeReglas from './comunicados/PanelDeReglas'
+import { useLasRedes } from './comunicados/redesSociales'
+import PanelDeRedes from './comunicados/PanelDeRedes'
+import { useEncargosDeRedes } from './comunicados/encargosDeRedes'
+import PanelDeEncargos from './comunicados/PanelDeEncargos'
 
 /** Prefijo con el que se guarda un destinatario que es una etiqueta de hermano. */
 const PREFIJO_ETIQUETA = 'Etiqueta: '
 
-/**
- * A quién alcanza un destinatario.
- *
- *   · `hermanos`   los del censo: buzón en su área y, si hay correo, correo.
- *   · `soloCorreo` la junta que tiene cuenta de acceso pero NO ficha en el
- *                  censo. No tienen área, así que buzón no hay; correo sí.
- *   · `reconocido` si sabemos siquiera a quién se refiere. `false` no es «no
- *                  hay nadie»: es «no lo entiendo», y hay que decirlo.
- */
-/**
- * Alguien a quien solo le llega el correo: no tiene ficha en el censo ni área
- * donde recibir el aviso.
- *
- * Era `MiembroPersonal[]` —la junta con cuenta pero sin ficha— y de aquí se
- * usan tres campos: id, nombre y correo. Al abrirlo a esos tres caben también
- * los suscriptores de la web, que son exactamente el mismo caso: un correo y
- * un nombre, y nada más.
- */
-interface SoloCorreo {
-  id: string
-  nombre: string
-  email: string
-}
-
-interface Alcance {
-  hermanos: Hermano[]
-  soloCorreo: SoloCorreo[]
-  reconocido: boolean
-  /**
-   * Este comunicado va a la lista de FUERA, no al censo. Cambia cómo se manda:
-   * uno a uno, cada correo con su enlace de baja.
-   */
-  aSuscriptores?: boolean
-}
 
 function fmt(iso: string | null) {
   if (!iso) return '—'
@@ -144,7 +100,14 @@ export default function Comunicados() {
     comunicadoToRow,
     rowToComunicado,
   )
-  const [cuentas, setCuentas] = useCuentasSociales()
+  /*
+   * LAS REDES, EN SU SITIO (`comunicados/redesSociales.ts`).
+   *
+   * Se desarma aquí para que todo lo de abajo siga nombrando `cuentas` y
+   * `copiado` como siempre; `redes` entero es lo que se le pasa al panel.
+   */
+  const redes = useLasRedes()
+  const { cuentas, cuentasConectadas, enlaceDeLaWeb, compartirMovil, copiado, setCopiado } = redes
   const canales = useLista(CLAVES_CATALOGOS.canalesComunicado, CANALES)
   const segmentos = useLista(CLAVES_CATALOGOS.segmentosComunicado, SEGMENTOS)
   /*
@@ -405,136 +368,15 @@ export default function Comunicados() {
   )
   const cargosPorHermano = useMemo(() => cargosEfectivos(hermanos, personal), [hermanos, personal])
 
-  /* ---------------------------------------------------------------------
-     Encargos de redes: se escribe una vez y se reparte solo
-     --------------------------------------------------------------------- */
-  const [tareasRedes, setTareasRedes] = useTareasRedes()
-  const [encargoHecho, setEncargoHecho] = useState('')
-  const [encargoError, setEncargoError] = useState('')
   /*
-   * A QUIÉN SE LE PUEDE ENCARGAR: la junta, no el censo entero.
+   * LOS ENCARGOS DE REDES, EN SU SITIO (`comunicados/encargosDeRedes.ts`).
    *
-   * Se mira el cargo EFECTIVO —el de su ficha o el de personal, que es lo que
-   * ya calcula `cargosEfectivos` para todo lo demás— y no una lista aparte: si
-   * fuera aparte, cambiar la junta obligaría a acordarse de cambiarla también
-   * aquí, y no se acordaría nadie.
-   *
-   * Y se dejan fuera las bajas: encargarle un post a quien ya no está es
-   * mandar trabajo a un sitio del que nadie va a contestar.
+   * Se desarma `setTareasRedes` porque lo usa el efecto de las reglas
+   * automáticas —una regla puede dejar su encargo preparado— y `pendientes`
+   * no: eso es de los suscriptores, que es otra cosa con nombre parecido.
    */
-  const laJunta = useMemo(
-    () => hermanos
-      .filter((h) => h.estado !== 'Baja' && (cargosPorHermano.get(h.id)?.length ?? 0) > 0)
-      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    [hermanos, cargosPorHermano],
-  )
-  /*
-   * Y EL RESTO DE HERMANOS ACTIVOS, QUE TAMBIÉN PUEDEN LLEVAR LAS REDES.
-   *
-   * Aquí solo se ofrecía la junta, y la razón escrita era que un hermano de a
-   * pie «no podría verlo, porque quien no lleva nada no entra al panel». Eso
-   * es FALSO, y es justo lo contrario de para lo que se hizo esto: la tarea le
-   * sale en SU ÁREA, sin pisar el panel — es lo primero que dice
-   * `lib/tareasRedes.ts`.
-   *
-   * Con esa restricción, una hermandad que todavía no ha repartido cargos en
-   * las fichas se encontraba las dos listas VACÍAS y sin explicación. Llegó
-   * reportado como «no deja asignar hermanos en tareas de redes», y desde
-   * fuera no se distingue de que el desplegable esté roto.
-   *
-   * Quien lleva el Instagram de una hermandad es muchas veces alguien joven
-   * sin cargo ninguno. Decidir si se le encarga o no es de la hermandad, no de
-   * la aplicación; lo que tiene que hacer la aplicación es dejarlo elegir. La
-   * junta va primero, agrupada, porque es el caso normal.
-   */
-  const otrosHermanos = useMemo(
-    () => hermanos
-      .filter((h) => h.estado !== 'Baja' && (cargosPorHermano.get(h.id)?.length ?? 0) === 0)
-      .sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    [hermanos, cargosPorHermano],
-  )
-  const hayAQuienEncargar = laJunta.length > 0 || otrosHermanos.length > 0
-  /** Los encargos con algo pendiente. Los terminados no estorban la pantalla. */
-  const encargosAbiertos = useMemo(
-    () => porEncargo(tareasRedes).filter((g) => g.tareas.some((t) => t.estado === 'pendiente')),
-    [tareasRedes],
-  )
-
-  function crearEncargo(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const form = e.currentTarget
-    const data = new FormData(form)
-    const titulo = String(data.get('titulo') ?? '').trim()
-    // Y se dice qué falta, en vez de no hacer nada: un botón que no responde
-    // no se lee como «me falta un dato», se lee como «esto está roto».
-    if (!titulo) {
-      setEncargoError('Pon de qué es el post, aunque sea en tres palabras: es lo que verá quien lo tenga que hacer.')
-      return
-    }
-    setEncargoError('')
-    const redes = data.getAll('redes').map((v) => String(v)) as RedSocial[]
-    const quienSube = String(data.get('quienSube') ?? '')
-    const nuevas = tareasDeUnEncargo({
-      titulo,
-      texto: String(data.get('texto') ?? ''),
-      redes,
-      quienCrea: String(data.get('quienCrea') ?? ''),
-      // El mismo responsable para todas las redes: es como se reparte de
-      // verdad —quien lleva las redes las lleva todas— y pedir uno por red
-      // haría el formulario el doble de largo para el caso raro. Se puede
-      // cambiar tarea a tarea después.
-      quienPublica: quienSube
-        ? Object.fromEntries(redes.map((r) => [r, quienSube])) as Partial<Record<RedSocial, string>>
-        : undefined,
-    })
-    setTareasRedes((prev) => [...prev, ...nuevas])
-
-    /*
-     * Y SE LE AVISA. Esto es la mitad que pedía el encargo: si la tarea solo
-     * aparece cuando al responsable se le ocurre entrar en su área, no se ha
-     * repartido nada — se ha dejado escrito en un sitio donde nadie mira.
-     *
-     * Un aviso POR PERSONA y no por tarea: a quien le tocan las tres redes le
-     * llegarían tres correos iguales seguidos, que se lee como un fallo. Se
-     * agrupa lo suyo en un solo mensaje que dice qué le toca.
-     *
-     * Va DESPUÉS de guardar, como en Cuotas: si el correo falla, el encargo ya
-     * está y lo verá igual la próxima vez que entre.
-     */
-    const porPersona = new Map<string, string[]>()
-    for (const t of nuevas) {
-      if (!t.hermanoId) continue
-      const ya = porPersona.get(t.hermanoId)
-      if (ya) ya.push(loQueHayQueHacer(t))
-      else porPersona.set(t.hermanoId, [loQueHayQueHacer(t)])
-    }
-    for (const [hermanoId, quehaceres] of porPersona) {
-      const texto = `Te han encargado «${titulo}»: ${quehaceres.join(' y ')}.`
-      agregarAvisoHermano(hermanoId, texto, 'encargo', 'Tienes un encargo')
-      const h = hermanos.find((x) => x.id === hermanoId)
-      if (h) {
-        void avisarPorCorreo(
-          [{ id: h.id, nombre: h.nombre, email: h.email }],
-          'encargo',
-          'Tienes un encargo de la hermandad',
-          [texto, ...(String(data.get('texto') ?? '').trim() ? [`Texto del post: ${String(data.get('texto')).trim()}`] : [])],
-          'Lo tienes también en tu área de hermano, con el botón para marcarlo hecho.',
-        )
-      }
-    }
-
-    form.reset()
-    const aCuantos = porPersona.size
-    setEncargoHecho(
-      `Encargado en ${nuevas.length} tarea${nuevas.length === 1 ? '' : 's'}`
-      + (aCuantos > 0
-        ? `, y avisad${aCuantos === 1 ? 'o' : 'os'} ${aCuantos} responsable${aCuantos === 1 ? '' : 's'}.`
-        // Sin responsables no se dice «repartido»: se ha dejado preparado, y
-        // hay que volver para asignarlo o no lo hará nadie.
-        : '. Nadie lo tiene asignado todavía.'),
-    )
-    setTimeout(() => setEncargoHecho(''), 4000)
-  }
+  const encargos = useEncargosDeRedes({ hermanos, cargosPorHermano })
+  const { setTareasRedes } = encargos
   const rolesDisponibles = useMemo(
     () => etiquetasQueSonAutomaticas(tramosReales),
     [tramosReales],
@@ -560,31 +402,6 @@ export default function Comunicados() {
     ? resolverDestinatario({ destinatarios: destinatarioNuevo, criterios: null })
     : { hermanos: [], soloCorreo: [], reconocido: true }
 
-  const [conectando, setConectando] = useState<RedSocial | null>(null)
-  const [usuarioInput, setUsuarioInput] = useState('')
-  const [errorRed, setErrorRed] = useState('')
-  /** Qué red acaba de copiarse, para poder decir «✓ Copiado» en su botón. */
-  const [copiado, setCopiado] = useState<RedSocial | null>(null)
-
-  const cuentasConectadas = useMemo(() => cuentas.filter((c) => c.conectada), [cuentas])
-
-  /*
-   * La dirección pública de la hermandad, para que la publicación lleve enlace.
-   * Solo si la web está PUBLICADA: mandar a la gente a una web sin publicar es
-   * mandarla a una página que no existe.
-   */
-  const enlaceDeLaWeb = useMemo(() => {
-    const web = getWebPublica()
-    if (!web.publicada) return null
-    const origen = typeof window !== 'undefined' ? window.location.origin : ''
-    return baseDeLaWeb(web, origen)
-  }, [])
-
-  /*
-   * Se mira una vez al pintar y no en cada fila: `navigator.share` no cambia a
-   * media sesión, y llamarlo cinco veces por comunicado no aporta nada.
-   */
-  const compartirMovil = useMemo(() => sePuedeCompartirConElMovil(), [])
 
   const filtered = useMemo(() => {
     return comunicados
@@ -615,217 +432,14 @@ export default function Comunicados() {
   }, [comunicados, cuentasConectadas])
 
   /*
-   * ==========================================================================
-   * LOS PROGRAMADOS QUE YA TOCABAN, AL ABRIR ESTA PANTALLA
-   * ==========================================================================
-   *
-   * Antes «Programado» no significaba nada: se guardaba la fecha y no lo
-   * mandaba nadie, nunca.
-   *
-   * SE HACE AQUÍ Y NO AL ENTRAR EN EL PANEL, y no es pereza: para saber A QUIÉN
-   * va un comunicado hace falta el censo entero con sus cuotas resueltas, sus
-   * cargos y sus etiquetas — que es justo lo que está cargado en ESTA pantalla
-   * y en ninguna otra. Cargarlo en el arranque de la aplicación sería traerse
-   * cinco tablas en Tesorería, en el Inventario y en la Web pública, que es lo
-   * contrario de lo que se está haciendo para que esto aguante al crecer.
-   *
-   * Para que alguien entre, el numerito del menú se enciende cuando hay uno
-   * vencido (`avisos_que_esperan()` en la base).
-   *
-   * SE ESPERA A TENER EL CENSO. Con `hermanos` todavía vacío, el segmento se
-   * resolvería a cero personas y el comunicado se cerraría como «enviado a 0».
-   * Eso es peor que no mandarlo: se pierde y ya no se vuelve a intentar.
+   * LO QUE SALE SOLO AL ABRIR ESTA PANTALLA, en su sitio
+   * (`comunicados/losProgramados.ts`): los comunicados programados que ya
+   * tocaban y las reglas que se disparan hoy.
    */
+  const [programadosSalidos, setProgramadosSalidos] = useLosProgramadosQueYaTocaban({
+    hermanos, comunicados, setComunicados, setTareasRedes, resolverDestinatario, cuantosSon,
+  })
   const [reglas, setReglas] = useReglasAutomaticas()
-  const [programadosSalidos, setProgramadosSalidos] = useState<string | null>(null)
-  const yaLoIntente = useRef(false)
-  useEffect(() => {
-    if (yaLoIntente.current) return
-    if (hermanos.length === 0) return          // todavía no ha llegado el censo
-    yaLoIntente.current = true
-    /*
-     * PRIMERO LAS REGLAS, LUEGO EL ENVÍO. El orden no es casual: una regla
-     * crea un comunicado programado PARA HOY, así que si se dispara después de
-     * enviar, la felicitación de hoy no sale hasta que alguien vuelva a abrir
-     * esta pantalla — o sea, casi siempre mañana. Y felicitar el cumpleaños al
-     * día siguiente es peor que no felicitarlo.
-     */
-    void dispararReglasDeHoy({
-      reclamar: reclamarReglaDeLaBase,
-      /*
-       * A CUÁNTA GENTE ALCANZA HOY. Si no es a nadie —que es lo normal casi
-       * todos los días: de ochocientos hermanos, la mayoría de los días no
-       * cumple ninguno— no se crea nada. Un comunicado a cero personas por día
-       * llenaría la lista hasta enterrar los de verdad.
-       */
-      cuantos: (r) => cuantosSon(resolverDestinatario({
-        destinatarios: r.destinatarios,
-        criterios: r.criterios,
-      })),
-      crear: async (r) => {
-        const hoy = hoyIso()
-        const nuevo: Comunicado = {
-          id: nuevoId(),
-          numero: Math.max(0, ...comunicados.map((c) => c.numero)) + 1,
-          titulo: r.asunto,
-          cuerpo: r.cuerpo,
-          canal: 'Email',
-          redes: null,
-          destinatarios: r.destinatarios,
-          criterios: r.criterios,
-          /*
-           * PROGRAMADO PARA HOY, no «Enviado». Así entra por el camino de
-           * siempre —candado, tres intentos, personalización, freno de las
-           * marcas— en vez de tener el suyo propio.
-           */
-          estado: 'Programado',
-          fechaCreacion: hoy,
-          fechaProgramada: hoy,
-          fechaEnvio: null,
-          autor: r.nombre,
-          alcance: null,
-        }
-        /*
-         * SE ESCRIBE EN LA BASE **ESPERANDO**, y no con `setComunicados`.
-         *
-         * ============================================================
-         * ESTE ERA UN FALLO MUDO, Y DE LOS PEORES
-         * ============================================================
-         *
-         * `setComunicados` lanza la escritura y sigue: no la espera y no dice
-         * si ha fallado. Y peor: `useSupabaseTable` SE SALTA la escritura
-         * entera mientras su tabla no haya terminado de cargar
-         * (`cargado.current`). Este efecto espera al censo, que es OTRO hook
-         * con su propia carga, así que la carrera es real.
-         *
-         * Lo que pasaba entonces: la regla se marcaba como disparada —eso sí
-         * llega a la base—, el comunicado se quedaba solo en la memoria de esa
-         * pestaña, y la felicitación se perdía sin que nadie llegara a saberlo.
-         * Y la regla no vuelve a tocar hasta mañana.
-         *
-         * Escribiendo aquí directamente, un fallo LANZA, `dispararReglasDeHoy`
-         * devuelve la regla, y mañana se vuelve a intentar. Que es lo que tiene
-         * que pasar.
-         */
-        if (isSupabaseConfigured && supabase) {
-          const { error } = await supabase.from('comunicados').insert(comunicadoToRow(nuevo))
-          if (error) throw new Error(error.message)
-        }
-        // Y ya en la pantalla, para que se vea sin recargar.
-        setComunicados((prev) => [nuevo, ...prev])
-      },
-      /*
-       * Y EL ENCARGO DE REDES, si la regla lo lleva.
-       *
-       * Queda SIN REPARTIR: la regla no sabe a quién le toca, y adivinarlo
-       * sería peor. Aparece en «Encargos de redes» de esta misma pantalla,
-       * que es donde lo mira quien las lleva, y desde ahí se reparte —igual
-       * que un encargo escrito a mano.
-       *
-       * Lo que se publica es `textoRedes`, NO el cuerpo del correo: ese va
-       * personalizado («Hola Manuel») y un post lo lee cualquiera.
-       */
-      encargar: async (r) => {
-        const nuevas = tareasDeUnEncargo({
-          titulo: r.nombre,
-          texto: r.textoRedes,
-          redes: r.redes,
-          notas: 'Lo ha dejado preparado la regla automática. Falta repartirlo.',
-        })
-        // Esperando y en la base, por lo mismo que el comunicado: `setTareasRedes`
-        // no espera ni avisa si falla, y se perdería el encargo en silencio.
-        if (isSupabaseConfigured && supabase) {
-          const { error } = await supabase.from('tareas_redes').insert(nuevas.map(tareaRedToRow))
-          if (error) throw new Error(error.message)
-        }
-        setTareasRedes((prev) => [...prev, ...nuevas])
-      },
-      devolver: devolverReglaEnLaBase,
-    }).then(() => mandarLosProgramados({
-      reclamar: reclamarDeLaBase,
-      destinatarios: async (c: ComunicadoReclamado) => {
-        /*
-         * Se resuelve con los criterios GUARDADOS del comunicado, que es lo
-         * único que sabe a quién iba. La fila que devuelve la base no los trae
-         * —vienen en `jsonb` y no hacen falta para el candado— así que se busca
-         * el comunicado ya cargado en esta pantalla, que es el mismo.
-         */
-        const guardado = comunicados.find((x) => x.id === c.id)
-        const alcance = resolverDestinatario({
-          destinatarios: c.destinatarios,
-          criterios: guardado?.criterios ?? null,
-        })
-        if (!alcance.reconocido) throw new Error('No se sabe a quién iba dirigido.')
-        // Al buzón del área SIEMPRE, igual que en el envío a mano.
-        agregarAvisoAVarios(alcance.hermanos.map((h) => h.id), c.cuerpo, 'comunicado', c.titulo)
-        const ajustes = getAjustesCorreo()
-        if (!correoDisponible(ajustes) || !ajustes.avisaDe.comunicados) return []
-        return [
-          ...alcance.hermanos
-            .filter((h) => quiereAviso(getPreferenciasAvisos(h.id), 'comunicado'))
-            .map((h) => ({ email: h.email, nombre: h.nombre, numero: h.numero })),
-          ...alcance.soloCorreo.map((p) => ({ email: p.email, nombre: p.nombre, numero: null })),
-        ].filter((d) => d.email && d.email.includes('@'))
-      },
-      enviar: async (c, gente) => {
-        const ctx = {
-          hermandad: getHermandadSettings().nombreLegal,
-          ejercicio: new Date().getFullYear(),
-        }
-        /*
-         * El mismo freno que en el envío a mano: un comunicado guardado antes
-         * de que existieran las marcas puede llevar `{nombe}` dentro. Aquí no
-         * hay nadie mirando la pantalla, así que con más razón.
-         */
-        const revision = sePuedePersonalizar(`${c.titulo}\n${c.cuerpo}`)
-        if (!revision.puede) return { enviados: 0, error: revision.motivo }
-        if (llevaMarcas(c.cuerpo) || llevaMarcas(c.titulo)) {
-          const mensajes = gente.map((d) => {
-            const asunto = personalizar(c.titulo, d, ctx)
-            const cuerpo = personalizar(c.cuerpo, d, ctx)
-            const { texto, html } = cuerpoCorreo(asunto, cuerpo.split('\n\n'))
-            return { para: d.email, asunto, texto, html }
-          })
-          /*
-           * SE VA APUNTANDO POR DÓNDE VA, cada veinticinco.
-           *
-           * Si se cierra la pestaña a mitad de ochocientos, el candado caduca a
-           * la media hora y otro navegador lo coge — y sin esto empezaría por el
-           * primero: trescientas personas con la convocatoria repetida.
-           *
-           * Cada veinticinco y no cada uno porque ochocientas escrituras a la
-           * base para acompañar a ochocientos correos duplican el trabajo sin
-           * ganar nada: perder veinticinco por redondeo es mandar veinticinco
-           * repetidos en un caso raro, no dejar a nadie sin el suyo.
-           */
-          const u = await enviarCorreoUnoAUno(mensajes, (hechos) => {
-            if (hechos % 25 === 0) void apuntarAvanceEnLaBase(c.id, c.yaEnviados + hechos)
-          })
-          return { enviados: u.enviados, error: u.error }
-        }
-        const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
-        const r = await enviarCorreo({ para: gente.map((d) => d.email), asunto: c.titulo, texto, html })
-        return { enviados: r.ok ? (r.enviados ?? gente.length) : 0, error: r.error }
-      },
-      cerrar: cerrarEnLaBase,
-      soltar: soltarEnLaBase,
-    }).then((r) => {
-      if (r.mandados === 0 && r.fallidos.length === 0) return
-      /*
-       * Y SE DICE. Un envío que ocurre solo y en silencio es indistinguible de
-       * uno que no ha ocurrido: la hermandad no sabría nunca si su comunicado
-       * salió, ni cuándo, ni a cuántos.
-       */
-      setProgramadosSalidos(
-        r.fallidos.length > 0
-          ? `No se ha podido mandar «${r.fallidos[0].titulo}»: ${r.fallidos[0].motivo}`
-          : `Se ${r.mandados === 1 ? 'ha mandado el comunicado programado' : `han mandado ${r.mandados} comunicados programados`}`
-            + ` que ya tocaba${r.mandados === 1 ? '' : 'n'}, a ${r.personas} ${r.personas === 1 ? 'persona' : 'personas'}.`,
-      )
-    }))
-    // Solo al llegar el censo, una vez. `yaLoIntente` lo garantiza.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hermanos.length])
 
   /*
    * EL TÍTULO Y EL CUERPO, EN ESTADO.
@@ -867,208 +481,16 @@ export default function Comunicados() {
     setFormOpen(true)
   }
 
-  /**
-   * Conectar una red = decir cuál es la cuenta de la hermandad.
-   *
-   * Antes esto ponía «@hermandaddemo» si no se escribía nada, así que se
-   * pulsaba «Conectar» y quedaba conectada a una cuenta inventada. Ahora sin
-   * nombre no se conecta, y se acepta tanto «@hermandad» como la dirección
-   * entera pegada del navegador, que es lo que la gente tiene a mano.
+  /*
+   * MANDAR, en su sitio (`comunicados/mandarElComunicado.ts`). Se envuelve
+   * aquí para que las dos llamadas de abajo —el botón de la ficha y el
+   * formulario— sigan escribiendo `enviarAhora(c)` y no tengan que armar el
+   * contexto cada una por su cuenta.
    */
-  function conectar(red: RedSocial) {
-    const usuario = normalizarUsuario(usuarioInput)
-    if (!usuario || usuario === '@') {
-      setErrorRed('Escribe el nombre de la cuenta (@lahermandad) o pega la dirección de su página.')
-      return
-    }
-    const escrito = usuarioInput.trim()
-    const enlace = /^https?:\/\//i.test(escrito) ? escrito : null
-    setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: true, usuario, enlace } : c)))
-    setConectando(null)
-    setUsuarioInput('')
-    setErrorRed('')
-  }
-
-  function desconectar(red: RedSocial) {
-    setCuentas((prev) => prev.map((c) => (c.red === red ? { ...c, conectada: false, usuario: null, enlace: null } : c)))
-  }
-
-  async function enviarAhora(c: Comunicado) {
-    const hoy = hoyIso()
-    // Al buzón de cada hermano en su área, SIEMPRE. Es lo que no depende de que
-    // haya proveedor de correo contratado.
-    const alcance = resolverDestinatario(c)
-    const reciben = alcance.hermanos
-
-    // El alcance sale de a quién se le ha escrito DE VERDAD. Antes se calculaba
-    // aparte con `hermanosDeDestinatario`, que no sabe resolver un segmento, así
-    // que un comunicado que no había llegado a nadie podía quedar registrado
-    // con 84 personas alcanzadas.
-    const actualizado: Comunicado = { ...c, estado: 'Enviado', fechaEnvio: hoy, alcance: cuantosSon(alcance) }
-    setComunicados((prev) => prev.map((x) => (x.id === c.id ? actualizado : x)))
-    setSelected(actualizado)
-
-    agregarAvisoAVarios(reciben.map((h) => h.id), c.cuerpo, 'comunicado', c.titulo)
-
-    // Y por correo, si la hermandad lo tiene conectado y encendido para los
-    // comunicados. Se respeta lo que cada hermano haya apagado en su área: que
-    // la hermandad active el correo no le quita a nadie su decisión.
-    const ajustes = getAjustesCorreo()
-    if (!correoDisponible(ajustes) || !ajustes.avisaDe.comunicados) return
-    /*
-     * SE GUARDA QUIÉN ES CADA UNO, NO SOLO SU DIRECCIÓN.
-     *
-     * Antes esto era una lista de correos y punto, porque el cuerpo era el
-     * mismo para todos. En cuanto el texto dice «Hola {nombre}» hay que saber
-     * de quién es cada dirección, así que se lleva la persona al lado.
-     *
-     * A los de `soloCorreo` —la junta con cuenta pero sin ficha— NO se les pone
-     * número de hermano: no lo son. `{numero}` se les queda vacío, que es la
-     * verdad, en vez de un cero impreso en un correo.
-     */
-    const destinos: { email: string; nombre: string; numero?: number | null }[] = [
-      ...reciben
-        .filter((h) => quiereAviso(getPreferenciasAvisos(h.id), 'comunicado'))
-        .map((h) => ({ email: h.email, nombre: h.nombre, numero: h.numero })),
-      // La junta con cuenta pero sin ficha en el censo. No tiene área donde
-      // apagar los avisos, así que no hay preferencia que respetar: se le manda.
-      ...alcance.soloCorreo.map((p) => ({ email: p.email, nombre: p.nombre, numero: null })),
-    ].filter((d) => d.email && d.email.includes('@'))
-    const direcciones = destinos.map((d) => d.email)
-    if (direcciones.length === 0) return
-    setEnvioCorreo({ estado: 'enviando' })
-    // El mismo membrete que los demás avisos: la banda con el color y el
-    // nombre de la hermandad. Antes esta pantalla se montaba su propio HTML a
-    // mano, así que el comunicado —que es el correo que MÁS se manda— era el
-    // único que llegaba sin identificar de quién era.
-    /*
-     * A LOS DE FUERA SE LES ESCRIBE UNO A UNO.
-     *
-     * No es un descuido: cada suscriptor lleva SU enlace de baja, con su llave.
-     * Metidos todos en el mismo envío no cabe más que un enlace, así que o no
-     * se pone —y entonces la hermandad está mandando correo sin salida, que es
-     * lo que multa la AEPD— o se pone uno que daría de baja a otra persona.
-     *
-     * Al censo se le sigue mandando de una vez: el hermano tiene su área para
-     * apagar los avisos, no le hace falta enlace de baja.
-     */
-    if (alcance.aSuscriptores) {
-      /*
-       * SI NO SE SUPO QUIÉNES SON, NO SE MANDA Y SE DICE.
-       *
-       * `getSuscriptores()` devuelve `null` cuando la consulta no se pudo
-       * hacer. Dando eso por «no hay ninguno», el envío se hacía igual, no
-       * escribía a nadie, y la pantalla decía «Enviado por correo a 0
-       * suscriptores» — con lo que la hermandad se quedaba convencida de que su
-       * boletín había salido. Un envío a cero no es un envío.
-       */
-      if (noSeSupoDeLosSuscriptores) {
-        setEnvioCorreo({
-          estado: 'error',
-          texto: 'No se ha podido leer la lista de suscriptores, así que no se ha mandado nada. '
-            + 'Vuelve a abrir la pantalla y prueba otra vez: mandarlo ahora sería no mandárselo a nadie.',
-        })
-        return
-      }
-      const origen = window.location.origin
-      const { enviados, fallidos } = await avisarASuscriptores(
-        listaSuscriptores,
-        c.titulo,
-        (baja) => {
-          const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
-          return {
-            texto: `${texto}\n\n—\nSi no quieres recibir más avisos: ${baja}`,
-            html: `${html}<p style="font-size:12px;color:#777;margin-top:24px">`
-              + `Recibes esto porque te apuntaste en la web de la hermandad. `
-              + `<a href="${baja}">Darme de baja</a>.</p>`,
-          }
-        },
-        (m) => enviarCorreo(m),
-        origen,
-      )
-      setEnvioCorreo(
-        fallidos === 0
-          ? { estado: 'hecho', texto: `Enviado por correo a ${enviados} suscriptores de la web.` }
-          : {
-            estado: 'error',
-            texto: `Enviado a ${enviados}. A ${fallidos} no se ha podido: revisa Configuración → Correo.`,
-          },
-      )
-      return
-    }
-
-    /*
-     * ¿LLEVA MARCAS? Entonces no hay UN correo: hay uno por persona.
-     *
-     * Y por eso se pregunta primero, en vez de mandar siempre uno a uno: un
-     * comunicado sin marcas —que son la mayoría— sigue saliendo de una vez, en
-     * tandas de cincuenta. Solo paga el precio de la fila quien lo necesita.
-     */
-    if (llevaMarcas(c.cuerpo) || llevaMarcas(c.titulo)) {
-      /*
-       * EL FRENO, OTRA VEZ AQUÍ. Ya está en el formulario, pero un comunicado
-       * guardado ayer con `{nombe}` dentro llega hasta aquí sin volver a pasar
-       * por él. Lo que no se puede deshacer es el correo.
-       */
-      const revision = sePuedePersonalizar(`${c.titulo}\n${c.cuerpo}`)
-      if (!revision.puede) {
-        setEnvioCorreo({ estado: 'error', texto: `${revision.motivo} No se ha mandado nada.` })
-        return
-      }
-      const ctx = {
-        hermandad: getHermandadSettings().nombreLegal,
-        ejercicio: new Date().getFullYear(),
-      }
-      const mensajes = destinos.map((d) => {
-        const asunto = personalizar(c.titulo, d, ctx)
-        const cuerpo = personalizar(c.cuerpo, d, ctx)
-        const { texto, html } = cuerpoCorreo(asunto, cuerpo.split('\n\n'))
-        return { para: d.email, asunto, texto, html }
-      })
-      const u = await enviarCorreoUnoAUno(mensajes, (hechos, total) => {
-        setEnvioCorreo({ estado: 'enviando', texto: `Enviando, uno por uno: ${hechos} de ${total}…` })
-      })
-      /*
-       * Y SE CUENTA LO QUE HA PASADO DE VERDAD, incluidos los que se quedaron
-       * sin intentar cuando se cortó. «Enviado» a secas encima de un envío que
-       * se paró en el número doce es la peor manera de acabar esto.
-       */
-      setEnvioCorreo(
-        u.cortado
-          ? { estado: 'error', texto: u.error ?? 'Se cortó el envío.' }
-          : u.fallidos > 0
-            ? {
-              estado: 'error',
-              texto: `Enviado a ${u.enviados} de ${mensajes.length}. A ${u.fallidos} no se ha podido: `
-                + `revisa sus correos en Hermanos, porque a esas personas no les ha llegado nada.`
-                + (u.error ? ` (${u.error})` : ''),
-            }
-            : { estado: 'hecho', texto: `Enviado por correo a ${u.enviados} personas, cada una con su nombre.` },
-      )
-      return
-    }
-
-    const { texto, html } = cuerpoCorreo(c.titulo, c.cuerpo.split('\n\n'))
-    const r = await enviarCorreo({ para: direcciones, asunto: c.titulo, texto, html })
-    /*
-     * Y SE DICE A CUÁNTOS NO LES HA LLEGADO. Las direcciones mal escritas se
-     * descartaban en silencio: la hermandad marcaba 612 destinatarios, la
-     * pantalla decía «enviado a 572» y nadie caía en la diferencia. Esos
-     * cuarenta no se enteran de nada —ni de los cabildos, ni de los cultos, ni
-     * de que se les ha emitido la cuota—, y como el comunicado queda en
-     * «Enviado», no vuelve a intentarse nunca.
-     */
-    const fuera = r.sinCorreoValido ?? 0
-    const aviso = fuera > 0
-      ? ` ${fuera} ${fuera === 1 ? 'no tenía' : 'no tenían'} un correo válido en el censo: `
-        + `${fuera === 1 ? 'revísalo' : 'revísalos'} en Hermanos, porque a ${fuera === 1 ? 'esa persona' : 'esas personas'} no les llega nada.`
-      : ''
-    setEnvioCorreo(
-      r.ok
-        ? { estado: fuera > 0 ? 'error' : 'hecho', texto: `Enviado por correo a ${r.enviados} hermanos.${aviso}` }
-        : { estado: 'error', texto: `${r.error ?? 'No se pudo mandar el correo.'}${aviso}` },
-    )
-  }
+  const enviarAhora = (c: Comunicado) => mandarElComunicado(c, {
+    resolverDestinatario, cuantosSon, setComunicados, setSelected, setEnvioCorreo,
+    listaSuscriptores, noSeSupoDeLosSuscriptores,
+  })
 
   /** El estado del último envío por correo, para no dejarlo en silencio. */
   const [envioCorreo, setEnvioCorreo] = useState<{ estado: 'enviando' | 'hecho' | 'error'; texto?: string } | null>(null)
@@ -1224,262 +646,9 @@ export default function Comunicados() {
         </button>
       </div>
 
-      {/*
-        LAS CINCO REDES, A LA VISTA Y EN UNA SOLA TIRA.
-        Esto era un desplegable con cinco tarjetas grandes, cada una con su
-        botón «Conectar» en rojo: cerrado no se veía para qué servía, y abierto
-        empujaba los comunicados —que son el contenido de la pantalla— media
-        página hacia abajo. Ahora es una tira de fichas que cabe de un vistazo,
-        siempre visible, y el color dice el estado sin tener que leer: la marca
-        va encendida cuando la cuenta está puesta y apagada cuando no. Al pulsar
-        una ficha, el formulario se abre debajo (uno cada vez, para que la tira
-        no se descoloque).
-      */}
-      <section className="redes-panel" aria-labelledby="redes-titulo">
-        <header className="redes-panel__head">
-          <div className="redes-panel__que">
-            <h2 id="redes-titulo">
-              Redes sociales de la hermandad
-              <span className="redes-panel__marcador">
-                <b>{cuentasConectadas.length}</b> de {cuentas.length} puestas
-              </span>
-            </h2>
-            <p className="table-subtle">
-              Di cuál es la cuenta de la hermandad en cada red. Con eso, los comunicados salen con el
-              texto listo y un botón que abre la red, y los iconos aparecen en el pie de la web.
-            </p>
-          </div>
-        </header>
+      <PanelDeRedes redes={redes} />
 
-        <div className="redes-tira">
-          {cuentas.map((c) => {
-            const enlace = enlaceDeLaCuenta(c)
-            return (
-              <div
-                key={c.red}
-                className={`red-ficha${c.conectada ? ' red-ficha--puesta' : ''}${conectando === c.red ? ' red-ficha--editando' : ''}`}
-                style={{ '--marca': COLOR_RED[c.red] } as CSSProperties}
-              >
-                <button
-                  type="button"
-                  className="red-ficha__boton"
-                  onClick={() => {
-                    if (conectando === c.red) { setConectando(null); setUsuarioInput(''); setErrorRed(''); return }
-                    setConectando(c.red)
-                    setUsuarioInput(c.enlace ?? c.usuario ?? '')
-                    setErrorRed('')
-                  }}
-                  aria-expanded={conectando === c.red}
-                >
-                  <span className="red-ficha__marca"><IconoRed red={c.red} tam={22} /></span>
-                  <span className="red-ficha__texto">
-                    <b>{c.red}</b>
-                    {/* El título trae el nombre entero: la ficha es estrecha y
-                        un «@hermandaddelaverac…» no dice cuál es la cuenta. */}
-                    <span className="red-ficha__estado" title={c.conectada ? (c.usuario || undefined) : undefined}>
-                      {c.conectada ? (c.usuario || 'Puesta') : 'Sin poner'}
-                    </span>
-                  </span>
-                </button>
-                {/* El enlace a la cuenta va FUERA del botón: dos cosas que se
-                    pulsan no pueden estar una dentro de otra, y aquí son de
-                    verdad dos —editar y abrir la página de la hermandad—. */}
-                {c.conectada && enlace && (
-                  <a
-                    className="red-ficha__ir"
-                    href={enlace}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={`Abrir ${c.red} en otra pestaña`}
-                    aria-label={`Abrir la cuenta de ${c.red} en otra pestaña`}
-                  >
-                    ↗
-                  </a>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* El formulario, debajo de la tira y uno cada vez. */}
-        {conectando && (
-          <div className="redes-editor">
-            <label htmlFor="redCuenta">
-              La cuenta de la hermandad en <b>{conectando}</b>
-            </label>
-            <div className="redes-editor__fila">
-              <input
-                id="redCuenta"
-                type="text"
-                placeholder="@lahermandad o la dirección de su página"
-                value={usuarioInput}
-                onChange={(e) => { setUsuarioInput(e.target.value); setErrorRed('') }}
-                onKeyDown={(e) => { if (e.key === 'Enter') conectar(conectando) }}
-                autoFocus
-              />
-              <button className="btn btn-primary btn-sm" onClick={() => conectar(conectando)}>
-                Guardar
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => { setConectando(null); setUsuarioInput(''); setErrorRed('') }}
-              >
-                Cancelar
-              </button>
-              {cuentas.find((c) => c.red === conectando)?.conectada && (
-                <button className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => desconectar(conectando)}>
-                  Quitar
-                </button>
-              )}
-            </div>
-            {errorRed && <p className="form-hint form-hint--error">{errorRed}</p>}
-          </div>
-        )}
-
-        {/*
-          LA VERDAD SOBRE PUBLICAR SOLO, dicha donde se decide.
-          Publicar sin abrir la red exige una aplicación aprobada por cada
-          plataforma (Meta revisa a mano, X cobra por la API, TikTok y YouTube
-          auditan) y una clave secreta que no puede estar en el navegador: si
-          está en la web, cualquiera publica en nombre de la hermandad. Decirlo
-          aquí es mejor que un botón que diga «publicado» sin publicar nada.
-        */}
-        <p className="redes-panel__nota">
-          <b>Publicar se hace en dos pasos, y es de verdad.</b> El comunicado deja el texto preparado y
-          un botón que abre la red; se pega y se publica. Publicar sin salir de aquí exige que cada
-          plataforma apruebe la aplicación de la hermandad (Meta lo revisa a mano, X cobra por ello), así
-          que de momento no lo prometemos.
-        </p>
-      </section>
-
-      {/*
-        ENCARGAR UN POST Y QUE SE REPARTA SOLO.
-        Va justo debajo de las redes porque es lo que se hace CON ellas, y
-        encima de los comunicados porque un encargo es trabajo pendiente y un
-        comunicado es algo ya enviado.
-      */}
-      <section className="redes-panel" aria-labelledby="encargos-titulo">
-        <header className="redes-panel__head">
-          <div className="redes-panel__que">
-            <h2 id="encargos-titulo">
-              Encargar un post
-              {encargosAbiertos.length > 0 && (
-                <span className="redes-panel__marcador">
-                  <b>{encargosAbiertos.length}</b> sin terminar
-                </span>
-              )}
-            </h2>
-            <p className="table-subtle">
-              Se escribe una vez y salen solas las tareas: escribirlo y subirlo a cada red. Cada
-              responsable lo ve en su área de hermano, sin entrar aquí.
-            </p>
-          </div>
-        </header>
-
-        <form className="app-form" onSubmit={crearEncargo}>
-          <div className="form-row">
-            <label htmlFor="encargoTitulo">De qué es el post</label>
-            <input id="encargoTitulo" name="titulo" type="text" required
-              placeholder="Besamanos de la Virgen, sábado 12" />
-          </div>
-          <div className="form-row">
-            <label htmlFor="encargoTexto">Texto (opcional)</label>
-            <textarea id="encargoTexto" name="texto" rows={3}
-              placeholder="Lo que quieres que se publique. Si lo dejas vacío, lo escribe quien se encargue." />
-          </div>
-          <div className="assign-box">
-            <label id="encargoRedesLabel">En qué redes</label>
-            <div role="group" aria-labelledby="encargoRedesLabel" className="assign-box__row">
-              {REDES_SOCIALES.map((r) => (
-                <label key={r} className="checkbox-row" htmlFor={`encargoRed-${r}`}>
-                  <input id={`encargoRed-${r}`} type="checkbox" name="redes" value={r} />
-                  {r}
-                </label>
-              ))}
-            </div>
-          </div>
-          {/*
-            LA JUNTA PRIMERO, PERO NO SOLO LA JUNTA. La tarea le llega a la
-            persona en SU ÁREA, sin pisar el panel, así que no hace falta que
-            lleve ningún cargo para poder hacerla — y quien lleva el Instagram
-            de una hermandad muchas veces no lo lleva.
-          */}
-          <div className="form-grid-2">
-            <div className="form-row">
-              <label htmlFor="encargoQuienCrea">Quién lo escribe</label>
-              <select id="encargoQuienCrea" name="quienCrea" defaultValue="">
-                <option value="">Sin repartir todavía</option>
-                {laJunta.length > 0 && (
-                  <optgroup label="Junta de gobierno">
-                    {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
-                  </optgroup>
-                )}
-                {otrosHermanos.length > 0 && (
-                  <optgroup label="Otros hermanos">
-                    {otrosHermanos.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-            <div className="form-row">
-              <label htmlFor="encargoQuienSube">Quién lo sube a las redes</label>
-              <select id="encargoQuienSube" name="quienSube" defaultValue="">
-                <option value="">Sin repartir todavía</option>
-                {laJunta.length > 0 && (
-                  <optgroup label="Junta de gobierno">
-                    {laJunta.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
-                  </optgroup>
-                )}
-                {otrosHermanos.length > 0 && (
-                  <optgroup label="Otros hermanos">
-                    {otrosHermanos.map((h) => <option key={h.id} value={h.id}>{h.nombre}</option>)}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-          </div>
-          {!hayAQuienEncargar && (
-            <p className="form-hint form-hint--error">
-              Todavía no hay a quién encargárselo: no hay ningún hermano activo en el censo. El
-              post se puede dejar escrito y repartirlo después.
-            </p>
-          )}
-          <div className="assign-box__row">
-            <button type="submit" className="btn btn-primary">Encargar y repartir</button>
-            {encargoHecho && <span className="alert-item alert-item--ok">{encargoHecho}</span>}
-            {encargoError && <span className="alert-item alert-item--alerta">{encargoError}</span>}
-          </div>
-        </form>
-
-        {encargosAbiertos.length > 0 && (
-          <ul className="lista-limpia" style={{ marginTop: '1rem' }}>
-            {encargosAbiertos.map((g) => {
-              const va = comoVa(g.tareas)
-              return (
-                <li key={g.encargoId} className="assign-box" style={{ marginBottom: '0.6rem' }}>
-                  <div>
-                    <strong>{g.titulo}</strong>
-                    <span className="table-subtle"> · {va.hechas} de {va.total} hechas</span>
-                    <ul className="lista-limpia">
-                      {g.tareas.map((t) => (
-                        <li key={t.id}>
-                          {t.estado === 'hecha' ? '✅' : '⬜'} {loQueHayQueHacer(t)}
-                          {' — '}
-                          {/* Sin responsable no es «de nadie»: es un encargo a medio
-                              repartir, y hay que poder verlo de un vistazo. */}
-                          {t.hermanoId
-                            ? (hermanos.find((h) => h.id === t.hermanoId)?.nombre ?? 'alguien que ya no está en el censo')
-                            : <b>sin repartir</b>}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+      <PanelDeEncargos encargos={encargos} hermanos={hermanos} />
 
       {/*
         LO QUE HA SALIDO SOLO AL ABRIR ESTA PANTALLA.
@@ -1502,303 +671,23 @@ export default function Comunicados() {
       )}
 
       {/*
-        ====================================================================
-        LAS REGLAS QUE SE DISPARAN SOLAS
-        ====================================================================
-
-        Una regla es un sesgo + un texto + un cuándo. Cuando le toca, escribe
-        un comunicado programado para hoy y ahí acaba su trabajo: lo manda el
-        camino de siempre, con su candado y su «Hola {nombre}».
-
-        NACEN APAGADAS, y es la decisión que separa esto de una máquina de
-        mandar correos sin supervisión: una regla encendida escribe a
-        ochocientas personas en nombre de la hermandad sin que nadie lea el
-        texto antes. Se ve a cuánta gente alcanzaría HOY, y se enciende cuando
-        se ha visto. Encender es un clic; deshacer ochocientos correos no es
-        nada.
+        LAS REGLAS QUE SE DISPARAN SOLAS, en su sitio
+        (`comunicados/PanelDeReglas.tsx`). Se le pasan las dos capacidades que
+        necesita —a cuántos alcanza una regla hoy, y uno de los que la
+        recibirían— en vez del censo entero con sus cargos y sus cuotas.
       */}
-      <section className="settings-card">
-        <div className="settings-card__head">
-          <h2 className="settings-card__title">Que se manden solos</h2>
-        </div>
-        <p className="form-hint" style={{ marginTop: 0 }}>
-          Una regla escribe el comunicado por ti el día que toca — el cumpleaños de cada hermano,
-          por ejemplo. Sale con su nombre puesto, y se manda cuando alguien entre aquí.
-        </p>
-
-        {reglas.length === 0 ? (
-          <div className="assign-box">
-            <p className="form-hint" style={{ marginTop: 0 }}>
-              No tienes ninguna. Estas dos vienen escritas y las puedes cambiar después:
-            </p>
-            <div className="settings-actions">
-              {REGLAS_DE_FABRICA.map((f) => (
-                <button
-                  key={f.nombre}
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  onClick={() => setReglas((prev) => [
-                    { ...f, id: nuevoId(), activa: false, ultimaVez: null } as ReglaAutomatica,
-                    ...prev,
-                  ])}
-                >
-                  {f.nombre}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <ul className="lista-limpia">
-            {reglas.map((r) => {
-              /*
-               * A CUÁNTA GENTE ALCANZA HOY. Es el dato que hace falta para
-               * atreverse a encenderla, y el que evita la sorpresa: se elige
-               * «los que cumplen hoy», sale a tres de ochocientos, y sin este
-               * número no hay forma de saber si es que solo cumplen tres o es
-               * que el resto no tiene la fecha puesta en su ficha.
-               */
-              /*
-               * SE CUENTA CON EL MISMO CAMINO QUE SE MANDA.
-               *
-               * Aquí se contaba solo con `filtrarSegmento`, y al enviar se usa
-               * `resolverDestinatario`, que además añade `personalDelSegmento`:
-               * la junta que tiene cuenta de acceso pero no ficha en el censo.
-               *
-               * O sea que el número que se enseñaba antes de encender la regla
-               * era MÁS BAJO que la gente a la que le iba a llegar. Justo el
-               * dato que se mira para atreverse a encenderla.
-               */
-              const alcanza = cuantosSon(resolverDestinatario({
-                destinatarios: r.destinatarios,
-                criterios: r.criterios,
-              }))
-              return (
-                <li key={r.id} className="assign-box" style={{ marginBottom: '0.6rem' }}>
-                  <div className="assign-box__row" style={{ justifyContent: 'space-between' }}>
-                    <div>
-                      <b>{r.nombre}</b>
-                      <p className="table-subtle" style={{ margin: '0.2rem 0 0' }}>
-                        {r.cada === 'diaria' ? 'Todos los días' : 'El día 1 de cada mes'}
-                        {' · '}{r.destinatarios}
-                        {' · '}
-                        <b>{alcanza === 0 ? 'hoy no toca a nadie' : `hoy alcanzaría a ${alcanza}`}</b>
-                        {r.ultimaVez && ` · última vez el ${r.ultimaVez}`}
-                      </p>
-                    </div>
-                    <label className="checkbox-row">
-                      {/*
-                        Y NO SE PUEDE ENCENDER CON UNA MARCA QUE NO EXISTE.
-                        Aquí hace más falta que en un comunicado a mano: una
-                        regla encendida se manda sola, sin que nadie vuelva a
-                        leer el texto. Un `{nombe}` puesto hoy saldría en cada
-                        cumpleaños durante años.
-                      */}
-                      <input
-                        type="checkbox"
-                        checked={r.activa}
-                        /*
-                         * Ni con una marca en el texto del post: ahí no se
-                         * sustituye nada, así que se publicaría literalmente
-                         * «Hola {nombre}» en Instagram.
-                         */
-                        disabled={!r.activa && (
-                          !sePuedePersonalizar(`${r.asunto}\n${r.cuerpo}`).puede
-                          || llevaMarcas(r.textoRedes)
-                        )}
-                        onChange={(e) => setReglas((prev) => prev.map((x) => (
-                          x.id === r.id ? { ...x, activa: e.target.checked } : x
-                        )))}
-                      />
-                      <span>{r.activa ? 'Encendida' : 'Apagada'}</span>
-                    </label>
-                  </div>
-                  {/*
-                    EL TEXTO SE VE Y SE EDITA AQUÍ MISMO, sin abrir nada.
-
-                    Es lo que se le va a mandar a ochocientas personas:
-                    esconderlo detrás de un botón «editar» es cómo se encienden
-                    reglas sin haber leído lo que dicen. Y una felicitación que
-                    no se puede cambiar no sirve: cada hermandad escribe a los
-                    suyos a su manera, y el texto de fábrica es un punto de
-                    partida, no una imposición.
-                  */}
-                  <div className="form-row" style={{ marginTop: '0.6rem' }}>
-                    <label htmlFor={`asunto-${r.id}`}>Asunto</label>
-                    <input
-                      id={`asunto-${r.id}`}
-                      type="text"
-                      value={r.asunto}
-                      onChange={(e) => setReglas((prev) => prev.map((x) => (
-                        x.id === r.id ? { ...x, asunto: e.target.value } : x
-                      )))}
-                    />
-                  </div>
-                  <div className="form-row">
-                    <label htmlFor={`cuerpo-${r.id}`}>Mensaje</label>
-                    <textarea
-                      id={`cuerpo-${r.id}`}
-                      rows={5}
-                      value={r.cuerpo}
-                      onChange={(e) => setReglas((prev) => prev.map((x) => (
-                        x.id === r.id ? { ...x, cuerpo: e.target.value } : x
-                      )))}
-                    />
-                    {/* Las mismas marcas y el mismo botón que en un comunicado a mano. */}
-                    <div className="chips" style={{ marginTop: '0.5rem' }}>
-                      <span className="form-hint" style={{ marginRight: '0.3rem' }}>Personalizar:</span>
-                      {MARCAS.map((mk) => (
-                        <button
-                          key={mk.marca}
-                          type="button"
-                          className="chip"
-                          title={`${mk.que} — p. ej. «${mk.ejemplo}»`}
-                          onClick={() => setReglas((prev) => prev.map((x) => (
-                            x.id === r.id ? { ...x, cuerpo: `${x.cuerpo}{${mk.marca}}` } : x
-                          )))}
-                        >
-                          {`{${mk.marca}}`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {(() => {
-                    /*
-                      EL MISMO FRENO QUE EN UN COMUNICADO A MANO, y aquí hace
-                      MÁS falta: una regla encendida se manda sola, sin que
-                      nadie vuelva a leer el texto. Un `{nombe}` puesto hoy
-                      saldría cada cumpleaños durante años.
-                    */
-                    const rev = sePuedePersonalizar(`${r.asunto}\n${r.cuerpo}`)
-                    if (!rev.puede) {
-                      return (
-                        <p className="form-hint" style={{ color: 'var(--peligro, #b91c1c)' }}>
-                          ⚠ {rev.motivo}
-                        </p>
-                      )
-                    }
-                    // Y cómo le llegará a alguien de los que la van a recibir.
-                    const aQuien = filtrarSegmento(
-                      hermanos, r.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota,
-                    )[0] ?? null
-                    return (
-                      <div className="assign-box" style={{ marginTop: '0.2rem' }}>
-                        <p className="form-hint" style={{ margin: '0 0 0.35rem' }}>
-                          {aQuien ? `Así le llegará a ${aQuien.nombre}:` : 'Así llegará (hoy no toca a nadie, se usa un ejemplo):'}
-                        </p>
-                        <p style={{ margin: 0, fontWeight: 600 }}>
-                          {vistaPrevia(r.asunto, aQuien, ctxPersonalizacion)}
-                        </p>
-                        <p style={{ margin: '0.3rem 0 0', whiteSpace: 'pre-wrap' }}>
-                          {vistaPrevia(r.cuerpo, aQuien, ctxPersonalizacion)}
-                        </p>
-                      </div>
-                    )
-                  })()}
-                  {/*
-                    ====================================================
-                    Y EL ENCARGO DE REDES, SI SE QUIERE
-                    ====================================================
-
-                    Lo pedía el plan y faltaba: «llega el día del cumpleaños
-                    del titular, y a quien lleva Instagram le aparece la tarea
-                    con el texto ya escrito». La regla escribía el correo y ahí
-                    se acababa, así que el post había que acordarse de hacerlo.
-
-                    ESTO NO PUBLICA NADA SOLO. Deja el encargo —escribir el
-                    post, subirlo a cada red— y lo hace una persona. Publicar
-                    de verdad en Facebook o Instagram pide la API de Meta:
-                    cuenta de empresa, aplicación revisada por ellos y permisos
-                    que caducan solos, con lo que la hermandad se queda sin
-                    publicar y sin enterarse.
-
-                    Y EL TEXTO ES OTRO, no el del correo: el correo va
-                    personalizado («Hola Manuel») y un post lo lee cualquiera.
-                    Con el mismo texto se publicaría el nombre de un hermano en
-                    Instagram, que es lo último que se quiere.
-                  */}
-                  <div className="assign-box" style={{ marginTop: '0.5rem' }}>
-                    <label>Y además, dejar el encargo de redes</label>
-                    <div className="chips">
-                      {REDES_SOCIALES.map((red) => {
-                        const puesta = r.redes.includes(red)
-                        return (
-                          <button
-                            key={red}
-                            type="button"
-                            className={`chip${puesta ? ' chip--active' : ''}`}
-                            aria-pressed={puesta}
-                            onClick={() => setReglas((prev) => prev.map((x) => (
-                              x.id === r.id
-                                ? { ...x, redes: puesta ? x.redes.filter((y) => y !== red) : [...x.redes, red] }
-                                : x
-                            )))}
-                          >
-                            {red}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {r.redes.length === 0 ? (
-                      <p className="form-hint" style={{ marginBottom: 0 }}>
-                        Sin ninguna red, la regla solo escribe el correo. Es lo normal.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="form-row" style={{ marginTop: '0.6rem' }}>
-                          <label htmlFor={`redes-${r.id}`}>Lo que se publica</label>
-                          <textarea
-                            id={`redes-${r.id}`}
-                            rows={3}
-                            value={r.textoRedes}
-                            placeholder="Hoy es la festividad de nuestro titular…"
-                            onChange={(e) => setReglas((prev) => prev.map((x) => (
-                              x.id === r.id ? { ...x, textoRedes: e.target.value } : x
-                            )))}
-                          />
-                          {llevaMarcas(r.textoRedes) ? (
-                            <p className="form-hint" style={{ color: 'var(--peligro, #b91c1c)' }}>
-                              ⚠ Un post lo lee cualquiera, así que aquí no van marcas como
-                              «{'{nombre}'}»: publicarían el nombre de un hermano. Quita la marca y
-                              escribe el texto tal cual saldrá.
-                            </p>
-                          ) : (
-                            <p className="form-hint">
-                              Un texto para todos, sin marcas. El encargo queda <b>sin repartir</b> en
-                              «Encargos de redes», aquí abajo, y desde ahí se le asigna a quien las lleva.
-                            </p>
-                          )}
-                        </div>
-                        {!r.textoRedes.trim() && (
-                          <p className="form-hint" style={{ marginBottom: 0 }}>
-                            Sin texto no se deja ningún encargo: el correo sí saldrá.
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  <div className="settings-actions" style={{ marginTop: '0.5rem' }}>
-                    {/*
-                      NO SE PUEDE ENCENDER CON UNA MARCA MAL ESCRITA. El
-                      interruptor de arriba se apaga solo en ese caso: ver el
-                      `disabled` de la casilla.
-                    */}
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm rgpd-borrar"
-                      onClick={() => {
-                        if (!window.confirm(`¿Quitar la regla «${r.nombre}»?`)) return
-                        setReglas((prev) => prev.filter((x) => x.id !== r.id))
-                      }}
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+      <PanelDeReglas
+        reglas={reglas}
+        setReglas={setReglas}
+        ctxPersonalizacion={ctxPersonalizacion}
+        aCuantosAlcanzaHoy={(r) => cuantosSon(resolverDestinatario({
+          destinatarios: r.destinatarios,
+          criterios: r.criterios,
+        }))}
+        unoDeLosQueRecibirian={(r) => filtrarSegmento(
+          hermanos, r.criterios, rolesPorHermano, cargosPorHermano, situacionesDeCuota,
+        )[0] ?? null}
+      />
 
       <section className="stat-grid">
         <div className="stat-tile">

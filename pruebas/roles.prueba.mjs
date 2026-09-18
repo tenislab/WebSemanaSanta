@@ -151,7 +151,13 @@ async function cargoPorCuenta({ cargar, caso }) {
   // Y que las pantallas usen el hook, no el metadata.
   const { readFile } = await import('node:fs/promises')
   for (const f of ['src/components/AppShell.tsx', 'src/pages/app/Cuotas.tsx', 'src/pages/app/DashboardHome.tsx']) {
-    const src = await readFile(f, 'utf8')
+    /*
+     * `fuenteDe` y no `readFile`. Aquí importa por los dos lados: el guardia
+     * de «ya no mira el metadata» es de la clase silenciosa —comprueba que un
+     * patrón NO esté—, así que leyendo un solo fichero de una pantalla partida
+     * se quedaría verde sin mirar los demás.
+     */
+    const src = await (await import('./fuentes.mjs')).fuenteDe(f)
     caso(`${f.split('/').pop()} usa el hook`, true, /useCargoDeLaSesion(ConEstado)?\(\)/.test(src))
     caso(`${f.split('/').pop()} ya no mira el metadata`, false, /user_metadata\?\.personalId/.test(src))
   }
@@ -196,7 +202,7 @@ async function unaCuentaDosPuertas({ cargar, caso }) {
   caso('y solo si tiene ficha', true, /papeles\.esHermano && \(/.test(shell))
 
   // Desde su área, el panel.
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('el área ofrece volver al panel', true, /Ir al panel de gestión/.test(portal))
   caso('y solo si gestiona', true, /papelesAqui\.gestiona && !poniendoClaveNueva/.test(portal))
   // Y ya no se le manda a tener dos cuentas.

@@ -154,12 +154,37 @@ const filas = [...pares].sort().map((p) => {
  * llamadas `.rpc('…')` que hay en el código. Una lista a mano se queda vieja
  * el día que alguien añade una función, que es justo el día en que hace falta.
  */
+/**
+ * TODAS LAS PANTALLAS, BAJANDO A LAS SUBCARPETAS.
+ *
+ * Antes eran tres `readdir` sin recorrer: `src/pages`, `src/pages/app` y
+ * `src/components`, cada uno un nivel y nada más. Y en cuanto una pantalla se
+ * partió en una carpeta propia, lo de dentro se volvió INVISIBLE para esto:
+ * `src/pages/portal/Identificarse.tsx` llama a `resolver_email_hermano` —la
+ * función con la que el hermano entra— y al mudarse ahí la función se cayó de
+ * la lista de lo que el diagnóstico comprueba. O sea: una hermandad a la que le
+ * faltara esa función en la base habría visto el diagnóstico en verde y el
+ * «entrar» roto, sin relación aparente.
+ *
+ * Lo cazó `npm test`, que compara este fichero con lo que sale de volver a
+ * generarlo. Ahora se recorre de verdad, así que la próxima carpeta nueva entra
+ * sola.
+ */
+async function todasLasPantallas(dir) {
+  const salida = []
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const ruta = `${dir}/${e.name}`
+    if (e.isDirectory()) salida.push(...(await todasLasPantallas(ruta)))
+    else if (e.name.endsWith('.tsx') || e.name.endsWith('.ts')) salida.push(ruta)
+  }
+  return salida
+}
+
 const fuentesRpc = [
   ...ficheros,
-  ...(await readdir('src/pages')).filter((f) => f.endsWith('.tsx')).map((f) => `src/pages/${f}`),
-  ...(await readdir('src/pages/app')).filter((f) => f.endsWith('.tsx')).map((f) => `src/pages/app/${f}`),
-  ...(await readdir('src/components')).filter((f) => f.endsWith('.tsx')).map((f) => `src/components/${f}`),
-]
+  ...(await todasLasPantallas('src/pages')),
+  ...(await todasLasPantallas('src/components')),
+].filter((f, i, xs) => xs.indexOf(f) === i)
 const funciones = new Set()
 for (const f of fuentesRpc) {
   const src = await readFile(f, 'utf8')

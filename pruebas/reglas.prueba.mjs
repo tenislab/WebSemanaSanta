@@ -301,7 +301,7 @@ export default async function ({ cargar, caso }) {
    */
   const src = await readFile('src/lib/reglasAutomaticas.ts', 'utf8')
   caso('las reglas no mandan correo', false, /enviarCorreo|enviarCorreoUnoAUno|cuerpoCorreo/.test(src))
-  const pantalla = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
   caso('crean un comunicado programado', true, /estado: 'Programado'/.test(pantalla))
   /*
    * Y SE ESCRIBE EN LA BASE ESPERANDO A QUE ENTRE, no con `setComunicados`.
@@ -360,9 +360,32 @@ export default async function ({ cargar, caso }) {
    * que se enseñaba antes de encender la regla era MÁS BAJO que la gente a la
    * que le iba a llegar — y ese número es justo el que se mira para atreverse a
    * encenderla.
+   *
+   * SE MIRA DÓNDE SE CUENTA EL NÚMERO QUE SE PINTA, y no si el patrón aparece
+   * en algún sitio de la pantalla. Este guardia exigía el texto exacto
+   * `const alcanza = cuantosSon(resolverDestinatario({` y se puso rojo al
+   * sacar el panel de las reglas a su fichero, con el camino intacto.
+   *
+   * Y buscarlo en la pantalla entera NO VALE: el otro camino —el de disparar
+   * la regla, en `losProgramados.ts`— lleva la misma llamada, así que
+   * volviendo a poner el fallo de verdad (contarlo con `filtrarSegmento`, que
+   * se deja fuera a la junta con cuenta pero sin ficha en el censo) el guardia
+   * seguía en verde por el patrón del vecino. Salió rompiéndolo a propósito.
+   *
+   * Así que se recorta desde la capacidad que alimenta el número: si no está,
+   * el recorte sale vacío y salta igual.
    */
+  const MARCA = 'aCuantosAlcanzaHoy='
+  const dondeSeCuenta = pantalla.indexOf(MARCA)
+  // Y se corta al empezar la prop siguiente: la de al lado SÍ usa
+  // `filtrarSegmento`, con motivo —le hace falta una persona de ejemplo para
+  // la vista previa—, y una ventana de tamaño fijo se la comía.
+  const resto = dondeSeCuenta < 0 ? '' : pantalla.slice(dondeSeCuenta + MARCA.length)
+  const finDeLaProp = resto.search(/\n\s*[A-Za-z_$][\w$]*=/)
+  const comoSeCuenta = finDeLaProp < 0 ? resto : resto.slice(0, finDeLaProp)
   caso('el alcance se cuenta como se manda', true,
-    /const alcanza = cuantosSon\(resolverDestinatario\(\{/.test(pantalla))
+    /cuantosSon\(resolverDestinatario\(/.test(comoSeCuenta))
+  caso('y no a pelo con filtrarSegmento', false, /filtrarSegmento\(/.test(comoSeCuenta))
   caso('y al dispararla, igual', true,
     /cuantos: \(r\) => cuantosSon\(resolverDestinatario\(\{/.test(pantalla))
   caso('y se dice cuando no toca a nadie', true, /hoy no toca a nadie/.test(pantalla))

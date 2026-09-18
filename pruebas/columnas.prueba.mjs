@@ -243,7 +243,9 @@ async function guardadoDeLaHermandad({ caso }) {
     ['el área del hermano', 'src/pages/HermanoPortal.tsx'],
     ['el cortejo', 'src/pages/app/Cortejo.tsx'],
   ]) {
-    const texto = await readFile(ruta, 'utf8')
+    // `fuenteDe` y no `readFile`: el área del hermano y el editor de la web
+    // están partidos en varios ficheros, y la lista sigue nombrando la pantalla.
+    const texto = await (await import('./fuentes.mjs')).fuenteDe(ruta)
     caso(`${pantalla} escucha la campaña de la base`, true, /useCampana\(\)/.test(texto))
     caso(`${pantalla} ya no la lee una sola vez`, false,
       /const campana = useMemo\(\(\) => getCampana\(\), \[\]\)/.test(texto))

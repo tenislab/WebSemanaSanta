@@ -129,8 +129,7 @@ async function sesgarPorCargo({ cargar, caso }) {
  * lee como «la aplicación está rota».
  */
 async function elFormularioHabla({ caso }) {
-  const { readFile } = await import('node:fs/promises')
-  const src = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  const src = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
 
   /*
    * Ningún `return` a secas dentro de los formularios de esta pantalla.
@@ -397,8 +396,7 @@ async function elCargoVieneDeDosSitios({ cargar, caso }) {
 
 /** Y que la pantalla llame de verdad a lo que se acaba de probar. */
 async function laPantallaLoUsa({ caso }) {
-  const { readFile } = await import('node:fs/promises')
-  const src = (await readFile('src/pages/app/Comunicados.tsx', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
+  const src = (await (await import('./fuentes.mjs')).fuenteDeLosComunicados()).replace(/\/\*[\s\S]*?\*\//g, '')
 
   caso('la pantalla resuelve el nombre del segmento', true, /criteriosDeSegmento\(/.test(src))
   caso('y mira la papeleta del año', true, /segmentoDePapeleta\(/.test(src))
@@ -417,7 +415,7 @@ async function laPantallaLoUsa({ caso }) {
 
   // Y en Hermanos igual, o el mismo sesgo guardado devuelve gente distinta
   // según en qué pantalla se abra.
-  const herm = (await readFile('src/pages/app/Hermanos.tsx', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '')
+  const herm = (await (await import('./fuentes.mjs')).fuenteDelCenso()).replace(/\/\*[\s\S]*?\*\//g, '')
   caso('y en Hermanos también', true, /cargosEfectivos\(/.test(herm))
   caso('el sesgo del censo lo usa', true, /filtrarSegmento\(hermanos, limpiarCriterios\(criterios\), roles, cargosPorHermano, situacionesDeCuota\)/.test(herm))
 
@@ -428,8 +426,7 @@ async function laPantallaLoUsa({ caso }) {
    * esa comprobación viene a tapar: un segmento en el desplegable que nadie
    * resuelve.
    */
-  const { readFile: leerFichero } = await import('node:fs/promises')
-  const pantalla = await leerFichero('src/pages/app/Comunicados.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
   caso('la pantalla reconoce a los suscriptores', true,
     /c\.destinatarios === SEGMENTO_SUSCRIPTORES/.test(pantalla))
   // Y solo a los CONFIRMADOS: a quien no abrió el enlace del correo no se le

@@ -12,6 +12,7 @@
  * un cargo a sí mismo, que quitarlo no deje la hermandad sin nadie que pueda
  * repartirlos, y que el hermano civil no acabe siendo un moroso permanente.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ caso, cargar }) {
   const { readFile } = await import('node:fs/promises')
 
@@ -165,7 +166,7 @@ export default async function ({ caso, cargar }) {
    */
   const orden = permisos.slice(permisos.indexOf('export function cargoDeCuenta'))
   caso('personal desactivado NO corta antes de mirar la ficha', true,
-    orden.indexOf('cargoDeSuFicha') < orden.indexOf("if (miembro) return '__desconocido__'"))
+    antesQue(orden, 'cargoDeSuFicha', "if (miembro) return '__desconocido__'"))
   caso('y no reconocer a alguien nunca es ser titular', false,
     /if \(miembro\) return null/.test(orden))
 
@@ -257,7 +258,7 @@ export default async function ({ caso, cargar }) {
   const ficha = await readFile('src/lib/hermanoFicha.ts', 'utf8')
   caso('no cuenta como hermano en las cifras', true, /h\.estado !== 'Baja' && !h\.civil/.test(ficha))
   // Pero SÍ sigue en el listado del censo, para que secretaría lo gestione.
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('en el censo se le distingue', true, /'No paga cuota'/.test(estado) && /cuotaEnPalabras\(situacionDe/.test(hermanos))
   caso('y no sale como «de baja» por no tener número', true,
     /Hermano civil · no ocupa número ni paga cuota/.test(hermanos))
@@ -269,7 +270,7 @@ export default async function ({ caso, cargar }) {
   // ---------------------------------------------------------------------
   // 9. EL ÁREA DEL HERMANO: la otra puerta de la misma persona.
   // ---------------------------------------------------------------------
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   /*
    * No había NINGÚN enlace al panel dentro del área: el único estaba en la
    * pantalla de identificación, o sea antes de entrar. Quien llevaba cargo y

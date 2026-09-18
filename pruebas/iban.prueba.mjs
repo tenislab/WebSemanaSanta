@@ -96,9 +96,8 @@ export default async function ({ cargar, caso }) {
  * igual, con más código.
  */
 async function dondeSeUsa({ cargar, caso }) {
-  const { readFile } = await import('node:fs/promises')
   const sepa = await cargar('src/lib/sepa.ts')
-  const cuotas = await readFile('src/pages/app/Cuotas.tsx', 'utf8')
+  const cuotas = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
 
   /*
    * 1. EL DE LA HERMANDAD. Es el de cobro: si está mal, el banco rechaza el
@@ -214,7 +213,7 @@ async function unaSolaRegla({ caso }) {
    * guardaba SIN IBAN sin decir nada. Después nadie entendía por qué a ese
    * hermano no se le cobraba.
    */
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   // Se busca el código, no el comentario que lo cuenta: arriba está citado.
   caso('el alta ya no tira el IBAN malo', false, /const iban = ibanRaw &&/.test(hermanos))
   caso('lo dice y no guarda', true, /setIbanAltaError\(`Ese IBAN no vale/.test(hermanos))

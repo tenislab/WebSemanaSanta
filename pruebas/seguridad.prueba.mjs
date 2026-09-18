@@ -46,7 +46,7 @@ export default async function ({ caso }) {
   caso('una de un solo uso, no', false, claveAdivinable(claves[0], '12345678A'))
 
   // Los dos sitios que dan de alta la usan, y ninguno pone ya el DNI.
-  const hermanos = sinComentar(await readFile('src/pages/app/Hermanos.tsx', 'utf8'))
+  const hermanos = sinComentar(await (await import('./fuentes.mjs')).fuenteDelCenso())
   caso('el alta a mano usa una contraseña de un solo uso', true,
     /claveDeUnSoloUso\(\)/.test(hermanos))
   caso('y ya no usa el DNI como contraseña', false,

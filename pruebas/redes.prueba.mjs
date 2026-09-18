@@ -129,7 +129,7 @@ export default async function ({ cargar, caso }) {
 async function laPantallaYLaBase({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const sinComentarios = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
-  const com = sinComentarios(await readFile('src/pages/app/Comunicados.tsx', 'utf8'))
+  const com = sinComentarios(await (await import('./fuentes.mjs')).fuenteDeLosComunicados())
   const db = sinComentarios(await readFile('src/lib/db/comunicados.ts', 'utf8'))
 
   // El hook completa siempre las cinco.
@@ -259,8 +259,7 @@ async function unBotonQueDiceLoQueHace({ cargar, caso }) {
 
 /** Y que la pantalla use esto, no su propia versión. */
 async function laPantallaLoUsa({ caso }) {
-  const { readFile } = await import('node:fs/promises')
-  const c = (await readFile('src/pages/app/Comunicados.tsx', 'utf8'))
+  const c = (await (await import('./fuentes.mjs')).fuenteDeLosComunicados())
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 
   caso('la pantalla pide la acción al catálogo', true, /accionDePublicar\(r, texto, cuenta, enlaceDeLaWeb\)/.test(c))

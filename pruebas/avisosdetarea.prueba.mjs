@@ -55,7 +55,7 @@ export default async function ({ caso }) {
    * encontraba las dos listas vacías y sin explicación.
    */
   {
-    const src = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+    const src = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
     caso('hay una lista de los que no llevan cargo', true, /const otrosHermanos/.test(src))
     caso('y se ofrecen en el desplegable', true, /otrosHermanos\.map/.test(src))
     caso('la junta va aparte y primero', true, /optgroup label="Junta de gobierno"/.test(src))
@@ -73,7 +73,7 @@ export default async function ({ caso }) {
     const seguido = lib.replace(/\s*\n\s*\*?\s*/g, ' ')
     caso('la tarea se ve en su área, sin entrar al panel', true,
       /la ve en SU área sin entrar al panel/.test(seguido))
-    const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
-    caso('y el área del hermano las carga de verdad', true, /useTareasRedes/.test(portal))
+    const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
+    caso('y el área del hermano las carga de verdad', true, /useTareasRedes\s*\(/.test(portal))
   }
 }

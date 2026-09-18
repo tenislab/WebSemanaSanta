@@ -163,7 +163,7 @@ async function laMarcaEsUnaSola({ caso }) {
    */
   caso('dentro del lacre la marca va en oro', true,
     /\.portal__sello-disco \.logo-mark \{ color: rgba\(226, 196, 132/.test(css))
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   // Y el cinturón: si mañana se borra esa regla, que no vuelva a desaparecer.
   caso('y se pide en claro por si esa regla desaparece', true,
     /<LogoMark size=\{64\} claro \/>/.test(portal))

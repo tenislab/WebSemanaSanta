@@ -111,7 +111,7 @@ async function seGuardaYSeEnsena({ caso }) {
    * pasado la secretaría ese día, que es la peor manera de fallar: a veces sí
    * y a veces no.
    */
-  const censo = await lee('src/pages/app/Hermanos.tsx')
+  const censo = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('el censo pide el motivo al rechazar', true, /resolverSolicitud\(/.test(censo))
   const avisos = await lee('src/pages/app/Notificaciones.tsx')
   caso('y el panel de avisos también', true, /resolverSolicitud\(/.test(avisos))

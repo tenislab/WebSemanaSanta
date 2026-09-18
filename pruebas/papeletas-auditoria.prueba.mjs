@@ -51,7 +51,7 @@ export default async function ({ cargar, caso }) {
 
   // Y que las DOS pantallas usen esta función, que es lo que impide que se
   // vuelvan a separar.
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   const secre = await readFile('src/pages/app/Papeletas.tsx', 'utf8')
   caso('el área del hermano usa la función común', true, /conRenovacion\(prev, \{/.test(portal))
   caso('y secretaría también', true, /conRenovacion\(prev, \{/.test(secre))

@@ -113,7 +113,9 @@ export default async function ({ cargar, caso }) {
     'src/pages/app/Hermanos.tsx',
     'src/pages/app/Informes.tsx',
   ]) {
-    const t = await readFile(pantalla, 'utf8')
+    // `fuenteDe`: el censo, el área del hermano y el editor de la web están
+    // partidos en varios ficheros, y la lista sigue nombrando la pantalla.
+    const t = await (await import('./fuentes.mjs')).fuenteDe(pantalla)
     caso(`${pantalla.split('/').pop()} cuenta con esMiembro`, true, /filter\(esMiembro\)/.test(t))
     caso(`${pantalla.split('/').pop()} ya no deja fuera a los nuevos`, false,
       /const activos = [a-zA-Z]*\.filter\(\(h\) => h\.estado === 'Activo'\)/.test(t))

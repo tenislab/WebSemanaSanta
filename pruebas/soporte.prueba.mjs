@@ -10,6 +10,7 @@
  * cuarto vaya el último, y que la tabla que decide quién es soporte no se pueda
  * ni leer ni escribir desde la aplicación.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
   const sql = await readFile('supabase/soporte.sql', 'utf8')
@@ -94,7 +95,7 @@ export default async function ({ cargar, caso }) {
   caso('entrar deja constancia', true, /'soporte_entra'/.test(sql))
   caso('y salir también', true, /'soporte_sale'/.test(sql))
   caso('y se escribe antes de dejar entrar', true,
-    sql.indexOf('insert into registro_actividad') < sql.indexOf('insert into soporte_sesion'))
+    antesQue(sql, 'insert into registro_actividad', 'insert into soporte_sesion'))
 
   // --- Y SE VE EN PANTALLA, SIN PODER CERRARLO ---
   const shell = await readFile('src/components/AppShell.tsx', 'utf8')
@@ -106,7 +107,7 @@ export default async function ({ cargar, caso }) {
    * uno.
    */
   caso('y su aviso va antes que los demás', true,
-    shell.indexOf('como soporte') < shell.indexOf('No se ha podido guardar en la base de datos'))
+    antesQue(shell, 'como soporte', 'No se ha podido guardar en la base de datos'))
   // Sin botón de «entendido»: la única forma de que desaparezca es salir.
   caso('solo se quita saliendo de verdad', true, /Salir de esta hermandad/.test(shell))
 

@@ -11,6 +11,7 @@
  * existen; lo que se comprueba de ellos es que estén enganchados, mirando el
  * código.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/vigilancia.ts')
   const l = m.limpiarMensaje
@@ -95,5 +96,5 @@ export default async function ({ cargar, caso }) {
    */
   const main = await readFile('src/main.tsx', 'utf8')
   caso('se engancha en main.tsx', true, /^vigilar\(\)$/m.test(main))
-  caso('y antes de pintar', true, main.indexOf('vigilar()') < main.indexOf('createRoot'))
+  caso('y antes de pintar', true, antesQue(main, 'vigilar()', 'createRoot'))
 }

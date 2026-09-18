@@ -36,8 +36,11 @@ export default async function ({ cargar, caso }) {
     'src/pages/app/Tesoreria.tsx', 'src/pages/app/Inventario.tsx', 'src/pages/app/Archivo.tsx',
     'src/pages/app/Cortejo.tsx', 'src/pages/app/Comunicados.tsx', 'src/components/HermanoPicker.tsx',
   ]
+  const { fuenteDe } = await import('./fuentes.mjs')
   for (const f of PANTALLAS) {
-    const t = (await readFile(f, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    // `fuenteDe`: el censo, el área del hermano y el editor de la web están
+    // partidos en varios ficheros, y la lista sigue nombrando la pantalla.
+    const t = (await fuenteDe(f)).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
     caso(`${f.split('/').pop()} busca sin tildes`, true, /from '[./]*lib\/buscar'|from '\.\.\/lib\/buscar'/.test(t))
   }
 }

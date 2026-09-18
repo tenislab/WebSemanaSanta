@@ -94,7 +94,7 @@ export default async function ({ cargar, caso }) {
 
   // El borrado del artículo 17 del RGPD es permanente A PROPÓSITO: si se
   // pudiera deshacer no sería una supresión.
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   const rgpd = hermanos.slice(hermanos.indexOf('async function borrarHermanoRgpd'))
   caso('el borrado RGPD NO se puede deshacer', false, /ofrecerDeshacer/.test(rgpd.slice(0, 1200)))
 

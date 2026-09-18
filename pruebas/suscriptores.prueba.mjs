@@ -5,6 +5,7 @@
  * probar aquí no es técnico: es lo que exige el RGPD y lo que separa una lista
  * legítima de una lista que acaba en spam o en multa.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/suscriptoresWeb.ts')
 
@@ -177,7 +178,7 @@ async function laLlaveNoSaleDeLaBase({ caso }) {
   // --- 3. El correo lo manda el servidor, y ahora sí sale.
   caso('la función de envío sabe confirmar suscripciones', true, /async function mandarConfirmacion/.test(edge))
   caso('y esa rama va antes de pedir sesión', true,
-    edge.indexOf('if (suscripcion) return await mandarConfirmacion') < edge.indexOf('const permiso = await quienLlama(req)'))
+    antesQue(edge, 'if (suscripcion) return await mandarConfirmacion', 'const permiso = await quienLlama(req)'))
   caso('lee la llave con la clave de servicio', true,
     /rpc\/llave_para_confirmar[\s\S]{0,400}?Bearer \$\{SERVICE_KEY\}/.test(edge))
   /*
@@ -226,7 +227,7 @@ async function laLlaveNoSaleDeLaBase({ caso }) {
   caso('se pueden reenviar las confirmaciones', true, /export async function reenviarConfirmaciones/.test(lib))
   caso('de cinco en cinco, como el resto de envíos', true,
     /const DE_UNA_VEZ = 5[\s\S]{0,400}?pedirConfirmacion\(hermandadId, s\.email\)/.test(lib))
-  const panel = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  const panel = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
   caso('y el panel lo ofrece donde se nota la falta', true,
     /destinatarioNuevo === SEGMENTO_SUSCRIPTORES && pendientes\.length > 0/.test(panel))
   caso('diciendo cuántos han salido y cuántos no', true, /y \$\{fallidos\} sin salir/.test(panel))

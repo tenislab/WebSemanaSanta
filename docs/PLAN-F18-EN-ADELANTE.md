@@ -20,7 +20,7 @@ Continúa la numeración de `docs/HOJA-DE-RUTA.md`, que llega hasta F17.
 | **F19** | Editor de SEO | **hecho** salvo desplegar `api/w.ts` (ops, no código) — ver apéndice |  |
 | **F20** | La copia, cifrada al descargar | **hecho** — ver el apéndice | nada |
 | **F21** | Lo que quedaba de antes | trámites y F15 | el banco, el dominio |
-| **F22** | Deuda técnica | **hecha entera**: la cola sin conexión y el reparto de `WebPublica.tsx` | nada |
+| **F22** | Deuda técnica | **hecha entera**: la cola sin conexión y el reparto de los CINCO ficheros gordos (`WebPublica.tsx`, `HermanoPortal.tsx`, `Hermanos.tsx`, `Comunicados.tsx`, `Cuotas.tsx`) | nada |
 | **F23** | Acabado visual | **hecho** — ver el apéndice | nada |
 
 **Cerrado ya:** el freno de la convocatoria fuera de plazo, «Hola {nombre}», el
@@ -303,6 +303,70 @@ mitad bonita.
 ## F22 — Deuda técnica
 
 No se ve desde fuera y por eso no se hace nunca. Dos cosas concretas:
+
+- ~~**`Cuotas.tsx`, el quinto, con 2.349 líneas.**~~ **Hecho.** 2.349 → 1.787.
+  Salieron siete ficheros a `src/pages/app/cuotas/`: la remesa bancaria con su
+  cajón, las devoluciones del banco con el suyo, el cajón de ajustes, y dos
+  hojas de ayudantes (las dos fechas de los recibos y los meses con su nombre).
+
+  Aquí hizo falta arreglar la propia medición. Contar «usado dentro Y usado
+  fuera» vale para un componente, pero para un HOOK mezcla las salidas con las
+  entradas: lo que el bloque declara y usan otros no es una prop, es lo que el
+  hook devuelve. La remesa salían diecisiete props y son CINCO entradas de
+  datos, porque cinco de las diecisiete eran su propio estado, que se ha venido
+  con ella. Está en `/tmp` como `entradas.mjs`; la idea, escrita aquí.
+
+  Se rechazó **la emisión del ejercicio: 28 props** —toca el filtro, la
+  búsqueda, el recibo seleccionado, los movimientos y el cobro en mano— y **el
+  cajón de nueva cuota: 17**.
+
+  Y aparecieron **dos huecos de vigilancia que no eran del refactor**, los dos
+  en el camino del dinero y los dos encontrados rompiendo a propósito: que la
+  remesa exige mandato SEPA firmado del IBAN de ahora (sin eso, un cargo que el
+  hermano reclame no se puede defender) y que un recibo devuelto queda
+  «Devuelta» y no «Pendiente» (si no, vuelve a la siguiente remesa, a la misma
+  cuenta cancelada y con otra comisión). Nueve guardias nuevos.
+
+- ~~**`Comunicados.tsx`, el cuarto, con 2.390 líneas.**~~ **Hecho, y es el que
+  mejor se ha dejado partir de los cuatro.** 2.390 → 1.279, casi la mitad,
+  porque aquí las costuras eran de verdad: cinco asuntos completos que no se
+  tocaban entre sí.
+
+  Salieron **siete ficheros** a `src/pages/app/comunicados/`: las cuentas de
+  redes con su hook y su panel, los encargos de redes con los suyos, las
+  doscientas líneas de lo que ocurre solo al abrir la pantalla —los
+  programados que ya tocaban y las reglas que se disparan—, las ciento setenta
+  y seis de mandar un comunicado, el panel de las reglas y los dos tipos del
+  alcance en una hoja sin nada dentro.
+
+  Y una medición que merece quedar escrita: el panel de las reglas salían
+  **once props a pelo, y son cinco**. Cuatro de las once eran el censo con sus
+  cargos, sus roles y sus cuotas resueltas —que un panel de reglas no tiene por
+  qué conocer— y aparecían en DOS sitios para lo mismo: saber a quién alcanza
+  una regla. Así que se le pasan las dos capacidades y no las cuatro
+  estructuras. Eso es reducir de verdad; meter las once en un objeto con un
+  nombre bonito habría sido esconderlas.
+
+  Se rechazó **el cajón de nuevo comunicado: 34 props.** El mismo listón que
+  en el censo y en el área del hermano.
+
+- ~~**`Hermanos.tsx`, el tercero, con 2.896 líneas.**~~ **Hecho, y es el que
+  menos se deja partir.** 2.896 → 2.500. Aquí la medición dijo que NO a casi
+  todo: sacar la ficha del hermano costaba 31 props y la lista 33, aun mudando
+  con ellas su estado, y un componente de treinta props se lee peor que el
+  fichero gordo. Salió lo que sí cabía: las solicitudes de alta enteras —un
+  asunto completo, cinco props— más las columnas, las clases de estado y el
+  cuerpo de la tabla. **Decir que no también es parte del trabajo**: el mismo
+  listón que se aplicó al área del hermano.
+
+- ~~**`HermanoPortal.tsx`, el segundo, con 2.909 líneas.**~~ **Hecho**, y con un
+  reparto DISTINTO porque el fichero es distinto: no eran veintitrés
+  componentes hermanos, era UN componente con ciento setenta y tres bindings.
+  Se midió el coste de cada corte antes de dar ninguno —sacar una sección del
+  portal costaba entre veinte y cuarenta props, así que esas secciones se
+  quedaron donde estaban— y salieron las cuatro piezas que no lo costaban: la
+  sesión, el pago de la papeleta, la cabecera y la pantalla de identificarse
+  entera (siete props, de treinta y cuatro bindings que usaba). 2.909 → 1.867.
 
 - ~~**`WebPublica.tsx` tiene 4.573 líneas.**~~ **Hecho.** Había llegado a 4.770,
   con el segundo fichero del proyecto en 2.900. Ahora son 506 y veinticuatro

@@ -119,7 +119,7 @@ export default async function ({ cargar, caso }) {
   // quedarse con un hueco en blanco.
   caso('sin logo sigue dibujando el suyo', true, /const uid = /.test(escudo))
 
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   const conLogo = (portal.match(/<EscudoHermandad[\s\S]{0,260}?logoDataUrl=/g) ?? []).length
   const total = (portal.match(/<EscudoHermandad/g) ?? []).length
   caso('y en el buscador se le pasa siempre', total, conLogo)
@@ -164,7 +164,7 @@ async function aislamientoAuditoria({ caso }) {
   const sync = await readFile('src/lib/supabaseSync.ts', 'utf8')
   caso('el hook admite no dejar copia', true, /sinEspejo\?: boolean/.test(sync))
   caso('y sin copia no escucha a otras pestañas', true, /if \(sinEspejo\) return/.test(sync))
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('el área del hermano no deja copia', true, /const sinEspejo = \{ sinEspejo: true \}/.test(portal))
   // Las cuatro tablas que monta, no solo una.
   caso('en las cuatro tablas', 4, (portal.match(/\n\s+sinEspejo,\n/g) ?? []).length)
@@ -283,7 +283,7 @@ async function areaHermanoAuditoria({ caso }) {
   // Y en la aplicación: el hermano solo escribe SUS tres campos.
   const db = await readFile('src/lib/db/hermanos.ts', 'utf8')
   caso('hay un mapeo de solo contacto', true, /export function contactoDelHermanoToRow/.test(db))
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('el área lo usa para guardar', true, /\.update\(contactoDelHermanoToRow\(/.test(portal))
   caso('y si falla, lo dice', true, /No se han podido guardar tus datos/.test(portal))
 }

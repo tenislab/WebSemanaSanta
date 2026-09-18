@@ -33,7 +33,7 @@ export default async function ({ cargar, caso }) {
   caso('y si no, lo dice en vez de seguir', true, /if \(fallo\)[\s\S]{0,200}?return \{ ok: false/.test(rgpd))
   caso('con el motivo traducido, no el de Postgres', true, /traducirErrorDeEscritura/.test(rgpd))
 
-  const censo = await lee('src/pages/app/Hermanos.tsx')
+  const censo = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('la pantalla distingue «no se pudo» de «hecho»', true, /if \(!r\.ok\)/.test(censo))
   caso('y NO repinta el censo cuando ha fallado', true,
     /if \(!r\.ok\) \{[\s\S]{0,300}?return\s*\}/.test(censo))

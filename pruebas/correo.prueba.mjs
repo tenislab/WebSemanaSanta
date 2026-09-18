@@ -113,12 +113,12 @@ async function correoAuditoria({ cargar, caso }) {
   caso('con el correo apagado no sale ni el importante', 0, avisos.destinatariosDe(gente, 'importante', apagado).length)
 
   // Y que los dos sitios lo usen.
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('la baja usa «importante»', true, /'importante',\n\s+'Tu baja en la hermandad'/.test(hermanos))
   caso('el cambio de IBAN también', true, /'importante',\n\s+'Han cambiado tu cuenta bancaria'/.test(hermanos))
 
   // --- Los segmentos ---
-  const com = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
+  const com = await (await import('./fuentes.mjs')).fuenteDeLosComunicados()
   // Los criterios guardados mandan sobre el texto legible, y se miran los
   // PRIMEROS: son la única verdad de a quién iba dirigido el comunicado.
   caso('los destinatarios salen de los criterios guardados', true,
@@ -268,11 +268,22 @@ export async function losDescartadosSeCuentan({ caso }) {
   caso('viaja en todas las respuestas', true,
     (correo.match(/sinCorreoValido/g) ?? []).length >= 6)
 
-  const com = sin(await readFile('src/pages/app/Comunicados.tsx', 'utf8'))
+  const com = sin(await (await import('./fuentes.mjs')).fuenteDeLosComunicados())
   caso('la pantalla lo enseña', true, /r\.sinCorreoValido/.test(com))
-  // El texto se arma con singular y plural, así que la frase no está entera:
-  // se busca a dónde manda, que es lo que tiene que decir.
-  caso('y dice qué hacer', true, /en Hermanos/.test(com) && /rev[ií]salos?/.test(com))
+  /*
+   * El texto se arma con singular y plural, así que la frase no está entera:
+   * se busca a dónde manda, que es lo que tiene que decir.
+   *
+   * Y SE MIRA SOLO EL AVISO DE LOS DESCARTADOS, no la pantalla entera. Unas
+   * líneas más arriba hay otro mensaje —el del envío uno a uno— que también
+   * dice «revisa sus correos en Hermanos», así que buscándolo en toda la
+   * fuente el guardia se quedaba verde con este borrado: al romperlo a
+   * propósito no saltaba. Recortando desde `const fuera` se vigila lo que dice
+   * que vigila.
+   */
+  const avisoDescartados = com.slice(com.indexOf('const fuera = r.sinCorreoValido')).slice(0, 600)
+  caso('y dice qué hacer', true,
+    /en Hermanos/.test(avisoDescartados) && /rev[ií]salos?/.test(avisoDescartados))
   // No se pinta en verde: 40 hermanos incomunicados no es un envío correcto.
   caso('no se da por bueno si falta alguien', true, /fuera > 0 \? 'error' : 'hecho'/.test(com))
 }

@@ -93,7 +93,9 @@ async function todosUsanLaMisma({ caso }) {
     'src/components/FormulariosWeb.tsx',
   ]
   for (const f of ARCHIVOS) {
-    const t = await lee(f)
+    // `fuenteDe` y no `readFile`: el área del hermano y el editor de la web
+    // están partidos en varios ficheros, y la lista sigue nombrando la pantalla.
+    const t = await (await import('./fuentes.mjs')).fuenteDe(f)
     const nombre = f.split('/').pop()
     caso(`${nombre} no compara DNI a mano`, false, A_MANO.test(t))
     caso(`${nombre} usa la regla común`, true, /limpiarDni|mismoDni/.test(t))
@@ -105,7 +107,7 @@ async function todosUsanLaMisma({ caso }) {
    * nadie, y la pantalla dice que los datos no son correctos —que es lo
    * contrario de lo que pasa—.
    */
-  const portal = await lee('src/pages/HermanoPortal.tsx')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('el DNI del acceso va limpio a la base', 3,
     (portal.match(/const dni = limpiarDni\(/g) ?? []).length)
   caso('y ya no queda el normalizador viejo', false, /function normaliza\(/.test(portal))

@@ -237,7 +237,7 @@ export default async function ({ cargar, caso }) {
     for (const f of ['src/pages/app/Configuracion.tsx', 'src/components/AltaHermandad.tsx',
                      'src/pages/app/WebPublica.tsx']) {
       const src = await fuenteDe(f)
-      caso(`${f.split('/').pop()} comprueba el IBAN`, true, /ibanValido/.test(src))
+      caso(`${f.split('/').pop()} comprueba el IBAN`, true, /ibanValido\s*\(/.test(src))
     }
   }
 
@@ -296,7 +296,7 @@ export default async function ({ cargar, caso }) {
    */
   {
     const { readFile } = await import('node:fs/promises')
-    const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+    const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
     caso('el portal filtra el hueco antes de pintarlo', true,
       /defaultValue=\{siNoEsElHueco\(hermanoActivo\.telefono\)\}/.test(portal))
     caso('y también en la dirección', true,

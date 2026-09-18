@@ -104,7 +104,7 @@ export default async function ({ caso }) {
   // ---------------------------------------------------------------------
   // El censo impreso salía encabezado «Tu hermandad» mientras el recibo de la
   // misma hermandad, impreso cinco minutos antes, llevaba su nombre de verdad.
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('el censo impreso lleva el nombre de la hermandad', true,
     hermanos.includes('useHermandadSettings(fallbackNombre)'))
   for (const [modulo, fichero] of [['Cuotas', 'Cuotas'], ['Tesorería', 'Tesoreria'], ['Papeletas', 'Papeletas'],

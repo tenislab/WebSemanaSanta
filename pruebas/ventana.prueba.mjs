@@ -104,12 +104,12 @@ export default async function ({ cargar, caso }) {
   caso('una papeleta vieja sin pagar no se rescata', false, p.dentro({ anio: 2020, estado: 'Asignada' }))
 
   // --- Y NADIE ENCIENDE ESTO SIN QUERER ---
-  const { readFile } = await import('node:fs/promises')
   for (const [pantalla, fichero] of [
     ['Cuotas', 'src/pages/app/Cuotas.tsx'],
     ['Papeletas', 'src/pages/app/Papeletas.tsx'],
   ]) {
-    const src = await readFile(fichero, 'utf8')
+    // `fuenteDe`: Cuotas vive en varios ficheros desde que se partió.
+    const src = await (await import('./fuentes.mjs')).fuenteDe(fichero)
     /*
      * LA VENTANA VA SIEMPRE DETRÁS DE LA BANDERA. Cambiar qué datos hay en
      * pantalla es la clase de cambio que no se despliega a cincuenta
@@ -129,7 +129,7 @@ export default async function ({ cargar, caso }) {
    * «se emitirá a 800 hermanos» y crearía 800 recibos duplicados encima de los
    * que ya hay en la base, sin un solo error.
    */
-  const cuotas = await readFile('src/pages/app/Cuotas.tsx', 'utf8')
+  const cuotas = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
   caso('no se puede emitir un ejercicio que no se ha traído', true,
     /ejercicioFueraDeVentana\s*=\s*!!ventanaCuotas\s*&&\s*ejercicioEmision\s*<\s*desdeEjercicio/.test(cuotas))
   caso('y el botón de emitir lo respeta', true,

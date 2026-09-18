@@ -73,7 +73,7 @@ export default async function ({ cargar, caso }) {
    * no llamarla, o llamarla y no anotar el resultado — y entonces se le manda
    * una segunda clave al mismo hermano, que además no funcionaría.
    */
-  const pantalla = await (await import('node:fs/promises')).readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('la ficha llama a enviarAcceso', true, /onClick=\{\(\) => mandarAccesoATodos?\(|mandarAcceso\(selected\)/.test(pantalla))
   // Se anota la cuenta en la ficha: es lo que apaga el botón y evita la segunda
   // clave. Sin esto, el botón seguiría ahí invitando a repetirlo.

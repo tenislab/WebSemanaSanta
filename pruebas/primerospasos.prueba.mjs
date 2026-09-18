@@ -6,6 +6,7 @@
  * demasiada y ninguna decía por dónde se empieza — se abría Cuotas antes de
  * tener censo, no salía nada, y se cerraba la pestaña.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/primerosPasos.ts')
 
@@ -43,10 +44,10 @@ export default async function ({ cargar, caso }) {
    */
   const orden = pasos.map((p) => p.id)
   caso('la identidad, primero', 'identidad', orden[0])
-  caso('el censo antes que las cuotas', true, orden.indexOf('censo') < orden.indexOf('cuotas'))
-  caso('el censo antes que los accesos', true, orden.indexOf('censo') < orden.indexOf('accesos'))
-  caso('los cargos antes que el correo', true, orden.indexOf('cargos') < orden.indexOf('correo'))
-  caso('la cuenta bancaria antes que las cuotas', true, orden.indexOf('cobros') < orden.indexOf('cuotas'))
+  caso('el censo antes que las cuotas', true, antesQue(orden, 'censo', 'cuotas'))
+  caso('el censo antes que los accesos', true, antesQue(orden, 'censo', 'accesos'))
+  caso('los cargos antes que el correo', true, antesQue(orden, 'cargos', 'correo'))
+  caso('la cuenta bancaria antes que las cuotas', true, antesQue(orden, 'cobros', 'cuotas'))
   /*
    * Aquí hubo un paso «poner el precio de la papeleta» que estaba ROTO: el
    * precio viene de fábrica a 18 €, así que la comprobación era `18 > 0` y
@@ -113,7 +114,7 @@ async function laPantallaLoEnsena({ caso }) {
    * problema y después la solución.
    */
   caso('y antes que el panel de cifras', true,
-    inicio.indexOf('<GuiaPrimerosPasos') < inicio.indexOf('statsVisibles.length > 0'))
+    antesQue(inicio, '<GuiaPrimerosPasos', 'statsVisibles.length > 0'))
 
   // Se tacha solo: no hay nada que marcar a mano.
   caso('lo hecho se tacha', true, /guia__paso--hecho/.test(guia))

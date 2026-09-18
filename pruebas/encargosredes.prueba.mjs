@@ -120,7 +120,7 @@ export default async function ({ cargar, caso }) {
  */
 async function seVe({ caso }) {
   const { readFile } = await import('node:fs/promises')
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   const buzon = await readFile('src/components/BuzonHermano.tsx', 'utf8')
 
   // Arriba, entre las tarjetas de resumen, donde se mira sin bajar.
@@ -156,8 +156,12 @@ async function seVe({ caso }) {
  */
 async function avisos({ caso }) {
   const { readFile } = await import('node:fs/promises')
-  const src = await readFile('src/pages/app/Comunicados.tsx', 'utf8')
-  const crear = src.slice(src.indexOf('function crearEncargo'), src.indexOf('const rolesDisponibles'))
+  const { fuenteDeLosComunicados, cuerpoDeLaFuncion } = await import('./fuentes.mjs')
+  const src = await fuenteDeLosComunicados()
+  // Contando llaves y no recortando entre dos marcas: `crearEncargo` puede
+  // vivir en otro fichero de la pantalla, y un recorte entre dos marcas que
+  // acaban en ficheros distintos sale al revés y devuelve cadena vacía.
+  const crear = cuerpoDeLaFuncion(src, 'function crearEncargo')
   caso('el encargo existe todavía', true, crear.length > 200)
 
   caso('al repartir se deja el aviso en su área', true, /agregarAvisoHermano\(/.test(crear))
@@ -204,7 +208,7 @@ async function avisos({ caso }) {
  */
 async function sinEspejoEnElPortal({ caso }) {
   const { readFile } = await import('node:fs/promises')
-  const src = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const src = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   /*
    * La lista de hooks a vigilar NO se escribe a mano: se saca de quién usa
    * `useSupabaseTable`, que es exactamente donde está el peligro. Un hook con

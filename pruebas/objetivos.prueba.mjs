@@ -397,7 +397,7 @@ export default async function ({ cargar, caso }) {
   {
     const { readFile } = await import('node:fs/promises')
     const pantalla = await readFile('src/pages/app/Campanas.tsx', 'utf8')
-    caso('la aportación se apunta en el libro', true, /conApunteDeCobro/.test(pantalla))
+    caso('la aportación se apunta en el libro', true, /conApunteDeCobro\s*\(/.test(pantalla))
     caso('con la marca de la campaña', true, /origenDeRecaudacion/.test(pantalla))
     // Y NO guarda un total propio en ninguna parte.
     caso('la campaña no guarda un «recaudado»', false, /recaudado:/.test(pantalla))

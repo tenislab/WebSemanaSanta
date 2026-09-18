@@ -39,9 +39,7 @@ import { aCentimos, formatCurrency, formatDate, sumaEuros } from '../../lib/form
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { avisarPorCorreo } from '../../lib/avisosCorreo'
-import {
-  conApunteDeCobro, conContraApunteDeDevolucion, origenDeCuota, sinApunteDeCobro,
-} from '../../lib/apuntes'
+import { conApunteDeCobro, origenDeCuota, sinApunteDeCobro } from '../../lib/apuntes'
 import { apuntar } from '../../lib/registroActividad'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
@@ -50,32 +48,28 @@ import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { esNovedad, NOVEDADES } from '../../lib/novedades'
 import { desdeQueEjercicio, ventanaDeCuotas } from '../../lib/ventanaHistorico'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
-import { descargarArchivo, toCsv } from '../../lib/csv'
-import {
-  leerDevoluciones, cruzarConRecibos, resumenDeLaLectura, origenDeDevolucion,
-  type Devolucion,
-} from '../../lib/devoluciones'
 import ImportarTabla from '../../components/ImportarTabla'
 import { useContextoDeImportacion } from '../../lib/contextoImportacion'
 import { TABLA_CUOTAS } from '../../lib/tablasImportables'
-import { buildSepaXml, acreedorIncompleto } from '../../lib/sepa'
 import { useMandatosSepa, mandatoVigente } from '../../lib/mandatosSepa'
-import { ibanValido, porQueNoValeElIban } from '../../lib/iban'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
 import {
   ejercicioDeCuotas,
   emitirCuotasAnuales,
   hermanosSinCuota,
   ultimoEjercicio,
-  simularCobroRemesa,
-  parseFechaEs,
   ejercicioDe,
   ejercicioVigente,
   inicioDeEjercicio,
-  renovacionValida,
 } from '../../lib/cuotasEmision'
 import { filaQueAbre } from '../../lib/foco'
-import { hoyIso } from '../../lib/hoy'
+import { useLasDevoluciones } from './cuotas/devoluciones'
+import CajonDeAjustes from './cuotas/CajonDeAjustes'
+import { MESES_LARGOS } from './cuotas/meses'
+import { useLaRemesa } from './cuotas/remesa'
+import CajonDeRemesa from './cuotas/CajonDeRemesa'
+import CajonDeDevoluciones from './cuotas/CajonDeDevoluciones'
+import { hoy, isoLocal } from './cuotas/fechas'
 import {
   etiquetaDeSituacion,
   recuentoDeSituaciones,
@@ -83,15 +77,8 @@ import {
   type SituacionCuota,
 } from '../../lib/estadoCuotaHermano'
 
-function hoy() {
-  return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 /** Meses en castellano para el ajuste de renovación (enero = índice 0). */
-const MESES_LARGOS = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-]
 
 /**
  * Fecha por defecto del primer cobro: hoy + 15 días.
@@ -138,11 +125,6 @@ function sumarMeses(iso: string, meses: number): string {
   return isoLocal(d)
 }
 
-/** Fecha en ISO pero con la hora LOCAL: con toISOString, en España (UTC+1/+2)
- *  la medianoche local es el día anterior en UTC y toda fecha salía un día antes. */
-function isoLocal(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 export default function Cuotas() {
   // Antes de mandar nada, traer de la base la configuración de correo de
@@ -224,13 +206,8 @@ export default function Cuotas() {
   // Contra la lista real de personal, no contra el metadata (reescribible).
   const cargo = useCargoDeLaSesion() as string | null
   const puedeMora = !cargo || cargo === 'Tesorero/a' || cargo === 'Secretario/a'
-  const [remesaOpen, setRemesaOpen] = useState(false)
+
   /* C3 · lo que el banco devuelve de una remesa ya mandada. */
-  const [devolucionesOpen, setDevolucionesOpen] = useState(false)
-  const [lectura, setLectura] = useState<{ devoluciones: Devolucion[] } | null>(null)
-  const [falloLectura, setFalloLectura] = useState('')
-  const [aplicando, setAplicando] = useState(false)
-  const [fechaRemesa, setFechaRemesa] = useState('')
   const [modeloOpen, setModeloOpen] = useState(false)
   const [modeloRecibo, setModeloRecibo] = useState<ModeloPapeleta | null>(() => getModeloRecibo())
   // Traído de la hermandad: sin esto, quien entra desde otro ordenador ve el
@@ -440,6 +417,24 @@ export default function Cuotas() {
     [mandatos],
   )
 
+  /*
+   * LA REMESA BANCARIA, en su sitio (`cuotas/remesa.ts`). Se desarma para que
+   * el cajón, los dos avisos de arriba y el menú de acciones sigan nombrando
+   * `recibosRemesables` y `fueraDeLaRemesa` como siempre.
+   */
+  const remesa = useLaRemesa({
+    cuotas, setCuotas, setMovimientos, setSelected, hermandad, hermanos, hermanoDe, mandatoDe,
+  })
+  /*
+   * Y de la remesa la pantalla solo desarma lo que pinta ELLA: los dos avisos
+   * de arriba —lo ya remesado y los que se caen— y el menú de acciones. Lo
+   * demás lo lee su cajón de `remesa`, que se le pasa entero.
+   */
+  const {
+    recibosRemesables, fueraDeLaRemesa, dineroFuera, yaRemesados,
+    abrirRemesa, soltarRemesados, ultimaRemesa,
+  } = remesa
+
   // Recibos que el hermano dice tener pagados y a la tesorería aún le constan
   // sin cobrar: son los que hay que confirmar contra el extracto del banco.
   const avisados = useMemo(() => cuotas.filter(esAvisado), [cuotas])
@@ -567,6 +562,15 @@ export default function Cuotas() {
 
   const miCorreo = (user?.email ?? '').toLowerCase()
   const miNombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Un cargo'
+  /*
+   * LAS DEVOLUCIONES DEL BANCO, en su sitio (`cuotas/devoluciones.ts`). Se
+   * desarma para que el cajón de abajo siga nombrando `devolucionesOpen` y
+   * `cruceDevoluciones` como siempre.
+   */
+  const devoluciones = useLasDevoluciones({
+    cuotas, setCuotas, setMovimientos, hermanos, miNombre,
+  })
+  const { abrirDevoluciones } = devoluciones
 
   function aplicarCuota(id: string, cambios: Partial<Cuota>) {
     setCuotas((prev) => prev.map((c) => (c.id === id ? { ...c, ...cambios } : c)))
@@ -671,317 +675,7 @@ export default function Cuotas() {
     setQuery('')
   }
 
-  /**
-   * Auto-pagado simulado: marca como cobrada la remesa (sin pasarela real). Una
-   * fracción determinista se devuelve, para que se vean también las devoluciones.
-   */
-  function simularCobro() {
-    const ids = recibosRemesables.map((c) => c.id)
-    if (ids.length === 0) return
-    const fecha = hoy()
-    const despues = simularCobroRemesa(cuotas, ids, fecha)
-    setCuotas(despues)
-    // El recibo abierto en la ficha también se actualiza (si no, seguía diciendo
-    // «Pendiente» y al marcarlo pagado pisaba la devolución simulada).
-    setSelected((prev) => (prev ? simularCobroRemesa([prev], ids, fecha)[0] : prev))
 
-    /*
-     * Y AL LIBRO DE CUENTAS, QUE ES LO QUE FALTABA.
-     *
-     * Esta es la vía que más dinero mueve de toda la aplicación: una hermandad
-     * de seiscientos cobra aquí el ejercicio entero de una vez. Y no apuntaba
-     * NADA — la cuota salía pagada, el hermano quedaba al día, y Tesorería no
-     * se enteraba de que habían entrado veinte mil euros. No se nota hasta que
-     * se cierra el año, y entonces ya no hay forma de reconstruir qué faltó.
-     *
-     * Solo las que de verdad quedaron cobradas: en la remesa hay devoluciones,
-     * y apuntar una devuelta sería contar un dinero que el banco no ha dado.
-     */
-    const cobradas = despues.filter((c) => ids.includes(c.id) && c.estado === 'Pagada')
-    setMovimientos((prev) => cobradas.reduce(
-      (libro, c) => conApunteDeCobro(libro, {
-        origen: origenDeCuota(c.id),
-        concepto: `${c.concepto} — ${hermanos.find((h) => h.id === c.hermanoId)?.nombre ?? 'hermano/a'}`,
-        categoria: 'Cuotas Hermanos/as',
-        importe: c.importe,
-        fecha,
-        // Una remesa es un adeudo en cuenta: nunca es efectivo, aunque el
-        // recibo llevara otro método apuntado de antes.
-        metodo: 'Domiciliado',
-      }),
-      prev,
-    ))
-    setRemesaOpen(false)
-  }
-
-  // Remesa bancaria: recibos pendientes y domiciliados con IBAN, listos para
-  // presentar al banco. El CSV es un listado de trabajo; el XML es el
-  // fichero de adeudo directo SEPA (pain.008.001.02) que exige el banco.
-  // Solo entran los recibos cuya fecha de cobro ya ha llegado (o llega en la
-  // fecha elegida para la remesa). Sin este filtro, un fraccionamiento mensual
-  // presentaba de golpe los doce meses del año al banco.
-  const limiteRemesa = useMemo(() => {
-    if (fechaRemesa) return new Date(`${fechaRemesa}T23:59:59`)
-    const d = new Date()
-    d.setDate(d.getDate() + 5)
-    d.setHours(23, 59, 59, 999)
-    return d
-  }, [fechaRemesa])
-
-  const recibosRemesables = useMemo(
-    () =>
-      cuotas.filter((c) => {
-        // El IBAN tiene que estar Y valer. Uno mal escrito no se queda en una
-        // línea rechazada: el banco tira el fichero ENTERO. Ver `lib/iban.ts`.
-        if (c.estado !== 'Pendiente' || !c.domiciliada || !ibanValido(hermanoDe(c.hermanoId)?.iban ?? '')) return false
-        // Y hace falta un mandato FIRMADO vigente para ESE IBAN: sin él no hay
-        // orden del hermano que enseñarle al banco si reclama el cargo. Ver
-        // `supabase/mandatos-sepa.sql` y `lib/mandatosSepa.ts`.
-        const h = hermanoDe(c.hermanoId)!
-        if (!mandatoDe(h.id, h.iban)) return false
-        // Ya salió en un fichero descargado: no puede volver a entrar sola.
-        // Mandar dos veces el mismo recibo al banco son dos cargos al hermano,
-        // y el segundo vuelve devuelto y con comisión.
-        if (c.remesadaEl) return false
-        const cobro = parseFechaEs(c.fechaCobro)
-        // Si la fecha no se puede interpretar, se incluye (no se pierde el recibo).
-        return !cobro || cobro <= limiteRemesa
-      }),
-    [cuotas, hermanoDe, mandatoDe, limiteRemesa],
-  )
-
-  /**
-   * LOS DOMICILIADOS QUE SE CAEN DE LA REMESA, Y POR QUÉ.
-   *
-   * Se caían EN SILENCIO. La tesorería generaba la remesa creyendo que cobraba
-   * a todos los domiciliados, y a estos no. Su recibo se quedaba «Pendiente»
-   * para siempre, entraba otra vez en la siguiente remesa, se volvía a caer, y
-   * nada en la pantalla decía nunca por qué.
-   *
-   * En una hermandad son bastantes: el IBAN se importa del Excel de siempre,
-   * donde alguien lo tecleó a mano hace años. Faltan cifras, sobran, está el
-   * número de cuenta antiguo sin el «ES» delante, o sencillamente no está. Y
-   * desde que existe el mandato firmado, hay un motivo más: el IBAN vale, pero
-   * el hermano todavía no ha firmado su domiciliación desde su área.
-   */
-  const fueraDeLaRemesa = useMemo(() => {
-    const fuera = cuotas
-      .filter((c) => c.estado === 'Pendiente' && c.domiciliada && !c.remesadaEl)
-      .map((c) => ({ cuota: c, hermano: hermanoDe(c.hermanoId) }))
-      .filter((x) => x.hermano != null)
-      .map((x) => ({
-        ...x,
-        motivo: !ibanValido(x.hermano!.iban ?? '')
-          ? porQueNoValeElIban(x.hermano!.iban ?? '') ?? ''
-          : !mandatoDe(x.hermano!.id, x.hermano!.iban)
-            ? 'no ha firmado todavía el mandato SEPA de domiciliación'
-            : null,
-      }))
-      .filter((x) => x.motivo != null)
-      .map((x) => ({
-        id: x.cuota.id,
-        nombre: x.hermano!.nombre,
-        numero: x.hermano!.numero,
-        importe: x.cuota.importe,
-        motivo: x.motivo as string,
-      }))
-    // Una fila por hermano, no una por recibo: al tesorero le sirve la lista de
-    // a quién hay que pedirle el IBAN, y repetir al mismo cuatro veces —una por
-    // recibo del año— la hace ilegible.
-    const porHermano = new Map<number, typeof fuera[number] & { recibos: number }>()
-    for (const f of fuera) {
-      const ya = porHermano.get(f.numero)
-      if (ya) { ya.recibos += 1; ya.importe += f.importe }
-      else porHermano.set(f.numero, { ...f, recibos: 1 })
-    }
-    return [...porHermano.values()].sort((a, b) => a.numero - b.numero)
-  }, [cuotas, hermanoDe, mandatoDe])
-
-  const dineroFuera = useMemo(
-    () => sumaEuros(fueraDeLaRemesa.map((f) => f.importe)),
-    [fueraDeLaRemesa],
-  )
-
-  /** Pendientes que ya viajaron en un fichero descargado y por eso no entran. */
-  const yaRemesados = useMemo(
-    () => cuotas.filter((c) => c.remesadaEl && c.estado === 'Pendiente'),
-    [cuotas],
-  )
-  const ultimaRemesa = useMemo(
-    () => { const fechas = yaRemesados.map((c) => c.remesadaEl!).sort(); return fechas.length ? fechas[fechas.length - 1] : null },
-    [yaRemesados],
-  )
-
-  const acreedor = useMemo(
-    () => ({
-      nombre: hermandad.nombreLegal,
-      iban: hermandad.iban,
-      identificadorAcreedor: hermandad.identificadorAcreedor,
-      // El NIF va para que se pueda comprobar que el identificador es SUYO y no
-      // el de otra hermandad: el identificador lo lleva dentro. Ver `sepa.ts`.
-      nif: hermandad.cif,
-    }),
-    [hermandad],
-  )
-  const avisoAcreedor = useMemo(() => acreedorIncompleto(acreedor), [acreedor])
-
-  function abrirRemesa() {
-    const dentroCincoDias = new Date()
-    dentroCincoDias.setDate(dentroCincoDias.getDate() + 5)
-    // isoLocal, no toISOString: si no, se propone un día antes y encima se
-    // arrastra al fichero del banco.
-    setFechaRemesa(isoLocal(dentroCincoDias))
-    setRemesaOpen(true)
-  }
-
-  function exportarRemesaCsv() {
-    const filas = recibosRemesables.map((c) => {
-      const h = hermanoDe(c.hermanoId)!
-      return [c.numero, h.nombre, h.iban ?? '', c.concepto, c.importe.toFixed(2).replace('.', ','), c.fechaCobro]
-    })
-    const csv = toCsv(['Nº recibo', 'Hermano', 'IBAN', 'Concepto', 'Importe (€)', 'Fecha de cobro'], filas)
-    descargarArchivo(`remesa-cuotas-${hoyIso()}.csv`, csv)
-  }
-
-  function descargarSepaXml() {
-    if (avisoAcreedor || !fechaRemesa) return
-    const recibos = recibosRemesables.map((c) => {
-      const h = hermanoDe(c.hermanoId)!
-      // Vigente por construcción: `recibosRemesables` ya exige que exista.
-      const mandato = mandatoDe(h.id, h.iban)!
-      return {
-        numero: c.numero,
-        importe: c.importe,
-        concepto: `${c.concepto} — ${hermandad.nombreLegal || 'Hermandad'}`,
-        deudor: {
-          nombre: h.nombre,
-          iban: h.iban ?? '',
-          numeroHermano: h.numero,
-          mandatoId: mandato.referencia,
-          fechaFirma: new Date(mandato.firmadoEn),
-        },
-      }
-    })
-    const xml = buildSepaXml(acreedor, recibos, new Date(`${fechaRemesa}T00:00:00`), new Date())
-    descargarArchivo(`remesa-sepa-${fechaRemesa}.xml`, xml, 'application/xml;charset=utf-8;')
-    // Queda apuntado en cada recibo que ya viajó en un fichero. Antes no
-    // quedaba rastro de ninguna clase: el recibo seguía «Pendiente» y
-    // domiciliado, así que a la semana siguiente entraba otra vez en la remesa
-    // y el hermano recibía el segundo cargo.
-    const hoy = isoLocal(new Date())
-    const enLaRemesa = new Set(recibosRemesables.map((c) => c.id))
-    setCuotas((prev) => prev.map((c) => (enLaRemesa.has(c.id) ? { ...c, remesadaEl: hoy } : c)))
-    setRemesaOpen(false)
-  }
-
-  /**
-   * Soltar los recibos de la última remesa para poder volver a incluirlos.
-   *
-   * Hace falta porque descargar un fichero no significa haberlo mandado: se
-   * descarga, se ve que la fecha estaba mal, se borra y se rehace. Sin esta
-   * salida, esos recibos se quedarían fuera de toda remesa para siempre y
-   * nadie entendería por qué no se les cobra.
-   */
-  function soltarRemesados() {
-    const sueltos = cuotas.filter((c) => c.remesadaEl && c.estado === 'Pendiente')
-    if (sueltos.length === 0) return
-    if (!window.confirm(
-      `Vas a devolver ${sueltos.length} recibo${sueltos.length === 1 ? '' : 's'} a la remesa. ` +
-      'Hazlo solo si el fichero anterior NO llegó a mandarse al banco: si ya se mandó, ' +
-      'volverías a cobrarles.',
-    )) return
-    const ids = new Set(sueltos.map((c) => c.id))
-    setCuotas((prev) => prev.map((c) => (ids.has(c.id) ? { ...c, remesadaEl: undefined } : c)))
-  }
-
-  /*
-   * ─────────────────────────────────────────────────────────────────────────
-   * C3 · LAS DEVOLUCIONES DEL BANCO
-   * ─────────────────────────────────────────────────────────────────────────
-   *
-   * Se manda la remesa, el banco cobra, y unos días después devuelve una parte.
-   * Sin esto, TODOS los recibos se quedaban «Pagada»: la hermandad creía tener
-   * un dinero que no tenía, al hermano devuelto no se le volvía a pasar el
-   * recibo, y a la remesa siguiente entraba otra vez la cuenta cancelada — con
-   * su comisión otra vez.
-   *
-   * SE LEE Y SE ENSEÑA ANTES DE TOCAR NADA. Aplicar directo al soltar el
-   * fichero sería cambiar veinte recibos y dos docenas de apuntes sin que nadie
-   * haya visto qué trae: si el fichero es de otra remesa, o de otra hermandad,
-   * el destrozo ya está hecho.
-   */
-  async function cargarFicheroDeDevoluciones(archivo: File) {
-    setFalloLectura('')
-    setLectura(null)
-    const texto = await archivo.text()
-    const r = leerDevoluciones(texto)
-    if (!r.ok) { setFalloLectura(r.error); return }
-    setLectura({ devoluciones: r.devoluciones })
-  }
-
-  const cruceDevoluciones = useMemo(
-    () => (lectura ? cruzarConRecibos(lectura.devoluciones, cuotas) : null),
-    [lectura, cuotas],
-  )
-
-  function aplicarDevoluciones() {
-    if (!cruceDevoluciones || cruceDevoluciones.casadas.length === 0) return
-    setAplicando(true)
-    const hoy = hoyIso()
-
-    /*
-     * EL RECIBO VUELVE A «Devuelta», NO A «Pendiente».
-     *
-     * Son cosas distintas y se tratan distinto: «Pendiente» es un recibo que
-     * todavía no se ha intentado cobrar, y volvería a entrar en la siguiente
-     * remesa tal cual — o sea, otra vez a la misma cuenta cancelada y otra
-     * comisión. «Devuelta» dice que ya se intentó y falló, que es lo que hay
-     * que mirar antes de volver a pasarlo.
-     *
-     * Y se le quita `remesadaEl`: ese recibo ya no está en ninguna remesa viva.
-     */
-    const porId = new Map(cruceDevoluciones.casadas.map((c) => [c.recibo.id, c.devolucion]))
-    setCuotas((prev) => prev.map((c) => (porId.has(c.id)
-      ? { ...c, estado: 'Devuelta' as const, fechaPago: undefined, remesadaEl: undefined }
-      : c)))
-
-    /*
-     * Y AL LIBRO, COMO GASTO Y SIN BORRAR EL INGRESO. El dinero entró y volvió
-     * a salir: las dos cosas están en el extracto del banco, y el libro tiene
-     * que poder cuadrarse contra él línea a línea. Ver `lib/apuntes.ts`.
-     */
-    setMovimientos((prev) => cruceDevoluciones.casadas.reduce((libro, { recibo, devolucion }) => {
-      const nombre = hermanos.find((h) => h.id === recibo.hermanoId)?.nombre ?? 'un hermano'
-      return conContraApunteDeDevolucion(libro, {
-        origen: origenDeDevolucion(recibo.id),
-        concepto: `Devolución de ${recibo.concepto} — ${nombre} (${devolucion.motivo})`,
-        categoria: 'Cuotas Hermanos/as',
-        importe: devolucion.importe > 0 ? devolucion.importe : recibo.importe,
-        fecha: hoy,
-      })
-    }, prev))
-
-    // Y al hermano se le dice, que es quien tiene que arreglarlo con su banco.
-    for (const { recibo, devolucion } of cruceDevoluciones.casadas) {
-      agregarAvisoHermano(
-        recibo.hermanoId,
-        `El banco ha devuelto tu recibo de ${recibo.concepto}: ${devolucion.motivo.toLowerCase()}. `
-        + 'Ponte en contacto con la secretaría para arreglarlo.',
-        'cuota',
-        'Un recibo devuelto',
-      )
-    }
-
-    apuntar({
-      autorNombre: miNombre, accion: 'cuota_devuelta', sobreTipo: 'cuota',
-      sobreId: '', sobreNombre: '',
-      detalle: `Cargó las devoluciones del banco: ${cruceDevoluciones.casadas.length} recibo(s) a «Devuelta»`,
-    })
-
-    setAplicando(false)
-    setDevolucionesOpen(false)
-    setLectura(null)
-  }
 
   function abrirNuevaCuota() {
     setHermanoNuevaCuota(null)
@@ -1092,7 +786,7 @@ export default function Cuotas() {
             {/* Justo detrás de la remesa porque es su otra mitad: se manda el
                 fichero, y unos días después el banco contesta cuáles no ha
                 podido cobrar. */}
-            <button type="button" onClick={() => { setDevolucionesOpen(true); setLectura(null); setFalloLectura('') }}>
+            <button type="button" onClick={abrirDevoluciones}>
               Cargar devoluciones del banco
             </button>
             <button type="button" onClick={() => setModeloOpen(true)}>
@@ -1906,197 +1600,9 @@ export default function Cuotas() {
         </form>
       </Drawer>
 
-      {/*
-        C3 · LAS DEVOLUCIONES DEL BANCO.
-        La otra mitad de la remesa: se manda el fichero, y unos días después el
-        banco contesta cuáles no ha podido cobrar.
-      */}
-      <Drawer
-        open={devolucionesOpen}
-        onClose={() => { setDevolucionesOpen(false); setLectura(null); setFalloLectura('') }}
-        title="Devoluciones del banco"
-        subtitle={cruceDevoluciones ? resumenDeLaLectura(cruceDevoluciones) : 'Sube el fichero que te da el banco'}
-        ancho="ancho"
-        footer={cruceDevoluciones && cruceDevoluciones.casadas.length > 0 && (
-          <button
-            className="btn btn-primary"
-            onClick={aplicarDevoluciones}
-            disabled={aplicando}
-          >
-            {aplicando
-              ? 'Aplicando…'
-              : `Marcar ${cruceDevoluciones.casadas.length} como devuelto${cruceDevoluciones.casadas.length === 1 ? '' : 's'}`}
-          </button>
-        )}
-      >
-        <div className="app-form">
-          <p className="form-hint">
-            Después de mandar una remesa, el banco devuelve los recibos que no ha podido cobrar.
-            Descarga de tu banca electrónica el fichero <b>pain.002</b> —suele llamarse «informe de
-            estado» o «devoluciones»— y súbelo aquí.
-          </p>
+      <CajonDeDevoluciones devoluciones={devoluciones} hermanos={hermanos} />
 
-          <div className="form-row">
-            <label htmlFor="ficheroDevoluciones">Fichero del banco</label>
-            <input
-              id="ficheroDevoluciones"
-              type="file"
-              accept=".xml,text/xml,application/xml,.txt"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void cargarFicheroDeDevoluciones(f)
-                // Para poder volver a subir el mismo fichero si hizo falta
-                // corregir algo antes: sin esto, el segundo intento no dispara.
-                e.target.value = ''
-              }}
-            />
-          </div>
-
-          {falloLectura && <p className="form-hint form-hint--error">{falloLectura}</p>}
-
-          {cruceDevoluciones && (
-            <>
-              {cruceDevoluciones.casadas.length > 0 && (
-                <>
-                  <h3 className="settings-card__subtitle">Se va a marcar como devuelto</h3>
-                  <div className="table-card">
-                    <table>
-                      <thead>
-                        <tr><th>Recibo</th><th>Hermano/a</th><th>Importe</th><th>Por qué lo devuelven</th></tr>
-                      </thead>
-                      <tbody>
-                        {cruceDevoluciones.casadas.map(({ recibo, devolucion }) => (
-                          <tr key={recibo.id}>
-                            <td><code>{devolucion.referencia}</code></td>
-                            <td>{hermanos.find((h) => h.id === recibo.hermanoId)?.nombre ?? '—'}</td>
-                            <td className="num">{formatCurrency(devolucion.importe || recibo.importe)}</td>
-                            <td>{devolucion.motivo}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-
-              {/*
-                LAS QUE NO CUADRAN SE ENSEÑAN, NO SE TIRAN. Un recibo que el
-                banco devuelve y que aquí no aparece significa que algo no
-                encaja —el fichero es de otra remesa, o de otra hermandad— y
-                eso hay que verlo antes de aplicar nada.
-              */}
-              {cruceDevoluciones.huerfanas.length > 0 && (
-                <>
-                  <h3 className="settings-card__subtitle" style={{ marginTop: '1.2rem' }}>
-                    No cuadran con ningún recibo de aquí
-                  </h3>
-                  <p className="form-hint form-hint--error">
-                    Estas devoluciones vienen en el fichero pero su recibo no está en esta
-                    hermandad. Míralo antes de aplicar: puede que el fichero sea de otra remesa.
-                  </p>
-                  <ul className="lista-limpia">
-                    {cruceDevoluciones.huerfanas.map((x, i) => (
-                      <li key={`${x.referencia}-${i}`}>
-                        <code>{x.referencia || '(sin referencia)'}</code> · {formatCurrency(x.importe)} · {x.motivo}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </Drawer>
-
-      {/* Remesa bancaria */}
-      <Drawer
-        open={remesaOpen}
-        onClose={() => setRemesaOpen(false)}
-        title="Remesa bancaria"
-        subtitle={`${recibosRemesables.length} recibo${recibosRemesables.length === 1 ? '' : 's'} pendiente${recibosRemesables.length === 1 ? '' : 's'} domiciliado${recibosRemesables.length === 1 ? '' : 's'}`}
-        footer={
-          <>
-            <button className="btn btn-ghost" onClick={exportarRemesaCsv}>
-              Solo CSV
-            </button>
-            {/* SOLO en modo demostración. Con una hermandad de verdad detrás,
-                este botón daba por cobrada una remesa entera sin que hubiera
-                entrado un euro: los recibos quedaban «Pagada», sin apunte en
-                Tesorería, y encima devolvía una parte al azar. La contabilidad
-                quedaba diciendo que se había cobrado algo que no se cobró, y
-                deshacerlo es recibo por recibo. En una pantalla de trabajo,
-                al lado de «Descargar XML», es un accidente esperando. */}
-            {hayDatosDeEjemplo() && (
-              <button className="btn btn-outline" onClick={simularCobro} title="Solo para probar: marca la remesa como cobrada sin que haya pasarela">
-                Simular cobro
-              </button>
-            )}
-            <button className="btn btn-primary" onClick={descargarSepaXml} disabled={!!avisoAcreedor || !fechaRemesa}>
-              Descargar XML SEPA
-            </button>
-          </>
-        }
-      >
-        <div className="app-form">
-          {avisoAcreedor && (
-            <div className="banner-inline banner-inline--warn">
-              <span>{avisoAcreedor}</span>
-              {/* Antes decía «(Configuración)» y había que buscarlo a mano. */}
-              <Link to="/app/configuracion" className="btn btn-outline btn-sm">Ir a Configuración</Link>
-            </div>
-          )}
-          <div className="form-row">
-            <label htmlFor="fechaRemesa">Fecha de cobro</label>
-            <input
-              id="fechaRemesa"
-              type="date"
-              value={fechaRemesa}
-              onChange={(e) => setFechaRemesa(e.target.value)}
-            />
-            <p className="form-hint">
-              La misma fecha para todos los recibos del lote: es la fecha en la que el banco
-              presentará el cobro a cada hermano.
-            </p>
-          </div>
-          <div className="table-card table-card--in-drawer">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nº</th>
-                  <th>Hermano</th>
-                  <th>Importe</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recibosRemesables.map((c) => (
-                  <tr key={c.id}>
-                    <td className="num">{c.numero}</td>
-                    <td>{hermanoDe(c.hermanoId)?.nombre ?? '—'}</td>
-                    <td className="num">{formatCurrency(c.importe)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="form-hint">
-            El XML es un fichero de adeudo directo SEPA CORE (pain.008.001.02) real, listo para
-            subir a la banca online. El «Solo CSV» es un listado de trabajo para revisar antes de
-            enviarlo.{' '}
-            {hayDatosDeEjemplo() && (
-              <>
-                <b>Simular cobro</b> marca la remesa como pagada (sin pasarela real, para probar el
-                ciclo completo); una pequeña parte se devuelve, como en la vida real. Solo aparece
-                mientras estáis probando.
-              </>
-            )}
-          </p>
-          <p className="form-hint">
-            Al descargar el XML, estos recibos quedan marcados como remesados y no vuelven a entrar
-            en la siguiente remesa. Si al final no mandáis el fichero, podéis devolverlos desde el
-            aviso que sale en la pantalla de cuotas.
-          </p>
-        </div>
-      </Drawer>
+      <CajonDeRemesa remesa={remesa} hermanoDe={hermanoDe} />
 
       {/* Emisión anual del ejercicio (salto de año) */}
       <Drawer
@@ -2260,81 +1766,13 @@ export default function Cuotas() {
         />
       </Drawer>
 
-      {/* Ajustes de cuotas: renovación del ejercicio y mora */}
-      <Drawer
-        open={ajustesOpen}
-        onClose={() => setAjustesOpen(false)}
-        title="Ajustes de cuotas"
-        subtitle="Renovación y mora"
-      >
-        <div className="app-form">
-          <div className="assign-box">
-            <h4 className="assign-box__title">Cuándo se renuevan las cuotas</h4>
-            <div className="form-grid-2">
-              <div className="form-row">
-                <label htmlFor="renovacionDia">Día</label>
-                <input
-                  id="renovacionDia"
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={ajustes.renovacion.dia}
-                  onChange={(e) =>
-                    setAjustes({
-                      ...ajustes,
-                      renovacion: renovacionValida({ ...ajustes.renovacion, dia: Number(e.target.value) }),
-                    })
-                  }
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="renovacionMes">Mes</label>
-                <select
-                  id="renovacionMes"
-                  value={ajustes.renovacion.mes}
-                  onChange={(e) =>
-                    setAjustes({
-                      ...ajustes,
-                      renovacion: renovacionValida({ ...ajustes.renovacion, mes: Number(e.target.value) }),
-                    })
-                  }
-                >
-                  {MESES_LARGOS.map((nombre, i) => (
-                    <option key={nombre} value={i + 1}>
-                      {nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <p className="form-hint">
-              Cada {ajustes.renovacion.dia} de {MESES_LARGOS[ajustes.renovacion.mes - 1]} empieza un
-              ejercicio nuevo. Ahora mismo es el <b>{ejercicioEnCurso}</b>: es el que Cuotas propone
-              emitir y con esa fecha de cobro. La emisión no es automática —la lanza la tesorería
-              desde «Emitir el ejercicio entero»— pero el aviso vuelve solo cada año ese día.
-            </p>
-            <p className="form-hint">
-              Al emitir, a quien tenga IBAN se le domicilia y entra en la remesa que se manda al
-              banco; a quien no, el recibo le queda sin cobrar hasta que pague.
-            </p>
-          </div>
-          <div className="assign-box">
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={ajustes.moraRequiereDosCargos}
-                onChange={(e) => setAjustes({ ...ajustes, moraRequiereDosCargos: e.target.checked })}
-              />
-              La mora requiere que la confirmen dos cargos
-            </label>
-            <p className="form-hint">
-              {ajustes.moraRequiereDosCargos
-                ? 'Un cargo (tesorero o secretario) PROPONE la mora y otro distinto la CONFIRMA. Es una doble validación.'
-                : 'Basta con que un cargo autorizado (tesorero, secretario o titular) ponga la mora.'}
-            </p>
-          </div>
-        </div>
-      </Drawer>
+      <CajonDeAjustes
+        ajustes={ajustes}
+        setAjustes={setAjustes}
+        ajustesOpen={ajustesOpen}
+        setAjustesOpen={setAjustesOpen}
+        ejercicioEnCurso={ejercicioEnCurso}
+      />
 
       <ImportarTabla
         abierto={importarOpen}

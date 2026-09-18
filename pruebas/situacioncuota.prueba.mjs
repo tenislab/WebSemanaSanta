@@ -150,7 +150,6 @@ async function todosMiranElMismoAno({ cargar, caso }) {
   // tiene «último ejercicio», y hay que hablarle de alguno.
   caso('sin recibos, el año en curso', new Date().getFullYear(), e.ejercicioDeCuotas([]))
 
-  const { readFile } = await import('node:fs/promises')
   const sinComentarios = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
   const PANTALLAS = [
     'src/pages/app/Hermanos.tsx',
@@ -160,7 +159,9 @@ async function todosMiranElMismoAno({ cargar, caso }) {
     'src/pages/HermanoPortal.tsx',
   ]
   for (const f of PANTALLAS) {
-    const texto = sinComentarios(await readFile(f, 'utf8'))
+    // `fuenteDe` y no `readFile`: el área del hermano y el editor de la web
+    // están partidos en varios ficheros, y la lista sigue nombrando la pantalla.
+    const texto = sinComentarios(await (await import('./fuentes.mjs')).fuenteDe(f))
     caso(`${f.split('/').pop()} lo pregunta`, true, /ejercicioDeCuotas\(/.test(texto))
   }
 
@@ -170,7 +171,7 @@ async function todosMiranElMismoAno({ cargar, caso }) {
    * es lo que dejaba la pantalla de Cuotas diciendo «0 recibos del ejercicio
    * 2027 · 10 en total» con la tesorería llena.
    */
-  const cuotas = sinComentarios(await readFile('src/pages/app/Cuotas.tsx', 'utf8'))
+  const cuotas = sinComentarios(await (await import('./fuentes.mjs')).fuenteDeLasCuotas())
   caso('los indicadores no cuentan el año de la campaña', false,
     /stats\.total} recibos del ejercicio \{ejercicioEnCurso/.test(cuotas))
 }
@@ -189,14 +190,21 @@ async function nadieSeFiaDelBooleano({ caso }) {
   const sinComentarios = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
   const lee = async (f) => sinComentarios(await readFile(f, 'utf8'))
 
-  const censo = await lee('src/pages/app/Hermanos.tsx')
+  // `sinComentarios` por fuera, igual que el del área del hermano: la fuente
+  // entera viene tal cual y el `lee()` de arriba —que es lo que había— quitaba
+  // los comentarios. Sin eso salta por la línea que EXPLICA que no se use.
+  const censo = sinComentarios(await (await import("./fuentes.mjs")).fuenteDelCenso())
   caso('el censo no lee el booleano guardado', false, /h\.cuotaAlDia/.test(censo))
   caso('lo saca de los recibos', true, /situacionDeTodos|situacionDeHermano/.test(censo))
 
   const informes = await lee('src/pages/app/Informes.tsx')
   caso('Informes tampoco', false, /h\.cuotaAlDia/.test(informes))
 
-  const portal = await lee('src/pages/HermanoPortal.tsx')
+  // `sinComentarios` por fuera: `fuenteDelPortalDelHermano()` da la fuente tal
+  // cual, y el `lee()` de aquí arriba —que es lo que había antes— quitaba los
+  // comentarios. Sin eso, este guardia salta por la línea del portal que
+  // EXPLICA que no hay que usar `cuotaAlDia`, que es justo lo contrario.
+  const portal = sinComentarios(await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano())
   caso('ni el área del hermano', false, /cuotaAlDia/.test(portal))
 
   /*

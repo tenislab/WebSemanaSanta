@@ -1,222 +1,127 @@
-import { limpiarDni, mismoDni } from '../lib/dni'
-import { problemaDeTelefono } from '../lib/telefono'
-import {
-  pagarConTarjeta,
-  pagoConTarjetaDisponible,
-  comoVuelveDePagar,
-  misPagosConTarjeta,
-  pagoEnMarcha,
-  type IntentoDePago,
-} from '../lib/pagoTarjeta'
-import { CLAVE_SESION_HERMANO } from '../lib/sesion'
-
 /**
- * «SIN DATOS» NO SE ESCRIBE DENTRO DE UN CAMPO PARA RELLENAR.
+ * EL ÁREA DEL HERMANO.
  *
- * Cuando se da de alta a un hermano sin teléfono ni dirección, la ficha guarda
- * literalmente la cadena «Sin datos» —sirve para que las listas de secretaría
- * no salgan con huecos—. Pero al hermano, en su área, le aparecía ese texto
- * DENTRO del recuadro del teléfono, y para poner el suyo tenía que borrarlo
- * primero. Muchos escribían detrás: «Sin datos 600123456».
+ * Dos pantallas en una dirección (`/hermano`): la de identificarse —buscar tu
+ * hermandad, entrar, pedir el alta, recuperar la contraseña— y, una vez
+ * dentro, el portal con su cuota, su papeleta, su sitio en el cortejo y sus
+ * datos.
  *
- * Aquí se cambia por un `placeholder`, que es lo que hace de verdad: dice qué
- * va en el hueco y desaparece al escribir.
+ * ----------------------------------------------------------------------------
+ * POR QUÉ ESTÁ PARTIDO EN `portal/`, Y POR QUÉ NO COMO EL EDITOR DE LA WEB
+ * ----------------------------------------------------------------------------
+ *
+ * Tenía 2.909 líneas, y el reparto NO podía ser el mismo que el del editor de
+ * la web. Allí eran veintitrés componentes hermanos y bastaba con darle un
+ * fichero a cada uno; aquí es UN SOLO componente con ciento setenta y tres
+ * bindings dentro, así que el problema no es el reparto de la interfaz: es el
+ * estado.
+ *
+ * Se midió antes de cortar, y eso decidió los cortes:
+ *
+ *   · Sacar una sección del portal costaría entre VEINTE Y CUARENTA props.
+ *     Un componente de cuarenta props se lee peor que el fichero gordo, así
+ *     que las secciones se quedan aquí.
+ *   · La pantalla de identificarse usa treinta y cuatro bindings del padre y
+ *     TREINTA Y UNO son solo suyos: su estado se muda con ella y el contrato
+ *     queda en ocho props. Ese sí es un corte: una pantalla entera fuera.
+ *   · La sesión y los ayudantes no son interfaz y no cuestan nada.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE HAY QUE SABER SI SE TOCA
+ * ----------------------------------------------------------------------------
+ *
+ * VEINTITRÉS ficheros de prueba vigilan esta pantalla LEYENDO SU FUENTE, y no
+ * leen este fichero: piden el área entera con `fuenteDelPortalDelHermano()`
+ * (ver `pruebas/fuentes.mjs`), que pega esto con todo lo de `portal/`. Sin eso,
+ * un trozo movido deja veintitantos guardias apuntando a donde ya no hay nada
+ * —y los que comprueban que algo NO está se quedarían EN VERDE sin vigilar
+ * nada—.
  */
-function siNoEsElHueco(valor: string): string {
-  return valor === 'Sin datos' ? '' : valor
-}
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { LogoMark } from '../components/Logo'
-import EscudoHermandad from '../components/EscudoHermandad'
-import PapeletaTicket from '../components/PapeletaTicket'
-import PapeletaTarjeta from '../components/PapeletaTarjeta'
-import PapeletaModeloRender from '../components/PapeletaModeloRender'
 import AsistenciaTramo from '../components/AsistenciaTramo'
-import HistorialHermano from '../components/HistorialHermano'
-import MiSitioCortejo from '../components/MiSitioCortejo'
 import BuzonHermano from '../components/BuzonHermano'
-import MisReservasTienda from '../components/MisReservasTienda'
-import CarneHermano from '../components/CarneHermano'
-import MiFamilia from '../components/MiFamilia'
-import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../lib/modeloPapeleta'
-import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
-import { deudaDe, CUOTAS_INICIALES, type Cuota } from '../data/cuotas'
-import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
-import { useHermandadSettings } from '../lib/hermandadSettings'
-import {
-  useTramos,
-  etiquetaTramo,
-  cuerposPresentes,
-} from '../lib/tramos'
-import { repartoCompleto, repartoPorTramo, asignacionPorPapeleta as mapAsignaciones } from '../lib/cortejo'
-import { useCampana, renovacionDeHermano, ventanaAbiertaPara, diasHasta, participoEnCampana, estadoDeLaCampana } from '../lib/campana'
-import {
-  useSolicitudesPapeleta,
-  MODALIDADES,
-  type ModalidadPapeleta,
-} from '../lib/solicitudesPapeleta'
-import { CLAVES_DATOS, leerPersistido, useEscuchaOtrasPestanas } from '../lib/persistencia'
-import { restaurarCensoDemo, marcarModoDemo } from '../lib/demo'
-import { useAvisosHermano } from '../lib/avisosHermano'
-import { useAjustesCuotas } from '../lib/ajustesCuotas'
-import { hidratarPlantillas } from '../lib/hidratar'
-import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
-import { conRenovacion } from '../lib/renovarPapeleta'
-import { contactoDelHermanoToRow } from '../lib/db/hermanos'
-import { hayRecuperacionEnMarcha, olvidarRecuperacion } from '../lib/recuperacionClave'
-import { pedirRecuperacion, ponerClaveConToken } from '../lib/recuperarHermano'
-import { papelesDeLaCuenta, type PapelesDeLaCuenta } from '../lib/multiHermandad'
 import CalendarioMes from '../components/CalendarioMes'
-import { claseTipo, fechaLarga } from '../lib/calendario'
-import { EVENTOS_INICIALES, type Aparicion, type Evento, type TipoEvento } from '../data/eventos'
-import { eventoToRow, rowToEvento } from '../lib/db/eventos'
-
-/** Lo que se le enseña al hermano: los cabildos y la formación interna no. */
-const TIPOS_PARA_HERMANOS = new Set<TipoEvento>(['Culto', 'Salida', 'Caridad', 'Convivencia', 'Formación'])
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import { useAuth } from '../context/AuthContext'
-import { hermanoToRow, rowToHermano } from '../lib/db/hermanos'
-import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
-import { cuotaToRow, rowToCuota } from '../lib/db/cuotas'
-import { formatCurrency, formatDate, maskIban } from '../lib/format'
-import { useMandatosSepa, mandatoVigente, textoDelMandatoSepa } from '../lib/mandatosSepa'
-import { useTareasRedes, misTareasPendientes, loQueHayQueHacer } from '../lib/tareasRedes'
-import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
-import { descargarArchivo } from '../lib/csv'
-import { estiloTema, inicialesHermandad } from '../lib/color'
-import AvisoFalta from '../components/AvisoFalta'
+import CarneHermano from '../components/CarneHermano'
 import Drawer from '../components/Drawer'
 import FotoHermano from '../components/FotoHermano'
+import HistorialHermano from '../components/HistorialHermano'
+import MiFamilia from '../components/MiFamilia'
+import MiSitioCortejo from '../components/MiSitioCortejo'
+import MisReservasTienda from '../components/MisReservasTienda'
+import PapeletaModeloRender from '../components/PapeletaModeloRender'
+import PapeletaTarjeta from '../components/PapeletaTarjeta'
+import PapeletaTicket from '../components/PapeletaTicket'
 import ReportarFallo from '../components/ReportarFallo'
-import { requisito, requisitoActual } from '../lib/requisitos'
+import { useAuth } from '../context/AuthContext'
+import { CUOTAS_INICIALES, deudaDe, type Cuota } from '../data/cuotas'
+import { EVENTOS_INICIALES, type Aparicion, type Evento } from '../data/eventos'
+import { HERMANOS_INICIALES, type Hermano } from '../data/hermanos'
+import { PAPELETAS_INICIALES, type MetodoPago, type Papeleta } from '../data/papeletas'
+import { useAjustesCuotas } from '../lib/ajustesCuotas'
+import { useAvisosHermano } from '../lib/avisosHermano'
+import { claseTipo, fechaLarga } from '../lib/calendario'
 import {
-  ID_HERMANDAD_PRINCIPAL,
+  diasHasta,
+  estadoDeLaCampana,
+  participoEnCampana,
+  renovacionDeHermano,
+  useCampana,
+  ventanaAbiertaPara,
+} from '../lib/campana'
+import { estiloTema, inicialesHermandad } from '../lib/color'
+import { asignacionPorPapeleta as mapAsignaciones, repartoCompleto, repartoPorTramo } from '../lib/cortejo'
+import { descargarArchivo } from '../lib/csv'
+import { ejercicioDeCuotas } from '../lib/cuotasEmision'
+import { cuotaToRow, rowToCuota } from '../lib/db/cuotas'
+import { eventoToRow, rowToEvento } from '../lib/db/eventos'
+import { contactoDelHermanoToRow, hermanoToRow, rowToHermano } from '../lib/db/hermanos'
+import { papeletaToRow, rowToPapeleta } from '../lib/db/papeletas'
+import { etiquetaDeSituacion, situacionDeHermano } from '../lib/estadoCuotaHermano'
+import { solicitudesDeMiFamilia, traerMiTutor, type MiTutor } from '../lib/familia'
+import { formatCurrency, formatDate, maskIban } from '../lib/format'
+import { useHermandadSettings } from '../lib/hermandadSettings'
+import {
   HERMANDADES_MUESTRA,
   HERMANOS_MUESTRA,
-  buscarHermandades,
-  type HermandadDirectorio,
+  ID_HERMANDAD_PRINCIPAL,
   type HermanoDirectorio,
-  type IconoHermandad,
 } from '../lib/hermandades'
-import { crearSolicitudPrincipal, claveSolicitudesMuestra, getSolicitudes, STORAGE_KEY as CLAVE_SOLICITUDES, type SolicitudAlta } from '../lib/solicitudes'
-import { solicitudesDeMiFamilia, traerMiTutor, type MiTutor } from '../lib/familia'
-import { situacionDeHermano, etiquetaDeSituacion } from '../lib/estadoCuotaHermano'
-import { ejercicioDeCuotas } from '../lib/cuotasEmision'
-import { fijarHermandadDeLaPagina, hermandadesPublicas, type HermandadPublica } from '../lib/multiHermandad'
-import { codigoDeHermano } from '../lib/codigoHermano'
-
-/* La clave vive en `lib/sesion.ts` para que el panel también pueda cerrarla. */
-const SESION_KEY = CLAVE_SESION_HERMANO
-const CONSENT_KEY = 'cabildo-hermano-consent'
-const DNI_DEMO = 'h4' // Francisco Gómez Nieto, nº 501 · usado por el botón "hermano de prueba"
-
-
-interface Sesion {
-  hermandadId: string
-  hermanoId: string
-}
-
-function leerSesion(): Sesion | null {
-  try {
-    const raw = sessionStorage.getItem(SESION_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<Sesion>
-    if (parsed && typeof parsed.hermandadId === 'string' && typeof parsed.hermanoId === 'string') {
-      return { hermandadId: parsed.hermandadId, hermanoId: parsed.hermanoId }
-    }
-  } catch {
-    // sesión corrupta o de un formato anterior: se ignora
-  }
-  return null
-}
-
-function guardarSesion(sesion: Sesion) {
-  sessionStorage.setItem(SESION_KEY, JSON.stringify(sesion))
-}
-
-/**
- * A DÓNDE VOLVER DESPUÉS DE ENTRAR, si a esta pantalla se llegó desde otro sitio.
- *
- * Lo usa la tienda de la web pública: «¿Eres hermano? Entra y verás tu precio»
- * manda aquí con `?volver=/w/mi-hermandad#tienda`, y al entrar se vuelve al
- * escaparate con los precios ya rebajados. Sin esto, quien pulsa ese enlace
- * acaba en su área del hermano preguntándose qué ha pasado con su cesta.
- *
- * SOLO SE ADMITE UN CAMINO DE ESTA MISMA WEB: tiene que empezar por una barra y
- * NO por dos. `//otrositio.com` es una dirección absoluta con el esquema
- * heredado, así que sin la segunda comprobación bastaría con mandarle a alguien
- * `…/hermano?volver=//parecido-a-gobergo.com` para que, tras teclear su DNI y
- * su contraseña aquí, acabara en una página ajena.
- */
-function aDondeVolver(destino: string | null): string | null {
-  if (!destino) return null
-  if (!destino.startsWith('/') || destino.startsWith('//')) return null
-  return destino
-}
-
-/**
- * Un hermano dado de baja no entra en su área. Se le dice por qué: un «DNI o
- * contraseña incorrectos» le haría probar diez veces y llamar a secretaría
- * pensando que ha perdido la clave.
- */
-const MENSAJE_BAJA =
-  'Tu ficha figura de baja en la hermandad, así que el área del hermano no está disponible. Si crees que es un error, habla con secretaría.'
-
-function hoy() {
-  return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-type TablaMuestra<T> = Record<string, [T[], (updater: (prev: T[]) => T[]) => void]>
-
-/** Censo o papeletas de cada hermandad de muestra, cada una con su clave propia — igual que en la base de datos real, cada hermandad vería solo sus filas. */
-function useTablaPorHermandad<T>(prefijoClave: string, porDefecto: (hermandadId: string) => T[]): TablaMuestra<T> {
-  const [mapa, setMapa] = useState<Record<string, T[]>>(() =>
-    Object.fromEntries(
-      HERMANDADES_MUESTRA.map((h) => [h.id, leerPersistido(`${prefijoClave}-${h.id}`, porDefecto(h.id))]),
-    ),
-  )
-  return useMemo(() => {
-    const tabla: TablaMuestra<T> = {}
-    for (const h of HERMANDADES_MUESTRA) {
-      tabla[h.id] = [
-        mapa[h.id] ?? [],
-        (updater) => {
-          setMapa((prev) => {
-            const next = updater(prev[h.id] ?? [])
-            localStorage.setItem(`${prefijoClave}-${h.id}`, JSON.stringify(next))
-            return { ...prev, [h.id]: next }
-          })
-        },
-      ]
-    }
-    return tabla
-  }, [mapa, prefijoClave])
-}
-
-function guardarSolicitudMuestra(hermandadId: string, nueva: SolicitudAlta) {
-  const clave = claveSolicitudesMuestra(hermandadId)
-  const prev = leerPersistido<SolicitudAlta[]>(clave, [])
-  localStorage.setItem(clave, JSON.stringify([nueva, ...prev]))
-}
-
+import { hidratarPlantillas } from '../lib/hidratar'
+import { mandatoVigente, textoDelMandatoSepa, useMandatosSepa } from '../lib/mandatosSepa'
+import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../lib/modeloPapeleta'
+import { comoVuelveDePagar, misPagosConTarjeta, type IntentoDePago } from '../lib/pagoTarjeta'
+import { CLAVES_DATOS, useEscuchaOtrasPestanas } from '../lib/persistencia'
+import { conRenovacion } from '../lib/renovarPapeleta'
+import { exportarDatosHermano, recopilarDatosHermano } from '../lib/rgpd'
+import {
+  STORAGE_KEY as CLAVE_SOLICITUDES,
+  crearSolicitudPrincipal,
+  getSolicitudes,
+  type SolicitudAlta,
+} from '../lib/solicitudes'
+import { MODALIDADES, useSolicitudesPapeleta, type ModalidadPapeleta } from '../lib/solicitudesPapeleta'
+import { supabase } from '../lib/supabase'
+import { nuevoId, useSupabaseTable } from '../lib/supabaseSync'
+import { loQueHayQueHacer, misTareasPendientes, useTareasRedes } from '../lib/tareasRedes'
+import { problemaDeTelefono } from '../lib/telefono'
+import { cuerposPresentes, etiquetaTramo, useTramos } from '../lib/tramos'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import Identificarse from './portal/Identificarse'
+import { PagoPapeleta } from './portal/PagoPapeleta'
+import { PortalHead } from './portal/PortalHead'
+import {
+  CONSENT_KEY,
+  SESION_KEY,
+  TIPOS_PARA_HERMANOS,
+  aDondeVolver,
+  hoy,
+  leerSesion,
+  siNoEsElHueco,
+  useTablaPorHermandad,
+  type Sesion,
+} from './portal/sesion'
 
 export default function HermanoPortal() {
-  /**
-   * ¿Se ha llegado aquí porque el panel de gestión ha echado a esta cuenta?
-   *
-   * Lo manda `ProtectedRoute`. Sin contarlo, el rebote se lee como que la
-   * aplicación está rota: pulsas «Gestiono la hermandad» y acabas en el área
-   * del hermano, como si los dos botones llevaran al mismo sitio.
-   */
-  const ubicacion = useLocation()
-  const echadoDelPanel = (ubicacion.state as { motivo?: string } | null)?.motivo === 'cuenta-de-hermano'
-
-  // Qué es esta cuenta. Puede ser las dos cosas a la vez, que es lo normal.
-  const [papelesAqui, setPapelesAqui] = useState<PapelesDeLaCuenta>({ esHermano: false, gestiona: false, seguro: false })
-  useEffect(() => {
-    void papelesDeLaCuenta().then(setPapelesAqui)
-  }, [])
 
   const hermandadPrincipal = useHermandadSettings()
   const nombrePrincipal = hermandadPrincipal.nombreLegal || 'Tu hermandad (modo demo)'
@@ -333,6 +238,8 @@ export default function HermanoPortal() {
 
   const [sesion, setSesion] = useState<Sesion | null>(() => leerSesion())
   const [searchParams] = useSearchParams()
+  /* Con qué DNI llega rellenado el campo de entrar. Ver `Identificarse`. */
+  const [dniInicial, setDniInicial] = useState(() => searchParams.get('dni') ?? '')
   const navigate = useNavigate()
 
   /*
@@ -358,36 +265,6 @@ export default function HermanoPortal() {
     navigate(volverA)
   }, [sesion, volverA, navigate])
 
-  // ---- Identificación: buscar hermandad → iniciar sesión o solicitar alta ----
-  const [paso, setPaso] = useState<'buscar' | 'acceso'>('buscar')
-  const [queryHermandad, setQueryHermandad] = useState('')
-  const [hermandadElegida, setHermandadElegida] = useState<HermandadDirectorio | null>(null)
-  const [modoAcceso, setModoAcceso] = useState<'login' | 'solicitud'>('login')
-  const [dniInput, setDniInput] = useState(() => searchParams.get('dni') ?? '')
-  const [claveInput, setClaveInput] = useState('')
-  const [errorLogin, setErrorLogin] = useState<string | null>(null)
-  /** El acuse de «te hemos mandado un correo», o el motivo por el que no se puede. */
-  const [recuperacion, setRecuperacion] = useState<{ tipo: 'hecho' | 'aviso'; texto: string } | null>(null)
-  const [recuperando, setRecuperando] = useState(false)
-  /**
-   * Se ha llegado desde el enlace del correo de «he olvidado mi contraseña».
-   *
-   * Supabase deja un `type=recovery` en la parte de después de la almohadilla
-   * y abre una sesión limitada, solo para cambiar la contraseña. Hay que
-   * atenderlo aquí: si no, el hermano pulsa el enlace, aterriza en la pantalla
-   * de entrar como si nada, y no entiende para qué le hemos mandado el correo.
-   */
-  /*
-   * EL TOKEN DEL ENLACE QUE MANDAMOS NOSOTROS.
-   *
-   * `hayRecuperacionEnMarcha()` mira lo que deja Supabase tras la almohadilla,
-   * y sigue valiendo para los hermanos que ya tenían cuenta antes de que las
-   * cuentas pasaran a llamarse por hermandad + DNI. Los de ahora llegan con
-   * `?recuperar=…`, que es el nuestro. Se atienden los dos: si no, la mitad de
-   * la gente pulsa el enlace y aterriza en la pantalla de entrar sin entender
-   * para qué le hemos mandado el correo.
-   */
-  const tokenDelEnlace = new URLSearchParams(window.location.search).get('recuperar') ?? ''
 
   /*
    * ¿VUELVE DE PAGAR CON TARJETA?
@@ -398,13 +275,6 @@ export default function HermanoPortal() {
    * webhook, con la clave de servicio. Ver `lib/pagoTarjeta.ts`.
    */
   const vueltaDelPago = comoVuelveDePagar(window.location.search)
-  const [poniendoClaveNueva, setPoniendoClaveNueva] = useState(
-    () => hayRecuperacionEnMarcha() || tokenDelEnlace !== '',
-  )
-  const [claveNuevaError, setClaveNuevaError] = useState<string | null>(null)
-  const [claveNuevaHecha, setClaveNuevaHecha] = useState(false)
-  const [solicitudEnviada, setSolicitudEnviada] = useState(false)
-  const [errorSolicitud, setErrorSolicitud] = useState<string | null>(null)
 
   const [datosGuardados, setDatosGuardados] = useState(false)
   const [datosError, setDatosError] = useState<string | null>(null)
@@ -617,26 +487,6 @@ export default function HermanoPortal() {
       ) ?? null
     : null
 
-  // Las hermandades dadas de alta de verdad. Todas comparten un mismo
-  // Supabase, así que el hermano tiene que decir cuál es la suya ANTES de
-  // escribir el DNI: el mismo DNI puede estar en dos hermandades (alguien que
-  // es hermano de dos) y sin esto no se sabría a cuál entra.
-  const [hermandadesReales, setHermandadesReales] = useState<HermandadPublica[]>([])
-  const [falloElDirectorio, setFalloElDirectorio] = useState(false)
-  useEffect(() => {
-    if (!usarSupabase) return
-    let cancelado = false
-    hermandadesPublicas().then((lista) => {
-      if (cancelado) return
-      // `null` = no se pudo preguntar. Sin distinguirlo, quien busca su
-      // hermandad no la encuentra y se va creyendo que no está en Gobergo.
-      setFalloElDirectorio(lista === null)
-      setHermandadesReales(lista ?? [])
-    })
-    return () => {
-      cancelado = true
-    }
-  }, [usarSupabase])
 
   /*
    * SUS PAGOS CON TARJETA A MEDIO HACER.
@@ -663,354 +513,6 @@ export default function HermanoPortal() {
     // es justo quien necesita ver su intento recién abierto.
   }, [sesion, vueltaDelPago])
 
-  const datosPrincipalDirectorio = useMemo(
-    () => ({
-      nombre: nombrePrincipal,
-      ciudad: hermandadPrincipal.ciudad,
-      color: hermandadPrincipal.colorPrimario,
-      telefono: hermandadPrincipal.telefono,
-      email: hermandadPrincipal.email,
-    }),
-    [nombrePrincipal, hermandadPrincipal],
-  )
-  const opcionesHermandad = useMemo(
-    () => buscarHermandades(queryHermandad, datosPrincipalDirectorio, hermandadesReales),
-    [queryHermandad, datosPrincipalDirectorio, hermandadesReales],
-  )
-
-  function elegirHermandad(h: HermandadDirectorio) {
-    setHermandadElegida(h)
-    // De qué hermandad va esta página. Lo necesita la solicitud de alta, que
-    // la rellena alguien que todavía no es hermano y no ha iniciado sesión:
-    // sin esto no habría forma de saber a qué secretaría mandarla.
-    if (usarSupabase) fijarHermandadDeLaPagina(h.id)
-    setPaso('acceso')
-    setModoAcceso('login')
-    setErrorLogin(null)
-    setErrorSolicitud(null)
-    setSolicitudEnviada(false)
-    // Se conserva el DNI que venga en el enlace (…/hermano?dni=…), que es como
-    // llegan los hermanos desde un correo: si no, al elegir hermandad se borraba.
-    setDniInput(searchParams.get('dni') ?? '')
-    setClaveInput('')
-  }
-
-  // El enlace del correo puede llegar SIN recargar la página: si el hermano
-  // ya tenía su área abierta, pulsar el enlace solo cambia lo que va detrás de
-  // la almohadilla y el navegador no vuelve a montar nada. Sin escuchar esto,
-  // se quedaría mirando la pantalla de entrar sin entender qué ha pasado.
-  useEffect(() => {
-    function alCambiarLaDireccion() {
-      if (hayRecuperacionEnMarcha()) setPoniendoClaveNueva(true)
-    }
-    window.addEventListener('hashchange', alCambiarLaDireccion)
-    return () => window.removeEventListener('hashchange', alCambiarLaDireccion)
-  }, [])
-
-  /** Guarda la contraseña nueva de quien viene del enlace del correo. */
-  async function guardarClaveNueva(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const datos = new FormData(e.currentTarget)
-    const nueva = String(datos.get('nueva') ?? '')
-    const repetida = String(datos.get('repetida') ?? '')
-    if (nueva.length < 6) {
-      setClaveNuevaError('La contraseña tiene que tener al menos 6 caracteres.')
-      return
-    }
-    if (nueva !== repetida) {
-      setClaveNuevaError('Las dos contraseñas no coinciden.')
-      return
-    }
-    if (!supabase) {
-      setClaveNuevaError('No hay conexión con la base de datos.')
-      return
-    }
-    /*
-     * DOS CAMINOS, y hacen falta los dos.
-     *
-     * Con `?recuperar=…` es un enlace de los nuestros: el cambio lo hace la
-     * función `enviar-correo` con la clave de servicio, porque una contraseña
-     * no se puede cambiar desde el navegador sin una sesión.
-     *
-     * Sin él, es un enlace de Supabase de los de antes —los hermanos que ya
-     * tenían cuenta siguen usándolos— y ahí sí hay sesión abierta.
-     */
-    if (tokenDelEnlace) {
-      const r = await ponerClaveConToken(tokenDelEnlace, nueva)
-      if (!r.ok) { setClaveNuevaError(r.error); return }
-    } else {
-      const { error } = await supabase.auth.updateUser({ password: nueva })
-      if (error) {
-        // El enlace del correo caduca. Decirlo es más útil que «error»: lo que
-        // hay que hacer es pedir otro, no volver a intentarlo.
-        setClaveNuevaError(
-          'No se ha podido cambiar. El enlace del correo puede haber caducado: pide uno nuevo desde «¿Has olvidado tu contraseña?».',
-        )
-        return
-      }
-    }
-    setClaveNuevaError(null)
-    setClaveNuevaHecha(true)
-    setPoniendoClaveNueva(false)
-    olvidarRecuperacion()
-  }
-
-  function volverABuscar() {
-    setPaso('buscar')
-    setHermandadElegida(null)
-    // Se deja de apuntar a ninguna: si no, quien vuelve atrás sin elegir otra
-    // seguiría mandando su solicitud a la hermandad que miró antes.
-    if (usarSupabase) fijarHermandadDeLaPagina(null)
-    setErrorLogin(null)
-    setErrorSolicitud(null)
-    setSolicitudEnviada(false)
-  }
-
-  /**
-   * «He olvidado mi contraseña». Manda al hermano un correo para ponerse otra.
-   *
-   * LO IMPORTANTE AQUÍ NO ES EL CORREO, ES LO QUE SE RESPONDE. La respuesta es
-   * SIEMPRE la misma, exista o no ese DNI en el censo. Si dijera «ese DNI no
-   * está», cualquiera podría ir probando documentos para averiguar quién es
-   * hermano de qué hermandad — y eso revela convicciones religiosas, que es
-   * categoría especial del RGPD. Una pantalla de login no puede ser una forma
-   * de comprobar la fe de nadie.
-   *
-   * Tampoco se enseña a qué dirección se ha mandado, por lo mismo.
-   */
-  async function recuperarClave() {
-    setErrorLogin(null)
-    setRecuperacion(null)
-    /* `limpiarDni` y no `normaliza`: este DNI viaja a la base de datos, y allí
-       están guardados sin puntos ni guiones. Escrito «12.345.678-A» no
-       encontraba a nadie y la recuperación decía que no existe esa cuenta. */
-    const dni = limpiarDni(dniInput)
-    if (!dni) {
-      setRecuperacion({ tipo: 'aviso', texto: 'Escribe tu DNI y volvemos a intentarlo.' })
-      return
-    }
-
-    // Sin base de datos no hay correos que mandar: la contraseña la cambia la
-    // secretaría desde el panel, y eso es lo que hay que decir.
-    if (!usarSupabase || !supabase || !hermandadElegida) {
-      setRecuperacion({
-        tipo: 'aviso',
-        texto: 'Escribe a tu secretaría para que te pongan una nueva. Desde aquí todavía no se puede.',
-      })
-      return
-    }
-
-    setRecuperando(true)
-    /*
-     * LO MANDA EL SERVIDOR. Antes se le pedía a Supabase que escribiera a la
-     * dirección de la cuenta; desde que la cuenta se llama por hermandad + DNI,
-     * esa dirección no recibe nada. Ahora la función `enviar-correo` busca el
-     * correo DE VERDAD en la ficha y manda ahí el enlace, y ni el token ni la
-     * dirección pasan por este navegador. Ver `lib/recuperarHermano.ts`.
-     */
-    await pedirRecuperacion(hermandadElegida.id, dni)
-    setRecuperando(false)
-    setRecuperacion({
-      tipo: 'hecho',
-      texto:
-        'Si ese DNI está en el censo y tiene un correo puesto, te acabamos de mandar un enlace para cambiar la contraseña. Míralo también en la carpeta de spam.',
-    })
-  }
-
-  /** DNI + contraseña, ya dentro de la hermandad elegida — no hace falta adivinar dónde busca. */
-  async function identificar(e: FormEvent) {
-    e.preventDefault()
-    if (!hermandadElegida) return
-    /* Limpio: va dentro de `resolver_email_hermano`, y en la base los DNI
-       están sin puntos. Con `normaliza` a secas, quien escribiera el suyo
-       puntuado NO PODÍA ENTRAR, y el mensaje decía que los datos no son
-       correctos — que es exactamente lo contrario de lo que pasaba. */
-    const dni = limpiarDni(dniInput)
-
-    // Con la base de datos conectada, la hermandad elegida es una de verdad y
-    // su id viaja en la consulta. Es imprescindible: el DNI ya no es único en
-    // toda la base —la misma persona puede ser hermana de dos hermandades— y
-    // buscar solo por DNI podía devolver el correo de otra.
-    if (usarSupabase && supabase) {
-      const { data: email, error: rpcError } = await supabase.rpc('resolver_email_hermano', {
-        p_hermandad_id: hermandadElegida.id,
-        p_dni: dni,
-      })
-      if (rpcError || !email) {
-        setErrorLogin('DNI o contraseña incorrectos.')
-        return
-      }
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password: claveInput,
-      })
-      if (signInError || !signInData.session) {
-        setErrorLogin('DNI o contraseña incorrectos.')
-        return
-      }
-      // Sin filtrar por hermandad: ya con la sesión abierta, las políticas de
-      // Supabase hacen que esta persona solo vea su propia ficha y ninguna más.
-      const { data: fila } = await supabase.from('hermanos').select('*').eq('dni', dni).maybeSingle()
-      if (!fila) {
-        setErrorLogin('No se pudo cargar tu ficha. Inténtalo de nuevo en unos segundos.')
-        return
-      }
-      if (fila.estado === 'Baja') {
-        // La contraseña era correcta, así que la sesión de Supabase ya está
-        // abierta: se cierra antes de salir.
-        await supabase.auth.signOut()
-        setErrorLogin(MENSAJE_BAJA)
-        return
-      }
-      // La sesión sigue guardando ID_HERMANDAD_PRINCIPAL, que aquí significa
-      // «la hermandad de verdad, la que está en la base de datos», frente a
-      // las de muestra del modo demostración. Ya dentro, un hermano pertenece
-      // a una sola hermandad y todo lo que lee viene filtrado por Supabase.
-      const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: fila.id as string }
-      guardarSesion(nueva)
-      setSesion(nueva)
-      setErrorLogin(null)
-      return
-    }
-
-    if (hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
-      const encontrado = hermanos.find((h) => mismoDni(h.dni, dni) && h.claveAcceso === claveInput)
-      if (!encontrado) {
-        setErrorLogin('DNI o contraseña incorrectos.')
-        return
-      }
-      if (encontrado.estado === 'Baja') {
-        setErrorLogin(MENSAJE_BAJA)
-        return
-      }
-      const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId: encontrado.id }
-      guardarSesion(nueva)
-      setSesion(nueva)
-      setErrorLogin(null)
-      return
-    }
-
-    const censo = censosMuestra[hermandadElegida.id]?.[0] ?? []
-    const encontrado = censo.find((c) => mismoDni(c.dni, dni) && c.claveAcceso === claveInput)
-    if (!encontrado) {
-      setErrorLogin('DNI o contraseña incorrectos.')
-      return
-    }
-    const nueva = { hermandadId: hermandadElegida.id, hermanoId: encontrado.id }
-    guardarSesion(nueva)
-    setSesion(nueva)
-    setErrorLogin(null)
-  }
-
-  /** Quien todavía no está en el censo pide el alta; la secretaría la aprueba o la rechaza desde Hermanos. */
-  function solicitarAlta(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!hermandadElegida) return
-    const data = new FormData(e.currentTarget)
-    const nombre = String(data.get('nombre') ?? '').trim()
-    /* Limpio antes de guardarlo en la solicitud: si entra con puntos, se queda
-       con puntos en la base y luego no coincide con nada — ni con su ficha
-       cuando se apruebe, ni con el barrido de supresión del RGPD, que busca
-       las solicitudes por DNI para borrarlas. */
-    const dni = limpiarDni(String(data.get('dni') ?? ''))
-    const email = String(data.get('email') ?? '').trim()
-    const telefono = String(data.get('telefono') ?? '').trim()
-    /*
-     * NO SE PIDE CONTRASEÑA, Y ESO ES EL ARREGLO. Se guardaba EN CLARO en
-     * `solicitudes_alta`, donde la lee cualquiera del personal con el módulo
-     * «hermanos» y donde se quedaba mientras la solicitud estuviera pendiente.
-     * La gente repite contraseñas: la que veía la secretaria es probablemente
-     * la de su correo. La clave se genera al aprobar y se manda por correo.
-     */
-    if (!nombre || !dni || !email) {
-      setErrorSolicitud('Rellena tu nombre, DNI y correo.')
-      return
-    }
-    // El teléfono es opcional, pero si lo pone tiene que servir para llamarle:
-    // es por donde secretaría le avisa de que su alta está aprobada.
-    const malTelefono = problemaDeTelefono(telefono)
-    if (malTelefono) {
-      setErrorSolicitud(malTelefono)
-      return
-    }
-
-    // Con Supabase conectado esta comprobación no se puede hacer aquí: quien
-    // rellena esto no ha iniciado sesión y no puede leer el censo de nadie
-    // —faltaría más—. Si el DNI ya estuviera, lo verá la secretaría al recibir
-    // la solicitud, que es quien tiene que decidir.
-    const yaEsHermano =
-      usarSupabase
-        ? false
-        : hermandadElegida.id === ID_HERMANDAD_PRINCIPAL
-          ? hermanos.some((h) => mismoDni(h.dni, dni))
-          : (censosMuestra[hermandadElegida.id]?.[0] ?? []).some((h) => mismoDni(h.dni, dni))
-    if (yaEsHermano) {
-      setErrorSolicitud('Ya hay un hermano/a con ese DNI en esta hermandad. Prueba a iniciar sesión.')
-      return
-    }
-
-    const nueva: SolicitudAlta = {
-      id: nuevoId(),
-      nombre,
-      dni,
-      email,
-      telefono,
-      clavePropuesta: '',
-      fecha: hoy(),
-      estado: 'Pendiente',
-    }
-
-    if (usarSupabase || hermandadElegida.id === ID_HERMANDAD_PRINCIPAL) {
-      // Se espera al resultado: antes se decía «tu solicitud se ha enviado a
-      // la secretaría» aunque no hubiera salido del navegador.
-      crearSolicitudPrincipal(nueva).then((r) => {
-        if (r.ok) {
-          setErrorSolicitud(null)
-          setSolicitudEnviada(true)
-        } else {
-          setErrorSolicitud(r.error ?? 'No se pudo enviar la solicitud.')
-        }
-      })
-      return
-    }
-    guardarSolicitudMuestra(hermandadElegida.id, nueva)
-    setErrorSolicitud(null)
-    setSolicitudEnviada(true)
-  }
-
-  function entrarComoDemo(hermanoId: string = DNI_DEMO) {
-    // El navegador puede tener un censo viejo (de pruebas anteriores) que ya no
-    // incluye a este hermano de muestra. En vez de fallar, restauramos el censo
-    // de ejemplo y recargamos: la sesión queda guardada y, al volver, el hermano
-    // ya existe. Así el acceso demo funciona siempre, sin depender del estado
-    // previo del navegador.
-    if (!hermanos.some((h) => h.id === hermanoId)) {
-      marcarModoDemo()
-      restaurarCensoDemo()
-      guardarSesion({ hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId })
-      window.location.reload()
-      return
-    }
-    marcarModoDemo()
-    const nueva = { hermandadId: ID_HERMANDAD_PRINCIPAL, hermanoId }
-    guardarSesion(nueva)
-    setSesion(nueva)
-  }
-
-  // Unos cuantos hermanos del censo para entrar de un clic en modo local (igual
-  // que los accesos rápidos del panel de la hermandad, pero del lado del hermano).
-  /**
-   * Accesos rápidos de demostración. Solo cuando NO hay Supabase configurado
-   * en absoluto: `usarSupabase` también es false cuando Supabase está caído o
-   * en pausa, y en ese caso `hermanos` no son los de ejemplo sino el CENSO
-   * REAL espejado en este navegador. Enseñar ahí el DNI y la contraseña de
-   * cuatro hermanos de verdad, en una pantalla pública, es una fuga.
-   */
-  const hayDemo = !isSupabaseConfigured
-  const hermanosDemo = useMemo(
-    () => (hayDemo ? hermanos.filter((h) => h.estado !== 'Baja').slice(0, 4) : []),
-    [hermanos, hayDemo],
-  )
 
   // El censo puede haber perdido a este hermano (borrado desde el panel). Con
   // la sesión apuntando a nadie el área se quedaba a medias; se cierra sola.
@@ -1027,20 +529,27 @@ export default function HermanoPortal() {
     }
     sessionStorage.removeItem(SESION_KEY)
     setSesion(null)
-    setPaso('buscar')
-    setHermandadElegida(null)
-    setQueryHermandad('')
-    setModoAcceso('login')
-    setDniInput('')
-    setClaveInput('')
-    setSolicitudEnviada(false)
-    setErrorSolicitud(null)
+    /*
+     * LO QUE ANTES SE VACIABA A MANO AQUÍ LO HACE AHORA EL REMONTAJE.
+     *
+     * Eran nueve líneas reiniciando el formulario de entrada —el paso, la
+     * hermandad elegida, el buscador, el DNI, la contraseña, los errores—.
+     * Hacían falta porque todo vivía en el mismo componente y el estado
+     * sobrevivía al cambio de pantalla. Ahora la pantalla de identificarse es
+     * otro componente que solo existe mientras no hay hermano dentro: al salir
+     * se monta de cero y sus `useState` arrancan en su valor inicial, que es
+     * exactamente lo que hacían esas nueve líneas.
+     *
+     * La única que NO se arregla sola es el DNI: su valor inicial sale de
+     * `?dni=` de la dirección, que sigue ahí después de salir. Se vacía con el
+     * prop.
+     */
+    setDniInicial('')
     setSolTramo('')
     setSolPreferencia('')
     setSolComentario('')
     setDatosGuardados(false)
     setBajaMuestraSolicitada(false)
-    setErrorLogin(null)
     setClaveError(null)
     setClaveGuardada(false)
   }
@@ -1471,363 +980,22 @@ export default function HermanoPortal() {
 
   // ===================== Pantalla de identificación =====================
   if (!hermanoActivo) {
+    /*
+     * LA OTRA PANTALLA. Vive en `portal/Identificarse.tsx` con su estado, sus
+     * efectos y sus manejadores dentro: de los treinta y cuatro bindings que
+     * usaba, treinta y uno eran solo suyos. Lo que cruza son estas siete cosas.
+     */
     return (
-      <div className="portal portal--entrada" style={estiloTema(hermandadElegida?.color ?? '#6A1A23')}>
-        {/* Las manchas de color, el damasco y la luz del fondo. Van en su
-            propia capa para poder quedarse DEBAJO del arco de piedra y de la
-            filigrana, que se pintan con los pseudoelementos de `.portal`.
-
-            Y `portal--entrada` porque toda esa escena es SOLO la entrada: una
-            vez dentro, el hermano está trabajando y el fondo es el normal. */}
-        <div className="portal__ambiente" aria-hidden="true" />
-        <PortalHead
-          hermandad={hermandadElegida?.nombre ?? 'Gobergo'}
-          logo={hermandadElegida?.logoDataUrl ?? null}
-          color={hermandadElegida?.color}
-          icono={hermandadElegida?.icono}
-        />
-        <main className="portal__stage">
-          <aside className="portal__aside" style={{ ['--portal-accent' as string]: hermandadElegida?.color ?? colorActivo }}>
-            {/* El lacre. Es lo primero que se ve al entrar, así que lleva el
-                escudo de SU hermandad si lo ha subido; la marca de Gobergo solo
-                mientras no ha elegido ninguna, porque a partir de ahí el
-                hermano tiene que ver lo suyo, no lo nuestro. */}
-            <div className="portal__sello">
-              <span className="portal__sello-disco">
-                {hermandadElegida?.logoDataUrl ? (
-                  <img src={hermandadElegida.logoDataUrl} alt="" className="portal__aside-escudo" />
-                ) : (
-                  /* `claro` porque el lacre es cera GRANATE: sin esto la marca
-                     se pintaba del mismo color que el fondo y no se veía. El
-                     tono exacto —oro, como el anillo del lacre— lo pone el CSS;
-                     esto es el cinturón por si esa regla desaparece. */
-                  <LogoMark size={64} claro />
-                )}
-              </span>
-            </div>
-            <h2 className="portal__aside-title">Tu hermandad, en tu bolsillo</h2>
-            <p className="portal__aside-sub">Entra en tu área personal y gestiona todo sin pasar por secretaría.</p>
-            <ul className="portal__aside-list">
-              <li>Tus cuotas y recibos al día</li>
-              <li>Tu papeleta de sitio y su pago</li>
-              <li>Solicitudes y tus datos personales</li>
-              <li>Avisos y comunicados de la hermandad</li>
-            </ul>
-          </aside>
-          <div className="portal__card">
-            {echadoDelPanel && !poniendoClaveNueva && (
-              <div className="banner-inline banner-inline--warn" role="status">
-                <span>
-                  <b>Esta cuenta no lleva ningún cargo en la hermandad.</b> Por eso te hemos traído
-                  aquí, a tu área. Si tienes cargo y no puedes entrar al panel, pídele a secretaría
-                  que te lo ponga en tu ficha, en «Personal y permisos». No hace falta otra cuenta ni
-                  otra contraseña: es la misma.
-                </span>
-              </div>
-            )}
-
-            {/* Y al revés: quien SÍ gestiona y ha venido a su área tiene que
-                poder volver sin cerrar sesión. Casi todo el que lleva una
-                hermandad es además hermano, así que este camino se hace todos
-                los días. */}
-            {papelesAqui.gestiona && !poniendoClaveNueva && (
-              <div className="banner-inline" role="status">
-                <span>Estás en tu área personal.</span>
-                <Link to="/app" className="btn btn-ghost btn-sm">Ir al panel de gestión</Link>
-              </div>
-            )}
-
-            {/* `!poniendoClaveNueva`: viniendo del enlace del correo, el
-                buscador de hermandad no pinta nada. Sin esto se quedaba
-                ARRIBA, con el formulario de la contraseña debajo del todo, y
-                el hermano leía «Busca tu hermandad» y se paraba ahí. */}
-            {paso === 'buscar' && !poniendoClaveNueva && (
-              <>
-                <div className="portal__card-head">
-                  <span className="portal__card-head-titulo">Tu espacio personal</span>
-                  <span className="portal__card-head-marca">Gobergo</span>
-                </div>
-
-                <h1>Encuentra tu hermandad</h1>
-                <p className="portal__lead">
-                  Escribe el nombre completo o la ciudad para acceder a tu área personal.
-                </p>
-
-                <div className="portal__buscador">
-                  <label htmlFor="buscarHermandad" className="sr-only">Tu hermandad</label>
-                  <input
-                    id="buscarHermandad"
-                    type="text"
-                    value={queryHermandad}
-                    onChange={(e) => setQueryHermandad(e.target.value)}
-                    placeholder="Nombre o ciudad…"
-                    autoFocus
-                  />
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-                    <circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" />
-                  </svg>
-                </div>
-                <ul className="portal__picker">
-                  {opcionesHermandad.map((h) => (
-                    <li key={h.id}>
-                      <button type="button" className="portal__picker-item" onClick={() => elegirHermandad(h)}>
-                        <EscudoHermandad color={h.color} icono={h.icono} logoDataUrl={h.logoDataUrl} nombre={h.nombre} size={30} />
-                        <span>
-                          <b>{h.nombre}</b>
-                          {h.ciudad && <small>{h.ciudad}</small>}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                  {opcionesHermandad.length === 0 && (
-                    <li className="portal__picker-empty">
-                      {/*
-                        SI NO SE PUDO LEER LA LISTA, SE DICE. Antes un tropiezo
-                        de red se veía igual que «tu hermandad no está»: quien
-                        busca la suya y no la encuentra se va convencido de que
-                        no usa Gobergo, y no vuelve.
-                      */}
-                      {falloElDirectorio
-                        ? 'No se ha podido cargar la lista de hermandades. Recarga la página e '
-                          + 'inténtalo otra vez; no quiere decir que la tuya no esté.'
-                        : queryHermandad.trim()
-                          ? 'No encontramos ninguna hermandad con ese nombre.'
-                          : 'Todavía no hay ninguna hermandad dada de alta en Gobergo.'}
-                    </li>
-                  )}
-                </ul>
-
-                {hayDemo && (
-                  <div className="banner banner--info banner--demo" role="status" style={{ marginTop: '0.4rem' }}>
-                    <div>
-                      <strong>Modo demostración.</strong> Entra con datos de ejemplo (censo, cuotas y
-                      papeleta) y prueba el área del hermano sin escribir nada.
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-block"
-                      onClick={() => entrarComoDemo()}
-                    >
-                      Entrar en modo demo (datos de ejemplo)
-                    </button>
-                    {hermanosDemo.length > 0 && (
-                      <>
-                        <div className="demo-accounts__label">O entra como un hermano concreto:</div>
-                        <div className="demo-accounts">
-                          {hermanosDemo.map((h) => (
-                            <button
-                              type="button"
-                              key={h.id}
-                              className="demo-account"
-                              onClick={() => entrarComoDemo(h.id)}
-                            >
-                              <span className="demo-account__avatar">{inicialesHermandad(h.nombre)}</span>
-                              <span>
-                                <b>{h.nombre}</b>
-                                <small>Hermano/a nº {h.numero}</small>
-                                <small className="demo-account__cred">DNI {h.dni} · {h.claveAcceso}</small>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                <div className="portal__foot">
-                  <Link to="/" className="portal__foot-back">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M15 18l-6-6 6-6" />
-                    </svg>
-                    Volver a la portada
-                  </Link>
-                </div>
-              </>
-            )}
-
-            {/* Viene del enlace del correo: lo único que tiene que hacer aquí es
-                poner su contraseña nueva. Se enseña por delante de todo lo
-                demás, hermandad incluida: ya está identificado por el enlace. */}
-            {poniendoClaveNueva && (
-              <div className="portal__recuperar">
-                <h2>Pon tu contraseña nueva</h2>
-                <p className="form-hint">
-                  Has llegado desde el enlace que te mandamos por correo. Elige una contraseña y ya
-                  puedes entrar con ella.
-                </p>
-                <form onSubmit={guardarClaveNueva}>
-                  <div className="form-row">
-                    <label htmlFor="claveNueva">Contraseña nueva</label>
-                    <input id="claveNueva" name="nueva" type="password" autoComplete="new-password" autoFocus required />
-                  </div>
-                  <div className="form-row">
-                    <label htmlFor="claveNuevaRepetida">Repítela</label>
-                    <input id="claveNuevaRepetida" name="repetida" type="password" autoComplete="new-password" required />
-                  </div>
-                  {claveNuevaError && <p className="form-hint form-hint--error">{claveNuevaError}</p>}
-                  <button type="submit" className="btn btn-primary btn-block">
-                    Guardar y entrar
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {claveNuevaHecha && (
-              <div className="banner-inline banner-inline--accent" style={{ marginBottom: '1rem' }}>
-                Contraseña cambiada. Entra abajo con tu DNI y la nueva.
-              </div>
-            )}
-
-            {paso === 'acceso' && hermandadElegida && !poniendoClaveNueva && (
-              <>
-                <button type="button" className="portal__back" onClick={volverABuscar}>
-                  ← Cambiar de hermandad
-                </button>
-                <div className="portal__chosen" style={{ borderColor: hermandadElegida.color }}>
-                  <EscudoHermandad
-                    color={hermandadElegida.color}
-                    icono={hermandadElegida.icono}
-                    logoDataUrl={hermandadElegida.logoDataUrl}
-                    nombre={hermandadElegida.nombre}
-                    size={34}
-                  />
-                  <span>
-                    <b>{hermandadElegida.nombre}</b>
-                    {hermandadElegida.ciudad && <small>{hermandadElegida.ciudad}</small>}
-                  </span>
-                </div>
-
-                <div className="portal__tabs" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={modoAcceso === 'login'}
-                    className={`portal__tab${modoAcceso === 'login' ? ' portal__tab--active' : ''}`}
-                    onClick={() => setModoAcceso('login')}
-                  >
-                    Ya soy hermano/a
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={modoAcceso === 'solicitud'}
-                    className={`portal__tab${modoAcceso === 'solicitud' ? ' portal__tab--active' : ''}`}
-                    onClick={() => setModoAcceso('solicitud')}
-                  >
-                    Quiero ser hermano/a
-                  </button>
-                </div>
-
-                {modoAcceso === 'login' && (
-                  <>
-                    <p className="portal__lead">Entra con tu DNI y tu contraseña.</p>
-                    <form className="app-form" onSubmit={identificar}>
-                      <div className="form-row">
-                        <label htmlFor="dniHermano">DNI / NIE</label>
-                        <input
-                          id="dniHermano"
-                          type="text"
-                          value={dniInput}
-                          onChange={(e) => setDniInput(e.target.value)}
-                          placeholder="12345678A"
-                          autoFocus
-                          required
-                        />
-                      </div>
-                      <div className="form-row">
-                        <label htmlFor="claveHermano">Contraseña</label>
-                        <input
-                          id="claveHermano"
-                          type="password"
-                          value={claveInput}
-                          onChange={(e) => setClaveInput(e.target.value)}
-                          placeholder="Tu contraseña (al alta, tu DNI)"
-                          required
-                        />
-                      </div>
-                      {errorLogin && <p className="form-hint form-hint--error">{errorLogin}</p>}
-                      <button type="submit" className="btn btn-primary btn-block">
-                        Entrar
-                      </button>
-                      {/* Debajo del botón y no arriba: quien se sabe su
-                          contraseña no tiene por qué leer esto. */}
-                      <button
-                        type="button"
-                        className="portal__olvide"
-                        onClick={recuperarClave}
-                        disabled={recuperando}
-                      >
-                        {recuperando ? 'Mandando…' : '¿Has olvidado tu contraseña?'}
-                      </button>
-                      {recuperacion && (
-                        <p
-                          className={`form-hint${recuperacion.tipo === 'hecho' ? ' form-hint--ok' : ''}`}
-                          role="status"
-                        >
-                          {recuperacion.texto}
-                        </p>
-                      )}
-                    </form>
-                    {!usarSupabase && hermandadElegida.id === ID_HERMANDAD_PRINCIPAL && (
-                      <>
-                        <div className="auth-sep"><span>o</span></div>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-block"
-                          onClick={() => entrarComoDemo()}
-                        >
-                          Entrar en modo demo (sin escribir)
-                        </button>
-                      </>
-                    )}
-                  </>
-                )}
-
-                {modoAcceso === 'solicitud' &&
-                  (solicitudEnviada ? (
-                    <div className="banner-inline banner-inline--accent">
-                      Tu solicitud se ha enviado a la secretaría de {hermandadElegida.nombre}. Te avisarán en cuanto la
-                      revisen.
-                    </div>
-                  ) : (
-                    <>
-                      <p className="portal__lead">
-                        Pide el alta como hermano/a de {hermandadElegida.nombre}. La secretaría revisará tu solicitud.
-                      </p>
-                      <form className="app-form" onSubmit={solicitarAlta}>
-                        <div className="form-row">
-                          <label htmlFor="solNombre">Nombre y apellidos</label>
-                          <input id="solNombre" name="nombre" type="text" placeholder="Nombre completo" required />
-                        </div>
-                        <div className="form-row">
-                          <label htmlFor="solDni">DNI / NIE</label>
-                          <input id="solDni" name="dni" type="text" placeholder="12345678A" required />
-                        </div>
-                        <div className="form-row">
-                          <label htmlFor="solEmail">Correo electrónico</label>
-                          <input id="solEmail" name="email" type="email" placeholder="tucorreo@ejemplo.com" required />
-                        </div>
-                        <div className="form-row">
-                          <label htmlFor="solTelefono">Teléfono</label>
-                          <input id="solTelefono" name="telefono" type="tel" inputMode="tel" placeholder="600 00 00 00" />
-                        </div>
-                        <p className="form-hint">
-                          Si la hermandad te da de alta, te llega una clave a ese correo para entrar
-                          en tu área. La cambias por la que quieras en cuanto entres.
-                        </p>
-                        {errorSolicitud && <p className="form-hint form-hint--error">{errorSolicitud}</p>}
-                        <button type="submit" className="btn btn-primary btn-block">
-                          Enviar solicitud
-                        </button>
-                      </form>
-                    </>
-                  ))}
-              </>
-            )}
-          </div>
-        </main>
-      </div>
+      <Identificarse
+        hermanos={hermanos}
+        censosMuestra={censosMuestra}
+        usarSupabase={usarSupabase}
+        hermandadPrincipal={hermandadPrincipal}
+        nombrePrincipal={nombrePrincipal}
+        colorActivo={colorActivo}
+        dniInicial={dniInicial}
+        onSesion={setSesion}
+      />
     )
   }
 
@@ -2697,213 +1865,3 @@ export default function HermanoPortal() {
  * extracto. El dinero va igualmente directo a la hermandad — el cobro se crea
  * contra SU cuenta conectada, Gobergo no lo toca. Ver `lib/pagoTarjeta.ts`.
  */
-function PagoPapeleta({
-  papeleta,
-  bizum,
-  iban,
-  nombreHermandad,
-  hermano,
-  onComunicar,
-  cuentaStripe,
-  intentos,
-}: {
-  papeleta: Papeleta
-  bizum: string
-  iban: string
-  nombreHermandad: string
-  hermano: { nombre: string; numero: number }
-  onComunicar: (metodo: MetodoPago) => void
-  /** La cuenta conectada de la hermandad. Sin ella no hay pago con tarjeta. */
-  cuentaStripe?: string | null
-  /** Sus intentos de pago con tarjeta. `null` = no se ha podido mirar. */
-  intentos?: IntentoDePago[] | null
-}) {
-  const [pagando, setPagando] = useState(false)
-  const [falloPago, setFalloPago] = useState('')
-  /*
-   * ¿TIENE ESTA MISMA PAPELETA UN PAGO A MEDIO HACER?
-   *
-   * El recibo tarda en ponerse en «Pagada» lo que tarde el aviso de Stripe en
-   * llegar, y ese hueco es exactamente cuando el hermano vuelve, lo ve
-   * pendiente y paga otra vez. Devolver dos cobros es media mañana de
-   * tesorería, así que se le dice.
-   */
-  const enMarcha = pagoEnMarcha(intentos ?? null, 'papeleta', papeleta.id)
-  const hayTarjeta = pagoConTarjetaDisponible(cuentaStripe)
-
-  /*
-   * El concepto del pago: un código corto, no una frase.
-   *
-   * Antes decía «Papeleta 1 - Jaime Rivas». Eso no lo escribe nadie entero
-   * desde un móvil, de pie y con el pulgar: se acorta, se come el apellido, y
-   * a la tesorería le llega un ingreso que no sabe de quién es. Y si en la
-   * hermandad hay dos que se llaman igual, el nombre tampoco distingue.
-   */
-  const concepto = codigoDeHermano(hermano)
-
-  if (papeleta.pagoComunicado) {
-    return (
-      <div className="pago-box pago-box--ok">
-        <b>Pago comunicado por {papeleta.pagoComunicado.metodo}</b>
-        <p className="form-hint">
-          Avisaste el {papeleta.pagoComunicado.fecha} de que ya has pagado {formatCurrency(papeleta.importe)}. La
-          secretaría de {nombreHermandad} confirmará el pago en cuanto vea el ingreso en su cuenta.
-        </p>
-      </div>
-    )
-  }
-
-  // Con tarjeta se puede pagar aunque la hermandad no haya publicado ni su
-  // Bizum ni su cuenta: el cobro no necesita que nadie los teclee.
-  if (!bizum && !iban && !hayTarjeta) {
-    return <AvisoFalta compacto requisito={requisito('datosCobro', { hermandad: { iban, bizumTelefono: bizum } })} />
-  }
-
-  return (
-    <div className="pago-box">
-      <b>Pagar mi papeleta · {formatCurrency(papeleta.importe)}</b>
-      {/* El error de la pasarela se enseña tal cual: dice cosas que hacen falta
-          —«tu hermandad no ha enlazado su cuenta»— y un «no se ha podido»
-          genérico dejaría al hermano sin saber si el problema es suyo. */}
-      {falloPago && <p className="form-hint form-hint--error">{falloPago}</p>}
-      {enMarcha && (
-        <p className="form-hint form-hint--warn">
-          <b>Ya has empezado a pagar esta papeleta con tarjeta.</b> Si acabas de hacerlo, espera un
-          momento y recarga: el recibo se pone al día solo cuando el banco lo confirma. Vuelve a
-          pagar solo si el pago no llegó a completarse.
-        </p>
-      )}
-      {(bizum || iban) && (
-        <p className="form-hint">
-          El pago llega directamente a {nombreHermandad}. Pon en el concepto tu código
-          de hermano, <code>{concepto}</code>, y la secretaría sabrá que es tuyo. Es el
-          mismo todo el año: te lo puedes aprender.
-        </p>
-      )}
-      <div className="pago-metodos">
-        {/*
-          LA TARJETA VA LA PRIMERA a propósito: es el único que no obliga a
-          nadie a avisar ni a cotejar el extracto. Los otros dos siguen ahí
-          porque hay hermanos que no pagan con tarjeta, y quitárselos sería
-          cambiar una opción por otra en vez de sumar.
-        */}
-        {hayTarjeta && (
-          <div className="pago-metodo">
-            <span className="pago-metodo__titulo">Tarjeta</span>
-            <span className="pago-metodo__dato">Se confirma solo</span>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={pagando}
-              onClick={async () => {
-                setPagando(true)
-                setFalloPago('')
-                const r = await pagarConTarjeta('papeleta', papeleta.id)
-                if (r.ok) { window.location.href = r.url; return }
-                setPagando(false)
-                setFalloPago(r.error)
-              }}
-            >
-              {pagando ? 'Abriendo la pasarela…' : `Pagar ${formatCurrency(papeleta.importe)}`}
-            </button>
-          </div>
-        )}
-        {bizum && (
-          <div className="pago-metodo">
-            <span className="pago-metodo__titulo">Bizum</span>
-            <span className="pago-metodo__dato">{bizum}</span>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => onComunicar('Bizum')}>
-              Ya he enviado el Bizum
-            </button>
-          </div>
-        )}
-        {iban && (
-          <div className="pago-metodo">
-            <span className="pago-metodo__titulo">Transferencia</span>
-            <span className="pago-metodo__dato">{iban}</span>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => onComunicar('Transferencia')}>
-              Ya he hecho la transferencia
-            </button>
-          </div>
-        )}
-      </div>
-      {/* Si la hermandad ya cobra con tarjeta, este aviso mentiría: diría «no
-          se puede pagar con tarjeta» justo debajo del botón de pagar con
-          tarjeta. */}
-      {!hayTarjeta && <AvisoFalta compacto requisito={requisitoActual('pasarela')} />}
-    </div>
-  )
-}
-
-function PortalHead({
-  hermandad,
-  logo,
-  color,
-  icono,
-  onSalir,
-  onContarFallo,
-  alPanel,
-}: {
-  hermandad: string
-  logo: string | null
-  color?: string
-  icono?: IconoHermandad
-  onSalir?: () => void
-  /** Abre el cajón de contar un fallo. */
-  onContarFallo?: () => void
-  /**
-   * Quien lleva cargo entra por la misma puerta que cualquier hermano —su DNI
-   * y su clave— y desde aquí pasa al panel de un clic.
-   *
-   * Antes NO había ningún enlace al panel dentro del área: el único estaba en
-   * la pantalla de identificación, o sea antes de entrar. Quien llevaba cargo
-   * y entraba a ver su papeleta tenía que cerrar sesión y volver a empezar.
-   */
-  alPanel?: boolean
-}) {
-  return (
-    <header className="portal__head">
-      <div className="portal__brand">
-        <span className="portal__logo">
-          {/* Un solo sitio decide cómo se ve la insignia de una hermandad: el
-              propio `EscudoHermandad`, que enseña el logo si lo hay y dibuja el
-              suyo si no. Antes esto tenía su propio `<img>` aparte, y por eso
-              el buscador podía quedarse con el dibujo genérico mientras la
-              cabecera sí enseñaba el escudo de verdad. */}
-          {/* Con color hay hermandad detrás, y el escudo se apaña con lo que
-              haya: su logo, su glifo o sus iniciales. Sin color no hay
-              hermandad elegida todavía y va la marca de Gobergo. */}
-          {color ? (
-            <EscudoHermandad color={color} icono={icono} logoDataUrl={logo} nombre={hermandad} size={28} />
-          ) : (
-            <LogoMark size={28} />
-          )}
-        </span>
-        <span>
-          <b>{hermandad}</b>
-          <small>Área del hermano</small>
-        </span>
-      </div>
-      <div className="portal__head-acciones">
-        {alPanel && (
-          <Link to="/app" className="btn btn-outline btn-sm">
-            Ir al panel de gestión
-          </Link>
-        )}
-        {/* Contar un fallo TAMBIÉN aquí, y aquí hace más falta que en el panel:
-            el hermano está solo con su móvil, sin nadie de la junta al lado a
-            quien preguntar. Si no puede decirlo desde aquí, no lo dice. */}
-        {onContarFallo && (
-          <button className="btn btn-ghost btn-sm" onClick={onContarFallo}>
-            Contar un fallo
-          </button>
-        )}
-        {onSalir && (
-          <button className="btn btn-ghost btn-sm" onClick={onSalir}>
-            Salir
-          </button>
-        )}
-      </div>
-    </header>
-  )
-}

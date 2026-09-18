@@ -1,3 +1,4 @@
+import { antesQue } from './fuentes.mjs'
 import { readFileSync } from 'node:fs'
 
 const leerFuente = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
@@ -151,9 +152,9 @@ export default async function ({ cargar, caso }) {
   })
   const tipos = mezcla.map((a) => a.tipo)
   caso('la baja va antes que un cobro por confirmar', true,
-    tipos.indexOf('bajaPedida') < tipos.indexOf('pagoCuota'))
+    antesQue(tipos, 'bajaPedida', 'pagoCuota'))
   caso('y el mensaje de la web también', true,
-    tipos.indexOf('mensajeWeb') < tipos.indexOf('pagoCuota'))
+    antesQue(tipos, 'mensajeWeb', 'pagoCuota'))
 
   // --- Y CADA TIPO TIENE SU TÍTULO DE BLOQUE ---
   /*
@@ -170,8 +171,8 @@ export default async function ({ cargar, caso }) {
 
   // --- LA FAMILIA, POR LOS DOS LADOS ---
   const { readFile } = await import('node:fs/promises')
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
-  const panel = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
+  const panel = await (await import('./fuentes.mjs')).fuenteDelCenso()
   const familia = await readFile('src/components/MiFamilia.tsx', 'utf8')
 
   /*

@@ -19,7 +19,7 @@
 export default async function ({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const css = await readFile('src/styles/global.css', 'utf8')
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
 
   // --- La escena es SOLO la entrada ---
   caso('la entrada se marca como escena', true, /className="portal portal--entrada"/.test(portal))

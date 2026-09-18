@@ -15,6 +15,7 @@
  * avisado a ninguno, y sin manera de darse cuenta hasta que en febrero
  * faltaran trescientas papeletas por sacar.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ caso, cargar }) {
   const { readFile } = await import('node:fs/promises')
   const src = await readFile('src/lib/convocatoria.ts', 'utf8')
@@ -268,7 +269,7 @@ export default async function ({ caso, cargar }) {
     pantalla.indexOf('Convocatoria: avisar a todos los hermanos'),
   )
   caso('la banda de renovación no habla si no hay campaña', true,
-    bandas.indexOf('Renovación <b>') > bandas.indexOf(") : estadoCampana === 'sin-saber' ? ("))
+    antesQue(bandas, ") : estadoCampana === 'sin-saber' ? (", 'Renovación <b>'))
   caso('y distingue «no hay» de «todavía no consta»', true,
     /estadoCampana === 'sin-crear' \? \(/.test(bandas)
     && /estadoCampana === 'sin-saber' \? \([\s\S]{0,200}?Comprobando la campaña/.test(bandas))
@@ -480,7 +481,7 @@ async function bienvenida({ caso }) {
 
   // Y la pantalla la manda en los DOS sitios que dan de alta.
   const { readFile } = await import('node:fs/promises')
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('se manda en los dos sitios que dan de alta', 2,
     (hermanos.match(/void darLaBienvenida\(/g) || []).length)
   // Con su número ya asignado: mandarlo antes diría «tu número es el 0».

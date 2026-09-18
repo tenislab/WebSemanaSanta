@@ -16,10 +16,11 @@
  * dada de alta. Por eso aquí se comprueba el cableado de las dos ramas, ya que
  * la que importa no se puede ver en la demo.
  */
+import { antesQue } from './fuentes.mjs'
 import { readFileSync } from 'node:fs'
 
 export default async function ({ caso }) {
-  const cuotas = readFileSync('src/pages/app/Cuotas.tsx', 'utf8')
+  const cuotas = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
 
   /*
    * 1. LA TABLA VACÍA, SIN CONCEPTO, NO OFRECE EMITIR: MANDA A DEFINIR LA CUOTA.
@@ -39,7 +40,7 @@ export default async function ({ caso }) {
     // `else`). Se busca el BOTÓN (`onClick={abrirEmision}`) y no el texto: el
     // texto aparece también en el comentario que explica el cambio, antes de la
     // rama, y con él esta comprobación pasaba o fallaba según dónde mirara.
-    ramaVacia.indexOf('onClick={abrirEmision}') > ramaVacia.indexOf(') : ('))
+    antesQue(ramaVacia, ') : (', 'onClick={abrirEmision}'))
 
   /*
    * 2. EL BOTÓN APAGADO DEL CAJÓN DICE POR QUÉ.

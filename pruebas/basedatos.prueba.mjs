@@ -2056,8 +2056,8 @@ async function nadieGuardaContrasenasEnClaro({ sql, caso }) {
 async function elFormularioYaNoLaPide({ caso }) {
   const { readFile } = await import('node:fs/promises')
   const web = await readFile('src/components/FormulariosWeb.tsx', 'utf8')
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
-  const hermanos = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
+  const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
 
   caso('el formulario de la web no pide contraseña', false, /autoComplete="new-password"/.test(web))
   caso('y manda la solicitud sin ninguna', true, /clavePropuesta: '',/.test(web))

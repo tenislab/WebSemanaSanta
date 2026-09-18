@@ -85,7 +85,7 @@ export default async function ({ cargar, caso }) {
   // El último error se guarda aparte y NO se borra al dar a «Entendido»: cuando
   // alguien se decide a contarlo, ese aviso lo cerró hace rato.
   caso('el panel recuerda el último error de la base', true, /setUltimoErrorBd/.test(shell))
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('el área del hermano también', true, /onContarFallo/.test(portal))
 
   await avisoDeDominio({ cargar, caso })

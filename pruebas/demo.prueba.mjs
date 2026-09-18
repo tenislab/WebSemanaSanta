@@ -64,7 +64,7 @@ export default async function ({ cargar, caso }) {
   caso('y «configured» sale de Supabase', true,
     /configured: isSupabaseConfigured/.test(ctx))
 
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('el del área del hermano también', true, /\{hayDemo && \(/.test(portal))
   caso('y su guarda es Supabase', true, /const hayDemo = !isSupabaseConfigured/.test(portal))
   // Los hermanos que se ofrecen de un clic salen de la MISMA guarda: si se

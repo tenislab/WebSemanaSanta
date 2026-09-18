@@ -172,4 +172,33 @@ export default async function ({ cargar, caso }) {
   {
     caso('lleva el id de la cuota', 'devolucion:abc', d.origenDeDevolucion('abc'))
   }
+
+  /*
+   * 11. Y LO QUE HACE LA PANTALLA AL APLICARLO, QUE NO VIGILABA NADIE.
+   *
+   * Todo lo de arriba prueba la biblioteca: leer el fichero, casar por
+   * referencia, calcular importes. Lo que hace la pantalla con el resultado
+   * —que es donde se decide el estado del recibo— no lo miraba ninguna prueba:
+   * cambiando «Devuelta» por «Pendiente» las 5642 seguían pasando. Salió
+   * rompiéndolo a propósito al partir el fichero.
+   *
+   * Y no es un matiz: «Pendiente» es un recibo que todavía no se ha intentado
+   * cobrar, y volvería a entrar en la siguiente remesa tal cual — otra vez a
+   * la misma cuenta cancelada, y otra comisión. «Devuelta» dice que ya se
+   * intentó y falló.
+   */
+  {
+    const pantalla = await (await import('./fuentes.mjs')).fuenteDeLasCuotas()
+    caso('el recibo devuelto queda «Devuelta»', true,
+      /estado: 'Devuelta' as const/.test(pantalla))
+    caso('y no vuelve a «Pendiente», que entraría otra vez en la remesa', false,
+      /porId\.has\(c\.id\)[\s\S]{0,80}?estado: 'Pendiente'/.test(pantalla))
+    // Se le quita la marca de remesado: ese recibo ya no está en ninguna
+    // remesa viva, y si se queda marcado no se puede volver a pasar nunca.
+    caso('y se suelta de la remesa', true,
+      /estado: 'Devuelta' as const[\s\S]{0,120}?remesadaEl: undefined/.test(pantalla))
+    // El dinero sale del libro con su contra-apunte, no se queda cobrado.
+    caso('y el libro recibe el contra-apunte', true,
+      /conContraApunteDeDevolucion\s*\(/.test(pantalla))
+  }
 }

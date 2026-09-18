@@ -19,6 +19,7 @@
  * `importar.ts`), y `'' === ''`, así que borrar a uno de esos se llevaba
  * TODAS las solicitudes que tampoco tuvieran DNI.
  */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/rgpd.ts')
 
@@ -115,7 +116,7 @@ export default async function ({ cargar, caso }) {
 
   caso('la rama de la base mira el tutor', true, /tutor_id/.test(conBase))
   caso('y decide antes de borrar la ficha', true,
-    conBase.indexOf('tutor_id') < conBase.indexOf(".from('hermanos').delete()"))
+    antesQue(conBase, 'tutor_id', ".from('hermanos').delete()"))
   caso('borra por id, no por correo a ciegas', true,
     /solicitudes_alta'\)\.delete\(\)\.in\('id'/.test(conBase))
   caso('ya no borra todo lo que comparta correo', false,

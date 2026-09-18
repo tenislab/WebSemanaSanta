@@ -95,7 +95,9 @@ async function loQueNoPuedeRomperse({ caso, readFile }) {
     ['src/pages/app/Personal.tsx', 2],
   ]
   for (const [fichero, cuantos] of sitios) {
-    const src = await readFile(fichero, 'utf8')
+    // `fuenteDe`: el censo, el área del hermano y el editor de la web están
+    // partidos en varios ficheros, y la lista sigue nombrando la pantalla.
+    const src = await (await import('./fuentes.mjs')).fuenteDe(fichero)
     const veces = (src.match(/correoAcceso/g) ?? []).length
     caso(`${fichero} guarda el nombre de la cuenta`, true, veces >= cuantos)
   }
@@ -109,7 +111,7 @@ async function loQueNoPuedeRomperse({ caso, readFile }) {
    * dirección de la cuenta, que con este cambio no recibe nada. Sin la nuestra,
    * cada hermano nuevo se queda sin poder recuperar su acceso.
    */
-  const portal = await readFile('src/pages/HermanoPortal.tsx', 'utf8')
+  const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('ya no se le pide a Supabase que mande el correo', false,
     /resetPasswordForEmail/.test(portal))
   caso('lo manda la función, con el correo de la ficha', true,

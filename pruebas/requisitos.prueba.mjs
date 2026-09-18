@@ -119,7 +119,13 @@ async function avisoDeEjemplo({ cargar, caso }) {
    */
   const HABLAN_DE_LA_DEMO = new Set([
     'src/pages/app/Configuracion.tsx',
-    'src/pages/HermanoPortal.tsx',
+    /*
+     * El botón de «entrar en modo demo» se mudó de `HermanoPortal.tsx` a
+     * `portal/Identificarse.tsx` al partir la pantalla, y este guardia se puso
+     * ROJO, que es lo que tenía que hacer: recorre `src` entero, así que la
+     * mudanza no lo despistó, solo cambió de sitio lo que ya estaba exento.
+     */
+    'src/pages/portal/Identificarse.tsx',
     'src/components/AuthForm.tsx',
     'src/components/ModeloPapeletaEditor.tsx',
   ])

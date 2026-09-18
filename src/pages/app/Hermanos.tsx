@@ -1,117 +1,128 @@
-import { llano } from '../../lib/buscar'
-import { memo, useDeferredValue, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react'
-import { limpiarDni, mismoDni, problemaDeDocumento } from '../../lib/dni'
-import { problemaDeTelefono } from '../../lib/telefono'
+/**
+ * EL CENSO: la lista de hermanos, su ficha y los cajones que salen de ella.
+ *
+ * ----------------------------------------------------------------------------
+ * QUÉ SE HA SACADO DE AQUÍ Y QUÉ NO, CON LOS NÚMEROS DELANTE
+ * ----------------------------------------------------------------------------
+ *
+ * Es el tercer fichero gordo que se parte, y el que menos se deja partir. Como
+ * el área del hermano, es UN componente —ciento cincuenta bindings— así que lo
+ * que decide no es el tamaño de cada trozo sino cuántos props costaría sacarlo.
+ * Medido antes de tocar nada:
+ *
+ *   · LA FICHA DEL HERMANO (780 líneas) → 31 props, aun mudando con ella todo
+ *     su estado. SE QUEDA.
+ *   · LA LISTA con sus filtros (345 líneas) → 33 props. SE QUEDA.
+ *   · Las solicitudes de alta → su estado, sus manejadores y su cajón son un
+ *     asunto completo y salen con pocos props.
+ *   · El cajón de dar de alta → seis props.
+ *   · Las columnas y las clases de estado → cero: son datos y funciones puras.
+ *   · El cuerpo de la tabla ya estaba separado.
+ *
+ * Treinta y un props es peor que el fichero gordo: un componente así no se lee,
+ * se descifra. Es el mismo listón que se aplicó al área del hermano, y por eso
+ * aquí se sacan cuatro piezas y no siete.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE HAY QUE SABER SI SE TOCA
+ * ----------------------------------------------------------------------------
+ *
+ * VEINTITRÉS ficheros de prueba vigilan esta pantalla LEYENDO SU FUENTE —es la
+ * más mirada del proyecto, porque aquí están los datos personales de todos los
+ * hermanos— y no leen este fichero: piden el censo entero con `fuenteDelCenso()`
+ * (ver `pruebas/fuentes.mjs`), que pega esto con todo lo de `censo/`.
+ */
 import AvisoDeCampo from '../../components/AvisoDeCampo'
-import { prepararAvisos } from '../../lib/avisosCorreo'
-import { Link, useSearchParams } from 'react-router-dom'
-import Drawer from '../../components/Drawer'
-import MenuAcciones from '../../components/MenuAcciones'
 import CamposPropiosForm from '../../components/CamposPropios'
+import CertificadoAntiguedad from '../../components/CertificadoAntiguedad'
+import Drawer from '../../components/Drawer'
+import EditorSegmento from '../../components/EditorSegmento'
+import FotoHermano from '../../components/FotoHermano'
+import ImportarCenso from '../../components/ImportarCenso'
+import InformeImpreso from '../../components/InformeImpreso'
+import MenuAcciones from '../../components/MenuAcciones'
+import { useAuth } from '../../context/AuthContext'
+import { referenciaCertificado, type Certificado } from '../../data/certificados'
+import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
-import { formatCurrency, isPlausibleIban, maskIban, porQueNoValeElIban } from '../../lib/format'
-import { useTramos, etiquetaTramo } from '../../lib/tramos'
-import { repartoCompleto } from '../../lib/cortejo'
-import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
-import { esMiembro, aniosDeHermandad, cumpleEsteMes, diaYMes, edadDe, esSuCumpleHoy, fraseAntiguedad, mesEnCurso, tonoDe } from '../../lib/hermanoFicha'
-import { getAsistencias, historialDeAsistencia, asistenciaEnUnaFrase } from '../../lib/asistencia'
-import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
-import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
-import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { crearAccesoHermano } from '../../lib/accesos'
-import { darLaBienvenida } from '../../lib/bienvenida'
-import { contarLaTanda, enviarAcceso, enviarAccesoEnTanda, porQueNoSePuede } from '../../lib/enviarAcceso'
-import { claveDeUnSoloUso } from '../../lib/claves'
-import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
-import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, type MiembroPersonal } from '../../lib/personal'
-import { personalToRow, rowToPersonal } from '../../lib/db/personal'
-import { getCampana } from '../../lib/campana'
-import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
-import { toCsv, descargarArchivo } from '../../lib/csv'
-import ImportarCenso from '../../components/ImportarCenso'
-import FotoHermano from '../../components/FotoHermano'
-import { darDeBajaEnCenso, reactivarEnCenso } from '../../lib/censo'
-import { etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
-import { useSolicitudes, saveSolicitudes, type SolicitudAlta } from '../../lib/solicitudes'
-import { useEtiquetas } from '../../lib/etiquetas'
-import { useCamposPropios, valorLegible } from '../../lib/camposPropios'
-import { useHermandadSettings } from '../../lib/hermandadSettings'
-import CertificadoAntiguedad from '../../components/CertificadoAntiguedad'
-import { emitirCertificado, useCertificadosDe } from '../../lib/certificados'
-import { referenciaCertificado, type Certificado } from '../../data/certificados'
-import EditorSegmento from '../../components/EditorSegmento'
-import InformeImpreso from '../../components/InformeImpreso'
-import { etiquetaSegmento, filtrarSegmento, limpiarCriterios, mismosCriterios, type CriteriosSegmento } from '../../lib/segmentacion'
-import { hayDatosDeEjemplo } from '../../lib/demo'
-
-/**
- * En el censo, «sin sesgo» significa enseñarlo ENTERO, bajas incluidas. No
- * vale CRITERIOS_POR_DEFECTO, que ya filtra a activos con correo.
- */
-type OrdenCampo = 'numero' | 'nombre' | 'estado' | 'cuota' | 'antiguedad'
-/** `opcional`: columna de apoyo que se oculta en el móvil (ver `col-opcional`). */
-const COLUMNAS: { id: OrdenCampo | 'tramo'; label: string; orden: boolean; opcional?: boolean }[] = [
-  { id: 'numero', label: 'Nº', orden: true, opcional: true },
-  { id: 'nombre', label: 'Hermano', orden: true },
-  { id: 'tramo', label: 'Tramo', orden: false, opcional: true },
-  { id: 'estado', label: 'Estado', orden: true },
-  { id: 'cuota', label: 'Cuota', orden: true, opcional: true },
-  { id: 'antiguedad', label: 'Antigüedad', orden: true, opcional: true },
-]
-
-const SIN_SESGO: CriteriosSegmento = {
-  estado: 'Cualquiera', cuota: 'Todos', edad: 'Todos', etiqueta: '', cargo: '', soloConEmail: false, campos: [],
-}
+import { asistenciaEnUnaFrase, getAsistencias, historialDeAsistencia } from '../../lib/asistencia'
+import { avisarPorCorreo, prepararAvisos } from '../../lib/avisosCorreo'
 import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
-import { avisarPorCorreo } from '../../lib/avisosCorreo'
-import { apuntar } from '../../lib/registroActividad'
-import { useAuth } from '../../context/AuthContext'
-import { filaQueAbre } from '../../lib/foco'
-import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
+import { darLaBienvenida } from '../../lib/bienvenida'
+import { llano } from '../../lib/buscar'
+import { getCampana } from '../../lib/campana'
+import { useCamposPropios, valorLegible } from '../../lib/camposPropios'
+import { darDeBajaEnCenso, reactivarEnCenso } from '../../lib/censo'
+import { emitirCertificado, useCertificadosDe } from '../../lib/certificados'
+import { claveDeUnSoloUso } from '../../lib/claves'
+import { repartoCompleto } from '../../lib/cortejo'
+import { descargarArchivo, toCsv } from '../../lib/csv'
+import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
 import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
+import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
+import { personalToRow, rowToPersonal } from '../../lib/db/personal'
+import { hayDatosDeEjemplo } from '../../lib/demo'
+import { limpiarDni, mismoDni, problemaDeDocumento } from '../../lib/dni'
+import { contarLaTanda, enviarAcceso, enviarAccesoEnTanda, porQueNoSePuede } from '../../lib/enviarAcceso'
 import {
-  etiquetaDeSituacion,
   situacionDeHermano,
   situacionDeTodos,
   situacionEnUnaFrase,
   type SituacionCuota,
 } from '../../lib/estadoCuotaHermano'
-import { resolverSolicitud, MOTIVOS_DE_RECHAZO } from '../../lib/familia'
-
-/**
- * La cuota de un hermano en una palabra. Son CUATRO estados, no dos.
- *
- * Y SALE DE SUS RECIBOS, no de la ficha. Antes se miraba `h.cuotaAlDia`, un
- * booleano guardado que nadie actualizaba nunca al cobrar: se ponía en falso
- * al dar de alta y ahí se quedaba para siempre. Todo el censo salía
- * «Pendiente» —hubieran pagado o no—, y de ese mismo dato bebían Informes, la
- * segmentación de comunicados y el área del propio hermano. Llegó dicho como
- * «las cuotas no se ponen en condiciones, no puedes ver si alguien tiene la
- * cuota en orden», y era literalmente cierto.
- *
- * El cuarto estado es «sin emitir»: a quien no se le ha emitido ningún recibo
- * no se le puede llamar moroso ni decir que está al día. Es lo que le pasa a
- * un censo recién importado, que es el caso de la captura que llegó.
- */
-function cuotaEnPalabras(s: SituacionCuota): string {
-  return etiquetaDeSituacion(s).texto
-}
-
-function cuotaClass(s: SituacionCuota): string {
-  return etiquetaDeSituacion(s).clase
-}
-
-function estadoClass(estado: EstadoHermano) {
-  if (estado === 'Activo') return 'pill--ok'
-  if (estado === 'Nuevo') return 'pill--info'
-  return 'pill--off'
-}
-
-
-/** Solicitudes ya aprobadas al llegar con `?aprobar=`. A nivel de módulo para
- *  sobrevivir al remontaje que React hace en desarrollo. */
-const YA_APROBADAS = new Set<string>()
+import { useEtiquetas } from '../../lib/etiquetas'
+import { formatCurrency, isPlausibleIban, maskIban, porQueNoValeElIban } from '../../lib/format'
+import { useHermandadSettings } from '../../lib/hermandadSettings'
+import {
+  cumpleEsteMes,
+  diaYMes,
+  edadDe,
+  esMiembro,
+  esSuCumpleHoy,
+  fraseAntiguedad,
+  mesEnCurso,
+  tonoDe,
+} from '../../lib/hermanoFicha'
+import { CLAVES_DATOS, leerDatos } from '../../lib/persistencia'
+import { CLAVE_PERSONAL, cargosEfectivos, getPersonal, type MiembroPersonal } from '../../lib/personal'
+import { apuntar } from '../../lib/registroActividad'
+import { borrarDatosHermano, exportarDatosHermano, recopilarDatosHermano } from '../../lib/rgpd'
+import { etiquetasDe, etiquetasQueSonAutomaticas, indiceRoles } from '../../lib/rolesPapeleta'
+import {
+  etiquetaSegmento,
+  filtrarSegmento,
+  limpiarCriterios,
+  mismosCriterios,
+  type CriteriosSegmento,
+} from '../../lib/segmentacion'
+import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { problemaDeTelefono } from '../../lib/telefono'
+import { etiquetaTramo, useTramos } from '../../lib/tramos'
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { FilasDelCenso } from './censo/FilasDelCenso'
+import { CajonSolicitudes } from './censo/CajonSolicitudes'
+import { useSolicitudesDeAlta } from './censo/solicitudesDeAlta'
+import {
+  COLUMNAS,
+  SIN_SESGO,
+  cuotaClass,
+  cuotaEnPalabras,
+  estadoClass,
+  type OrdenCampo,
+} from './censo/columnas'
 
 export default function Hermanos() {
   // Antes de mandar nada, traer de la base la configuración de correo de
@@ -457,233 +468,28 @@ export default function Hermanos() {
   const [identError, setIdentError] = useState<string | null>(null)
   const [identSaved, setIdentSaved] = useState(false)
 
-  const solicitudesRemotas = useSolicitudes()
-  const [solicitudes, setSolicitudesState] = useState<SolicitudAlta[]>(solicitudesRemotas)
-  useEffect(() => setSolicitudesState(solicitudesRemotas), [solicitudesRemotas])
+  /*
+   * LAS SOLICITUDES DE ALTA, en `censo/solicitudesDeAlta.tsx`.
+   *
+   * Sale entero —el estado, el aprobar de ciento cuarenta líneas, el rechazo
+   * con su motivo y el cajón— porque de todo lo que toca solo estas cinco
+   * cosas vienen de fuera. Se queda aquí `solicitudesOpen`, que es de esta
+   * pantalla: el botón que lo abre está en la barra de arriba.
+   */
+  const alta = useSolicitudesDeAlta({
+    hermanos,
+    setHermanos,
+    hermandad,
+    onAvisoDeAcceso: setAvisoAcceso,
+    onReciénDadoDeAlta: setJustAddedId,
+  })
+  const { pendientes } = alta
   const [solicitudesOpen, setSolicitudesOpen] = useState(false)
-  /* Qué solicitud se está rechazando y con qué motivo. Se pide SIEMPRE: un
-     «no» sin explicación obliga a la persona a llamar a la hermandad. */
-  const [rechazando, setRechazando] = useState<string | null>(null)
-  const [motivoRechazo, setMotivoRechazo] = useState('')
   const [importarOpen, setImportarOpen] = useState(false)
   const [bajasOpen, setBajasOpen] = useState(false)
-  const pendientes = useMemo(() => solicitudes.filter((s) => s.estado === 'Pendiente'), [solicitudes])
 
-  function actualizarSolicitudes(next: SolicitudAlta[]) {
-    setSolicitudesState(next)
-    saveSolicitudes(next)
-  }
 
-  /*
-   * APROBAR AL LLEGAR DESDE NOTIFICACIONES.
-   *
-   * Allí el botón pone «Dar de alta», y antes solo traía aquí: llegó dicho
-   * como «si le doy a dar de alta en notificaciones no funciona, tengo que
-   * irme a Hermanos». Y tenía razón — un botón que promete un alta y solo
-   * cambia de pantalla es una promesa rota.
-   *
-   * Se hace así, con un parámetro, y NO copiando la lógica al otro lado: dar
-   * de alta a un hermano son cincuenta líneas con número correlativo, control
-   * de DNI repetido, creación de la cuenta de acceso y correo de bienvenida
-   * —y un caso aparte para los menores a cargo—. Duplicarlo sería tener dos
-   * altas distintas, y la copia se quedaría atrás a la primera.
-   *
-   * `hecho` evita repetirlo si React vuelve a montar el efecto: aprobar dos
-   * veces daría de alta a la misma persona dos veces.
-   */
-  useEffect(() => {
-    const id = params.get('aprobar')
-    if (!id || YA_APROBADAS.has(id)) return
-    const sol = solicitudes.find((x) => x.id === id && x.estado === 'Pendiente')
-    if (!sol) return
-    /*
-     * Se apunta ANTES de empezar, y en el módulo, no en un `useRef`.
-     *
-     * Con el ref se daba de alta DOS VECES: React monta, desmonta y vuelve a
-     * montar los componentes en desarrollo, y en el remontaje el ref vuelve a
-     * empezar. Se veía en el censo — la misma persona repetida— y el control
-     * de DNI de dentro no lo pillaba porque las dos aprobaciones leían la
-     * lista antes de que ninguna hubiera terminado.
-     *
-     * Un `Set` del módulo sobrevive al remontaje y a las dos llamadas del
-     * mismo tirón, que es lo único que hace falta aquí.
-     */
-    YA_APROBADAS.add(id)
-    void aprobarSolicitud(sol).then(() => {
-      const limpio = new URLSearchParams(params)
-      limpio.delete('aprobar')
-      setParams(limpio, { replace: true })
-    })
-    /* Sin `aprobarSolicitud` ni `setParams` en las dependencias: la primera se
-       recrea en cada pintado y volvería a ejecutar el efecto en bucle. Lo que
-       hace seguro dejarlas fuera es el `aprobadaAlLlegar`, que no deja aprobar
-       dos veces el mismo identificador. */
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, solicitudes])
 
-  async function aprobarSolicitud(sol: SolicitudAlta) {
-    // Limpio, igual que en el alta a mano: si no, el mismo señor con puntos y
-    // sin puntos pasaba el control y entraba dos veces en el censo.
-    const dniSolicitud = limpiarDni(sol.dni)
-    if (hermanos.some((h) => limpiarDni(h.dni) === dniSolicitud)) {
-      // Este rechazo lo decide la aplicación, así que el motivo lo escribe
-      // ella: es el único caso en que se sabe seguro por qué.
-      actualizarSolicitudes(solicitudes.map((s) => (
-        s.id === sol.id
-          ? resolverSolicitud(s, 'Rechazada', 'Ya hay un hermano/a con ese DNI en el censo de la hermandad.')
-          : s
-      )))
-      return
-    }
-    const nuevo: Hermano = {
-      id: nuevoId(),
-      // El número definitivo se asigna dentro del setHermanos de abajo, ya con
-      // la lista más reciente: calcularlo aquí (antes del await) podía repetir
-      // número si entretanto se daba de alta a otro hermano.
-      numero: 0,
-      nombre: sol.nombre,
-      estado: 'Nuevo',
-      antiguedad: new Date().getFullYear(),
-      email: sol.email,
-      telefono: sol.telefono || 'Sin datos',
-      direccion: 'Sin datos',
-      cuotaAlDia: false,
-      iban: null,
-      dni: dniSolicitud,
-      // Vacía a propósito: la de verdad vive en Supabase Auth. Ver claves.ts.
-      claveAcceso: '',
-      authUserId: null,
-      // Si la pidió un hermano para un hijo suyo, el menor queda a su cargo y
-      // podrá gestionarle la papeleta desde su propia cuenta.
-      ...(sol.tutorId ? { tutorId: sol.tutorId } : {}),
-      ...(sol.fechaNacimiento ? { fechaNacimiento: sol.fechaNacimiento } : {}),
-    }
-    /*
-     * A UN MENOR NO SE LE CREA CUENTA, y no hacerlo es el arreglo.
-     *
-     * Cuando un hermano pide el alta de un hijo desde su área, del menor no se
-     * piden ni correo ni contraseña: entra su tutor por él, desde su propia
-     * cuenta. La solicitud viaja con `clavePropuesta: ''` y con el correo DEL
-     * PADRE, que es a quien hay que escribir.
-     *
-     * Y aquí se le intentaba crear una cuenta igualmente. Fallaba siempre, y
-     * por partida doble: la contraseña vacía no la acepta Supabase, y el
-     * correo del padre ya tiene cuenta. Así que aprobar el alta de un hijo
-     * terminaba SIEMPRE con la banda de aviso «la ficha se ha guardado, pero
-     * NO se ha creado su acceso: el correo ya lo usa otra cuenta» — un aviso
-     * que no significa nada aquí, porque ese menor no necesita ninguna cuenta,
-     * y que hacía pensar que el alta no había funcionado.
-     */
-    /*
-     * MENOR ES QUIEN TIENE TUTOR, Y SOLO ESO.
-     *
-     * Aquí ponía `Boolean(sol.tutorId) || !sol.clavePropuesta.trim()`. El
-     * segundo trozo era un cinturón de más mientras el formulario pedía una
-     * contraseña; desde que NO la pide —se guardaba en claro, ver
-     * `FormulariosWeb.tsx`— todas las solicitudes llegan sin ella, y con esa
-     * condición TODO EL MUNDO pasaría por menor: se aprobaría el alta y no se
-     * le crearía cuenta a nadie, sin un solo aviso. Quien tiene tutor es menor;
-     * lo demás no lo dice la contraseña.
-     */
-    const esMenorACargo = Boolean(sol.tutorId)
-    /* Una clave de un solo uso, que se le manda por correo al darle la
-       bienvenida. No se guarda en la ficha. */
-    const claveProvisional = claveDeUnSoloUso()
-    const acceso = esMenorACargo
-      ? { id: null, error: null }
-      : await crearAccesoHermano(sol.email, claveProvisional, sol.dni, sol.nombre)
-    nuevo.authUserId = acceso.id
-    // Cómo se llama su cuenta por dentro. Sin apuntarlo, la pantalla de entrar
-    // no la encuentra a partir de su DNI y esa persona no entra nunca.
-    nuevo.correoAcceso = acceso.correoAcceso ?? null
-    // Si no se ha podido crear su acceso, se DICE. Ver crearAccesoHermano().
-    if (acceso.error) setAvisoAcceso(acceso.error)
-    // La comprobación de DNI se repite AQUÍ, ya con la lista más reciente: entre
-    // el clic y el final del alta (una llamada de red) pudo entrar otro hermano.
-    let duplicado = false
-    let suNumero = 0
-    setHermanos((prev) => {
-      // Con `limpiarDni`, igual que la comprobación de arriba: con
-      // `toUpperCase()` a secas, «12.345.678-A» y «12345678A» pasaban por
-      // personas distintas y la misma entraba dos veces.
-      if (prev.some((h) => mismoDni(h.dni, sol.dni))) {
-        duplicado = true
-        return prev
-      }
-      suNumero = Math.max(0, ...prev.map((h) => h.numero)) + 1
-      return [...prev, { ...nuevo, numero: suNumero }]
-    })
-    /*
-     * Y SE LE DA LA BIENVENIDA por correo, con su número y cómo entrar.
-     *
-     * Antes había que decírselo a mano, por teléfono o en el mostrador. En una
-     * hermandad que da de alta a treinta personas después de un cabildo, eso
-     * son treinta llamadas — y las que no se hacen son treinta personas que no
-     * saben que tienen un área.
-     *
-     * La contraseña NO va escrita en el correo: ver src/lib/bienvenida.ts.
-     */
-    if (!duplicado) {
-      if (esMenorACargo) {
-        /* Al menor no se le manda «entra con tu DNI»: no tiene cuenta. Se
-           avisa a QUIEN LO PIDIÓ, que es quien va a gestionarlo. */
-        const tutor = hermanos.find((h) => h.id === sol.tutorId)
-        if (tutor?.email) {
-          void avisarPorCorreo(
-            [{ id: tutor.id, nombre: tutor.nombre, email: tutor.email }],
-            'ficha',
-            'Ya está dado de alta',
-            [
-              `${nuevo.nombre} ya está en el censo de la hermandad, con el número ${suNumero}.`,
-              'Lo gestionas desde tu propia área de hermano, en «Mi familia»: desde ahí puedes '
-              + 'ver sus cuotas y sacarle la papeleta de sitio.',
-            ],
-            'Este aviso lo puedes apagar desde tu área de hermano.',
-          )
-        }
-      } else {
-        void darLaBienvenida({
-          id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
-          numero: suNumero,
-          // Siempre se la mandamos: nunca la ha elegido ella. Y solo si su
-          // cuenta se ha llegado a crear, claro.
-          claveProvisional: acceso.id ? claveProvisional : null,
-          hermandad: hermandad.nombreLegal,
-        })
-      }
-    }
-    // Sobre el estado más reciente de las solicitudes, no sobre el de antes del
-    // await: si no, aprobar dos seguidas revertía la primera a «Pendiente».
-    setSolicitudesState((prev) => {
-      const next = prev.map((s) => (s.id === sol.id
-        ? resolverSolicitud(
-          s,
-          duplicado ? 'Rechazada' : 'Aprobada',
-          duplicado ? 'Ya hay un hermano/a con ese DNI en el censo de la hermandad.' : undefined,
-        )
-        : s))
-      saveSolicitudes(next)
-      return next
-    })
-    setJustAddedId(nuevo.id)
-    setTimeout(() => setJustAddedId(null), 3000)
-  }
-
-  /**
-   * Rechaza una solicitud CON EL PORQUÉ, que es lo que se pidió.
-   *
-   * Antes se ponía «Rechazada» y ya. Quien la había mandado no volvía a saber
-   * nada: la solicitud desaparecía de su área sin decir si le habían dado de
-   * alta, si se había perdido o si le habían dicho que no. El motivo se guarda
-   * en la solicitud y se lee en «Mi familia» (ver lib/familia.ts).
-   */
-  function rechazarSolicitud(sol: SolicitudAlta, motivo: string) {
-    actualizarSolicitudes(solicitudes.map((s) => (
-      s.id === sol.id ? resolverSolicitud(s, 'Rechazada', motivo) : s
-    )))
-    setRechazando(null)
-    setMotivoRechazo('')
-  }
 
   useEffect(() => {
     setIbanDraft(selected?.iban ?? '')
@@ -2683,214 +2489,12 @@ export default function Hermanos() {
         </div>
       </Drawer>
 
-      <Drawer
-        open={solicitudesOpen}
-        onClose={() => setSolicitudesOpen(false)}
-        title="Solicitudes de alta"
-        subtitle={`${pendientes.length} pendiente${pendientes.length === 1 ? '' : 's'}`}
-      >
-        <div className="ficha">
-          {pendientes.length === 0 ? (
-            <p className="form-hint">No hay solicitudes pendientes.</p>
-          ) : (
-            pendientes.map((sol) => (
-              <div className="assign-box" key={sol.id}>
-                <div className="ficha__row">
-                  <span className="pill pill--warn">Pendiente</span>
-                  <span className="pill pill--off">{sol.fecha}</span>
-                </div>
-                <dl className="ficha__list">
-                  <div><dt>Nombre</dt><dd>{sol.nombre}</dd></div>
-                  <div><dt>DNI / NIE</dt><dd>{sol.dni}</dd></div>
-                  <div><dt>Correo</dt><dd>{sol.email}</dd></div>
-                  <div><dt>Teléfono</dt><dd>{sol.telefono || 'Sin datos'}</dd></div>
-                  {sol.fechaNacimiento && (
-                    <div><dt>Fecha de nacimiento</dt><dd>{sol.fechaNacimiento}</dd></div>
-                  )}
-                  {/* La pidió un hermano para un hijo suyo: al aprobarla, el
-                      menor queda a su cargo. */}
-                  {sol.tutorId && (
-                    <div>
-                      <dt>A cargo de</dt>
-                      <dd>{hermanos.find((h) => h.id === sol.tutorId)?.nombre ?? 'un hermano dado de baja'}</dd>
-                    </div>
-                  )}
-                </dl>
-                {/*
-                  RECHAZAR PIDE EL PORQUÉ. Antes era un botón y ya: quedaba
-                  «Rechazada» y la persona que la mandó no volvía a saber nada
-                  —la solicitud desaparecía de su área sin decir si le habían
-                  dado de alta, si se había perdido o si le habían dicho que
-                  no—. Los motivos de siempre están hechos para no tener que
-                  escribirlos, pero se puede escribir otro.
-                */}
-                {rechazando === sol.id ? (
-                  <div className="assign-box assign-box--anidada">
-                    <label htmlFor={`motivo-${sol.id}`}>¿Por qué se rechaza?</label>
-                    <p className="form-hint">
-                      Lo va a leer {sol.nombre} en su área. Sé breve y concreto: si es algo que
-                      puede arreglar (un DNI mal escrito, un dato que falta), dilo.
-                    </p>
-                    <div className="filters">
-                      {MOTIVOS_DE_RECHAZO.map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          className={`chip${motivoRechazo === m ? ' chip--active' : ''}`}
-                          onClick={() => setMotivoRechazo(m)}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="form-row">
-                      <input
-                        id={`motivo-${sol.id}`}
-                        type="text"
-                        value={motivoRechazo}
-                        onChange={(e) => setMotivoRechazo(e.target.value)}
-                        placeholder="O escríbelo tú"
-                      />
-                    </div>
-                    <div className="assign-box__row">
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm rgpd-borrar"
-                        disabled={!motivoRechazo.trim()}
-                        onClick={() => rechazarSolicitud(sol, motivoRechazo)}
-                      >
-                        Rechazar y avisar
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => { setRechazando(null); setMotivoRechazo('') }}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="assign-box__row">
-                    <button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSolicitud(sol)}>
-                      Aprobar y dar de alta
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm rgpd-borrar"
-                      onClick={() => { setRechazando(sol.id); setMotivoRechazo('') }}
-                    >
-                      Rechazar
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </Drawer>
+      <CajonSolicitudes
+        alta={alta}
+        hermanos={hermanos}
+        abierto={solicitudesOpen}
+        onCerrar={() => setSolicitudesOpen(false)}
+      />
     </div>
   )
 }
-
-
-/**
- * El cuerpo de la tabla del censo. Va aparte y dentro de `memo` para que
- * teclear en el buscador no lo recorra entero en cada letra: ver el comentario
- * donde se usa. Las props son la lista ya filtrada y valores estables; si
- * ninguna cambia, el render urgente ni entra aquí.
- */
-const FilasDelCenso = memo(function FilasDelCenso({
-  lista,
-  justAddedId,
-  marcados,
-  situaciones,
-  tramos,
-  onAbrir,
-  onMarcar,
-}: {
-  lista: Hermano[]
-  justAddedId: string | null
-  marcados: Set<string>
-  situaciones: Map<string, SituacionCuota>
-  tramos: Map<string, string>
-  onAbrir: (id: string) => void
-  onMarcar: (id: string) => void
-}) {
-  return (
-    <>
-      {lista.map((h) => (
-                          <tr
-                key={h.id}
-                className={h.id === justAddedId ? 'row--flash' : undefined}
-                {...filaQueAbre(() => onAbrir(h.id))}
-              >
-                <td className="col-marca" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={marcados.has(h.id)}
-                    onChange={() => onMarcar(h.id)}
-                    aria-label={`Marcar a ${h.nombre}`}
-                  />
-                </td>
-                <td className="num col-opcional">{h.numero > 0 ? h.numero : '—'}</td>
-                <td>
-                  <div className="row-person">
-                    {/* Un tono estable por persona: el censo deja de ser una
-                        columna de círculos grises todos iguales. */}
-                    <span className="row-avatar" style={{ '--tono': tonoDe(h.nombre).fondo } as CSSProperties}>
-                      {initials(h.nombre)}
-                    </span>
-                    <span>
-                      <span className="row-person__name">{h.nombre}</span>
-                      <span className="row-person__sub">{h.email}</span>
-                      {/* En el móvil se ocultan Nº, tramo y antigüedad. */}
-                      <span className="row-person__sub solo-movil">
-                        Nº {h.numero > 0 ? h.numero : '—'} · {cuotaEnPalabras((situaciones.get(h.id) ?? 'sinEmitir')).toLowerCase()} · {tramos.get(h.id) ?? 'sin papeleta'}
-                      </span>
-                    </span>
-                  </div>
-                </td>
-                <td className="col-opcional">
-                  {tramos.get(h.id) ?? <span className="table-muted">Sin papeleta</span>}
-                </td>
-                <td>
-                  <span className={`pill ${estadoClass(h.estado)}`}>{h.estado}</span>
-                  {h.bajaSolicitada && h.estado !== 'Baja' && (
-                    <span
-                      className="pill-avisado"
-                      title={`Pidió la baja${h.bajaSolicitadaEl ? ` el ${h.bajaSolicitadaEl}` : ''}`}
-                    >
-                      Pide la baja
-                    </span>
-                  )}
-                </td>
-                <td className="col-opcional">
-                  <span className={`pill ${cuotaClass((situaciones.get(h.id) ?? 'sinEmitir'))}`}>{cuotaEnPalabras((situaciones.get(h.id) ?? 'sinEmitir'))}</span>
-                </td>
-                <td className="num col-opcional">
-                  {/* Sin antigüedad, una raya: el censo llegó a poner «NaN
-                      años» debajo de cada nombre cuando esa columna no venía
-                      en el Excel que se importó. */}
-                  {h.antiguedad || '—'}
-                  {aniosDeHermandad(h.antiguedad) !== null && (
-                    <span className="table-subtle"> · {aniosDeHermandad(h.antiguedad)} años</span>
-                  )}
-                </td>
-                <td className="col-opcional">
-                  <button
-                    className="icon-btn"
-                    title="Ver ficha"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onAbrir(h.id)
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                  </button>
-                </td>
-              </tr>
-      ))}
-    </>
-  )
-})

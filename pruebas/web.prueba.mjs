@@ -1,4 +1,5 @@
 /** Enlaces propios y fichas de la web pública (noticias y titulares). */
+import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
   const m = await cargar('src/lib/webPublica.ts')
 
@@ -145,10 +146,10 @@ async function elCartelYLaCaridad({ caso, m }) {
     tipos.includes('cartel') && tipos.includes('caridad'))
   // EN SU SITIO. Añadidas al final quedaban detrás de Contacto, que es el
   // cierre de la web: parecía un despiste y había que arrastrarlas a mano.
-  caso('y no detrás de Contacto', true, tipos.indexOf('cartel') < tipos.indexOf('contacto'))
-  caso('el cartel va después de los cultos', true, tipos.indexOf('cultos') < tipos.indexOf('cartel'))
+  caso('y no detrás de Contacto', true, antesQue(tipos, 'cartel', 'contacto'))
+  caso('el cartel va después de los cultos', true, antesQue(tipos, 'cultos', 'cartel'))
   // Y lo que ya tenía, intacto y en su orden.
-  caso('lo que ya tenía sigue', true, tipos.indexOf('historia') < tipos.indexOf('cultos'))
+  caso('lo que ya tenía sigue', true, antesQue(tipos, 'historia', 'cultos'))
 
   // Apagadas de fábrica: una sección de obra social vacía queda peor que no
   // tenerla, y no todas las hermandades tienen cartel propio.
