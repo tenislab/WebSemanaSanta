@@ -204,7 +204,7 @@ export default async function ({ cargar, caso }) {
    * Y QUE LA PANTALLA LO USE BIEN, QUE ES DONDE SE PIERDE UN CENSO
    * ==========================================================================
    */
-  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const cfg = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
 
   // --- SE PIDE DOS VECES ---
   caso('se pide la contraseña dos veces', true,
@@ -230,6 +230,36 @@ export default async function ({ cargar, caso }) {
    */
   caso('se puede descargar sin cifrar', true, /Descargar sin cifrar/.test(cfg))
   caso('y cancelar', true, /Cancelar\s*\n?\s*<\/button>/.test(cfg))
+
+  /*
+   * ==========================================================================
+   * Y QUE LA PANTALLA CIFRE DE VERDAD, QUE NO LO VIGILABA NADIE
+   * ==========================================================================
+   *
+   * Todo lo de arriba comprueba lo que RODEA al cifrado: que se pida la
+   * contraseña dos veces, que se avise de que no hay forma de recuperarla, que
+   * el botón esté apagado si no coinciden. Que la copia se cifre NO lo miraba
+   * nada: cambiando la llamada a `cifrarYComprobar` por otra cualquiera, las
+   * 5646 pruebas seguían pasando y la copia salía en claro. Salió rompiéndolo
+   * a propósito al partir el fichero.
+   *
+   * Y es la peor de las tres que han salido así: lo que se descarga es el censo
+   * entero de la hermandad —nombres, direcciones, DNI, IBAN— y lo que lo
+   * protege es exactamente esa línea.
+   */
+  caso('la copia se cifra de verdad', true, /cifrarYComprobar\s*\(/.test(cfg))
+  /*
+   * Y SE COMPRUEBA QUE DESCIFRA ANTES DE DARLA. Una copia que no se puede
+   * abrir es peor que no tener copia: la hermandad cree que la tiene y lo
+   * descubre el día que hace falta. `cifrarYComprobar` lo hace, y por eso se
+   * llama así; usar `cifrar` a secas dejaría de comprobarlo.
+   */
+  caso('y se comprueba que descifra antes de darla', false,
+    /await cifrarCopia\s*\(/.test(cfg))
+  // La cifrada sale con otra extensión y como binario: `.json` invita a
+  // abrirla con cualquier cosa y a darla por corrupta.
+  caso('la cifrada se descarga como .gobergo', true,
+    /\.gobergo`,[\s\S]{0,120}?application\/octet-stream/.test(cfg))
 
   // --- AL RESTAURAR SE RECONOCE Y SE PIDE ---
   caso('al restaurar se reconoce una copia cifrada', true, /if \(esCopiaCifrada\(obj\)\)/.test(cfg))

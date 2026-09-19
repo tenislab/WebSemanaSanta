@@ -125,6 +125,7 @@ export default async function ({ cargar, caso }) {
   await elCartelYLaCaridad({ caso, m })
   await elEnlaceDeUnCulto({ caso, m })
   await laHemeroteca({ caso, m })
+  await cadaSeccionTieneSuAncla({ cargar, caso })
 }
 
 /**
@@ -240,4 +241,45 @@ async function laHemeroteca({ caso, m }) {
   // Y las ocultas no salen ni en la hemeroteca.
   const conOculta = m.noticiasPorAnio([n('x', '2025-01-01'), n('y', '2025-02-01', { publicada: false })])
   caso('una noticia oculta no entra', 1, conOculta[0].noticias.length)
+
+}
+
+/*
+ * ============================================================================
+ * CADA SECCIÓN TIENE QUE PINTAR SU ANCLA
+ * ============================================================================
+ *
+ * El menú de la web construye su enlace con el TIPO de la sección —`ancla:
+ * s.tipo`, en `SitioContenido.tsx`— así que la sección tiene que pintar
+ * `<section id="<tipo>">` o el enlace del menú no lleva a ninguna parte.
+ *
+ * Esto no lo vigilaba nada, y lo rompí yo al repartir el fichero: un renombrado
+ * automático convirtió `id="cultos"` en `id="sec.cultos"` y la sección de
+ * cultos se quedó sin ancla. Las 5654 pruebas siguieron pasando, el texto de la
+ * página salía IDÉNTICO, y solo lo delató la foto —569 filas de 1100
+ * cambiadas, que es lo que pinta un desplazamiento y no un cambio de
+ * contenido—. Un enlace del menú que no salta no se ve en ninguna prueba de
+ * texto y tampoco al mirar la web por encima.
+ */
+async function cadaSeccionTieneSuAncla({ cargar, caso }) {
+  const m = await cargar('src/lib/webPublicaDatos.ts')
+  const sitio = await (await import('./fuentes.mjs')).fuenteDelSitio()
+
+  // El ancla sale del tipo: se comprueba que se sigue construyendo así.
+  caso('el menú hace el enlace con el tipo de la sección', true,
+    /ancla: s\.tipo/.test(sitio))
+
+  for (const tipo of Object.keys(m.SECCIONES_INFO)) {
+    /*
+     * `paginas` es la excepción, y está dicha en su código: cada página del
+     * menú es su propia sección anclable, así que su id lleva el id de la
+     * página y no el tipo.
+     */
+    if (tipo === 'paginas') {
+      caso('las páginas anclan por su id', true, /id=\{`pagina-\$\{p\.id\}`\}/.test(sitio))
+      continue
+    }
+    caso(`la sección «${tipo}» pinta su ancla`, true,
+      new RegExp(`<section id="${tipo}"`).test(sitio))
+  }
 }

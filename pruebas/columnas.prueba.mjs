@@ -289,7 +289,7 @@ async function guardadosQueSeVen({ caso }) {
 
   // El visto bueno verde SOLO si de verdad se ha guardado. Un visto bueno que
   // sale pase lo que pase no informa: engaña.
-  const conf = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const conf = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
   caso('el verde de los tramos depende del resultado', true,
     /if \(!r\.ok \|\| !rAjustes\.ok\) \{[\s\S]{0,420}setTramosSaved\(false\)/.test(conf))
   // El precio se edita en la tarjeta de los tramos, así que lo tiene que

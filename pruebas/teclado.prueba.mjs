@@ -91,7 +91,7 @@ export default async function ({ caso }) {
     const t = await readFile(`src/pages/app/${m}.tsx`, 'utf8')
     caso(`${m}: el buscador tiene etiqueta`, true, /className="search-box"[\s\S]{0,200}aria-label="/.test(t))
   }
-  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const cfg = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
   caso('los dos campos de color tienen etiqueta', 2,
     (cfg.match(/className="color-picker-hex"\n\s*aria-label="/g) || []).length)
 

@@ -88,7 +88,7 @@ export default async function ({ cargar, caso }) {
    * que alguien puede haberse equivocado de archivo; sin esto no habría marcha
    * atrás de la marcha atrás.
    */
-  const conf = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const conf = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
   caso('antes de volcar se descarga lo que hay ahora', true,
     /antes-de-restaurar-\$\{marca\}\.json/.test(conf))
   caso('y se descarga ANTES de volcar', true,

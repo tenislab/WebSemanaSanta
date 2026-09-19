@@ -123,7 +123,28 @@ export async function fuenteDeLosComunicados() {
 export function cuerpoDeLaFuncion(fuente, marca) {
   const desde = fuente.indexOf(marca)
   if (desde < 0) return ''
-  const abre = fuente.indexOf('{', desde)
+  /*
+   * SE SALTA LA LISTA DE PARÁMETROS ANTES DE BUSCAR EL CUERPO.
+   *
+   * La primera versión cogía la primera `{` después de la marca, y con un
+   * `function useConvocar({ campana, … }: { … })` esa llave es la de
+   * desestructurar: el conteo se cerraba ahí y devolvía LOS PARÁMETROS, no el
+   * cuerpo. Un guardia acotado así no vigila nada —busca en un trozo donde lo
+   * que busca nunca está— y sale rojo, o peor, verde por casualidad.
+   *
+   * Así que primero se cierra el paréntesis de los parámetros, contando, y la
+   * llave del cuerpo es la primera que venga DESPUÉS.
+   */
+  const par = fuente.indexOf('(', desde)
+  let arranque = desde
+  if (par >= 0 && par < (fuente.indexOf('{', desde) < 0 ? Infinity : fuente.length)) {
+    let p = 0
+    for (let i = par; i < fuente.length; i++) {
+      if (fuente[i] === '(') p++
+      else if (fuente[i] === ')' && --p === 0) { arranque = i; break }
+    }
+  }
+  const abre = fuente.indexOf('{', arranque)
   if (abre < 0) return ''
   let nivel = 0
   for (let i = abre; i < fuente.length; i++) {
@@ -170,6 +191,46 @@ export async function fuenteDeLasCuotas() {
 }
 
 /**
+ * LOS AJUSTES, ENTERA.
+ *
+ * `Configuracion.tsx` más lo que viva en `src/pages/app/ajustes/`. Dieciséis
+ * sitios en trece ficheros de prueba la vigilan leyendo su fuente, y lo que
+ * miran es variado y delicado: el NIF y el IBAN de la hermandad, el
+ * identificador de acreedor SEPA, la copia cifrada, el correo, los campos
+ * propios del censo y el teclado de los formularios.
+ */
+export async function fuenteDeLosAjustes() {
+  return (await fuente('src/pages/app/Configuracion.tsx')) + (await pegarCarpeta('src/pages/app/ajustes'))
+}
+
+/**
+ * LA WEB PÚBLICA PINTADA, ENTERA.
+ *
+ * `SitioContenido.tsx` más lo que viva en `src/components/sitio/`. Aquí no son
+ * dieciséis guardias como en otras pantallas: son pocos, pero uno de ellos es
+ * de la clase silenciosa y de los que más duelen —que la web NO herede el
+ * teléfono, la dirección ni el correo personales de Configuración—. Leyendo un
+ * fichero que ha adelgazado, ese guardia se queda verde mientras el patrón
+ * puede volver a aparecer en los ficheros nuevos.
+ */
+export async function fuenteDelSitio() {
+  return (await fuente('src/components/SitioContenido.tsx')) + (await pegarCarpeta('src/components/sitio'))
+}
+
+/**
+ * LAS PAPELETAS DE SITIO, ENTERA.
+ *
+ * `Papeletas.tsx` más lo que viva en `src/pages/app/papeletas/`. Ocho sitios en
+ * ocho ficheros de prueba la vigilan, y lo que miran es delicado por partida
+ * doble: el cobro de la papeleta —que va al libro de cuentas— y el sitio que le
+ * toca a cada hermano en el cortejo, que es lo que una hermandad discute
+ * durante todo el año.
+ */
+export async function fuenteDeLasPapeletas() {
+  return (await fuente('src/pages/app/Papeletas.tsx')) + (await pegarCarpeta('src/pages/app/papeletas'))
+}
+
+/**
  * La fuente de lo que vive en esa ruta, contando con que una pantalla puede
  * estar partida en varios ficheros.
  *
@@ -184,5 +245,8 @@ export async function fuenteDe(ruta) {
   if (ruta === 'src/pages/app/Hermanos.tsx') return fuenteDelCenso()
   if (ruta === 'src/pages/app/Comunicados.tsx') return fuenteDeLosComunicados()
   if (ruta === 'src/pages/app/Cuotas.tsx') return fuenteDeLasCuotas()
+  if (ruta === 'src/pages/app/Configuracion.tsx') return fuenteDeLosAjustes()
+  if (ruta === 'src/components/SitioContenido.tsx') return fuenteDelSitio()
+  if (ruta === 'src/pages/app/Papeletas.tsx') return fuenteDeLasPapeletas()
   return fuente(ruta)
 }

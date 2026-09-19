@@ -20,7 +20,7 @@ Continúa la numeración de `docs/HOJA-DE-RUTA.md`, que llega hasta F17.
 | **F19** | Editor de SEO | **hecho** salvo desplegar `api/w.ts` (ops, no código) — ver apéndice |  |
 | **F20** | La copia, cifrada al descargar | **hecho** — ver el apéndice | nada |
 | **F21** | Lo que quedaba de antes | trámites y F15 | el banco, el dominio |
-| **F22** | Deuda técnica | **hecha entera**: la cola sin conexión y el reparto de los CINCO ficheros gordos (`WebPublica.tsx`, `HermanoPortal.tsx`, `Hermanos.tsx`, `Comunicados.tsx`, `Cuotas.tsx`) | nada |
+| **F22** | Deuda técnica | **hecha entera**: la cola sin conexión y el reparto de los OCHO ficheros gordos (`WebPublica.tsx`, `HermanoPortal.tsx`, `Hermanos.tsx`, `Comunicados.tsx`, `Cuotas.tsx`, `Configuracion.tsx`, `SitioContenido.tsx`, `Papeletas.tsx`) | nada |
 | **F23** | Acabado visual | **hecho** — ver el apéndice | nada |
 
 **Cerrado ya:** el freno de la convocatoria fuera de plazo, «Hola {nombre}», el
@@ -303,6 +303,110 @@ mitad bonita.
 ## F22 — Deuda técnica
 
 No se ve desde fuera y por eso no se hace nunca. Dos cosas concretas:
+
+- ~~**`Papeletas.tsx`, el octavo, con 1.793 líneas.**~~ **Hecho:** 1.793 →
+  **1.138**. Nueve ficheros a `src/pages/app/papeletas/`: `renovarYSacar.ts`
+  (293 líneas, 8 entradas — los cuatro caminos por los que sale una papeleta,
+  más el aviso al hermano y el envío por correo), `solicitudes.ts` (130, 5),
+  `convocatoria.ts` (117, 5), `pagos.ts` (97, 5), `impresion.ts` (95, 3),
+  `CajonDeAjustes.tsx` (116, 7 props), `ZonaDeImpresion.tsx` (86, 4),
+  `CajonDeSolicitudes.tsx` (54, 1) y `fechas.ts` (16).
+
+  **Un corte rechazado: el cajón de la ficha del hermano.** Es lo más grande
+  que queda dentro, y sacarlo pedía **treinta props**. Treinta props no es un
+  componente: es la misma función con la lista de la compra delante. Se queda.
+
+  **Y el reparto destapó un guardia que no podía fallar.** Dos frases de la
+  convocatoria —«han salido N correos» y «mira Configuración → Correo»— están
+  también en el otro sitio de esta pantalla que manda correo, el de mandar UNA
+  papeleta al hermano. Mientras los dos vivían en el mismo fichero de 1.793
+  líneas el guardia no podía distinguirlos: borrando el recuento de la
+  convocatoria seguía verde, porque lo encontraba en el hermano de al lado.
+  Partida la pantalla, los dos guardias se acotan al cuerpo de `useConvocar` y
+  **ya saltan** al romperlo. Es la misma trampa que apareció cuatro veces
+  partiendo Ajustes, y van seis.
+
+  **Y la propia herramienta de acotar estaba mal.** `cuerpoDeLaFuncion`, que
+  es la que recorta un guardia al trozo que le toca, cogía la primera `{`
+  después del nombre de la función. Con un `function useConvocar({ campana, …
+  }: { … })` esa llave es la de desestructurar los parámetros: el conteo se
+  cerraba ahí y devolvía **la lista de parámetros, no el cuerpo**. Un guardia
+  acotado así busca en un trozo donde lo que busca no puede estar. Tres
+  guardias más la usan (`removeCuerpo` en Ajustes, `crearEncargo` en
+  Comunicados y el de deshacer); los tres se salvaban por tener paréntesis
+  normales, y uno de ellos ya llevaba escrito un `crear.length > 200` justo
+  para esto. Arreglada: ahora cierra primero el paréntesis de los parámetros,
+  contando, y busca el cuerpo después.
+
+  Las cinco piezas mudadas se rompieron a propósito, una a una y **en el sitio
+  donde se llaman, no en la definición** —renombrar una definición no hace
+  saltar a un guardia que vigila la llamada—: las cinco saltan. La de la
+  convocatoria se volvió a romper **después** de arreglar el recorte, porque
+  la primera vez había salido roja por el motivo equivocado: fallaba el
+  recorte, no el guardia.
+
+- ~~**`SitioContenido.tsx`, el séptimo, con 1.908 líneas.**~~ **Hecho:** 1.908 →
+  **456**. Es la web pública pintada, y la pieza grande era `Seccion`, un
+  despachador de dieciséis tipos de sección con 594 líneas. Catorce ficheros a
+  `src/components/sitio/`, agrupados **espejando los del editor**
+  (`TabsDeLaHermandad`, `TabsDeDinero` y uno por pestaña): no es un reparto
+  inventado, es el vocabulario que el proyecto ya tiene.
+
+  Los bloques salen como **funciones que devuelven JSX**, no como componentes.
+  A propósito: convertirlos en componentes habría metido dieciséis niveles
+  nuevos en el árbol de React, y lo que se estaba haciendo era mover código, no
+  cambiar cómo se pinta.
+
+  **Y aquí me cargué tres cosas, las tres con el mismo renombrado automático**,
+  que es lo que conviene contar antes del octavo reparto. Al mudar los bloques
+  hay que cambiar `web.x` por `sec.web.x`, y el renombrado entró donde no
+  debía:
+
+  · **`id="cultos"` → `id="sec.cultos"`**: la sección de cultos perdió su
+    ancla, y el enlace «Cultos» del menú de la propia web dejaba de saltar. Las
+    5654 pruebas siguieron pasando y el texto de la página salía IDÉNTICO: solo
+    lo delató la foto, con 569 filas de 1100 cambiadas —que es lo que pinta un
+    desplazamiento, no un cambio de contenido—. Ahora hay diecisiete guardias
+    nuevos: cada tipo de sección tiene que pintar su ancla, porque el menú la
+    construye con el tipo.
+  · **Prosa publicada**: «Con ella se sostienen los cultos … de la hermandad»
+    salía como «los p.cultos … de la p.hermandad». En la web, a la vista de
+    cualquiera. Cuatro sitios, tres de ellos en comentarios y uno en texto.
+  · **Un parámetro tapado**: se llamaba `p`, y en tres de los seis ficheros hay
+    `.map((p) => …)`. Hoy no mordía, pero es una trampa para el siguiente. Se
+    llama `sec`.
+
+  La lección, para la próxima: **un renombrado automático sobre JSX tiene que
+  apartar las cadenas, los comentarios y los nombres de atributo antes de
+  tocar nada.** El guion de `/tmp` ya lo hace y lo explica en su sitio.
+
+- ~~**`Configuracion.tsx`, el sexto, con 2.243 líneas.**~~ **Hecho, y el más
+  limpio de los seis:** 2.243 → **666 líneas**, menos de un tercio. Aquí las
+  costuras ya estaban puestas —la pantalla se organiza en diez secciones, y
+  cuatro de ellas ya eran componentes sueltos al final del fichero con CERO
+  props—. Diez ficheros a `src/pages/app/ajustes/`.
+
+  La medición dio números que no se habían visto en los otros cinco: la
+  sección de catálogos y cuotas, **una prop**; la de copias y datos, **dos**;
+  cuerpos y tramos, **504 líneas por cinco props**; y los cuatro componentes
+  del final, **cero**. No hubo que rechazar ningún corte.
+
+  Y aparecieron **dos huecos de vigilancia más**, los dos encontrados
+  rompiendo a propósito:
+
+  · **La copia no se comprobaba que se cifrara.** Las pruebas miraban todo lo
+    que rodea al cifrado y no la línea que cifra: cambiándola, las 5646
+    seguían pasando y la copia salía en claro — el censo entero con nombres,
+    direcciones, DNI e IBAN.
+  · **Los tres frenos de «cuerpos y tramos»** —no quitar un cuerpo que tiene
+    tramos, que vaciarle el nombre cuente igual, y que quede al menos uno— no
+    los vigilaba nada.
+
+  Y la trampa de los guardias sobre una fuente pegada apareció **cuatro veces
+  en este reparto**: un patrón que está en dos ficheros de la misma pantalla
+  deja de poder detectar una regresión en uno solo. Se arreglan recortando por
+  FUNCIÓN (`cuerpoDeLaFuncion`), que es específico y además sobrevive a la
+  siguiente mudanza. Conviene contarlo antes del séptimo reparto.
 
 - ~~**`Cuotas.tsx`, el quinto, con 2.349 líneas.**~~ **Hecho.** 2.349 → 1.787.
   Salieron siete ficheros a `src/pages/app/cuotas/`: la remesa bancaria con su

@@ -98,8 +98,7 @@ export default async function ({ cargar, caso }) {
 
 /** Y que esté donde se fue a buscarlo. */
 async function estaEnAjustes({ caso }) {
-  const { readFile } = await import('node:fs/promises')
-  const cfg = (await readFile('src/pages/app/Configuracion.tsx', 'utf8'))
+  const cfg = (await (await import('./fuentes.mjs')).fuenteDeLosAjustes())
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
 
   caso('«Conexiones» es una sección de Ajustes', true, /id: 'conexiones', label: 'Conexiones'/.test(cfg))

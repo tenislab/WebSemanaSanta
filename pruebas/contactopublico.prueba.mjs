@@ -119,7 +119,13 @@ export default async function ({ cargar, caso }) {
    * editor dice que no publica nada y la web publica el dato personal — que es
    * exactamente el fallo del que venimos, con otro disfraz.
    */
-  const sitio = leer('src/components/SitioContenido.tsx')
+  /*
+   * `fuenteDelSitio()` y no `leer`: la web pintada está partida en varios
+   * ficheros, y este guardia es de los que comprueban que un patrón NO esté.
+   * Leyendo solo el fichero de arriba se quedaría verde sin mirar los demás,
+   * que es justo donde podría volver la herencia del dato personal.
+   */
+  const sitio = await (await import('./fuentes.mjs')).fuenteDelSitio()
   const seo = leer('src/lib/seoWeb.ts')
   const publico = leer('src/pages/SitioPublico.tsx')
   for (const campo of ['direccion', 'telefono', 'email']) {

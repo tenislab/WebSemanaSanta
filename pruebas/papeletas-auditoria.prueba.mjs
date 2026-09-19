@@ -52,7 +52,7 @@ export default async function ({ cargar, caso }) {
   // Y que las DOS pantallas usen esta función, que es lo que impide que se
   // vuelvan a separar.
   const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
-  const secre = await readFile('src/pages/app/Papeletas.tsx', 'utf8')
+  const secre = await (await import('./fuentes.mjs')).fuenteDeLasPapeletas()
   caso('el área del hermano usa la función común', true, /conRenovacion\(prev, \{/.test(portal))
   caso('y secretaría también', true, /conRenovacion\(prev, \{/.test(secre))
   caso('secretaría ya no recibe el importe por parámetro', true,
@@ -107,6 +107,6 @@ export default async function ({ cargar, caso }) {
   const libCortejo = await readFile('src/lib/cortejo.ts', 'utf8')
   caso('sin tramos cargados no se avisa en falso', true,
     /if \(tramos\.length === 0\) return \[\]/.test(libCortejo))
-  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const cfg = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
   caso('y Configuración pregunta antes de quitarlo', true, /se quedan sin sitio en el cortejo/.test(cfg))
 }

@@ -12,7 +12,7 @@
 export default async function ({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
   const src = await readFile('src/components/TraerDatos.tsx', 'utf8')
-  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const cfg = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
 
   // --- Está donde se dice que está.
   caso('la pestaña existe en Ajustes', true, /\{ id: 'traer', label: 'Traer vuestros datos'/.test(cfg))

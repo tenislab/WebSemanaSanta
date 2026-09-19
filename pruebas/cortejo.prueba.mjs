@@ -200,7 +200,7 @@ export default async function ({ cargar, caso }) {
    * Son TRES caminos que emiten —renovar, sacar en tramo y la simbólica— y los
    * tres tienen que preguntar, no solo el botón que se ve.
    */
-  const pantallaPaps = await readFile('src/pages/app/Papeletas.tsx', 'utf8')
+  const pantallaPaps = await (await import('./fuentes.mjs')).fuenteDeLasPapeletas()
   caso('Papeletas no ofrece sacar a quien no sale', true,
     /const fueraDelCortejo = !puedeSalirEnElCortejo\(h\)/.test(pantallaPaps))
   caso('y el botón lo respeta', true, /&& !fueraDelCortejo/.test(pantallaPaps))
@@ -316,5 +316,54 @@ async function losDosControlesDelDiaDeSalida({ caso }) {
   caso('y si no estaba pagada, la apunta en Tesorería', true, /apuntarPapeleta\(p, p\.metodoPago \?\? 'Efectivo', hoyTexto\)/.test(presente))
   caso('y no la vuelve a cobrar si ya estaba pagada', true,
     /p\.estado !== 'Pagada' && p\.estado !== 'Entregada'/.test(presente))
+
+  /*
+   * ==========================================================================
+   * LOS TRES FRENOS DE «CUERPOS Y TRAMOS», QUE NO VIGILABA NADIE
+   * ==========================================================================
+   *
+   * El cortejo se configura en Ajustes —qué cuerpos hay y qué tramos lleva cada
+   * uno— y esa pantalla tiene tres frenos que no se ven y que son lo único que
+   * separa un cambio de ajustes de un destrozo en el cortejo del año. NINGUNO
+   * estaba vigilado: quitando entero el primero, las 5649 pruebas seguían
+   * pasando. Salió rompiéndolo a propósito al repartir el fichero.
+   *
+   * Un cuerpo borrado con tramos dentro deja esos tramos colgando de un nombre
+   * que ya no existe: no salen en el cortejo, no salen en ninguna lista, y las
+   * papeletas que apuntaban a ellos se quedan sin sitio. Y no se arregla
+   * volviendo a crear el cuerpo con el mismo nombre, porque los tramos guardan
+   * el nombre de antes.
+   */
+  const { fuenteDeLosAjustes, cuerpoDeLaFuncion } = await import('./fuentes.mjs')
+  const ajustes = await fuenteDeLosAjustes()
+  /*
+   * SE RECORTA `removeCuerpo`, no se busca en toda la pantalla.
+   *
+   * Los dos frenos —quitar y vaciar— usan la MISMA expresión, así que
+   * buscándola en la fuente entera este guardia se quedaba verde al romper
+   * solo uno de los dos: lo satisfacía el del vecino. Salió rompiéndolo a
+   * propósito. Es la tercera vez que aparece esta trampa en este reparto.
+   */
+  const quitar = cuerpoDeLaFuncion(ajustes, 'function removeCuerpo')
+  caso('no se quita un cuerpo que tiene tramos', true,
+    /tramos\.some\(\(t\) => t\.cuerpo === c\.original\)/.test(quitar))
+  // Y vaciarle el nombre cuenta igual que quitarlo: es la misma pérdida por
+  // otra puerta, y era justo la que se colaba.
+  caso('y vaciarle el nombre cuenta igual', true,
+    /!c\.actual\.trim\(\) && tramos\.some\(\(t\) => t\.cuerpo === c\.original\)/.test(ajustes))
+  // Tiene que quedar al menos uno: sin cuerpos no hay dónde poner un tramo, y
+  // la pantalla del cortejo se queda en blanco sin decir por qué.
+  caso('tiene que quedar al menos un cuerpo', true,
+    /Debe haber al menos un cuerpo/.test(ajustes))
+  // Y no dos con el mismo nombre, que es el otro camino para que un tramo no
+  // sepa de cuál es.
+  caso('y no dos con el mismo nombre', true,
+    /new Set\(nombres\)\.size !== nombres\.length/.test(ajustes))
+  /*
+   * Y AL QUITAR UN TRAMO SE DICE CUÁNTA GENTE LLEVA DENTRO. Son papeletas ya
+   * repartidas de este año: borrarlo sin decirlo es perderlas en silencio.
+   */
+  caso('quitar un tramo con gente avisa de cuánta', true,
+    /papeletasDelAnio/.test(ajustes) && /window\.confirm/.test(ajustes))
 }
 

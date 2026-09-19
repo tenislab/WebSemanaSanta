@@ -92,7 +92,7 @@ export default async function ({ cargar, caso }) {
    * trámite que más tarda, así que ver el número escrito antes de tenerlo vale
    * la pena.
    */
-  const cfgSrc = await (await import('node:fs/promises')).readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const cfgSrc = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
   caso('Configuración propone el que le toca', true,
     /identificadorQueLeToca\(settings\.cif\)/.test(cfgSrc))
   caso('solo si la casilla está vacía', true,

@@ -109,7 +109,7 @@ export default async function ({ cargar, caso }) {
   }
 
   // 7. Y la pantalla tiene el botón, que es de donde sale todo esto.
-  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const cfg = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
   caso('Configuración pregunta qué falta', true, /diagnosticarCorreo/.test(cfg))
   caso('con su botón', true, /No me llegan: ¿qué falta\?/.test(cfg))
   // Y al mandar la prueba también se mira: es el único caso en que «enviado» y
@@ -223,7 +223,7 @@ async function elResponderAMalEscrito({ caso }) {
     /console\.error\([\s\S]{0,120}responder a/.test(fn))
 
   // La pantalla lo dice donde se arregla, que es el campo mismo.
-  const cfg = await readFile('src/pages/app/Configuracion.tsx', 'utf8')
+  const cfg = await (await import('./fuentes.mjs')).fuenteDeLosAjustes()
   caso('Configuración avisa del formato', true,
     /no tiene forma de dirección de correo/.test(cfg))
 }

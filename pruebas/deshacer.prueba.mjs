@@ -70,15 +70,29 @@ export default async function ({ cargar, caso }) {
 
   // --- Que esté enchufado donde hace falta ---
   const { readFile } = await import('node:fs/promises')
-  for (const [fichero, quePasa] of [
-    ['src/pages/app/Eventos.tsx', 'un evento se lleva sus tareas y a quién estaba asignada cada una'],
-    ['src/pages/app/Personal.tsx', 'el acceso de la secretaria'],
-    ['src/pages/app/Configuracion.tsx', 'un campo propio, con lo que cada hermano tenga apuntado'],
-    ['src/pages/app/WebPublica.tsx', 'el mensaje de alguien que escribió desde la web'],
+  for (const [fichero, quePasa, quien] of [
+    ['src/pages/app/Eventos.tsx', 'un evento se lleva sus tareas y a quién estaba asignada cada una', null],
+    ['src/pages/app/Personal.tsx', 'el acceso de la secretaria', null],
+    ['src/pages/app/Configuracion.tsx', 'un campo propio, con lo que cada hermano tenga apuntado', 'function quitarCampo'],
+    ['src/pages/app/WebPublica.tsx', 'el mensaje de alguien que escribió desde la web', null],
   ]) {
-    // `fuenteDe`: el editor de la web está partido en varios ficheros.
-    const src = await (await import('./fuentes.mjs')).fuenteDe(fichero)
-    caso(`${fichero.split('/').pop()} ofrece deshacer (${quePasa})`, true, /ofrecerDeshacer\(/.test(src))
+    // `fuenteDe`: varias de estas pantallas están partidas en más ficheros.
+    const { fuenteDe, cuerpoDeLaFuncion } = await import('./fuentes.mjs')
+    const src = await fuenteDe(fichero)
+    /*
+     * SE RECORTA LA FUNCIÓN QUE BORRA, no se busca en la pantalla entera.
+     *
+     * En Ajustes hay TRES sitios que ofrecen deshacer —los campos propios, los
+     * catálogos y los cuerpos del cortejo—, así que buscando `ofrecerDeshacer(`
+     * en toda la fuente este guardia se quedaba verde al quitarlo de uno
+     * cualquiera: lo satisfacían los otros dos. Salió rompiéndolo a propósito.
+     *
+     * Recortando la función por su nombre se vigila EL borrado que dice
+     * vigilar, y sigue dando igual en qué fichero de la pantalla viva.
+     */
+    const borrado = quien ? cuerpoDeLaFuncion(src, quien) : src
+    caso(`${fichero.split('/').pop()} ofrece deshacer (${quePasa})`, true,
+      /ofrecerDeshacer\(/.test(borrado))
   }
 
   // La barra va montada una sola vez, en el marco.

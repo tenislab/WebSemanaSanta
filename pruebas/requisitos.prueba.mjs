@@ -126,6 +126,15 @@ async function avisoDeEjemplo({ cargar, caso }) {
      * mudanza no lo despistó, solo cambió de sitio lo que ya estaba exento.
      */
     'src/pages/portal/Identificarse.tsx',
+    /*
+     * Y lo mismo otra vez, con el reparto de Ajustes: el «restablecer los datos
+     * de ejemplo» se fue de `Configuracion.tsx` a `ajustes/CopiasYDatos.tsx`,
+     * que es donde vive el resto de lo que toca los datos de la hermandad. El
+     * guardia se puso ROJO y dijo el fichero por su nombre, que es lo que tenía
+     * que hacer. `Configuracion.tsx` se queda en la lista porque sigue
+     * nombrando la demo en el aviso de la cabecera.
+     */
+    'src/pages/app/ajustes/CopiasYDatos.tsx',
     'src/components/AuthForm.tsx',
     'src/components/ModeloPapeletaEditor.tsx',
   ])

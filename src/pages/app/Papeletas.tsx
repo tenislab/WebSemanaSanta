@@ -8,15 +8,14 @@ import PapeletaTicket from '../../components/PapeletaTicket'
 import PapeletaModeloRender from '../../components/PapeletaModeloRender'
 import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
 import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../../lib/modeloPapeleta'
-import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
+import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, METODOS_PAGO_PAPELETA, type MetodoPagoPapeleta, type Papeleta } from '../../data/papeletas'
 import { estaSinCobrar, CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
-import { useConvocatoria, enviarConvocatoria, destinatariosConvocatoria } from '../../lib/convocatoria'
-import { useSolicitudesPapeleta, type SolicitudPapeleta } from '../../lib/solicitudesPapeleta'
+import { useConvocatoria, destinatariosConvocatoria } from '../../lib/convocatoria'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
-import { sumaEuros, formatDate, formatCurrency } from '../../lib/format'
+import { sumaEuros, formatCurrency } from '../../lib/format'
 import {
   useTramos,
   tramosDeCuerpo,
@@ -25,8 +24,7 @@ import {
   gruposAutomaticos,
   cuerposPresentes,
   precioDeTramo,
-  type Tramo,
-} from '../../lib/tramos'
+  } from '../../lib/tramos'
 import { puedeSalirEnElCortejo, repartoCompleto, asignacionPorPapeleta as mapAsignaciones } from '../../lib/cortejo'
 import {
   getCampana,
@@ -35,34 +33,30 @@ import {
   ventanaAbierta,
   diasHasta,
   renovacionDeHermano,
-  sePuedeConvocar,
   estadoDeLaCampana,
   type Campana,
   type EstadoRenovacion,
 } from '../../lib/campana'
 import { CLAVES_DATOS, leerPersistido, leerDatos } from '../../lib/persistencia'
-import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
+import { useSupabaseTable } from '../../lib/supabaseSync'
 import { esNovedad, NOVEDADES } from '../../lib/novedades'
 import { desdeQueEjercicio, ventanaDePapeletas } from '../../lib/ventanaHistorico'
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
-import { agregarAvisoHermano } from '../../lib/avisosHermano'
-import { avisarPorCorreo } from '../../lib/avisosCorreo'
-import { conApunteDeCobro, origenDePapeleta, sinApunteDeCobro } from '../../lib/apuntes'
-import { apuntar } from '../../lib/registroActividad'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
-import { conRenovacion } from '../../lib/renovarPapeleta'
 import { filaQueAbre } from '../../lib/foco'
 import { aniosDeHermandad } from '../../lib/hermanoFicha'
+import { fmtIso, hoy } from './papeletas/fechas'
+import { useRenovarYSacar } from './papeletas/renovarYSacar'
+import { useLosPagos } from './papeletas/pagos'
+import { useLaImpresion } from './papeletas/impresion'
+import { useConvocar } from './papeletas/convocatoria'
+import { useLasSolicitudes } from './papeletas/solicitudes'
+import CajonDeAjustes from './papeletas/CajonDeAjustes'
+import CajonDeSolicitudes from './papeletas/CajonDeSolicitudes'
+import ZonaDeImpresion from './papeletas/ZonaDeImpresion'
 
-function hoy() {
-  return new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
-function fmtIso(iso: string | null) {
-  if (!iso) return '—'
-  return formatDate(new Date(`${iso}T00:00:00`))
-}
 
 function claseEstado(estado: EstadoRenovacion) {
   if (estado === 'Renovada' || estado === 'Nueva') return 'pill--ok'
@@ -84,13 +78,6 @@ const FILTROS = ['Todos', 'Por renovar', 'Renovadas', 'Nuevas', 'No renovadas', 
  */
 const SIMBOLICA = '__simbolica'
 
-interface ItemImpresion {
-  papeleta: Papeleta
-  hermano: Hermano
-  tramo: Tramo | null
-  puesto: number | null
-  excedeAforo: boolean
-}
 
 export default function Papeletas() {
   // Antes de mandar nada, traer de la base la configuración de correo de
@@ -198,16 +185,11 @@ export default function Papeletas() {
   // Salidas de la papeleta: móvil (con QR, para el correo), física (sin QR, para
   // imprimir) o las dos a la vez (se muestran e imprimen ambas).
   const [variantePapeleta, setVariantePapeleta] = useState<'movil' | 'fisica' | 'ambas'>('movil')
-  const [imprimirOpen, setImprimirOpen] = useState(false)
-  const [imprimirEstados, setImprimirEstados] = useState<Record<string, boolean>>({ Asignada: true, Pagada: true, Entregada: true })
-  const [listaImpresion, setListaImpresion] = useState<ItemImpresion[] | null>(null)
+  /*
+   * `useConvocatoria` se queda aquí: la banda de arriba dice cuándo se avisó,
+   * y la convocatoria en sí se fue a `papeletas/convocatoria.ts`.
+   */
   const [convocatoria, refrescarConvocatoria] = useConvocatoria()
-  const [solicitudes, setSolicitudes] = useSolicitudesPapeleta()
-  const [solicitudesOpen, setSolicitudesOpen] = useState(false)
-  const solicitudesPendientes = useMemo(
-    () => solicitudes.filter((s) => s.anio === campana.anio && s.estado === 'Pendiente'),
-    [solicitudes, campana.anio],
-  )
 
   function guardarCampana(next: Campana) {
     setCampanaState(next)
@@ -341,538 +323,10 @@ export default function Papeletas() {
     setPendingCuerpo('')
   }
 
-  /**
-   * Renueva el sitio del año anterior con el mismo tramo. Si ya hay papeleta
-   * de esta campaña (doble clic, o una renuncia previa que se rectifica), la
-   * actualiza en vez de crear una segunda fila duplicada.
-   */
-  /**
-   * Renovar el sitio de un hermano. La cuenta la lleva `conRenovacion`, la
-   * misma que usa el área del hermano: escrito dos veces, se separaba.
-   *
-   * Ya no recibe el importe: lo calcula ella con el precio de HOY. Que quien
-   * llama pudiera pasar el que quisiera es justo lo que dejaba que las dos
-   * vías cobraran distinto.
-   */
-  function renovar(hermanoId: string, tramoId: string) {
-    if (!saleEnElCortejo(hermanoId)) return
-    setPapeletas((prev) =>
-      conRenovacion(prev, {
-        hermanoId,
-        tramoId,
-        anio: campana.anio,
-        tramos,
-        precioBase,
-        nuevoId,
-        hoy,
-      }),
-    )
-    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null, tramoId)
-  }
 
-  /** El hermano renuncia a salir este año: pierde su sitio, que queda libre. */
-  function noRenovar(hermanoId: string) {
-    setPapeletas((prev) => {
-      const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
-      if (actual) {
-        return prev.map((p) =>
-          p.id === actual.id ? { ...p, tramoId: null, opcion: null, estado: 'Renuncia', importe: 0 } : p,
-        )
-      }
-      const renuncia: Papeleta = {
-        id: nuevoId(),
-        numero: siguienteNumero(prev),
-        hermanoId,
-        anio: campana.anio,
-        tramoId: null,
-        importe: 0,
-        estado: 'Renuncia',
-        fechaSolicitud: hoy(),
-      }
-      return [renuncia, ...prev]
-    })
-  }
 
-  /**
-   * Saca (o rectifica) la papeleta de un hermano en un tramo concreto. Si ya
-   * tenía una papeleta este año (una renuncia o una solicitud sin tramo), la
-   * reutiliza; si no, crea una nueva.
-   */
-  /**
-   * ¿Se le puede emitir papeleta a esta persona?
-   *
-   * Lo que esconde una pantalla no protege nada: entre que se pinta la fila y
-   * se pulsa el botón, una ficha puede haber pasado a baja desde otro
-   * ordenador. Y hay tres caminos que emiten —renovar, sacar en tramo y la
-   * simbólica—, así que la comprobación va donde se emite, no solo donde se
-   * pinta.
-   */
-  function saleEnElCortejo(hermanoId: string): boolean {
-    return puedeSalirEnElCortejo(hermanos.find((h) => h.id === hermanoId))
-  }
 
-  function sacarEnTramo(hermanoId: string, tramoId: string) {
-    if (!saleEnElCortejo(hermanoId)) return
-    const importe = precioDeTramo(tramos.find((t) => t.id === tramoId), precioBase)
-    setPapeletas((prev) => {
-      const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
-      if (actual) {
-        return prev.map((p) =>
-          p.id === actual.id
-            ? { ...p, tramoId, opcion: null, estado: 'Asignada', importe, pagoComunicado: null }
-            : p,
-        )
-      }
-      const nueva: Papeleta = {
-        id: nuevoId(),
-        numero: siguienteNumero(prev),
-        hermanoId,
-        anio: campana.anio,
-        tramoId,
-        importe,
-        estado: 'Asignada',
-        fechaSolicitud: hoy(),
-      }
-      return [nueva, ...prev]
-    })
-    avisarDeSitio(hermanoId, tramos.find((t) => t.id === tramoId)?.nombre ?? null, null, tramoId)
-    setPendingCuerpo('')
-  }
 
-  /**
-   * Emite la PAPELETA SIMBÓLICA: la de quien tiene su sitio y este año no sale.
-   *
-   * No ocupa puesto en el cortejo, y ese es todo su sentido. Si el hermano
-   * quisiera salir, sitio hay: se le emite en un tramo como a cualquiera.
-   *
-   * El nombre se guarda en la papeleta —no una referencia a una lista— para que
-   * las papeletas de años pasados sigan diciendo lo que eran aunque la
-   * hermandad cambie el precio o el texto.
-   */
-  const NOMBRE_SIMBOLICA = 'Papeleta simbólica'
-
-  function sacarSimbolica(hermanoId: string) {
-    if (!saleEnElCortejo(hermanoId)) return
-    const importe = hermandad.precioSimbolica
-    setPapeletas((prev) => {
-      const actual = prev.find((p) => p.hermanoId === hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
-      if (actual) {
-        return prev.map((p) =>
-          p.id === actual.id
-            ? { ...p, tramoId: null, opcion: NOMBRE_SIMBOLICA, estado: 'Asignada', importe, pagoComunicado: null }
-            : p,
-        )
-      }
-      const nueva: Papeleta = {
-        id: nuevoId(),
-        numero: siguienteNumero(prev),
-        hermanoId,
-        anio: campana.anio,
-        tramoId: null,
-        opcion: NOMBRE_SIMBOLICA,
-        importe,
-        estado: 'Asignada',
-        fechaSolicitud: hoy(),
-      }
-      return [nueva, ...prev]
-    })
-    avisarDeSitio(hermanoId, null, NOMBRE_SIMBOLICA)
-    setPendingCuerpo('')
-  }
-
-  /*
-   * QUÉ LLEVA ESTE CORREO, y por qué cada cosa.
-   *
-   * Antes decía «Ya tienes sitio: Cirio 1º tramo» y poco más. Eso está bien
-   * como aviso, pero deja fuera lo único que el hermano va a necesitar
-   * buscar después: A QUÉ HORA TIENE QUE ESTAR. Es literalmente la pregunta
-   * de la semana antes de la salida, la que satura el teléfono de secretaría
-   * y el grupo de WhatsApp.
-   *
-   * La hora de citación es de cada tramo —no salen todos a la vez— y hasta
-   * ahora no se podía ni guardar, porque a la tabla le faltaba la columna.
-   * Ya se guarda, así que ya se puede decir aquí.
-   */
-  function parrafosDePapeleta(texto: string, tramoId?: string | null): string[] {
-    const t = tramoId ? tramos.find((x) => x.id === tramoId) : null
-    const parrafos = [texto]
-    if (t?.horaCitacion?.trim()) {
-      parrafos.push(`Tu hora de citación es a las ${t.horaCitacion.trim()}.`)
-    }
-    if (campana.fechaSalida) {
-      const f = new Date(`${campana.fechaSalida}T12:00:00`)
-      if (!Number.isNaN(f.getTime())) {
-        parrafos.push(`La salida es el ${f.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}.`)
-      }
-    }
-    parrafos.push('Puedes ver tu papeleta y descargarla desde tu área de hermano.')
-    return parrafos
-  }
-
-  /**
-   * Le dice al hermano que ya tiene sitio. Es lo que espera desde que manda la
-   * solicitud, y hasta ahora se enteraba al entrar en su área por su cuenta.
-   */
-  function avisarDeSitio(hermanoId: string, tramo: string | null, opcion: string | null, tramoId?: string | null) {
-    const que = tramo ?? opcion
-    const texto = que
-      ? `Ya tienes sitio para la estación de penitencia de ${campana.anio}: ${que}.`
-      : `Ya tienes papeleta para la estación de penitencia de ${campana.anio}.`
-    agregarAvisoHermano(hermanoId, texto, 'papeleta', 'Tu papeleta de sitio')
-    // Y por correo. Esta es de las que más se agradecen: hasta ahora el
-    // hermano se enteraba de su sitio solo si entraba a mirarlo por su cuenta.
-    const h = hermanos.find((x) => x.id === hermanoId)
-    if (!h) return
-
-    void avisarPorCorreo(
-      [{ id: h.id, nombre: h.nombre, email: h.email }],
-      'papeleta',
-      'Tu papeleta de sitio',
-      parrafosDePapeleta(texto, tramoId),
-      'Este aviso lo puedes apagar desde tu área de hermano.',
-    ).then((r) => {
-      // No corta el guardado —la papeleta ya está emitida y eso es lo que
-      // importa— pero deja rastro de que el aviso no salió.
-      if (r.error) console.warn(`El aviso de papeleta a ${h.nombre} no salió: ${r.error}`)
-    })
-  }
-
-  /**
-   * EL BOTÓN «DESCARGAR / ENVIAR» SOLO IMPRIMÍA.
-   *
-   * La versión de móvil llevaba escrito «es la que se envía al hermano por
-   * correo», pero el botón hacía `window.print()` y nada más: en ningún caso
-   * —ni en local, ni con la base de datos conectada— salía un correo de
-   * verdad. Quien lo pulsaba pensando que eso avisaba al hermano se quedaba
-   * sin saberlo, porque no fallaba con un error: simplemente no hacía lo que
-   * decía.
-   *
-   * Esto sí manda el correo, con el mismo aviso que se le manda solo al
-   * asignar el sitio (para cuando el hermano dice que no le llegó, o hay que
-   * reenviárselo).
-   */
-  const [enviandoPapeleta, setEnviandoPapeleta] = useState(false)
-  async function enviarPapeletaPorCorreo(hermanoId: string, tramo: string | null, opcion: string | null, tramoId?: string | null) {
-    if (enviandoPapeleta) return
-    const h = hermanos.find((x) => x.id === hermanoId)
-    if (!h) return
-    if (!h.email || !h.email.includes('@')) {
-      window.alert(`${h.nombre.split(' ')[0]} no tiene correo en su ficha. Añádeselo desde Hermanos y vuelve a intentarlo.`)
-      return
-    }
-    const que = tramo ?? opcion
-    const texto = que
-      ? `Aquí tienes tu papeleta de sitio para la estación de penitencia de ${campana.anio}: ${que}.`
-      : `Aquí tienes tu papeleta para la estación de penitencia de ${campana.anio}.`
-    setEnviandoPapeleta(true)
-    try {
-      const r = await avisarPorCorreo(
-        [{ id: h.id, nombre: h.nombre, email: h.email }],
-        'papeleta',
-        'Tu papeleta de sitio',
-        parrafosDePapeleta(texto, tramoId),
-        'Este aviso lo puedes apagar desde tu área de hermano.',
-      )
-      if (r.enviados > 0) {
-        window.alert(`Correo enviado a ${h.nombre}.`)
-      } else {
-        window.alert(
-          `No ha salido el correo${r.error ? `: ${r.error}` : '.'}\n\n`
-          + 'Comprueba en Configuración → Correo que el envío está encendido.',
-        )
-      }
-    } finally {
-      setEnviandoPapeleta(false)
-    }
-  }
-
-  function actualizarPapeleta(id: string, cambios: Partial<Papeleta>) {
-    setPapeletas((prev) => prev.map((p) => (p.id === id ? { ...p, ...cambios } : p)))
-  }
-
-  /**
-   * Registra el cobro de la papeleta con el método elegido (emitida → pagada).
-   *
-   * «EXENTO» NO ES UN COBRO. Es lo contrario: se le da su sitio a alguien sin
-   * cobrarle —un hermano mayor, una situación difícil, un cargo—. Antes se
-   * trataba como los demás métodos, así que apuntaba en Tesorería un ingreso
-   * de 18 € en la cuenta bancaria que nadie había pagado, y el contador de
-   * «Recaudado» de la campaña también lo sumaba. La hermandad cuadraba caja
-   * contra un dinero que no existe.
-   *
-   * La papeleta queda «Pagada» —porque para el cortejo lo está: puede salir— a
-   * importe cero, y no se apunta nada en el libro.
-   */
-  function registrarPago(id: string, metodo: MetodoPagoPapeleta) {
-    const exento = metodo === 'Exento'
-    actualizarPapeleta(id, {
-      estado: 'Pagada',
-      metodoPago: metodo,
-      fechaPago: hoy(),
-      ...(exento ? { importe: 0 } : {}),
-    })
-    if (exento) return
-    // Y al libro de cuentas. Esto es lo que faltaba: se cobraba la papeleta y
-    // Tesorería no lo veía, así que la recaudación de la campaña no aparecía
-    // por ninguna parte en el balance.
-    const p = papeletas.find((x) => x.id === id)
-    if (p) {
-      const h = hermanos.find((x) => x.id === p.hermanoId)
-      setMovimientos((prev) =>
-        conApunteDeCobro(prev, {
-          origen: origenDePapeleta(p.id),
-          concepto: `Papeleta de sitio ${p.anio} — ${h?.nombre ?? 'hermano/a'}`,
-          // No hay partida propia para papeletas en el Estado de Cuentas que
-          // piden las diócesis, y no se inventa una: iría en «Otros ingresos»
-          // igualmente al presentarlo. El concepto dice de qué es.
-          categoria: 'Otros ingresos',
-          importe: p.importe,
-          fecha: hoy(),
-          metodo,
-        }),
-      )
-    }
-  }
-
-  /** Anular ≠ borrar: la papeleta se conserva como «Anulada», con su motivo. */
-  function anularPapeleta(id: string) {
-    const motivo = window.prompt('Motivo de la anulación (queda registrado):', '')
-    if (motivo === null) return
-    actualizarPapeleta(id, { estado: 'Anulada', motivoAnulacion: motivo.trim() || 'Sin especificar' })
-    // Anulada deja de ser un ingreso: fuera su apunte, o el saldo contaría un
-    // dinero que se devolvió.
-    setMovimientos((prev) => sinApunteDeCobro(prev, origenDePapeleta(id)))
-    // Anular una papeleta es de lo primero que se pregunta en un cabildo
-    // cuando alguien se queda sin sitio: quién la anuló, cuándo y por qué.
-    const anulada = papeletas.find((x) => x.id === id)
-    apuntar({
-      autorNombre: quienSoy, accion: 'papeleta_anulada', sobreTipo: 'papeleta',
-      sobreId: id,
-      sobreNombre: hermanos.find((h) => h.id === anulada?.hermanoId)?.nombre ?? '',
-      detalle: `Anuló la papeleta de ${hermanos.find((h) => h.id === anulada?.hermanoId)?.nombre ?? 'un hermano'}: ${motivo.trim() || 'sin motivo'}`,
-    })
-  }
-
-  // ---- Impresión masiva: un único PDF con una papeleta por página ----
-  const contadorImpresion = useMemo(() => {
-    const c: Record<string, number> = { Asignada: 0, Pagada: 0, Entregada: 0 }
-    papeletasActivas.forEach((p) => {
-      if (p.estado in c) c[p.estado] += 1
-    })
-    return c
-  }, [papeletasActivas])
-
-  const totalAImprimir = (['Asignada', 'Pagada', 'Entregada'] as const)
-    .filter((e) => imprimirEstados[e])
-    .reduce((s, e) => s + (contadorImpresion[e] ?? 0), 0)
-
-  /**
-   * Abre el plazo avisando por correo a todos los hermanos que pueden sacar
-   * papeleta, y lo deja registrado en Comunicados.
-   *
-   * Es el correo más importante del año: de él depende que la gente saque su
-   * papeleta a tiempo, y quien no la saca en plazo pierde el sitio que llevaba
-   * años ocupando. Por eso el resultado se cuenta de verdad —cuántos han
-   * salido de cuántos— en vez del «(simulada)» de antes, que decía que se
-   * había avisado a ochocientos hermanos sin haber avisado a ninguno.
-   */
-  const [convocando, setConvocando] = useState(false)
-  /*
-   * EL FRENO DE LA FECHA. Fuera de plazo este correo miente: antes de abrir
-   * manda a ochocientas personas a sacar una papeleta que no van a poder sacar,
-   * y después de cerrar les anuncia como fecha límite un día que ya pasó. El
-   * porqué entero está en `sePuedeConvocar()`.
-   */
-  /*
-   * Y SE LE DICE SI LA CAMPAÑA EXISTE DE VERDAD.
-   *
-   * `getCampana()` nunca devuelve vacío: sin campaña creada devuelve la de
-   * fábrica, con fechas inventadas. Hoy caen dentro de ese plazo inventado, así
-   * que sin esto se ofrecía «Convocar papeletas» a una hermandad que no ha
-   * fijado ninguna fecha — anunciándole a ochocientas personas un plazo que
-   * nadie ha decidido y un año que a lo mejor no es el suyo.
-   */
-  const puedeConvocar = estadoCampana === 'sin-saber'
-    /*
-     * MIENTRAS NO CONSTA, NI SE OFRECE NI SE ACUSA.
-     *
-     * Con `sePuedeConvocar(..., false)` se decía «primero hay que crear la
-     * campaña» a la vez que la banda de arriba decía «comprobando la campaña
-     * de la hermandad…». Dos avisos seguidos que se contradicen: uno afirma que
-     * no existe y el otro que todavía no se sabe.
-     */
-    ? { puede: false, motivo: 'Comprobando la campaña…' }
-    : sePuedeConvocar(campana, undefined, estadoCampana === 'creada')
-
-  async function convocar() {
-    if (convocando) return
-    /*
-     * SE COMPRUEBA AQUÍ TAMBIÉN, y no solo en el botón. Un botón desactivado es
-     * un estado de la pantalla: sobrevive a un `Enter`, a una pestaña abierta
-     * desde ayer y a cualquiera que lo llame desde otro sitio mañana. Lo que no
-     * se puede deshacer es el correo.
-     */
-    if (!puedeConvocar.puede) {
-      window.alert(puedeConvocar.motivo)
-      return
-    }
-    setConvocando(true)
-    try {
-      const r = await enviarConvocatoria(
-        campana.anio,
-        hermanos,
-        fmtIso(campana.fechaLimiteRenovacion),
-        { hermandad: hermandad.nombreLegal, fechaSalidaIso: campana.fechaSalida },
-      )
-      refrescarConvocatoria()
-      if (r.enviados > 0) {
-        window.alert(
-          `Convocatoria enviada a ${r.enviados} hermano${r.enviados === 1 ? '' : 's'}`
-          + `${r.total !== r.enviados ? ` (de ${r.total} con correo)` : ''}. Queda registrada en Comunicados.`,
-        )
-      } else if (r.total === 0) {
-        window.alert(
-          'No hay a quién avisar: ningún hermano activo tiene correo en su ficha. '
-          + 'Añádeselo desde Hermanos y vuelve a intentarlo.',
-        )
-      } else {
-        window.alert(
-          `No ha salido ningún correo${r.error ? `: ${r.error}` : '.'}\n\n`
-          + 'Comprueba en Configuración → Correo que el envío está encendido. '
-          + 'La convocatoria NO se ha dado por hecha: puedes volver a intentarlo.',
-        )
-      }
-    } finally {
-      setConvocando(false)
-    }
-  }
-
-  /** Acepta una solicitud online: le emite la papeleta con lo pedido y marca la solicitud como aceptada. */
-  /**
-   * Tramo del cortejo con el que se emite una solicitud aceptada, para que la
-   * papeleta entre directa en el cortejo (sin colocarla a mano). Se elige del
-   * cuerpo pedido: cirio (reparto por número) para nazareno/penitente, o el
-   * primer tramo del cuerpo en otro caso. La secretaría puede recolocarlo luego.
-   */
-  /**
-   * Elige el tramo con el que se emite una solicitud aceptada, para que la
-   * papeleta entre directa en el cortejo. Del cuerpo pedido, prioriza el CIRIO
-   * con más hueco (reparto por número); si no queda cirio con sitio, cualquier
-   * tramo del cuerpo con hueco. `actuales` = papeletas del momento (para no
-   * amontonar ni desbordar). La secretaría puede recolocarlo luego en Cortejo.
-   */
-  function tramoParaSolicitud(s: SolicitudPapeleta, actuales: Papeleta[]): Tramo | null {
-    const cuerpo = s.tramoSolicitado && s.tramoSolicitado !== 'Sin preferencia' ? s.tramoSolicitado : null
-    const enCuerpo = cuerpo ? tramosDeCuerpo(cuerpo, tramos) : tramos
-    if (enCuerpo.length === 0) return null
-    const ocupados = (tId: string) =>
-      actuales.filter(
-        (p) => p.tramoId === tId && p.anio === campana.anio && p.estado !== 'Anulada' && p.estado !== 'Renuncia',
-      ).length
-    const libres = (t: Tramo) => (t.capacidad ?? 999) - ocupados(t.id)
-    // En los tramos por número el reparto es en CASCADA sobre el grupo entero,
-    // y todas las papeletas se guardan con el id del primer tramo del grupo.
-    // Mirando tramo a tramo, el 2º tramo de un grupo lleno parecía vacío y se
-    // aceptaba (y se cobraba) una papeleta que luego salía «Excede aforo».
-    const gruposConHueco = gruposAutomaticos(enCuerpo)
-      .map((g) => ({
-        grupo: g,
-        libres: g.tramos.reduce((n, t) => n + (t.capacidad ?? 999), 0) - g.tramos.reduce((n, t) => n + ocupados(t.id), 0),
-      }))
-      .filter((g) => g.libres > 0)
-      .sort((a, b) => b.libres - a.libres)
-    if (gruposConHueco.length > 0) return gruposConHueco[0].grupo.tramos[0]
-    const conHueco = enCuerpo.filter((t) => libres(t) > 0)
-    return (conHueco[0] ?? enCuerpo[0]) ?? null
-  }
-
-  function aceptarSolicitud(s: SolicitudPapeleta) {
-    setPapeletas((prev) => {
-      const tramo = tramoParaSolicitud(s, prev)
-      const tramoId = tramo ? tramo.id : null
-      const importe = tramo ? precioDeTramo(tramo, precioBase) : precioBase
-      // Con tramo → va al cortejo; sin tramo (sin cuerpo posible) → papeleta suelta.
-      const opcion = tramoId ? null : `${s.modalidad}${s.preferencia ? ` · ${s.preferencia}` : ''}`
-      const actual = prev.find((p) => p.hermanoId === s.hermanoId && p.anio === campana.anio && p.estado !== 'Anulada')
-      if (actual) {
-        /**
-         * SI YA ESTÁ COBRADA O ENTREGADA, NO SE TOCA.
-         *
-         * Este es el caso, y pasa: el hermano pide su sitio desde su área y
-         * queda una solicitud pendiente. Antes de que nadie la mire, ese mismo
-         * hermano pasa por el mostrador y la secretaría le emite la papeleta y
-         * le cobra en efectivo, con su apunte en el libro. Días después alguien
-         * abre el buzón —la solicitud sigue ahí, nadie la cerró— y pulsa
-         * «Aceptar y emitir».
-         *
-         * Antes, eso devolvía la papeleta a «Asignada» con el importe
-         * recalculado: el hermano volvía a figurar como que no ha pagado, con
-         * el apunte del cobro ya hecho en Tesorería y sin nada que lo ate. Se
-         * le reclamaba otra vez un dinero que ya había dado.
-         *
-         * Ahora se deja como está y solo se cierra la solicitud.
-         */
-        if (actual.estado === 'Pagada' || actual.estado === 'Entregada') return prev
-        return prev.map((p) => (p.id === actual.id ? { ...p, opcion, tramoId, estado: 'Asignada', importe } : p))
-      }
-      const nueva: Papeleta = {
-        id: nuevoId(),
-        numero: siguienteNumero(prev),
-        hermanoId: s.hermanoId,
-        anio: campana.anio,
-        tramoId,
-        opcion,
-        importe,
-        estado: 'Asignada',
-        fechaSolicitud: hoy(),
-      }
-      return [nueva, ...prev]
-    })
-    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Aceptada' } : x)))
-  }
-
-  function rechazarSolicitud(s: SolicitudPapeleta) {
-    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Rechazada' } : x)))
-  }
-
-  function generarImpresion() {
-    const lista: ItemImpresion[] = papeletasActivas
-      .filter((p) => imprimirEstados[p.estado])
-      .map((p) => {
-        const asig = asignacionPorPapeleta.get(p.id)
-        return {
-          papeleta: p,
-          hermano: hermanoDe(p.hermanoId)!,
-          tramo: asig?.tramo ?? null,
-          puesto: asig?.puesto ?? null,
-          excedeAforo: asig?.estado === 'Excede aforo',
-        }
-      })
-      .filter((it) => it.hermano)
-      .sort((a, b) => (a.hermano.numero || Infinity) - (b.hermano.numero || Infinity))
-    if (lista.length === 0) return
-    setListaImpresion(lista)
-    setImprimirOpen(false)
-    // Espera a que se pinten las páginas antes de abrir el diálogo de impresión.
-    document.body.classList.add('print-masivo')
-    setTimeout(() => {
-      // Y se recoge con `afterprint`, no en la línea de después de print():
-      // `window.print()` no promete devolver el control cuando el papel ya ha
-      // salido. En un navegador que vuelve enseguida, aquí se estaban tirando
-      // las cuatrocientas papeletas MIENTRAS se imprimían. Red de seguridad a
-      // los diez segundos por si `afterprint` no llega.
-      let recogido = false
-      const recoger = () => {
-        if (recogido) return
-        recogido = true
-        document.body.classList.remove('print-masivo')
-        setListaImpresion(null)
-      }
-      window.addEventListener('afterprint', recoger, { once: true })
-      window.setTimeout(recoger, 10000)
-      window.print()
-    }, 300)
-  }
 
   /** Cierra la campaña actual y abre la del año siguiente (los sitios de este año pasan a renovables). */
   function abrirNuevoAno() {
@@ -887,6 +341,45 @@ export default function Papeletas() {
     setFilter('Todos')
     setSelectedId(null)
   }
+
+  /*
+   * LAS CINCO PIEZAS QUE SE HAN IDO A `papeletas/`, enchufadas aquí.
+   *
+   * Se desarman porque la ficha del hermano y los cajones de abajo las nombran
+   * sueltas, y esa ficha se queda: son treinta props, y un componente de
+   * treinta props se lee peor que el fichero del que sale.
+   */
+  const emitir = useRenovarYSacar({
+    campana, hermandad, hermanos, tramos, precioBase,
+    setPapeletas, setPendingCuerpo, siguienteNumero,
+  })
+  const {
+    renovar, noRenovar, sacarEnTramo, sacarSimbolica,
+    enviandoPapeleta, enviarPapeletaPorCorreo,
+  } = emitir
+
+  const { actualizarPapeleta, registrarPago, anularPapeleta } = useLosPagos({
+    papeletas, setPapeletas, setMovimientos, hermanos, quienSoy,
+  })
+
+  const impresion = useLaImpresion({ papeletasActivas, asignacionPorPapeleta, hermanoDe })
+  const {
+    imprimirOpen, setImprimirOpen, imprimirEstados, setImprimirEstados,
+    listaImpresion, contadorImpresion, totalAImprimir, generarImpresion,
+  } = impresion
+
+  const { convocando, convocar, puedeConvocar } = useConvocar({
+    campana, estadoCampana, hermandad, hermanos, refrescarConvocatoria,
+  })
+
+  const solicitud = useLasSolicitudes({ campana, tramos, precioBase, setPapeletas, siguienteNumero })
+  /*
+   * De la petición, la pantalla solo necesita dos cosas: cuántas hay
+   * pendientes —para el número del botón— y cómo abrir el cajón. Lo demás
+   * (aceptar, rechazar, si está abierto) lo saca el cajón del mismo hook,
+   * que se le pasa entero.
+   */
+  const { solicitudesPendientes, setSolicitudesOpen } = solicitud
 
   const seleccion = selectedId ? { hermano: hermanoDe(selectedId), renovacion: renovacionDeHermano(selectedId, papeletas, campana) } : null
 
@@ -1569,93 +1062,15 @@ export default function Papeletas() {
           })()}
       </Drawer>
 
-      {/* Ajustes de la campaña */}
-      <Drawer
-        open={ajustesOpen}
-        onClose={() => setAjustesOpen(false)}
-        title="Ajustes de campaña"
-        subtitle={`Edición ${campana.anio}`}
-      >
-        <div className="app-form">
-          <div className="form-grid-2">
-            <div className="form-row">
-              <label htmlFor="fechaIniPart">Inicio · participaron el año pasado</label>
-              <input
-                id="fechaIniPart"
-                type="date"
-                value={campana.fechaInicioParticiparon}
-                onChange={(e) => guardarCampana({ ...campana, fechaInicioParticiparon: e.target.value })}
-              />
-              <p className="form-hint">Desde este día pueden solicitar los que salieron el año anterior (renovar).</p>
-            </div>
-            <div className="form-row">
-              <label htmlFor="fechaIniNuevos">Inicio · no participaron</label>
-              <input
-                id="fechaIniNuevos"
-                type="date"
-                value={campana.fechaInicioNoParticiparon}
-                onChange={(e) => guardarCampana({ ...campana, fechaInicioNoParticiparon: e.target.value })}
-              />
-              <p className="form-hint">Desde este día pueden solicitar el resto de hermanos (los que no salieron).</p>
-            </div>
-          </div>
-          <div className="form-row">
-            <label htmlFor="fechaLimite">Fin del plazo (fecha límite)</label>
-            <input
-              id="fechaLimite"
-              type="date"
-              value={campana.fechaLimiteRenovacion}
-              onChange={(e) => guardarCampana({ ...campana, fechaLimiteRenovacion: e.target.value })}
-            />
-            <p className="form-hint">Último día del plazo. Pasada esta fecha, quien no haya renovado pierde su sitio.</p>
-          </div>
-          <div className="form-row">
-            <label htmlFor="fechaSalida">Día de la estación de penitencia</label>
-            <input
-              id="fechaSalida"
-              type="date"
-              value={campana.fechaSalida ?? ''}
-              onChange={(e) => guardarCampana({ ...campana, fechaSalida: e.target.value || null })}
-            />
-          </div>
-
-          <div className="assign-box">
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={ajustes.bloquearPapeletaConDeuda}
-                onChange={(e) => setAjustes({ ...ajustes, bloquearPapeletaConDeuda: e.target.checked })}
-              />
-              Bloquear la papeleta si el hermano tiene cuotas pendientes
-            </label>
-            <p className="form-hint">
-              {ajustes.bloquearPapeletaConDeuda
-                ? 'No se podrá sacar papeleta a quien deba cuotas hasta que regularice.'
-                : 'Solo se avisa de la deuda, pero se puede emitir la papeleta igualmente.'}
-            </p>
-          </div>
-
-          <div className="assign-box">
-            <label>Cerrar campaña {campana.anio}</label>
-            <p className="form-hint">
-              Abre la campaña de {campana.anio + 1}: los sitios entregados este año pasan a ser renovables, y todos los
-              hermanos vuelven a empezar en «Por renovar» o «Sin papeleta». No se borra nada: el historial queda
-              guardado.
-            </p>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                if (window.confirm(`¿Abrir la campaña ${campana.anio + 1}? Los sitios de ${campana.anio} pasan a renovables.`)) {
-                  abrirNuevoAno()
-                  setAjustesOpen(false)
-                }
-              }}
-            >
-              Abrir campaña {campana.anio + 1}
-            </button>
-          </div>
-        </div>
-      </Drawer>
+      <CajonDeAjustes
+        ajustesOpen={ajustesOpen}
+        setAjustesOpen={setAjustesOpen}
+        campana={campana}
+        guardarCampana={guardarCampana}
+        abrirNuevoAno={abrirNuevoAno}
+        ajustes={ajustes}
+        setAjustes={setAjustes}
+      />
 
       {/* Modelo de papeleta personalizado */}
       <Drawer
@@ -1709,85 +1124,15 @@ export default function Papeletas() {
         </div>
       </Drawer>
 
-      {/* Solicitudes de papeleta enviadas por los hermanos desde su área */}
-      <Drawer
-        open={solicitudesOpen}
-        onClose={() => setSolicitudesOpen(false)}
-        title="Solicitudes de papeleta"
-        subtitle={`${solicitudesPendientes.length} pendiente${solicitudesPendientes.length === 1 ? '' : 's'}`}
-      >
-        {solicitudesPendientes.length === 0 ? (
-          <p className="form-hint">No hay solicitudes pendientes. Las que envíen los hermanos desde su área aparecerán aquí.</p>
-        ) : (
-          solicitudesPendientes.map((s) => (
-            <div className="assign-box" key={s.id}>
-              <div className="ficha__row">
-                <b>{s.hermanoNombre}</b>
-                <span className="pill pill--info">Nº {s.hermanoNumero}</span>
-              </div>
-              <dl className="ficha__list">
-                <div><dt>Modalidad</dt><dd>{s.modalidad}</dd></div>
-                {s.preferencia && <div><dt>Preferencia</dt><dd>{s.preferencia}</dd></div>}
-                <div><dt>Tramo solicitado</dt><dd>{s.tramoSolicitado}</dd></div>
-                {s.comentario && <div><dt>Comentario</dt><dd>{s.comentario}</dd></div>}
-                <div><dt>Enviada</dt><dd>{s.fecha}</dd></div>
-              </dl>
-              <div className="assign-box__row">
-                <button className="btn btn-primary btn-sm" onClick={() => aceptarSolicitud(s)}>Aceptar y emitir</button>
-                <button className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => rechazarSolicitud(s)}>Rechazar</button>
-              </div>
-            </div>
-          ))
-        )}
-      </Drawer>
+      <CajonDeSolicitudes solicitud={solicitud} />
 
-      {/* Zona de impresión masiva: oculta en pantalla, visible al imprimir con la clase print-masivo */}
-      {listaImpresion && (
-        <div className="impresion-masiva" aria-hidden="true">
-          {/*
-            CON EL MODELO DE LA HERMANDAD, IGUAL QUE LA DE UNA EN UNA.
-
-            Aquí iba siempre `PapeletaTicket`, el diseño de fábrica. La ficha
-            de un hermano sí respetaba el modelo que la hermandad se había
-            hecho —escudo, tipografía, textos suyos—, pero al imprimir la tanda
-            salían las cuatrocientas con el genérico.
-
-            Y es justo al revés de como se usa: la de una en una se saca para
-            una consulta; la tanda es la que se reparte a los hermanos, la que
-            lleva el escudo y la que se ve. La hermandad monta su modelo, lo
-            comprueba en una ficha, imprime las cuatrocientas y le salen todas
-            sin él.
-          */}
-          {listaImpresion.map((it) => (
-            <div className="impresion-masiva__pagina" key={it.papeleta.id}>
-              {modelo ? (
-                <PapeletaModeloRender
-                  modelo={modelo}
-                  sinQr={false}
-                  datos={{
-                    hermano: it.hermano,
-                    papeleta: it.papeleta,
-                    tramoEtiqueta: it.tramo ? etiquetaTramo(it.tramo) : null,
-                    puesto: it.puesto,
-                    hermandadNombre: hermandad.nombreLegal || (user?.user_metadata?.hermandad as string | undefined) || '',
-                    fechaSalida: campana.fechaSalida,
-                  }}
-                />
-              ) : (
-                <PapeletaTicket
-                  papeleta={it.papeleta}
-                  hermano={it.hermano}
-                  hermandad={hermandad}
-                  tramo={it.tramo}
-                  puesto={it.puesto}
-                  excedeAforo={it.excedeAforo}
-                  opcion={it.papeleta.opcion}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <ZonaDeImpresion
+        listaImpresion={listaImpresion}
+        campana={campana}
+        hermandad={hermandad}
+        modelo={modelo}
+        fallbackNombre={fallbackNombre}
+      />
     </div>
   )
 }

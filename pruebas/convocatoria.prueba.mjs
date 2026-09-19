@@ -15,7 +15,7 @@
  * avisado a ninguno, y sin manera de darse cuenta hasta que en febrero
  * faltaran trescientas papeletas por sacar.
  */
-import { antesQue } from './fuentes.mjs'
+import { antesQue, cuerpoDeLaFuncion } from './fuentes.mjs'
 export default async function ({ caso, cargar }) {
   const { readFile } = await import('node:fs/promises')
   const src = await readFile('src/lib/convocatoria.ts', 'utf8')
@@ -28,7 +28,7 @@ export default async function ({ caso, cargar }) {
   // 1. Que MANDE, por el mismo canal que el resto de avisos.
   caso('la convocatoria sale por correo', true, /await avisarPorCorreo\(/.test(codigo))
   caso('y ya no dice que es simulada', false, /simulad/i.test(codigo))
-  const pantalla = await readFile('src/pages/app/Papeletas.tsx', 'utf8')
+  const pantalla = await (await import('./fuentes.mjs')).fuenteDeLasPapeletas()
   const pantallaCodigo = sinComentar(pantalla)
   caso('la pantalla tampoco', false, /simulad/i.test(pantallaCodigo))
   caso('ni promete un proveedor por conectar', false, /se activará al conectar el proveedor/.test(pantallaCodigo))
@@ -37,8 +37,22 @@ export default async function ({ caso, cargar }) {
   caso('no se da por convocado si no sale nada', true,
     /if \(r\.enviados > 0\) \{\s*const conv/.test(codigo))
   // Y se cuenta lo que ha salido de verdad, no lo que se pretendía.
-  caso('se informa de cuántos han salido', true, /r\.enviados > 0/.test(pantalla))
-  caso('y de qué hacer si no sale ninguno', true, /Configuración → Correo/.test(pantalla))
+  /*
+   * ACOTADO AL CUERPO DE `useConvocar`, no a la pantalla entera.
+   *
+   * Estas dos frases —«han salido N» y «mira Configuración → Correo»— están
+   * también en el otro sitio que manda correo desde esta pantalla, el de
+   * mandar UNA papeleta al hermano. Mientras las dos vivían en el mismo
+   * fichero gigante no había forma de distinguirlas, y por eso el guardia
+   * llevaba años sin poder fallar: borrando el recuento de la convocatoria
+   * seguía verde, porque lo encontraba en el hermano de al lado.
+   *
+   * Partida la pantalla, cada cosa está en su fichero y el guardia puede
+   * mirar solo el suyo.
+   */
+  const convocar = cuerpoDeLaFuncion(pantalla, 'export function useConvocar')
+  caso('se informa de cuántos han salido', true, /r\.enviados > 0/.test(convocar))
+  caso('y de qué hacer si no sale ninguno', true, /Configuración → Correo/.test(convocar))
 
   // 3. Queda registrada donde se dice que queda.
   /*
@@ -480,7 +494,6 @@ async function bienvenida({ caso }) {
     /la que elegiste al pedir el alta/.test(sinNada.parrafos.join(' ')))
 
   // Y la pantalla la manda en los DOS sitios que dan de alta.
-  const { readFile } = await import('node:fs/promises')
   const hermanos = await (await import('./fuentes.mjs')).fuenteDelCenso()
   caso('se manda en los dos sitios que dan de alta', 2,
     (hermanos.match(/void darLaBienvenida\(/g) || []).length)

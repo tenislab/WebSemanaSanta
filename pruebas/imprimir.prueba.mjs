@@ -95,7 +95,7 @@ export default async function ({ caso }) {
   caso('y los recuadros se recalculan cuando llegan los datos', true,
     /const kpis = useMemo\([\s\S]*?\}, \[hermanos, cuotas, papeletas, movimientos\]\)/.test(informes))
 
-  const papeletas = await readFile('src/pages/app/Papeletas.tsx', 'utf8')
+  const papeletas = await (await import('./fuentes.mjs')).fuenteDeLasPapeletas()
   caso('las papeletas en masa, igual', true, papeletas.includes("window.addEventListener('afterprint', recoger"))
   caso('y también con red', true, /setTimeout\(recoger, 10000\)/.test(papeletas))
 

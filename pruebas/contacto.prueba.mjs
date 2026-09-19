@@ -227,7 +227,13 @@ export default async function ({ cargar, caso }) {
       // veintitrés ficheros y la lista sigue nombrando la pantalla.
       const src = await fuenteDe(fichero)
       for (const fn of esperados) {
-        caso(`${fichero.split('/').pop()} usa ${fn}`, true, src.includes(fn))
+        /*
+         * SE EXIGE LA LLAMADA, no el nombre. `src.includes('problemaDeNif')`
+         * encaja también en la línea de la importación, así que el guardia
+         * pasaba con el validador TRAÍDO Y SIN LLAMAR — que es justo el fallo
+         * que viene a tapar: un campo que se teclea y no se comprueba.
+         */
+        caso(`${fichero.split('/').pop()} usa ${fn}`, true, new RegExp(`${fn}\\s*\\(`).test(src))
       }
     }
 
@@ -275,9 +281,10 @@ export default async function ({ cargar, caso }) {
    * enseñaban justo la forma que la aplicación iba a rechazar.
    */
   {
-    const { readFile } = await import('node:fs/promises')
+    const { fuenteDe } = await import('./fuentes.mjs')
     for (const f of ['src/pages/app/Configuracion.tsx', 'src/components/AltaHermandad.tsx']) {
-      const src = await readFile(f, 'utf8')
+      // `fuenteDe`: los ajustes están partidos en varios ficheros.
+      const src = await fuenteDe(f)
       const malos = ['G41000000', 'ES23000B12345678', 'G-00000000']
       for (const m of malos) {
         caso(`${f.split('/').pop()} ya no propone ${m}`, false, src.includes(m))
