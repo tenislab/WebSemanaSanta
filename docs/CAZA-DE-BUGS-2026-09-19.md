@@ -6,9 +6,9 @@ sospecha: cada punto lleva **cómo se ha medido** y con qué números, y los
 frentes que han salido limpios se dicen también — un informe que solo enseña
 los hallazgos no deja saber qué se ha mirado.
 
-Está ordenado por lo que le hace daño a una hermandad de verdad. **Los dos
-primeros ya están arreglados** —van tachados, con su medición de antes y de
-después—; del 3 al 7 siguen abiertos.
+Está ordenado por lo que le hace daño a una hermandad de verdad. **Los tres
+primeros están arreglados** —van tachados, con su medición de antes y de
+después—; del 4 al 7 siguen abiertos.
 
 ---
 
@@ -18,7 +18,7 @@ después—; del 3 al 7 siguen abiertos.
 |---|---|---|---|
 | ~~**1**~~ | ~~La supresión del art. 17 certifica un borrado incompleto~~ **ARREGLADO** | **alta** | ejecutando la función con la consulta caída |
 | ~~**2**~~ | ~~Cuatro tokens CSS que no existen se comen 16 declaraciones~~ **ARREGLADO** | **alta** | estilo calculado en el navegador |
-| **3** | Tres tablas pintan todas sus filas: 245 ms por tecla | **media** | cronómetro con 800 hermanos |
+| ~~**3**~~ | ~~Tres tablas pintan todas sus filas: 245 ms por tecla~~ **ARREGLADO ENTERO** (la tecla y abrir) | **media** | A/B alternado, tres pasadas por lado |
 | **4** | El censo lleva un padrón oculto que es el 20 % del DOM | media | conteo de nodos |
 | **5** | La memoria del ejercicio publica «hermano nº 0» | baja | ejecutando `construirMemoria` |
 | **6** | 34 de 39 filtros solo dicen cuál está puesto con el color | baja | recuento sobre el código |
@@ -257,11 +257,107 @@ En tema claro los dos están bien: es el tema oscuro el que no se repasó.
 
 ---
 
-## 3. Tres tablas pintan todas sus filas, y se nota en cada tecla
+## ~~3. Tres tablas pintan todas sus filas, y se nota en cada tecla~~ — ARREGLADO
 
-No hay paginación ni virtualización en ninguna tabla de la aplicación
-(comprobado: cero coincidencias de página, límite o ventana en las cuatro
-pantallas de tabla).
+> **Hecho entero, en dos tandas.** Primero memorizar el cuerpo de cada tabla,
+> que arregló LA TECLA; después paginarlas, que arregló ABRIR, que es lo que la
+> primera tanda no movió ni un milisegundo.
+>
+> **Sumando las dos, contra la situación de partida:**
+>
+> | pantalla | abrir | por tecla | nodos en el DOM |
+> |---|---|---|---|
+> | **Cuotas** (4.512 recibos) | **1.697 → 465 ms** | **179 → 34 ms** | **107.834 → 3.723** |
+> | **Tesorería** (3.000 apuntes) | **1.152 → 448 ms** | **170 → 37 ms** | **52.324 → 2.069** |
+> | Papeletas (800) | 562 → 429 ms | 70 → 40 ms | 17.931 → 2.544 |
+> | Censo (800) | 672 → 467 ms | 68 → 39 ms | 24.380 → 7.591 |
+>
+> **Cien filas por página, y el paginador NO SE PINTA si todo cabe en una.** Es
+> la decisión de diseño que importa: una hermandad de ochenta hermanos no ve
+> aparecer nada nuevo en su censo. Comprobado con las **29 capturas de la
+> demostración, byte a byte iguales** a las de antes de paginar — esto se ha
+> hecho para una grande y no se le cambia la pantalla a la pequeña.
+>
+> **Y lo que no se paginó, que es donde estaba el peligro.** En el censo, la
+> misma lista filtrada alimenta cuatro cosas más: el CSV que se descarga, el
+> padrón que sale por la impresora, «marcar todos» y los contadores. A la tabla
+> le llega la página; a esas cuatro, la lista entera. Si a cualquiera le hubiera
+> llegado la página, el fallo sería mucho peor que el lento que se venía a
+> arreglar: **un padrón de ochocientos hermanos que imprime cien y no lo dice en
+> ninguna parte.** Nadie lo descubre mirando la pantalla; se descubre en el
+> cabildo. Hay guardias para las cuatro, y dichos también al revés —«a esto no
+> le puede llegar una página»—, porque la versión en positivo seguiría en verde
+> si alguien añadiera un segundo camino.
+>
+> Y lleva **«Ver todas»**: cuesta lo que costaba antes y se avisa de ello, pero
+> quitar la posibilidad en silencio es peor —hay quien busca con el Ctrl-F del
+> navegador sobre la tabla entera—.
+>
+> **El censo es el que menos baja** (24.380 → 7.591 nodos) y no es casualidad:
+> de esos 7.591, unos 4.800 son el padrón oculto del punto 4, que sigue ahí.
+>
+> **A/B alternado, tres pasadas por lado** (ANTES/DESPUÉS/ANTES/… para que una
+> máquina que se calienta no se cuele como si fuera el cambio), medianas:
+>
+> | pantalla | antes | después | |
+> |---|---|---|---|
+> | **Cuotas** | **179 ms** [179 162 218] | **60 ms** [56 115 60] | **3×** |
+> | **Tesorería** | **170 ms** [170 134 171] | **120 ms** [120 120 115] | 1,4× |
+> | Papeletas | 70 ms [70 73 64] | 56 ms [53 56 64] | 1,25× |
+> | Hermanos *(control: no se toca)* | 68 ms | 61 ms | dentro del ruido |
+>
+> El tiempo de ABRIR no se mueve en ninguna (1.697 → 1.752 ms en Cuotas): este
+> cambio es sobre la tecla, no sobre el primer pintado, y decirlo de otra
+> manera sería vender humo.
+>
+> **Corrección a lo que escribí en este mismo informe.** El titular decía «245
+> ms por tecla», y era **una sola muestra**. Midiendo tres veces por lado, las
+> muestras del mismo estado van de 162 a 304 ms: la mediana honesta de la
+> situación de partida es **179 ms**. El fallo era real y la mejora es real,
+> pero el número que puse era el peor de una tirada, no la medida.
+>
+> Cuatro ficheros nuevos —`cuotas/FilasDeRecibos.tsx`,
+> `cuotas/FilasPorHermano.tsx`, `tesoreria/FilasDeApuntes.tsx` y
+> `papeletas/FilasDeLaCampana.tsx`—, veintiocho guardias, y **29 capturas byte
+> a byte iguales** en las tres pantallas, con sus volcados de texto idénticos.
+
+### Y el arreglo no estaba donde se había puesto
+
+Puestos los cuatro `memo`, Cuotas y Papeletas mejoraron y **Tesorería no mejoró
+nada**: de 170 a 143–190 ms, o sea dentro del ruido. El motivo no estaba en
+Tesorería.
+
+`useSupabaseTable` devolvía su `set…` como una **función suelta**, o sea nueva
+en cada pintado. Ese `set…` lo monta cada pantalla para cada colección, pasa a
+los manejadores (`marcarConciliado`, `marcarPagada`) y de ahí a las props de
+las filas. Y `memo` compara por identidad: **una sola prop así atraviesa el
+límite y lo deja en un adorno.** Queda escrito «memo», queda el comentario
+explicándolo, y no sirve de nada.
+
+Estabilizado (`lib/supabaseSync.ts`, con `toRow` en una referencia para que la
+identidad no dependa de una prop), Tesorería pasó a 115–120 ms, y Cuotas de
+~153 a 60.
+
+**Lo que esto enseña, y es la mitad del valor del punto 3:** el `memo` del censo
+llevaba tiempo puesto y funcionando, y el de al lado no habría funcionado
+nunca. Leyendo el código las dos cosas se ven igual. Solo el cronómetro las
+distingue.
+
+### Y mi propio guardia tenía un agujero
+
+El guardia nuevo no vigila que el `memo` esté puesto —eso es lo fácil— sino que
+**todas sus props sean estables**. Rompiendo a propósito las cuatro costuras,
+tres saltaron y **la cuarta no**: `const tramoDe = (() => {…})`, una flecha
+entre paréntesis, se le colaba, porque yo había escrito la comprobación
+describiendo la forma que conocía. Ahora coge lo que hay después del `=` y
+pregunta si lleva una flecha sin envoltorio que la estabilice. Con la rotura
+fiel —la línea exacta que había antes— salta.
+
+### Los números de partida, y cómo se midieron
+
+No había paginación ni virtualización en ninguna tabla de la aplicación
+(comprobado entonces: cero coincidencias de página, límite o ventana en las
+cuatro pantallas de tabla). **Ya la hay**, en las cuatro.
 
 **Medido con una hermandad grande de verdad** —800 hermanos, tres ejercicios de
 recibos, 3.000 apuntes—, cronometrando lo que tarda en pintarse y **lo que
@@ -421,17 +517,26 @@ Merece decirse, porque es la mitad del trabajo:
 
 ## Lo que queda
 
-Los puntos **1 y 2 están hechos**. Después de ellos, el barrido de las quince
-pantallas × tres vistas (móvil claro, móvil oscuro, escritorio oscuro) sale
-**limpio en las cuarenta y cinco**: ni un desborde, ni un contraste por debajo
-de 3:1, ni un error de consola. Antes salían tres avisos.
+**Los puntos 1, 2 y 3 están hechos.** Después de ellos:
 
-Por orden de lo que yo haría:
+- El barrido de las quince pantallas × tres vistas (móvil claro, móvil oscuro,
+  escritorio oscuro) sale **limpio en las cuarenta y cinco**: ni un desborde,
+  ni un contraste por debajo de 3:1, ni un error de consola. Antes salían tres
+  avisos.
+- La pantalla de Cuotas con 4.512 recibos **abre en 465 ms en vez de 1.697** y
+  cuesta **34 ms por tecla en vez de 179**, con **3.723 nodos en vez de
+  107.834**. Tesorería, 448 ms en vez de 1.152 y 37 por tecla en vez de 170.
+- Y una hermandad pequeña no nota ninguno de los tres cambios: 29 capturas byte
+  a byte iguales.
+- 5.757 pruebas pasan, con 67 guardias nuevos.
 
-1. **El punto 3**, que es el que más se nota usándolo, y el patrón ya está
-   escrito en `FilasDelCenso.tsx`.
-2. Los puntos **4, 5, 6 y 7** son cada uno de un rato corto.
+**Lo que queda:** los puntos **4, 5, 6 y 7**, cada uno de un rato corto. El 4
+—el padrón oculto que el censo monta siempre— es además lo que impide que el
+censo baje como han bajado las otras tres: de sus 7.591 nodos, unos 4.800 son
+ese padrón.
 
-Y de todos ellos, el que más dice de cómo está montado esto es **el 3**: la
-solución existe, está a cuatro ficheros, y solo se aplicó donde alguien se
-molestó en medir.
+Y la lección que más dice de cómo está montado esto salió del punto 3: el
+`memo` del censo llevaba tiempo puesto y funcionando, y el de la pantalla de al
+lado no habría funcionado nunca —una prop cambiaba de identidad cuatro ficheros
+más abajo—. **Leyendo el código las dos cosas se ven igual. Solo el cronómetro
+las distingue.**

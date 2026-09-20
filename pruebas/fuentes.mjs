@@ -226,6 +226,9 @@ export async function fuenteDelSitio() {
  * toca a cada hermano en el cortejo, que es lo que una hermandad discute
  * durante todo el año.
  */
+export async function fuenteDeLaTesoreria() {
+  return (await fuente('src/pages/app/Tesoreria.tsx')) + (await pegarCarpeta('src/pages/app/tesoreria'))
+}
 export async function fuenteDeLasPapeletas() {
   return (await fuente('src/pages/app/Papeletas.tsx')) + (await pegarCarpeta('src/pages/app/papeletas'))
 }
@@ -248,5 +251,6 @@ export async function fuenteDe(ruta) {
   if (ruta === 'src/pages/app/Configuracion.tsx') return fuenteDeLosAjustes()
   if (ruta === 'src/components/SitioContenido.tsx') return fuenteDelSitio()
   if (ruta === 'src/pages/app/Papeletas.tsx') return fuenteDeLasPapeletas()
+  if (ruta === 'src/pages/app/Tesoreria.tsx') return fuenteDeLaTesoreria()
   return fuente(ruta)
 }

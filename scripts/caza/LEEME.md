@@ -39,6 +39,34 @@ fondo; y un texto sobre una **foto** no se juzga, se salta.
 node scripts/caza/desbordes-y-contrastes.mjs
 ```
 
+## `ab.sh`
+
+Mide un cambio de rendimiento **comparándolo contra el código sin el cambio**:
+guarda lo que hay sin comprometer (`git stash -u`), construye, mide, lo
+devuelve, construye, mide — y repite tres vueltas ALTERNANDO los lados.
+
+Lo de alternar no es adorno. En esta máquina el `ms/tecla` oscila un ±40 %
+entre pasadas de la misma versión: con una muestra por lado se puede
+«demostrar» cualquier cosa, incluidas las dos contrarias. El primer «después»
+que medí daba 304 → 153 ms y la mediana honesta era 179 → 60.
+
+```bash
+scripts/caza/ab.sh          # el resumen sale con medianas y muestras crudas
+```
+
+Deja el desglose en `/tmp/claude-0/ab.txt`. Al acabar hay que comprobar que el
+árbol está como estaba: hace `stash` y `pop` seis veces.
+
+## `ver-paginador.mjs`
+
+Siembra una hermandad grande y enseña qué dice el paginador de cada tabla,
+cuántas filas quedan en el DOM y cuántos nodos. Y lo prueba: salta a otra
+página, pulsa «Ver todas» y vuelve.
+
+```bash
+node scripts/caza/ver-paginador.mjs     # deja las capturas en /tmp/claude-0/fotos-paginador
+```
+
 ## `botones.mjs`
 
 Pulsa los botones visibles de diecisiete pantallas y anota si la pantalla se

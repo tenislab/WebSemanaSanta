@@ -1,5 +1,5 @@
 import { llano } from '../../lib/buscar'
-import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -18,20 +18,23 @@ import {
   cargarModeloReciboDeLaBase,
 } from '../../lib/modeloRecibo'
 import type { ModeloPapeleta } from '../../lib/modeloPapeleta'
-import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
+import { HERMANOS_INICIALES, type Hermano } from '../../data/hermanos'
 import {
   CUOTAS_INICIALES,
   METODOS_COBRO,
   deudaDe,
   esAvisado,
   estaSinCobrar,
-  metodoDeCuota,
   metodoEnFrase,
   type ConceptoCuota,
   type Cuota,
   type EstadoCuota,
   type MetodoCobro,
 } from '../../data/cuotas'
+import { FilasDeRecibos } from './cuotas/FilasDeRecibos'
+import { Paginador } from '../../components/Paginador'
+import { usePaginado } from '../../lib/paginar'
+import { FilasPorHermano } from './cuotas/FilasPorHermano'
 import { useConceptosCuota } from '../../lib/conceptosCuota'
 import { useAuth } from '../../context/AuthContext'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
@@ -62,7 +65,6 @@ import {
   ejercicioVigente,
   inicioDeEjercicio,
 } from '../../lib/cuotasEmision'
-import { filaQueAbre } from '../../lib/foco'
 import { useLasDevoluciones } from './cuotas/devoluciones'
 import CajonDeAjustes from './cuotas/CajonDeAjustes'
 import { MESES_LARGOS } from './cuotas/meses'
@@ -102,12 +104,6 @@ function formatearFechaInput(value: string) {
   const d = new Date(`${value}T00:00:00`)
   if (Number.isNaN(d.getTime())) return hoy()
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function estadoClass(estado: EstadoCuota) {
-  if (estado === 'Pagada') return 'pill--ok'
-  if (estado === 'Pendiente') return 'pill--warn'
-  return 'pill--err'
 }
 
 /**
@@ -461,6 +457,20 @@ export default function Cuotas() {
       .sort((a, b) => b.numero - a.numero)
   }, [cuotas, busqueda, filter, hermanoDe])
 
+  /*
+   * PARTIDA EN PÁGINAS PARA LA TABLA, Y SOLO PARA LA TABLA.
+   *
+   * `filtered` se queda ENTERA, y eso es lo importante: es la que cuentan los
+   * recuadros, la que se descarga en CSV, la que sale por la impresora y la
+   * que marca «todos». A la tabla va solo `paginado.pagina`. Paginar esas
+   * cuatro sería un fallo peor que el lento que se viene a arreglar: un padrón
+   * de ochocientos que imprime cien y no lo dice.
+   *
+   * Con menos de cien filas no aparece el paginador y no cambia nada: ver
+   * `POR_PAGINA` en `lib/paginar.ts`.
+   */
+  const paginadoDeRecibos = usePaginado(filtered)
+
   /**
    * EL CENSO CON SU SITUACIÓN, una fila por hermano.
    *
@@ -479,6 +489,20 @@ export default function Cuotas() {
       .filter((x) => filtroSituacion === 'Todos' || x.situacion === filtroSituacion)
       .filter((x) => !q || llano(x.hermano.nombre).includes(q) || String(x.hermano.numero).includes(q))
   }, [situaciones, filtroSituacion, busqueda])
+
+  /*
+   * PARTIDA EN PÁGINAS PARA LA TABLA, Y SOLO PARA LA TABLA.
+   *
+   * `situacionesFiltradas` se queda ENTERA, y eso es lo importante: es la que cuentan los
+   * recuadros, la que se descarga en CSV, la que sale por la impresora y la
+   * que marca «todos». A la tabla va solo `paginado.pagina`. Paginar esas
+   * cuatro sería un fallo peor que el lento que se viene a arreglar: un padrón
+   * de ochocientos que imprime cien y no lo dice.
+   *
+   * Con menos de cien filas no aparece el paginador y no cambia nada: ver
+   * `POR_PAGINA` en `lib/paginar.ts`.
+   */
+  const paginadoPorHermano = usePaginado(situacionesFiltradas)
 
   const stats = useMemo(() => {
     // Los indicadores hablan del EJERCICIO EN CURSO (antes mezclaban todos los
@@ -515,7 +539,13 @@ export default function Cuotas() {
    * Por eso `metodo` se puede pasar: es lo que dice cómo se ha cobrado DE
    * VERDAD, que no siempre es como se pensaba cobrar.
    */
-  function marcarPagada(id: string, metodo?: MetodoCobro) {
+  /*
+   * `useCallback` y no una función suelta: es una prop de `FilasDeRecibos`, y
+   * si cambiara de identidad en cada render el `memo` de las filas no pasaría
+   * de largo nunca. Es la misma razón que en `Hermanos.tsx` con
+   * `alternarMarca`.
+   */
+  const marcarPagada = useCallback((id: string, metodo?: MetodoCobro) => {
     const cambios = {
       estado: 'Pagada' as const,
       fechaPago: hoy(),
@@ -558,7 +588,7 @@ export default function Cuotas() {
         )
       }
     }
-  }
+  }, [cuotas, hermanos, setCuotas, setSelected, setMovimientos])
 
   const miCorreo = (user?.email ?? '').toLowerCase()
   const miNombre = (user?.user_metadata?.nombre as string | undefined) ?? user?.email ?? 'Un cargo'
@@ -1194,72 +1224,24 @@ export default function Cuotas() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c) => {
-              const h = hermanoDe(c.hermanoId)
-              return (
-                <tr
-                  key={c.id}
-                  className={c.id === justAddedId ? 'row--flash' : undefined}
-                  {...filaQueAbre(() => setSelected(c))}
-                >
-                  <td className="num col-opcional">{String(c.numero).padStart(4, '0')}</td>
-                  <td>
-                    <div className="row-person">
-                      <span className="row-avatar">{h ? initials(h.nombre) : '?'}</span>
-                      <span>
-                        <span className="row-person__name">{h?.nombre ?? 'Hermano desconocido'}</span>
-                        <span className="row-person__sub">Nº {h?.numero ?? '—'}</span>
-                        <span className="row-person__sub solo-movil">{c.concepto} · {c.fechaCobro}</span>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="col-opcional">{c.concepto}</td>
-                  <td>
-                    <span className={`pill ${estadoClass(c.estado)}`}>{c.estado}</span>
-                    {esAvisado(c) && (
-                      <span className="pill-avisado" title={`El hermano avisó el ${c.pagoComunicado?.fecha} de que ha pagado por ${c.pagoComunicado?.metodo}`}>
-                        Dice que ha pagado
-                      </span>
-                    )}
-                  </td>
-                  <td className="num">{formatCurrency(c.importe)}</td>
-                  <td className="col-opcional">
-                    <span className="cobro-cell">
-                      <span className="num">{c.fechaCobro}</span>
-                      <span className={`cobro-tag${c.domiciliada ? ' cobro-tag--bank' : ''}`}>
-                        {metodoDeCuota(c)}
-                      </span>
-                    </span>
-                  </td>
-                  <td className="col-opcional">
-                    <div className="row-actions">
-                      <button
-                        className="icon-btn"
-                        title="Ver recibo"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelected(c)
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                      </button>
-                      {c.estado === 'Pendiente' && (
-                        <button
-                          className="icon-btn"
-                          title="Marcar como pagada"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            marcarPagada(c.id)
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+            {/*
+              EL CUERPO, MEMORIZADO. Cada letra del buscador re-renderiza esta
+              pantalla; sin el límite de `memo`, React recorría las cuatro mil
+              quinientas filas en el render urgente —el de la letra— aunque la
+              lista filtrada no hubiera cambiado todavía. Medido: 304 ms por
+              tecla. Ver `cuotas/FilasDeRecibos.tsx`.
+
+              Las props tienen que ser ESTABLES o el límite no sirve:
+              `hermanoDe` ya venía de un `useMemo` y `marcarPagada` está en un
+              `useCallback` por esto mismo.
+            */}
+            <FilasDeRecibos
+              filtered={paginadoDeRecibos.pagina}
+              justAddedId={justAddedId}
+              hermanoDe={hermanoDe}
+              setSelected={setSelected}
+              marcarPagada={marcarPagada}
+            />
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="table-empty">
@@ -1302,6 +1284,7 @@ export default function Cuotas() {
             )}
           </tbody>
         </table>
+        <Paginador p={paginadoDeRecibos} que="recibos" />
       </div>
       ) : (
       /*
@@ -1325,55 +1308,11 @@ export default function Cuotas() {
             </tr>
           </thead>
           <tbody>
-            {situacionesFiltradas.map((x) => {
-              const etiqueta = etiquetaDeSituacion(x.situacion)
-              return (
-                <tr key={x.hermano.id}>
-                  <td className="num col-opcional">{x.hermano.numero > 0 ? x.hermano.numero : '—'}</td>
-                  <td>
-                    <div className="row-person">
-                      <span className="row-avatar">{initials(x.hermano.nombre)}</span>
-                      <span>
-                        <span className="row-person__name">{x.hermano.nombre}</span>
-                        <span className="row-person__sub">Nº {x.hermano.numero > 0 ? x.hermano.numero : '—'}</span>
-                        {/*
-                          En el móvil, la línea de debajo del nombre lleva lo
-                          de las columnas QUE SE HAN ESCONDIDO —los recibos del
-                          ejercicio y desde cuándo arrastra—, no la situación:
-                          esa se ve en su propia columna, ahí al lado, y
-                          repetirla dejaba «Sin cuota emitida» dos veces en
-                          cada fila.
-                        */}
-                        <span className="row-person__sub solo-movil">
-                          {x.recibosDelEjercicio === 0
-                            ? `sin recibos de ${ejercicioMirado}`
-                            : `${x.recibosDelEjercicio} recibo${x.recibosDelEjercicio === 1 ? '' : 's'} de ${ejercicioMirado}`}
-                          {x.desde != null && x.desde < ejercicioMirado ? ` · debe desde ${x.desde}` : ''}
-                        </span>
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`pill ${etiqueta.clase}`}>{etiqueta.texto}</span>
-                    {x.avisa && (
-                      <span className="pill-avisado" title="Ha avisado desde su área de que ya ha pagado">
-                        Dice que ha pagado
-                      </span>
-                    )}
-                  </td>
-                  <td className="num">
-                    {x.deudaTotal > 0 ? formatCurrency(x.deudaTotal) : '—'}
-                    {/* Lo atrasado se separa: no es lo mismo deber el recibo de
-                        este mes que arrastrar dos ejercicios. */}
-                    {x.deudaAtrasada > 0 && (
-                      <span className="row-person__sub">{formatCurrency(x.deudaAtrasada)} de años anteriores</span>
-                    )}
-                  </td>
-                  <td className="num col-opcional">{x.recibosDelEjercicio}</td>
-                  <td className="num col-opcional">{x.desde ?? '—'}</td>
-                </tr>
-              )
-            })}
+            {/* El cuerpo, memorizado: ver `cuotas/FilasPorHermano.tsx`. */}
+            <FilasPorHermano
+              situacionesFiltradas={paginadoPorHermano.pagina}
+              ejercicioMirado={ejercicioMirado}
+            />
             {situacionesFiltradas.length === 0 && (
               <tr>
                 <td colSpan={6} className="table-empty">
@@ -1385,6 +1324,7 @@ export default function Cuotas() {
             )}
           </tbody>
         </table>
+        <Paginador p={paginadoPorHermano} que="hermanos" />
       </div>
       )}
 

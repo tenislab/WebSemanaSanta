@@ -1,6 +1,6 @@
 import { llano } from '../../lib/buscar'
 import { sumaEuros, aCentimos } from '../../lib/format'
-import { useDeferredValue, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useDeferredValue, useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'
 import MovimientoJustificante from '../../components/MovimientoJustificante'
 import {
@@ -21,7 +21,9 @@ import { CLAVES_DATOS } from '../../lib/persistencia'
 import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { hayDatosDeEjemplo } from '../../lib/demo'
-import { filaQueAbre } from '../../lib/foco'
+import { FilasDeApuntes } from './tesoreria/FilasDeApuntes'
+import { Paginador } from '../../components/Paginador'
+import { usePaginado } from '../../lib/paginar'
 import { hoyIso } from '../../lib/hoy'
 import ImportarTabla from '../../components/ImportarTabla'
 import { useContextoDeImportacion } from '../../lib/contextoImportacion'
@@ -90,6 +92,19 @@ export default function Tesoreria() {
   }, [movimientos, busqueda, filter])
 
   /*
+   * PARTIDA EN PÁGINAS PARA LA TABLA, Y SOLO PARA LA TABLA.
+   *
+   * `filtered` se queda entera: es la que cuentan los recuadros de arriba, la
+   * que se descarga, la que sale por la impresora y la que marca «todos». A la
+   * tabla va solo `paginado.pagina`. Paginar las otras sería un fallo peor que
+   * el lento que se viene a arreglar.
+   *
+   * Con menos de cien filas no hay paginador ni cambia nada: ver `POR_PAGINA`
+   * en `lib/paginar.ts`.
+   */
+  const paginado = usePaginado(filtered)
+
+  /*
    * La posición de IVA se calcula sobre TODO el libro que está viendo el
    * tesorero, con sus filtros aplicados o sin ellos según lo que sea
    * `movimientos` aquí: si un día se filtra por trimestre, esta cifra pasa a
@@ -111,10 +126,14 @@ export default function Tesoreria() {
     setFormOpen(true)
   }
 
-  function marcarConciliado(id: string) {
+  /*
+   * `useCallback`: es una prop de `FilasDeApuntes`, y una función nueva en
+   * cada render dejaría su `memo` sin efecto.
+   */
+  const marcarConciliado = useCallback((id: string) => {
     setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, estado: 'Conciliado' } : m)))
     setSelected((prev) => (prev && prev.id === id ? { ...prev, estado: 'Conciliado' } : prev))
-  }
+  }, [setMovimientos, setSelected])
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -287,59 +306,16 @@ export default function Tesoreria() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((m) => (
-              <tr
-                key={m.id}
-                className={m.id === justAddedId ? 'row--flash' : undefined}
-                {...filaQueAbre(() => setSelected(m))}
-              >
-                <td className="num col-opcional">{String(m.numero).padStart(4, '0')}</td>
-                <td className="num col-opcional">{m.fecha}</td>
-                <td>
-                  {m.concepto}
-                  <span className={`pill pill--${m.tipo === 'Ingreso' ? 'ok' : 'err'} tesoreria-tipo`}>{m.tipo}</span>
-                  {/* En el móvil se ocultan fecha, categoría, cuenta y estado. */}
-                  <span className="row-person__sub solo-movil">
-                    {m.fecha} · {m.categoria} · {m.estado}
-                  </span>
-                </td>
-                <td className="col-opcional">{m.categoria}</td>
-                <td className="col-opcional">{m.cuenta}</td>
-                <td className={`num tesoreria-importe tesoreria-importe--${m.tipo === 'Ingreso' ? 'ok' : 'err'}`}>
-                  {m.tipo === 'Gasto' ? '−' : '+'}
-                  {formatCurrency(m.importe)}
-                </td>
-                <td className="col-opcional">
-                  <span className={`pill ${m.estado === 'Conciliado' ? 'pill--ok' : 'pill--warn'}`}>{m.estado}</span>
-                </td>
-                <td className="col-opcional">
-                  <div className="row-actions">
-                    <button
-                      className="icon-btn"
-                      title="Ver justificante"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelected(m)
-                      }}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                    </button>
-                    {m.estado === 'Pendiente' && (
-                      <button
-                        className="icon-btn"
-                        title="Marcar como conciliado"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          marcarConciliado(m.id)
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {/*
+              El cuerpo, memorizado: ver `tesoreria/FilasDeApuntes.tsx`. Con
+              tres mil apuntes eran 170 ms por tecla en el buscador.
+            */}
+            <FilasDeApuntes
+              filtered={paginado.pagina}
+              justAddedId={justAddedId}
+              setSelected={setSelected}
+              marcarConciliado={marcarConciliado}
+            />
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={8} className="table-empty">
@@ -349,6 +325,7 @@ export default function Tesoreria() {
             )}
           </tbody>
         </table>
+        <Paginador p={paginado} que="apuntes" />
       </div>
 
       {/* Justificante */}

@@ -1,6 +1,6 @@
 import { traducirErrorDeEscritura, type ErrorTraducido } from './errorDeBaseDeDatos'
 import { traerTodasLasFilas } from './paginado'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { modoDemoActivo } from './demo'
@@ -163,6 +163,15 @@ export function useSupabaseTable<T extends { id: string }>(
    */
   const ventanaRef = useRef(opciones?.ventana)
   ventanaRef.current = opciones?.ventana
+  /*
+   * `toRow` TAMBIÉN EN UNA REFERENCIA, y por lo de abajo.
+   *
+   * Es una prop, así que no se puede dar por estable aunque hoy todas las
+   * pantallas pasen una función de módulo. Con la referencia, el `setItems` de
+   * abajo no necesita depender de ella y no cambia de identidad nunca.
+   */
+  const toRowRef = useRef(toRow)
+  toRowRef.current = toRow
   // Modo local efectivo: sin Supabase configurado, o en modo demostración
   // (aunque Supabase esté configurado pero en pausa). En demo leemos siempre
   // los datos de ejemplo del navegador, sin consultar Supabase, para que el
@@ -207,11 +216,11 @@ export function useSupabaseTable<T extends { id: string }>(
    * Un solo sitio para no acabar con tres formas distintas de escribir la
    * misma clave, que es exactamente como se rompe un espejo compartido.
    */
-  function espejar(lista: T[]) {
+  const espejar = useCallback((lista: T[]) => {
     const v = ventanaRef.current
     if (v) espejarParteEnLocal(claveLocal, lista, v.dentro)
     else espejarEnLocal(claveLocal, lista)
-  }
+  }, [claveLocal])
 
   useEffect(() => {
     if (local || !supabase) return
@@ -373,18 +382,37 @@ export function useSupabaseTable<T extends { id: string }>(
     })
   })
 
-  function setItems(actualizador: Actualizador<T>) {
+  /*
+   * `useCallback`, Y NO ES COSMÉTICO: ERA LA IDENTIDAD DE ESTA FUNCIÓN.
+   *
+   * Era una función suelta, o sea NUEVA EN CADA PINTADO, y este hook lo monta
+   * cada pantalla para cada colección. El `set…` que devuelve va a parar a los
+   * manejadores de media aplicación —`marcarPagada`, `marcarConciliado`—, y de
+   * ahí a las props del cuerpo memorizado de las tablas.
+   *
+   * Resultado: `memo` compara por identidad, así que el límite de las filas se
+   * atravesaba en cada letra del buscador y no servía de nada. Se vio midiendo:
+   * puestos los `memo` de Cuotas y Tesorería, TESORERÍA NO MEJORÓ NADA —de 170
+   * a 143–190 ms por tecla, dentro del ruido—, y el motivo estaba aquí, cuatro
+   * ficheros más abajo de donde se había puesto el arreglo.
+   *
+   * Todo lo que necesita es estable o está en una referencia, así que la
+   * identidad no cambia nunca: `local` es un `useState` inicial, `tabla` y
+   * `claveLocal` son parámetros, `cargado` y `ventanaRef` son referencias, y
+   * `toRow` se pasó a una para esto.
+   */
+  const setItems = useCallback((actualizador: Actualizador<T>) => {
     setItemsState((prev) => {
       const next = typeof actualizador === 'function' ? (actualizador as (p: T[]) => T[])(prev) : actualizador
       if (!local && supabase) {
-        if (cargado.current) sincronizar(tabla, prev, next, toRow)
+        if (cargado.current) sincronizar(tabla, prev, next, toRowRef.current)
         if (!sinEspejo) espejar(next)
       } else if (!sinEspejo) {
         espejar(next)
       }
       return next
     })
-  }
+  }, [local, tabla, sinEspejo, espejar])
 
   return [items, setItems] as const
 }

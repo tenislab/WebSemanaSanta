@@ -8682,3 +8682,51 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem;
   line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-muted);
 }
+
+/* =========================================================================
+   El pie de una tabla paginada
+   -------------------------------------------------------------------------
+   Va DENTRO de `.table-card`, debajo de la tabla y pegado a ella: es parte
+   del mismo objeto, no un control que flota aparte. Y no se pinta cuando todo
+   cabe en una página, así que en una hermandad pequeña esta sección de CSS no
+   llega a aplicarse nunca.
+
+   `.table-card` tiene `overflow-x: auto` porque la tabla mide 720 px mínimo;
+   el paginador no hereda ese ancho mínimo a propósito, para que en el móvil se
+   quede quieto en su sitio en vez de irse a la derecha con la tabla.
+   ========================================================================= */
+.paginador {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 0.6rem 1rem;
+  padding: 0.7rem 1.1rem;
+  border-top: 1px solid var(--line);
+  position: sticky; left: 0;
+}
+.paginador__cuenta {
+  margin: 0; font-size: 0.8rem; color: var(--text-muted);
+  /* Los dígitos alineados: el texto cambia con cada página y sin esto baila. */
+  font-variant-numeric: tabular-nums;
+}
+.paginador__paginas { display: flex; align-items: center; gap: 0.2rem; flex-wrap: wrap; }
+.paginador__num {
+  min-width: 1.9rem; padding: 0.3rem 0.45rem;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: none; color: var(--text); font: inherit; font-size: 0.82rem;
+  font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.paginador__num:hover { background: var(--bg-sunken); }
+.paginador__num:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+/* La puesta se marca con fondo Y con borde, no solo con el tono: el
+   `aria-current` lo dice a quien escucha, y esto a quien no distinga colores. */
+.paginador__num--puesta {
+  background: var(--bg-sunken); border-color: var(--line-strong); font-weight: 700;
+}
+.paginador__hueco { padding: 0 0.15rem; color: var(--text-muted); font-size: 0.82rem; }
+.paginador__todas { flex: none; }
+@media (max-width: 640px) {
+  .paginador { justify-content: center; }
+  .paginador__cuenta { flex: 1 1 100%; text-align: center; }
+}
+/* Y en el papel no sale: lo que se imprime es el documento entero, que se
+   arma aparte y con la lista completa (ver `InformeImpreso`). */
+@media print { .paginador { display: none; } }

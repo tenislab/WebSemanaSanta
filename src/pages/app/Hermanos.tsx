@@ -113,6 +113,8 @@ import {
 } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { FilasDelCenso } from './censo/FilasDelCenso'
+import { Paginador } from '../../components/Paginador'
+import { usePaginado } from '../../lib/paginar'
 import { CajonSolicitudes } from './censo/CajonSolicitudes'
 import { useSolicitudesDeAlta } from './censo/solicitudesDeAlta'
 import {
@@ -579,6 +581,20 @@ export default function Hermanos() {
         return signo * ((a.numero || Infinity) - (b.numero || Infinity))
       })
   }, [sesgados, busqueda, filter, filtroEtiqueta, orden, soloCumples, roles, situacionesDeCuota])
+
+  /*
+   * PARTIDA EN PÁGINAS PARA LA TABLA, Y SOLO PARA LA TABLA.
+   *
+   * `filtered` se queda ENTERA, y eso es lo importante: es la que cuentan los
+   * recuadros, la que se descarga en CSV, la que sale por la impresora y la
+   * que marca «todos». A la tabla va solo `paginado.pagina`. Paginar esas
+   * cuatro sería un fallo peor que el lento que se viene a arreglar: un padrón
+   * de ochocientos que imprime cien y no lo dice.
+   *
+   * Con menos de cien filas no aparece el paginador y no cambia nada: ver
+   * `POR_PAGINA` en `lib/paginar.ts`.
+   */
+  const paginado = usePaginado(filtered)
 
   const cumplenEsteMes = useMemo(
     () => hermanos.filter((h) => h.estado !== 'Baja' && cumpleEsteMes(h.fechaNacimiento)).length,
@@ -1502,7 +1518,7 @@ export default function Hermanos() {
               actualiza en el render diferido, fuera del camino del dedo.
             */}
             <FilasDelCenso
-              lista={filtered}
+              lista={paginado.pagina}
               justAddedId={justAddedId}
               marcados={marcados}
               situaciones={situacionesDeCuota}
@@ -1549,6 +1565,7 @@ export default function Hermanos() {
             )}
           </tbody>
         </table>
+        <Paginador p={paginado} que="hermanos" />
       </div>
 
       {/* Ficha individual */}

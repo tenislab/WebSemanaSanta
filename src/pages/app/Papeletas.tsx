@@ -1,5 +1,5 @@
 import { llano } from '../../lib/buscar'
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'
 import { Link } from 'react-router-dom'
 import Drawer from '../../components/Drawer'
@@ -8,7 +8,7 @@ import PapeletaTicket from '../../components/PapeletaTicket'
 import PapeletaModeloRender from '../../components/PapeletaModeloRender'
 import ModeloPapeletaEditor from '../../components/ModeloPapeletaEditor'
 import { cargarModeloPapeletaDeLaBase, getModeloPapeleta, type ModeloPapeleta } from '../../lib/modeloPapeleta'
-import { HERMANOS_INICIALES, initials } from '../../data/hermanos'
+import { HERMANOS_INICIALES } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, METODOS_PAGO_PAPELETA, type MetodoPagoPapeleta, type Papeleta } from '../../data/papeletas'
 import { estaSinCobrar, CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
 import { useAjustesCuotas } from '../../lib/ajustesCuotas'
@@ -35,7 +35,6 @@ import {
   renovacionDeHermano,
   estadoDeLaCampana,
   type Campana,
-  type EstadoRenovacion,
 } from '../../lib/campana'
 import { CLAVES_DATOS, leerPersistido, leerDatos } from '../../lib/persistencia'
 import { useSupabaseTable } from '../../lib/supabaseSync'
@@ -44,9 +43,11 @@ import { desdeQueEjercicio, ventanaDePapeletas } from '../../lib/ventanaHistoric
 import { papeletaToRow, rowToPapeleta } from '../../lib/db/papeletas'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
-import { filaQueAbre } from '../../lib/foco'
-import { aniosDeHermandad } from '../../lib/hermanoFicha'
 import { fmtIso, hoy } from './papeletas/fechas'
+import { FilasDeLaCampana } from './papeletas/FilasDeLaCampana'
+import { Paginador } from '../../components/Paginador'
+import { usePaginado } from '../../lib/paginar'
+import { claseEstado } from './papeletas/claseEstado'
 import { useRenovarYSacar } from './papeletas/renovarYSacar'
 import { useLosPagos } from './papeletas/pagos'
 import { useLaImpresion } from './papeletas/impresion'
@@ -57,13 +58,6 @@ import CajonDeSolicitudes from './papeletas/CajonDeSolicitudes'
 import ZonaDeImpresion from './papeletas/ZonaDeImpresion'
 
 
-
-function claseEstado(estado: EstadoRenovacion) {
-  if (estado === 'Renovada' || estado === 'Nueva') return 'pill--ok'
-  if (estado === 'Por renovar') return 'pill--warn'
-  if (estado === 'No renovada') return 'pill--err'
-  return 'pill--off'
-}
 
 const FILTROS = ['Todos', 'Por renovar', 'Renovadas', 'Nuevas', 'No renovadas', 'Sin papeleta'] as const
 
@@ -201,7 +195,18 @@ export default function Papeletas() {
     return (id: string) => map.get(id)
   }, [hermanos])
 
-  const tramoDe = (tramoId: string | null) => (tramoId ? (tramos.find((t) => t.id === tramoId) ?? null) : null)
+  /*
+   * DE UN `find` POR FILA A UN MAPA, y memorizado.
+   *
+   * Era una función creada en cada render que recorría la lista de tramos
+   * entera por cada fila. Dos problemas en uno: al ser nueva en cada render
+   * atravesaba el `memo` de las filas, y al ser un `find` lineal multiplicaba
+   * filas por tramos. Ahora es un mapa estable mientras los tramos no cambien.
+   */
+  const tramoDe = useMemo(() => {
+    const map = new Map(tramos.map((t) => [t.id, t]))
+    return (tramoId: string | null) => (tramoId ? (map.get(tramoId) ?? null) : null)
+  }, [tramos])
 
   const cuerposDisponibles = useMemo(() => cuerposPresentes(tramos), [tramos])
   const tramosDelCuerpoElegido = useMemo(
@@ -257,6 +262,20 @@ export default function Papeletas() {
           : (a.hermano.numero || Infinity) - (b.hermano.numero || Infinity),
       )
   }, [hermanos, papeletas, campana, filter, busqueda, orden])
+
+  /*
+   * PARTIDA EN PÁGINAS PARA LA TABLA, Y SOLO PARA LA TABLA.
+   *
+   * `filas` se queda ENTERA, y eso es lo importante: es la que cuentan los
+   * recuadros, la que se descarga en CSV, la que sale por la impresora y la
+   * que marca «todos». A la tabla va solo `paginado.pagina`. Paginar esas
+   * cuatro sería un fallo peor que el lento que se viene a arreglar: un padrón
+   * de ochocientos que imprime cien y no lo dice.
+   *
+   * Con menos de cien filas no aparece el paginador y no cambia nada: ver
+   * `POR_PAGINA` en `lib/paginar.ts`.
+   */
+  const paginado = usePaginado(filas)
 
   const stats = useMemo(() => {
     const cuenta = { conSitio: 0, porRenovar: 0, noRenovadas: 0, nuevas: 0 }
@@ -318,10 +337,12 @@ export default function Papeletas() {
     return Math.max(0, ...lista.filter((p) => p.anio === anio).map((p) => p.numero)) + 1
   }
 
-  function abrirDetalle(id: string) {
+  /* `useCallback`: es prop de `FilasDeLaCampana` y su `memo` compara por
+     identidad. Una función nueva en cada render lo dejaría sin efecto. */
+  const abrirDetalle = useCallback((id: string) => {
     setSelectedId(id)
     setPendingCuerpo('')
-  }
+  }, [])
 
 
 
@@ -614,80 +635,18 @@ export default function Papeletas() {
             </tr>
           </thead>
           <tbody>
-            {filas.map(({ hermano: h, renovacion: r }) => {
-              const tramoAnterior = tramoDe(r.sitioAnterior?.tramoId ?? null)
-              const aniosEnLaHermandad = aniosDeHermandad(h.antiguedad, campana.anio)
-              const asigActual = r.papeletaActual ? asignacionPorPapeleta.get(r.papeletaActual.id) : undefined
-              const tramoActual = asigActual?.tramo ?? null
-              return (
-                <tr key={h.id} {...filaQueAbre(() => abrirDetalle(h.id))}>
-                  <td className="num col-opcional">{h.numero}</td>
-                  <td>
-                    <div className="row-person">
-                      <span className="row-avatar">{initials(h.nombre)}</span>
-                      <span>
-                        <span className="row-person__name">{h.nombre}</span>
-                        <span className="row-person__sub">Nº {h.numero} · {h.estado}</span>
-                        {/* En el móvil se ocultan sus columnas: el dato baja aquí. */}
-                        <span className="row-person__sub solo-movil">
-                          {aniosEnLaHermandad === null ? 'Antigüedad sin registrar' : `${aniosEnLaHermandad} años`}
-                          {' · '}
-                          {tramoAnterior ? etiquetaTramo(tramoAnterior) : 'sin sitio anterior'}
-                        </span>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="table-subtle td-nowrap col-opcional">
-                    {/* La antigüedad manda en el reparto del cortejo, así que
-                        cuando no consta hay que decirlo, no poner un número
-                        inventado. Aquí llegó a salir «NaN años». */}
-                    {aniosEnLaHermandad === null ? (
-                      <span className="table-muted">Sin registrar</span>
-                    ) : (
-                      <>
-                        {aniosEnLaHermandad} años
-                        <span className="table-muted"> · {h.antiguedad}</span>
-                      </>
-                    )}
-                  </td>
-                  <td className="col-opcional">{tramoAnterior ? etiquetaTramo(tramoAnterior) : <span className="table-muted">—</span>}</td>
-                  <td>
-                    <span className={`pill ${claseEstado(r.estado)}`}>{r.estado}</span>
-                  </td>
-                  <td>
-                    {tramoActual ? (
-                      <>
-                        {etiquetaTramo(tramoActual)}
-                        {asigActual?.estado === 'Excede aforo' && (
-                          <span className="table-subtle"> · excede aforo</span>
-                        )}
-                      </>
-                    ) : r.papeletaActual?.opcion && r.papeletaActual.estado !== 'Renuncia' ? (
-                      <>
-                        {/* La pregunta de quien mira esta columna es si esa
-                            persona camina o no. Se responde. */}
-                        {r.papeletaActual.opcion}
-                        <span className="table-subtle"> · no sale en el cortejo</span>
-                      </>
-                    ) : (
-                      <span className="table-muted">—</span>
-                    )}
-                  </td>
-                  <td className="col-opcional">
-                    <button
-                      className="icon-btn"
-                      title="Ver ficha"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        abrirDetalle(h.id)
-                      }}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
+            {/*
+              El cuerpo, memorizado: ver `papeletas/FilasDeLaCampana.tsx`. Con
+              800 filas eran 104 ms por tecla, el doble que el censo con el
+              doble de filas, y la diferencia era justamente este límite.
+            */}
+            <FilasDeLaCampana
+              filas={paginado.pagina}
+              campana={campana}
+              tramoDe={tramoDe}
+              asignacionPorPapeleta={asignacionPorPapeleta}
+              abrirDetalle={abrirDetalle}
+            />
             {filas.length === 0 && (
               <tr>
                 <td colSpan={7} className="table-empty">
@@ -697,6 +656,7 @@ export default function Papeletas() {
             )}
           </tbody>
         </table>
+        <Paginador p={paginado} que="hermanos" />
       </div>
 
       {/* Ficha del hermano en la campaña */}

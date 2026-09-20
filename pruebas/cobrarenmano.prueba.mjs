@@ -26,8 +26,18 @@ export default async function ({ cargar, caso }) {
    * `conApunteDeCobro` decide con `cuentaSegunMetodo()` si el ingreso va a caja
    * o al banco: pasarle el método equivocado no da error, da un descuadre.
    */
+  /*
+   * LA FIRMA, NO CÓMO SE DECLARE.
+   *
+   * Decía `/function marcarPagada\(…\)/`, y se puso roja el día que
+   * `marcarPagada` pasó a un `useCallback` —por rendimiento, sin tocar lo que
+   * hace—. Lo que este guardia protege es que se PUEDA decir el método de
+   * cobro, o sea el parámetro; que sea una `function`, una flecha o un
+   * `useCallback` no cambia nada de eso, y atarlo a la sintaxis solo garantiza
+   * un rojo falso en el próximo cambio de forma.
+   */
   caso('se puede decir cómo se ha cobrado de verdad', true,
-    /function marcarPagada\(id: string, metodo\?: MetodoCobro\)/.test(pantalla))
+    /marcarPagada\s*=?\s*(useCallback\()?\(?\(?id: string, metodo\?: MetodoCobro\)/.test(pantalla))
   caso('y ese método es el que va al libro', true, /metodo: metodo \?\? c\.metodoCobro/.test(pantalla))
   caso('y se guarda en el recibo', true, /metodoCobro: metodo, domiciliada: metodo === 'Domiciliación'/.test(pantalla))
   /*
