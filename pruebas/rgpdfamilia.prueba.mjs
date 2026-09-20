@@ -21,6 +21,7 @@
  */
 import { antesQue } from './fuentes.mjs'
 export default async function ({ cargar, caso }) {
+  await laRamaDeLaBase({ caso })
   const m = await cargar('src/lib/rgpd.ts')
 
   const CLAVE_SOL = 'cabildo-solicitudes-alta'
@@ -121,4 +122,116 @@ export default async function ({ cargar, caso }) {
     /solicitudes_alta'\)\.delete\(\)\.in\('id'/.test(conBase))
   caso('ya no borra todo lo que comparta correo', false,
     /solicitudes_alta'\)\.delete\(\)\.eq\('email'/.test(conBase))
+}
+
+/**
+ * Y LA RAMA DE LA BASE, QUE ES LA QUE USA UNA HERMANDAD DE VERDAD.
+ *
+ * Todo lo de arriba recorre el camino de `localStorage`, que es el del modo
+ * demostración. La rama de Supabase —la de una hermandad con su base
+ * conectada— no se probaba, y ahí dentro había una consulta cuyo error nadie
+ * miraba: la que saca el DNI y el correo de la ficha para poder encontrar
+ * después su solicitud de alta.
+ *
+ * QUÉ PASABA. Si esa consulta falla —red, permisos, tiempo de espera—, el DNI y
+ * el correo quedan vacíos, el filtro de búsqueda se queda vacío, el bloque que
+ * borra las solicitudes NO LLEGA A ENTRAR... y la ficha se borraba igual. La
+ * función devolvía `{ ok: true }` y la pantalla enseñaba «datos suprimidos»,
+ * con una fila en `solicitudes_alta` que seguía llevando el nombre, el DNI, el
+ * correo y el teléfono de quien acababa de ejercer el artículo 17.
+ *
+ * Se comprueba con un Supabase de mentira al que se le escribe el guion
+ * (`stub-supabase-guion.mjs`), y mirando DOS cosas: qué devuelve la función y
+ * QUÉ LLEGÓ A PEDIRLE A LA BASE. Lo segundo es lo que de verdad lo prueba: que
+ * el `delete hermanos` no aparezca es lo que dice que no se ha borrado nada.
+ */
+async function laRamaDeLaBase({ caso }) {
+  const { build } = await import('esbuild')
+  const { writeFileSync, mkdtempSync } = await import('node:fs')
+  const { join, dirname } = await import('node:path')
+  const { tmpdir } = await import('node:os')
+  const { fileURLToPath } = await import('node:url')
+  const aqui = dirname(fileURLToPath(import.meta.url))
+  const raiz = join(aqui, '..')
+
+  const res = await build({
+    entryPoints: [join(raiz, 'src/lib/rgpd.ts')],
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    write: false,
+    alias: { '@supabase/supabase-js': join(aqui, 'stub-supabase-guion.mjs') },
+    /*
+     * CONFIGURADO, y es la única forma de entrar en esta rama:
+     * `isSupabaseConfigured` sale de estas dos variables, y el arranque normal
+     * de las pruebas las deja vacías a propósito.
+     */
+    define: {
+      'import.meta.env': JSON.stringify({
+        VITE_SUPABASE_URL: 'https://ejemplo.supabase.co',
+        VITE_SUPABASE_ANON_KEY: 'clave-de-mentira',
+      }),
+    },
+  })
+  const salida = mkdtempSync(join(tmpdir(), 'rgpd-base-'))
+  const destino = join(salida, 'rgpd.mjs')
+  writeFileSync(destino, res.outputFiles[0].text)
+  const m = await import(destino)
+
+  const borrarCon = async (guion) => {
+    globalThis.__GUION = guion
+    globalThis.__LLAMADAS = []
+    const r = await m.borrarDatosHermano('h1')
+    return { r, llamadas: globalThis.__LLAMADAS }
+  }
+
+  const BIEN = {
+    'select:uno hermanos': { data: { dni: '11111111A', email: 'yo@ejemplo.es' }, error: null },
+    'select solicitudes_alta': { data: [{ id: 's1', dni: '11111111A', tutor_id: null }], error: null },
+    'delete hermanos': { data: null, error: null },
+    'delete solicitudes_alta': { data: null, error: null },
+    'select hermanos': { data: [], error: null },
+  }
+
+  // 1. Cuando todo va bien: se borran las DOS cosas.
+  {
+    const { r, llamadas } = await borrarCon(BIEN)
+    caso('con la base al día, la supresión sale bien', true, r.ok)
+    caso('se borra la ficha', true, llamadas.includes('delete hermanos'))
+    caso('y se borra su solicitud de alta', true, llamadas.includes('delete solicitudes_alta'))
+    caso('y se mira el DNI antes de borrar', true,
+      llamadas.indexOf('select:uno hermanos') < llamadas.indexOf('delete hermanos'))
+  }
+
+  // 2. Y cuando falla la consulta del DNI: NO SE BORRA NADA.
+  {
+    const { r, llamadas } = await borrarCon({
+      ...BIEN,
+      'select:uno hermanos': { data: null, error: { message: 'fetch failed', code: '' } },
+    })
+    caso('si no se puede leer su DNI, NO se borra la ficha', false, llamadas.includes('delete hermanos'))
+    caso('ni se da la supresión por hecha', false, r.ok)
+    caso('y se dice qué hacer', true, String(r.queHacer ?? '').includes('solicitud de alta'))
+  }
+
+  // 3. El caso que abría el agujero, dicho al derecho: no puede pasar que se
+  //    borre la ficha y NO la solicitud devolviendo que todo ha ido bien.
+  {
+    const { r, llamadas } = await borrarCon({
+      ...BIEN,
+      'select:uno hermanos': { data: null, error: { message: 'timeout', code: '' } },
+    })
+    const certificaAMedias = r.ok
+      && llamadas.includes('delete hermanos')
+      && !llamadas.includes('delete solicitudes_alta')
+    caso('nunca se certifica una supresión a medias', false, certificaAMedias)
+  }
+
+  // 4. Y una ficha que de verdad no existe (data null SIN error) no es un
+  //    fallo: ahí no hay solicitud que buscar y el borrado sigue su camino.
+  {
+    const { r, llamadas } = await borrarCon({ ...BIEN, 'select:uno hermanos': { data: null, error: null } })
+    caso('una ficha que no está no bloquea el borrado', true, r.ok)
+    caso('y la ficha se borra igual', true, llamadas.includes('delete hermanos'))
+  }
 }

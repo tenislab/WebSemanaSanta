@@ -96,7 +96,12 @@ export function edadDe(iso: string | undefined, hoy = new Date()): number | null
  */
 // Los tonos están medidos: con su tinta, TODOS pasan de 4,5:1 (AA) también en
 // las pastillas, que van sobre el mismo tono aclarado un 12 %.
-const TONOS = [
+//
+// SE EXPORTA para que la prueba pueda recorrerlos los seis. El avatar de cada
+// fila del censo mezcla este tono con el fondo y con la tinta de la página, así
+// que su contraste cambia con cada nombre: hay que poder medir el PEOR de los
+// seis, no uno de muestra. Ver `pruebas/contraste.prueba.mjs`.
+export const TONOS = [
   { fondo: '#6A1A23', tinta: '#fff6ee' },
   { fondo: '#74501c', tinta: '#fff7ea' },
   { fondo: '#425332', tinta: '#f4f7ee' },

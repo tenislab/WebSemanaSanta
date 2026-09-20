@@ -1708,7 +1708,7 @@ span.logo-mark img { width: 100%; height: 100%; }
 .guia {
   margin-bottom: 1.6rem; padding: 1.2rem 1.3rem 1rem;
   background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-shadow);
 }
 .guia__cabecera { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .guia__cabecera h2 { font-size: 1.25rem; margin: 0.3rem 0 0; }
@@ -1765,7 +1765,21 @@ span.logo-mark img { width: 100%; height: 100%; }
 .guia__paso--toca {
   background: var(--bg-sunken); border-color: var(--line-strong); border-radius: var(--radius-sm);
 }
-.guia__paso--toca .guia__marca { background: var(--gold); color: #fff; border-color: var(--gold); }
+/*
+ * TINTA OSCURA SOBRE EL ORO, NO BLANCA.
+ *
+ * Estaba `color: #fff`, y en tema claro funciona porque el oro de claro es
+ * oscuro (4,12:1). En tema oscuro el oro se aclara —es el mismo token, con
+ * otro valor— y el blanco se queda en 1,84:1: el número del paso en el que
+ * estás, que es el único dato de la chapa, deja de leerse.
+ *
+ * Y la tinta es `#1a1207`, no una cualquiera oscura: es la que ya usa
+ * `.alta__paso--ahora span`, que es una chapa numerada igual que esta, y es la
+ * única de la casa MEDIDA sobre los dos oros —4,50:1 en claro, 10,07:1 en
+ * oscuro—. El `#2a1b14` de `.tramo-ficha__orden` parecía valer y se queda en
+ * 4,03:1 en tema claro; de hecho el guardia nuevo lo cazó al escribirlo aquí.
+ */
+.guia__paso--toca .guia__marca { background: var(--gold); color: #1a1207; border-color: var(--gold); }
 
 /* Lo hecho se tacha y se apaga: sigue estando, pero deja de pedir atención. */
 .guia__paso--hecho .guia__texto h3 { text-decoration: line-through; color: var(--text-muted); font-weight: 400; }
@@ -1941,7 +1955,14 @@ span.logo-mark img { width: 100%; height: 100%; }
   border: 1px solid color-mix(in srgb, var(--tono, var(--line)) 28%, var(--line));
   display: flex; align-items: center; justify-content: center;
   font-size: 0.7rem; font-weight: 700;
-  color: color-mix(in srgb, var(--tono, var(--text-muted)) 78%, var(--text));
+  /*
+   * 60 % Y NO 78 %. El tono sale del nombre, así que el contraste cambia con
+   * cada hermano: medidos en tema oscuro salían desde 3,47:1 hasta 2,67:1, o
+   * sea que a unos cuantos les quedaban las iniciales por debajo del mínimo de
+   * 3:1. Acercando la tinta a la de la página el tono se sigue notando y el
+   * peor caso sube.
+   */
+  color: color-mix(in srgb, var(--tono, var(--text-muted)) 60%, var(--text));
 }
 .row-person__name { display: block; font-weight: 600; color: var(--text); }
 .row-person__sub { display: block; font-size: 0.76rem; color: var(--text-muted); }
@@ -2153,8 +2174,8 @@ span.logo-mark img { width: 100%; height: 100%; }
 .tramos-precio-base { max-width: 300px; margin-bottom: 1.1rem; }
 
 .tramo-ficha {
-  border: 1px solid var(--linea); border-radius: 12px;
-  padding: 0.85rem 1rem 1rem; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 0.85rem 1rem 1rem; background: var(--bg-sunken);
 }
 .tramo-ficha + .tramo-ficha { margin-top: 0.75rem; }
 
@@ -2166,14 +2187,14 @@ span.logo-mark img { width: 100%; height: 100%; }
    nombre y por eso las flechas están al lado, que es lo que lo cambia. */
 .tramo-ficha__orden {
   display: grid; place-items: center; width: 1.7rem; height: 1.7rem;
-  border-radius: 50%; background: var(--gold); color: var(--tinta, #2a1b14);
+  border-radius: 50%; background: var(--gold); color: #1a1207;
   font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .tramo-ficha__nombre { font-weight: 600; font-size: 1rem; }
 .tramo-ficha__acciones { display: flex; gap: 0.25rem; }
 
 .tramo-ficha__grupo + .tramo-ficha__grupo {
-  margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--linea);
+  margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--line);
 }
 .tramo-ficha__titulo {
   margin: 0 0 0.5rem; font-size: 0.72rem; font-weight: 700;
@@ -2187,7 +2208,7 @@ span.logo-mark img { width: 100%; height: 100%; }
   font-size: 0.78rem; color: var(--text-muted);
 }
 .tramo-ficha input, .tramo-ficha select {
-  width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--linea);
+  width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--line);
   border-radius: 8px; background: var(--fondo); color: inherit; font: inherit;
 }
 .tramo-ficha input:focus, .tramo-ficha select:focus {
@@ -2219,17 +2240,6 @@ span.logo-mark img { width: 100%; height: 100%; }
    era un desplegable que decía «No sale en el cortejo» y había que deducir lo
    demás — y quien no lo deducía emitía papeletas que no ocupaban puesto.
    ========================================================================= */
-.opcion-row--papeleta {
-  display: block; padding: 0.9rem 1rem 0.9rem 1.15rem;
-  border: 1px solid var(--linea); border-radius: 12px;
-  border-left-width: 5px; background: var(--surface);
-}
-.opcion-row--papeleta + .opcion-row--papeleta { margin-top: 0.7rem; }
-/* Verde = camina y ocupa sitio. Gris = no sale. El color no va solo: cada una
-   lleva además su texto, para quien no distinga los tonos. */
-.opcion-row--papeleta.es-salida { border-left-color: var(--ok, #2f6b4f); }
-.opcion-row--papeleta.es-simbolica { border-left-color: var(--text-muted); }
-
 .opcion-row__cabecera {
   display: grid; grid-template-columns: 1fr 130px 34px; gap: 0.6rem; align-items: center;
 }
@@ -2244,7 +2254,7 @@ span.logo-mark img { width: 100%; height: 100%; }
 }
 .opcion-tipo label {
   display: grid; gap: 0.1rem; cursor: pointer;
-  padding: 0.5rem 0.7rem; border: 1px solid var(--linea); border-radius: 9px;
+  padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 9px;
   /* La rejilla coloca el radio a la izquierda y los dos textos apilados a su
      derecha, sin que el pie se meta debajo del círculo. */
   grid-template-columns: auto 1fr; grid-template-areas: 'radio titulo' '. pie';
@@ -4038,7 +4048,7 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 
 .ficha-acceso {
   margin: 0.9rem 0; padding: 0.75rem 0.9rem;
-  border: 1px dashed var(--linea); border-radius: 10px;
+  border: 1px dashed var(--line); border-radius: 10px;
 }
 .ficha-acceso .form-hint { margin: 0 0 0.55rem; }
 .ficha-acceso .form-hint:last-child { margin-bottom: 0; }
@@ -5991,7 +6001,7 @@ html:has(.sitio) { scroll-behavior: smooth; }
   gap: 0.55rem;
   padding: 0;
   text-align: left;
-  background: var(--surface);
+  background: var(--bg-sunken);
   border: 1.5px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -6011,7 +6021,7 @@ html:has(.sitio) { scroll-behavior: smooth; }
 .estilo-card__pie small {
   display: block;
   margin-top: 0.15rem;
-  color: var(--text-soft);
+  color: var(--text-muted);
   font-size: 0.74rem;
   line-height: 1.35;
 }
@@ -6111,7 +6121,7 @@ html:has(.sitio) { scroll-behavior: smooth; }
 .afinar--suelto .afinar__cuerpo { padding: 0 0.8rem 0.9rem; }
 .afinar {
   margin-bottom: 1.1rem;
-  background: var(--surface);
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
@@ -6129,13 +6139,13 @@ html:has(.sitio) { scroll-behavior: smooth; }
 .afinar__cabeza::-webkit-details-marker { display: none; }
 .afinar__cabeza::before {
   content: '▸';
-  color: var(--text-soft);
+  color: var(--text-muted);
   transition: transform 0.15s;
 }
 .afinar[open] .afinar__cabeza::before { transform: rotate(90deg); }
 .afinar__cabeza:hover { background: var(--surface-2); }
 .afinar__titulo { font-weight: 650; }
-.afinar__nota { color: var(--text-soft); font-size: 0.8rem; }
+.afinar__nota { color: var(--text-muted); font-size: 0.8rem; }
 .afinar__cuerpo { padding: 0 1.1rem 1.1rem; }
 .afinar__bloque + .afinar__bloque { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
 .afinar__h {
@@ -6144,7 +6154,7 @@ html:has(.sitio) { scroll-behavior: smooth; }
   font-weight: 650;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-soft);
+  color: var(--text-muted);
 }
 
 /* Interruptor con explicación. Las casillas sueltas no decían en qué estado
@@ -6186,7 +6196,7 @@ html:has(.sitio) { scroll-behavior: smooth; }
 .interruptor--on .interruptor__palanca::after { transform: translateX(16px); }
 .interruptor input:focus-visible + .interruptor__palanca { box-shadow: 0 0 0 3px var(--ring); }
 .interruptor__texto b { display: block; font-size: 0.95rem; }
-.interruptor__texto small { display: block; margin-top: 0.1rem; color: var(--text-soft); font-size: 0.8rem; }
+.interruptor__texto small { display: block; margin-top: 0.1rem; color: var(--text-muted); font-size: 0.8rem; }
 
 /* Menú de acciones secundarias en las cabeceras */
 .menu-acciones { position: relative; }

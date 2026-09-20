@@ -145,11 +145,39 @@ export async function borrarDatosHermano(hermanoId: string): Promise<ResultadoBo
      * Se busca por DNI y por correo porque la solicitud es anterior a que
      * existiera su ficha: no hay ningún identificador que las una.
      */
-    const { data: ficha } = await supabase
+    /*
+     * Y SI ESTA CONSULTA FALLA, NO SE BORRA NADA.
+     *
+     * Era la única de las cinco de esta función cuyo error no se miraba, y con
+     * eso se abría otra vez el agujero que el comentario de arriba dice que se
+     * cerró: sin `ficha` no hay DNI ni correo, el filtro de búsqueda se queda
+     * vacío, el bloque que borra las solicitudes no llega a entrar... y la
+     * ficha se borraba igual. La función devolvía `{ ok: true }` y certificaba
+     * una supresión que había dejado atrás una fila con el nombre, el DNI, el
+     * correo y el teléfono de quien acababa de ejercer el artículo 17.
+     *
+     * Así que se para AQUÍ. Una supresión que no se puede completar es mejor no
+     * empezarla: dejarla a medias es lo único que no se puede deshacer —la
+     * ficha ya no está y el DNI con el que encontrar el resto se ha ido con
+     * ella—, mientras que no empezarla solo cuesta volver a pulsar el botón
+     * cuando la red responda.
+     */
+    const { data: ficha, error: falloFicha } = await supabase
       .from('hermanos')
       .select('dni, email')
       .eq('id', hermanoId)
       .maybeSingle()
+    if (falloFicha) {
+      console.error('No se pudo leer el DNI y el correo del hermano:', falloFicha.message)
+      return {
+        ok: false,
+        motivo: 'No se ha podido leer la ficha del hermano, así que no se ha borrado nada.',
+        queHacer: 'Vuelve a intentarlo en unos segundos. Hace falta leer su DNI y su correo '
+          + 'ANTES de borrar, porque son lo único que ata su ficha con la solicitud de alta '
+          + 'que rellenó, y esa también hay que borrarla. Borrando solo la ficha se quedaría '
+          + 'atrás su nombre, su DNI, su correo y su teléfono.',
+      }
+    }
     const suDni = (ficha as { dni?: string } | null)?.dni?.trim()
     const suEmail = (ficha as { email?: string } | null)?.email?.trim()
 

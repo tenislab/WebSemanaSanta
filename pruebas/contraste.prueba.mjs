@@ -15,6 +15,290 @@ export default async function ({ cargar, caso }) {
 
   await elBlancoDelCristal({ caso })
   await elEscudoSeVeSobreSuCaja({ cargar, caso })
+  await ningunTokenInventado({ caso })
+  await laTintaSobreElOro({ cargar, caso })
+  await lasInicialesDelAvatar({ cargar, caso })
+}
+
+/*
+ * LAS INICIALES DEL AVATAR, CON LOS SEIS TONOS Y EN LOS DOS TEMAS.
+ *
+ * El avatar de cada fila del censo se tiñe con un color sacado del NOMBRE, así
+ * que el contraste de sus iniciales cambia con cada hermano: medidos en el
+ * navegador en tema oscuro salían desde 3,47:1 hasta 2,67:1, o sea que a unos
+ * cuantos hermanos les quedaban por debajo del mínimo de 3:1 y a otros no. Un
+ * fallo que solo le pasa a algunos nombres es el que nadie reproduce.
+ *
+ * SE RECORREN LOS SEIS TONOS, no se muestrea: `tonoDe` elige de una lista
+ * cerrada de seis, así que el peor caso se puede calcular entero.
+ *
+ * Y se rehace la cuenta del CSS aquí: el fondo es el tono al 15 % sobre
+ * `--bg-sunken` y la tinta el tono al 60 % sobre `--text`, que es lo que hacen
+ * los dos `color-mix(in srgb, …)` de `.row-avatar`. Los porcentajes se LEEN
+ * del CSS, no se copian: si alguien los cambia, esta prueba mide los nuevos.
+ */
+async function lasInicialesDelAvatar({ cargar, caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const css = await readFile('src/styles/global.css', 'utf8')
+  const m = await cargar('src/lib/contraste.ts')
+  const ficha = await cargar('src/lib/hermanoFicha.ts')
+
+  function bloqueDe(selector) {
+    const i = css.indexOf(selector)
+    if (i < 0) return null
+    const abre = css.indexOf('{', i)
+    let nivel = 0
+    for (let j = abre; j < css.length; j += 1) {
+      if (css[j] === '{') nivel += 1
+      else if (css[j] === '}') { nivel -= 1; if (nivel === 0) return css.slice(abre + 1, j) }
+    }
+    return null
+  }
+  const claro = bloqueDe(':root {')
+  const oscuro = bloqueDe(":root[data-theme='dark']")
+  function valor(token, bloque) {
+    for (let i = 0; i < 10; i += 1) {
+      const enBloque = [...bloque.matchAll(new RegExp(`${token}:\\s*([^;]+);`, 'g'))].pop()
+      const enRaiz = [...claro.matchAll(new RegExp(`${token}:\\s*([^;]+);`, 'g'))].pop()
+      const hallado = enBloque ?? enRaiz
+      if (!hallado) return null
+      const bruto = hallado[1].trim()
+      const dentro = bruto.match(/^var\((--[\w-]+)\)$/)
+      if (!dentro) return bruto
+      token = dentro[1]
+    }
+    return null
+  }
+
+  /*
+   * Los dos porcentajes, leídos del CSS de `.row-avatar`.
+   *
+   * Y con `[\s\S]*?` y no `[^)]*?`: dentro del `color-mix` hay un
+   * `var(--tono, var(--text-muted))`, así que un «cualquier cosa menos un
+   * paréntesis» se para en el cierre de ese `var` y no llega nunca al `15%`.
+   * La primera versión de esta línea salió roja justo por eso.
+   */
+  const regla = bloqueDe('.row-avatar {') ?? ''
+  const pctFondo = Number(regla.match(/background:\s*color-mix\(in srgb,[\s\S]*?(\d+)%/)?.[1])
+  const pctTinta = Number(regla.match(/(?:^|;|\s)color:\s*color-mix\(in srgb,[\s\S]*?(\d+)%/)?.[1])
+  // Y se afirman los DOS números, no solo que se hayan leído: así, si el
+  // recorte volviera a pillar el número de un comentario, se vería.
+  caso('se leen los dos porcentajes de .row-avatar', [15, 60], [pctFondo, pctTinta])
+
+  const aRgb = (hex) => {
+    const h = hex.replace('#', '')
+    const c = h.length === 3 ? [...h].map((x) => x + x).join('') : h
+    return [0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16))
+  }
+  const aHex = (rgb) => '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')
+  // `color-mix(in srgb, A p%, B)` es una mezcla lineal en sRGB.
+  const mezclar = (a, p, b) => {
+    const [ra, ga, ba] = aRgb(a), [rb, gb, bb] = aRgb(b)
+    const f = p / 100
+    return aHex([ra * f + rb * (1 - f), ga * f + gb * (1 - f), ba * f + bb * (1 - f)])
+  }
+
+  /*
+   * Y QUE LA LISTA LLEGUE. `TONOS` no estaba exportado, y sin esta línea el
+   * bucle de abajo recorría cero tonos y el guardia salía VERDE sin haber
+   * medido nada: un guardia vacío es peor que ninguno, porque se cuenta.
+   */
+  caso('llegan los seis tonos del avatar', 6, (ficha.TONOS ?? []).length)
+
+  const flojos = []
+  for (const [tema, bloque] of [['claro', claro], ['oscuro', oscuro]]) {
+    const hundido = valor('--bg-sunken', bloque)
+    const tinta = valor('--text', bloque)
+    for (const tono of ficha.TONOS ?? []) {
+      const fondo = mezclar(tono.fondo, pctFondo, hundido)
+      const letra = mezclar(tono.fondo, pctTinta, tinta)
+      const c = m.contraste(letra, fondo)
+      if (c < 3) flojos.push(`${tono.fondo} en ${tema}: ${c.toFixed(2)}:1`)
+    }
+  }
+  caso('los seis tonos se leen en los dos temas', [], flojos)
+}
+
+/*
+ * LO QUE SE ESCRIBE ENCIMA DEL ORO TIENE QUE LEERSE EN LOS DOS TEMAS.
+ *
+ * `--gold` NO es el mismo color en los dos: en claro es `--oro-700`, oscuro; en
+ * oscuro es `--oro-300`, claro. Así que un `color: #fff` sobre `background:
+ * var(--gold)` se lee en uno y no en el otro, y quien lo escribe está mirando
+ * uno de los dos.
+ *
+ * Pasó en la chapa del paso en curso de la guía de primeros pasos: blanco sobre
+ * oro, 4,12:1 en claro y **1,84:1 en oscuro**. El número del paso en el que
+ * estás es el único dato que lleva esa chapa, y en tema oscuro no se leía.
+ *
+ * ESTA PRUEBA NO LEE LA LÍNEA DEL ARREGLO: resuelve los dos oros y calcula. Se
+ * exige 4,5:1 porque es texto pequeño —0,78rem en negrita, dentro de un círculo
+ * de 26 px—, no un titular. El día que los oros cambien, la prueba lo sabrá.
+ *
+ * Y se comprueba a la vez que el arreglo bueno —una tinta oscura, la misma que
+ * ya usaba `.tramo-ficha__num`— sirve para los dos, que es la razón de elegirla
+ * en vez de dos colores, uno por tema.
+ */
+async function laTintaSobreElOro({ cargar, caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const css = await readFile('src/styles/global.css', 'utf8')
+  const m = await cargar('src/lib/contraste.ts')
+
+  function bloqueDe(selector) {
+    const i = css.indexOf(selector)
+    if (i < 0) return null
+    const abre = css.indexOf('{', i)
+    let nivel = 0
+    for (let j = abre; j < css.length; j += 1) {
+      if (css[j] === '{') nivel += 1
+      else if (css[j] === '}') { nivel -= 1; if (nivel === 0) return css.slice(abre + 1, j) }
+    }
+    return null
+  }
+  const claro = bloqueDe(':root {')
+  const oscuro = bloqueDe(":root[data-theme='dark']")
+  function valor(token, bloque) {
+    for (let i = 0; i < 10; i += 1) {
+      const enBloque = [...bloque.matchAll(new RegExp(`${token}:\\s*([^;]+);`, 'g'))].pop()
+      const enRaiz = [...claro.matchAll(new RegExp(`${token}:\\s*([^;]+);`, 'g'))].pop()
+      const encontrado = enBloque ?? enRaiz
+      if (!encontrado) return null
+      const bruto = encontrado[1].trim()
+      const dentro = bruto.match(/^var\((--[\w-]+)\)$/)
+      if (!dentro) return bruto
+      token = dentro[1]
+    }
+    return null
+  }
+
+  const oroClaro = valor('--gold', claro)
+  const oroOscuro = valor('--gold', oscuro)
+  // Si esto no resolviera, todo lo de abajo compararía vacío contra vacío.
+  caso('los dos oros se resuelven, y son distintos', true,
+    Boolean(oroClaro && oroOscuro) && oroClaro !== oroOscuro)
+
+  /*
+   * Todas las reglas que ponen algo encima de un fondo de oro, sacadas del
+   * CSS y no escritas a mano: así entra sola la próxima que alguien escriba.
+   */
+  const sobreOro = [...css.matchAll(/\{([^}]*background:\s*var\(--gold\)[^}]*)\}/g)]
+    .map((bl) => {
+      const trozo = bl[1]
+      const col = trozo.match(/(?:^|;|\s)color:\s*([^;]+)/)
+      const desde = css.lastIndexOf('\n', bl.index) + 1
+      const selector = css.slice(desde, css.indexOf('{', bl.index)).trim().slice(-58)
+      return col ? { selector, tinta: col[1].trim() } : null
+    })
+    .filter(Boolean)
+
+  caso('hay al menos una regla que escribe sobre el oro', true, sobreOro.length > 0)
+
+  const flojas = []
+  for (const { selector, tinta } of sobreOro) {
+    // `var(--x, #reserva)` → se mide la reserva, que es lo que aplica cuando
+    // el token no está definido en la raíz.
+    const hex = tinta.match(/#[0-9a-fA-F]{3,8}/)?.[0]
+      ?? (tinta.startsWith('var(') ? valor(tinta.match(/--[\w-]+/)[0], claro) : tinta)
+    if (!hex) continue
+    for (const [tema, oro] of [['claro', oroClaro], ['oscuro', oroOscuro]]) {
+      const c = m.contraste(hex, oro)
+      if (c < 4.5) flojas.push(`${selector} en ${tema}: ${c.toFixed(2)}:1 (${hex} sobre ${oro})`)
+    }
+  }
+  caso('nada escrito sobre el oro baja de 4,5:1 en ninguno de los dos temas', [], flojas)
+
+  /*
+   * Y EL PORQUÉ DE LA TINTA ELEGIDA, con los tres candidatos medidos, porque
+   * la diferencia entre ellos no se ve mirándolos:
+   *
+   *   #ffffff  (lo que estaba)      claro 4,12:1   oscuro  1,84:1   no vale
+   *   #2a1b14  (el de al lado)      claro 4,03:1   oscuro  9,02:1   no vale
+   *   #1a1207  (la elegida)         claro 4,50:1   oscuro 10,07:1   vale
+   *
+   * `#2a1b14` es el caso que enseña para qué sirve medir: es oscuro, parece
+   * seguro, y en tema CLARO se queda por debajo del blanco al que sustituía.
+   * Lo escribí como arreglo y este guardia lo tumbó.
+   */
+  caso('la tinta elegida vale para el oro claro', true, m.contraste('#1a1207', oroClaro) >= 4.5)
+  caso('y para el oro oscuro', true, m.contraste('#1a1207', oroOscuro) >= 4.5)
+  // El blanco, que es lo que estaba, NO vale para los dos: por eso se cambió.
+  caso('el blanco no valía para los dos', false,
+    m.contraste('#ffffff', oroClaro) >= 4.5 && m.contraste('#ffffff', oroOscuro) >= 4.5)
+  // Ni el que parecía valer.
+  caso('ni el #2a1b14 que parecía valer', false, m.contraste('#2a1b14', oroClaro) >= 4.5)
+}
+
+/*
+ * NINGÚN `var()` SOBRE UN TOKEN QUE NO EXISTE, SALVO CON VALOR DE RESERVA.
+ *
+ * `border: 1px solid var(--noExiste)` no deja un borde por defecto: INVALIDA
+ * LA DECLARACIÓN ENTERA. Es una trampa que este repositorio ya tiene escrita en
+ * `docs/COMO-TRABAJAR.md`, y aun así había cuatro tokens inventados sueltos
+ * —`--linea` por `--line`, `--surface` por `--bg-sunken`, `--text-soft` por
+ * `--text-muted` y `--shadow-sm` por `--glass-shadow`—, los mismos nombres en
+ * inglés y en español y uno en singular. Dieciséis declaraciones en seis
+ * pantallas: sin borde, sin fondo y sin sombra, no «con otro».
+ *
+ * Y no era cosmético: la descripción de cada estilo de la web pedía
+ * `color: var(--text-soft)`, se caía la declaración, heredaba el negro que
+ * trae un `<button>` por defecto, y en tema oscuro quedaba en NEGRO SOBRE CASI
+ * NEGRO —1,32:1 medido en el navegador—. Texto invisible.
+ *
+ * EL VALOR DE RESERVA SÍ VALE, y hay tres así a propósito: `var(--err,
+ * #b3261e)`, `var(--radio-sm, 8px)` y `var(--sans-fallback, inherit)`. Ahí el
+ * token no existe y no importa, porque la reserva aplica. Así que lo que se
+ * exige no es «que todos existan» sino «que el que no exista traiga reserva»,
+ * que es la regla de verdad.
+ *
+ * Se cuentan también los tokens que se definen desde JavaScript —el sitio pone
+ * `--sitio-*` y `--e1`/`--e2` con `style=`—, porque esos existen en el
+ * navegador aunque no estén en la hoja.
+ */
+async function ningunTokenInventado({ caso }) {
+  const { readFile, readdir } = await import('node:fs/promises')
+  const css = await readFile('src/styles/global.css', 'utf8')
+
+  // Definidos en la hoja: cualquier `--x:` (en `:root`, en un tema, o al vuelo).
+  const definidos = new Set([...css.matchAll(/--([a-zA-Z0-9-]+)\s*:/g)].map((m) => m[1]))
+
+  // Y los que se ponen desde el código, que en el navegador existen igual.
+  const pilas = ['src']
+  while (pilas.length) {
+    const d = pilas.pop()
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      const ruta = `${d}/${e.name}`
+      if (e.isDirectory()) { pilas.push(ruta); continue }
+      if (!/\.(ts|tsx)$/.test(e.name)) continue
+      const t = await readFile(ruta, 'utf8')
+      for (const m of t.matchAll(/'(--[a-zA-Z0-9-]+)'/g)) definidos.add(m[1].slice(2))
+      for (const m of t.matchAll(/"(--[a-zA-Z0-9-]+)"/g)) definidos.add(m[1].slice(2))
+      for (const m of t.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)) definidos.add(m[1].slice(2))
+    }
+  }
+
+  /*
+   * Cada `var(...)`, con su coma si la trae. `[^)]*` basta porque un valor de
+   * reserva con paréntesis dentro —`var(--a, var(--b))`— también lleva la coma
+   * antes, que es lo único que se mira.
+   */
+  const inventados = []
+  for (const m of css.matchAll(/var\(\s*--([a-zA-Z0-9-]+)([^)]*)\)/g)) {
+    const nombre = m[1]
+    const tieneReserva = m[2].includes(',')
+    if (definidos.has(nombre) || tieneReserva) continue
+    const linea = css.slice(0, m.index).split('\n').length
+    inventados.push(`--${nombre} (línea ${linea})`)
+  }
+  caso('ningún var() sobre un token inventado y sin reserva', [], inventados)
+
+  // Y los cuatro que había, uno a uno, por su nombre: leer «[]» en verde no
+  // dice cuál era el fallo, y estos cuatro volverán a escribirse solos.
+  for (const [malo, bueno] of [['linea', 'line'], ['surface', 'bg-sunken'],
+    ['text-soft', 'text-muted'], ['shadow-sm', 'glass-shadow']]) {
+    caso(`--${malo} ya no se usa (es --${bueno})`, false,
+      new RegExp(`var\\(--${malo}[,)]`).test(css))
+    caso(`y --${bueno} existe de verdad`, true, definidos.has(bueno))
+  }
 }
 
 /*
