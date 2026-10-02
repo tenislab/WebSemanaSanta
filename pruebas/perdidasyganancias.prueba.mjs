@@ -15,6 +15,7 @@
  *      dos veces el día que se pague de verdad.
  */
 export default async function ({ cargar, caso }) {
+  await sePuedeCUADRAR({ cargar, caso })
   const pyg = await cargar('src/lib/perdidasYGanancias.ts')
   const movs = await cargar('src/data/movimientos.ts')
   const rep = await cargar('src/lib/repartos.ts')
@@ -348,4 +349,112 @@ export default async function ({ cargar, caso }) {
     const raras = reglas.flatMap((r) => [r.categoriaBase, r.categoriaDestino]).filter((c2) => !todas.has(c2))
     caso('ninguna apunta a una partida inventada', '', [...new Set(raras)].join(', '))
   }
+}
+
+/*
+ * ============================================================================
+ * EL PAPEL SE PUEDE CUADRAR LEYÉNDOLO
+ * ============================================================================
+ *
+ * Llegó como «el informe no se entiende», y el fallo estaba en el papel.
+ * «Reglas aplicadas» ponía dos importes en la misma columna y abajo restaba
+ * solo uno, sin nada en la fila que dijera cuál:
+ *
+ *     Luz y agua: la parte del almacén              74,56 €
+ *     El diezmo de caridad                       1.043,16 €
+ *     …
+ *     Comprometido y todavía sin pagar          − 1.043,16 €
+ *
+ * Quien suma los dos y ve que solo se descuenta uno no tenía en la fila ninguna
+ * forma de saber por qué. La explicación estaba, pero en un párrafo de seis
+ * líneas AL FINAL del documento, o sea después de haber intentado cuadrarlo.
+ *
+ * Y había dos cosas más del mismo tipo: la columna «Reglas» de las tablas no
+ * decía que va aparte —así que los totales no cuadran con las partidas más su
+ * regla—, y en pantalla el titular decía «GASTOS porcentuales» para algo que,
+ * en la mitad de los casos, sale de un INGRESO.
+ *
+ * Lo que se vigila aquí es que cada pieza siga diciendo lo que hace falta para
+ * cuadrar el papel sin preguntarle a nadie.
+ */
+async function sePuedeCUADRAR({ cargar, caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const r = await cargar('src/lib/repartos.ts')
+
+  /*
+   * SIN COMENTARIOS, Y ES LA SEGUNDA VEZ EN ESTA MISMA TANDA.
+   *
+   * Dos de los casos de abajo se pusieron rojos leyendo los comentarios que
+   * explican el propio arreglo: uno dice «Sin “imputar”: la demo es lo primero
+   * que lee una hermandad» y el otro cita el titular viejo entre comillas. Un
+   * guardia que lee los comentarios acusa a quien los escribe, y en un
+   * repositorio que comenta el porqué de todo eso pasa siempre.
+   *
+   * Se deja escrito aquí porque ya me pasó una vez en
+   * `pruebas/estadoobsoleto.prueba.mjs` y volvió a pasar media hora después.
+   */
+  const soloCodigo = (t) => t
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  const regla = (tipo) => ({
+    id: 'x', nombre: 'n', tipo, categoriaBase: 'Mantenimiento', porcentajeCent: 4000,
+    categoriaDestino: 'Gastos varios menores', activo: true, nota: '', creadoEn: '',
+  })
+
+  // 1. CADA CLASE DICE LO SUYO, y se ejecuta.
+  const deTraslado = r.queLeHaceAlResultado(regla('reparto'))
+  const deCompromiso = r.queLeHaceAlResultado(regla('compromiso'))
+  caso('un traslado dice que no cambia ningún total', true, /No cambia ning.n total/.test(deTraslado))
+  caso('y un compromiso dice que SE RESTA', true, /[Ss]e resta del resultado/.test(deCompromiso))
+  // Y no dicen lo mismo, que es lo único que de verdad hacía falta.
+  caso('las dos frases son distintas', true, deTraslado !== deCompromiso)
+  // El traslado NO puede decir que se resta: es justo la confusión que se vino
+  // a quitar, y sería peor que no decir nada.
+  caso('un traslado no dice que se resta', false, /se resta/.test(deTraslado))
+
+  // 2. EN CRISTIANO, que es la norma de la casa.
+  const frase = r.comoSeLeeElReparto(regla('reparto'))
+  caso('ya no se «imputa»', false, /imputa/.test(frase))
+  caso('se dice que «pasa a»', true, /pasa a/.test(frase))
+  // Ni en la demo, que es lo primero que lee una hermandad.
+  const demo = soloCodigo(await readFile('src/data/repartos.ts', 'utf8'))
+  caso('tampoco en los ejemplos de la demo', false, /imputar/.test(demo))
+
+  // 3. EL PAPEL: cada fila lo dice, y los totales avisan de que van sin reglas.
+  const papel = soloCodigo(await readFile('src/components/CuentaResultados.tsx', 'utf8'))
+  caso('el papel pone en cada fila qué le hace al resultado', true,
+    /queLeHaceAlResultado\(regla\)/.test(papel))
+  caso('y nombra la clase de cada regla', true, /nombreDelTipo\(regla\)/.test(papel))
+  caso('la columna dice que va aparte', true, /Reglas \(aparte\)/.test(papel))
+  caso('y se avisa de que los totales son los del libro', true,
+    /totales son los del libro/.test(papel))
+  /*
+   * Y LA ENTRADILLA VA ANTES DE LAS FILAS. Si se quedara solo el aviso del
+   * final volveríamos al punto de partida: la explicación llegando cuando el
+   * lector ya ha intentado cuadrar y no le ha salido.
+   */
+  const iEntradilla = papel.indexOf('solo los compromisos se restan')
+  const iFilas = papel.indexOf('cuenta.reglasAplicadas.map')
+  caso('la entradilla se lee antes que las filas', true, iEntradilla > 0 && iEntradilla < iFilas)
+
+  // 4. LA PANTALLA: el titular no llama «gasto» a lo que sale de un ingreso.
+  const pantalla = soloCodigo(await readFile('src/pages/app/Informes.tsx', 'utf8'))
+  caso('el titular ya no dice «gastos porcentuales»', false,
+    /Gastos porcentuales enlazados/.test(pantalla))
+  /*
+   * Y LOS EJEMPLOS DE LA AYUDA SON LOS DE LA LISTA. Decía «la luz» y «la
+   * lotería» mientras abajo salían «Mantenimiento» y «Donativos, Ofrendas y
+   * Cepillos»: el lector tenía que traducir los dos antes de entender nada.
+   */
+  const ayuda = pantalla.slice(pantalla.indexOf('reglas-ayuda'), pantalla.indexOf('reglas-ayuda') + 1200)
+  for (const partida of ['Mantenimiento', 'Gastos varios menores', 'Donativos, Ofrendas y Cepillos']) {
+    caso(`la ayuda nombra «${partida}», que es lo que se ve debajo`, true, ayuda.includes(partida))
+  }
+  caso('y ya no pone de ejemplo una lotería que no está en la lista', false,
+    /lotería/.test(ayuda))
+
+  // 5. Y la fila del comprometido dice con cuál de las dos cifras cuadra el banco.
+  caso('se dice con qué cifra cuadra el banco', true,
+    /el banco cuadra con los \{formatCurrency\(cuenta\.resultado\)\}/.test(pantalla))
 }

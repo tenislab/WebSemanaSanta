@@ -122,9 +122,10 @@ export default async function ({ cargar, caso }) {
    * por la frase «no `localStorage.clear()`» del comentario que explica
    * justamente que no se usa: cazaba la explicación en vez del código.
    */
-  const sinComentarios = (t) => t
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+  /* La pieza compartida de `fuentes.mjs`: aquí había una copia a ojo, y la de
+     otra prueba se comió media pantalla porque `accept="image/*"` tiene un
+     `/*` literal dentro de un texto. */
+  const { sinComentarios } = await import('./fuentes.mjs')
   const red = sinComentarios(await readFile('src/components/SiAlgoPetardea.tsx', 'utf8'))
   caso('atrapa los errores de pintado', true, /getDerivedStateFromError/.test(red))
   caso('enseña el fallo para poder copiarlo', true, /error\.name.*error\.message/.test(red))

@@ -31,6 +31,7 @@
 export default async function ({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
   await lasPaginas({ cargar, caso })
+  await elPadronSoloAlImprimir({ caso })
 
   /*
    * EL `set…` DE `useSupabaseTable`, ESTABLE.
@@ -247,4 +248,60 @@ async function lasPaginas({ cargar, caso }) {
     const t = await readFile(ruta, 'utf8')
     caso(`${ruta.split('/').pop()}: el «no hay nada» mira la lista entera`, true, patron.test(t))
   }
+}
+
+/*
+ * ============================================================================
+ * EL PADRÓN DEL CENSO SOLO EXISTE MIENTRAS SE IMPRIME
+ * ============================================================================
+ *
+ * La pantalla del censo llevaba SIEMPRE en el documento un padrón completo,
+ * escondido con `screen-hidden` y visible solo en el papel. Con ochocientos
+ * hermanos eran 4.836 nodos —el 20 % del DOM de esa pantalla— que nadie mira
+ * hasta que se pulsa Imprimir. Y el comentario que tenía al lado decía «solo
+ * existe al imprimir»: no era verdad, existía siempre.
+ *
+ * Medido con `scripts/caza/probar-padron.mjs`: 2.756 nodos en pantalla, 7.592
+ * mientras se imprime, y vuelta a 2.756 al acabar.
+ *
+ * LAS TRES COSAS QUE SE VIGILAN, Y LAS TRES SE ROMPEN SOLAS SI SE TOCAN MAL:
+ *
+ *   1. Que el padrón NO esté en el árbol si no se está imprimiendo. Es el
+ *      arreglo.
+ *   2. Que se enganche a `beforeprint` y NO al botón. Hay dos caminos para
+ *      imprimir —el botón, que llama a `window.print()`, y el Ctrl+P del
+ *      navegador, que no pasa por ninguna pantalla nuestra—. Montándolo en el
+ *      botón, el Ctrl+P imprimiría un censo EN BLANCO sin decir nada.
+ *   3. Que use `flushSync`. El navegador prepara el papel en cuanto vuelve el
+ *      manejador: un `setState` normal es asíncrono, React lo agruparía para
+ *      después, y el diálogo ya tendría su foto hecha —sin el padrón—. Es el
+ *      fallo que dejaría el arreglo puesto y el papel en blanco.
+ *   4. Y que se DESMONTE al acabar (`afterprint`). Sin eso el arreglo dura una
+ *      impresión: a la primera, el padrón se queda montado para siempre.
+ */
+async function elPadronSoloAlImprimir({ caso }) {
+  const { readFile } = await import('node:fs/promises')
+  const censo = await readFile('src/pages/app/Hermanos.tsx', 'utf8')
+  const imp = await readFile('src/lib/imprimir.ts', 'utf8')
+
+  caso('el padrón no está en el árbol si no se imprime', true,
+    /\{aImprimir && informeImpreso\}/.test(censo))
+  // Y dicho al revés: que no se haya quedado un segundo sitio que lo monta.
+  caso('y no se monta por ningún otro sitio', 1,
+    (censo.match(/\{informeImpreso\}|\{aImprimir && informeImpreso\}/g) || []).length)
+
+  caso('se engancha al evento de imprimir, no al botón', true,
+    /addEventListener\('beforeprint'/.test(imp))
+  caso('y se desmonta al acabar', true, /addEventListener\('afterprint'/.test(imp))
+  caso('con flushSync, que si no el papel sale en blanco', true,
+    /flushSync\(\(\) => setImprimiendo\(true\)\)/.test(imp))
+  caso('y se quitan los dos oyentes al desmontar', true,
+    /removeEventListener\('beforeprint'/.test(imp) && /removeEventListener\('afterprint'/.test(imp))
+
+  /*
+   * Y EL PADRÓN SIGUE LLEVANDO EL CENSO ENTERO, no la página. Es el mismo
+   * peligro del punto de la paginación y merece su propio caso aquí: si un día
+   * alguien junta las dos ideas mal, sale un padrón de cien de ochocientos.
+   */
+  caso('el padrón imprime el censo filtrado entero', true, /filas=\{filtered\.map/.test(censo))
 }

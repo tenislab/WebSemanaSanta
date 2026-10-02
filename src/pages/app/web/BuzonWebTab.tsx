@@ -137,6 +137,7 @@ export function BuzonWebTab({ abrirId }: { abrirId?: string | null }) {
                 key={id} type="button"
                 className={`chip${filtro === id ? ' chip--active' : ''}`}
                 onClick={() => setFiltro(id)}
+                aria-pressed={filtro === id}
               >
                 {txt}
               </button>

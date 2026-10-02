@@ -3565,6 +3565,33 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .sitio__hero--compacta { min-height: clamp(200px, 40cqi, 460px); }
 .sitio__hero--media { min-height: clamp(240px, 52cqi, 620px); }
 .sitio__hero--completa { min-height: clamp(280px, 64cqi, 800px); }
+/*
+  LAS CAPAS DE FONDO DE LA PORTADA (ver `components/sitio/marco.tsx`).
+
+  Una capa por foto, todas puestas, y lo que cambia es la opacidad: así se
+  cruzan en vez de cortarse. El fondo ya no va en la propia sección porque
+  cambiar un `background-image` no se puede animar —se sustituye de golpe—, y
+  detrás del nombre de la hermandad eso es un parpadeo cada cinco segundos.
+
+  `will-change` NO se pone: son capas a pantalla completa y prometer que van a
+  cambiar le pide al navegador una textura del tamaño de la pantalla por cada
+  foto. Con la opacidad sola ya compone sin repintar.
+*/
+.sitio__hero-foto {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 1.4s ease-in-out;
+}
+.sitio__hero-foto--puesta { opacity: 1; }
+/*
+  Y SI SE HA PEDIDO QUIETO, ni se cruza. El temporizador tampoco arranca (eso
+  se decide en el componente): esta regla es el cinturón por si alguna capa se
+  pinta de todas formas, porque una transición de opacidad a pantalla completa
+  es justo lo que ese ajuste pide que no pase.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .sitio__hero-foto { transition: none; }
+}
 .sitio__hero-overlay { position: absolute; inset: 0; }
 .sitio__hero-inner { position: relative; max-width: 800px; }
 .sitio__hero h1 { font-family: var(--sitio-fuente-titulos); font-size: clamp(1.7rem, 7cqi, 3.4rem); margin-bottom: 0.6rem; line-height: 1.1; }
@@ -4242,6 +4269,207 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .cortejo-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
 .cortejo-roster li { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .cortejo-roster .row-person { flex: 1; min-width: 0; }
+
+/* EL DÍA DE LA SALIDA la fila lleva dos cosas más —el par «Asiste / No asiste»
+   y, si hace falta, el motivo—, así que se le da aire y se separa cada hermano
+   con un filete. Sin él, con cuarenta nazarenos y los chips a la derecha, no se
+   veía dónde acababa una fila y empezaba la siguiente. */
+.cortejo-roster--dia { gap: 0; }
+.cortejo-roster--dia li {
+  padding: 0.6rem 0;
+  border-bottom: 1px dashed var(--line);
+  row-gap: 0.45rem;
+}
+.cortejo-roster--dia li:last-child { border-bottom: none; }
+/*
+  DOS LÍNEAS POR HERMANO, NO UNA.
+  
+  Esta ficha vive en el panel lateral, que mide 440 px. Al juntar en la misma
+  fila el nombre, la pastilla del estado, los dos iconos y los dos chips, el
+  nombre se partía en tres renglones y la pastilla «Confirmada» se pintaba
+  encima del tercero. En el código la fila era un `flex` correcto; solo al
+  pintarla con cuarenta nazarenos de nombre largo se veía el choque.
+  
+  Así que el hermano se queda con la línea entera para él y todo lo que se
+  pulsa baja a la segunda, que es además el orden en que se lee: primero a
+  quién tengo delante, después qué hago con él.
+*/
+.cortejo-roster--dia .row-person { flex: 1 1 100%; }
+.cortejo-roster--dia .asistencia__acciones { margin-left: auto; }
+.cortejo-roster--dia .asistencia__motivo { flex: 1 1 100%; min-width: 0; }
+
+/* La asistencia plegada: fuera del día de la salida no se toca, pero se
+   consulta, así que el recuento va en el propio rótulo y el resto no ocupa. */
+.asistencia-plegada { display: block; }
+.asistencia-plegada > summary {
+  cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--text);
+  list-style: none; display: flex; align-items: center; gap: 0.45rem;
+}
+.asistencia-plegada > summary::-webkit-details-marker { display: none; }
+.asistencia-plegada > summary::before {
+  content: '▸'; color: var(--text-muted); font-size: 0.7rem; transition: transform 0.15s ease;
+}
+.asistencia-plegada[open] > summary::before { transform: rotate(90deg); }
+/*
+  `.lista-limpia` — UNA CLASE QUE NO EXISTÍA.
+
+  Se usa en OCHO pantallas —reservas de la tienda, devoluciones de cuotas,
+  encargos de redes, el área del hermano, lo que se comparte de la web…— y no
+  tenía ni una regla en todo el fichero. O sea que las ocho pedían una lista
+  sin viñetas y las ocho enseñaban la viñeta del navegador, con su sangría de
+  40 px, al lado de tarjetas que ya traen su propio borde. Nadie lo vio porque
+  el nombre de la clase dice lo que debería pasar, y leyendo el marcado parece
+  que pasa. Salió al mirar la pantalla: un punto a la izquierda de cada aviso.
+*/
+.lista-limpia { list-style: none; margin: 0; padding: 0; }
+
+/*
+  UN AVISO AUTOMÁTICO: CABEZA SIEMPRE, CUERPO AL ABRIR.
+
+  Antes cada regla era un `.assign-box` beige dentro de otro `.assign-box`
+  beige dentro de una `.settings-card` beige: tres cajas del mismo color
+  anidadas, sin un borde ni un contraste que dijera dónde acaba una y empieza
+  la siguiente. Eso es lo que se ve «poco premium» —no es el color, es que no
+  hay jerarquía—, y encima todo abierto a la vez: 1.969 px medidos con dos
+  reglas, y serían cuatro mil con cuatro.
+
+  Ahora la regla es una tarjeta con su cabeza, su filete y su cuerpo plegado.
+  Una regla ENCENDIDA lleva el filete en verde por el borde de arranque: es el
+  estado que hay que poder ver sin leer, porque es el que manda correos.
+*/
+.avisos-auto .settings-card__head { justify-content: space-between; align-items: baseline; }
+.regla {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.65rem;
+  padding: 0 0.9rem 0.1rem;
+}
+.regla--encendida { border-left-color: var(--ok-fg); }
+.regla__cabeza {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.75rem;
+  padding: 0.8rem 0; cursor: pointer; list-style: none;
+}
+.regla__cabeza::-webkit-details-marker { display: none; }
+/* La flecha gira: es lo que dice que esto se abre, sin añadir un botón más. */
+.regla__cabeza::before {
+  content: '▸'; color: var(--text-muted); font-size: 0.7rem; flex: none;
+  transition: transform 0.15s ease;
+}
+.regla[open] > .regla__cabeza::before { transform: rotate(90deg); }
+.regla__cabeza:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); border-radius: 6px; }
+/* El nombre se come el hueco libre, así que las pastillas quedan alineadas a
+   la derecha en todas las filas y se pueden comparar de un vistazo. */
+.regla__que { flex: 1 1 14rem; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.regla__que b { font-size: 0.95rem; font-weight: 600; }
+.regla__cuando { font-size: 0.78rem; color: var(--text-muted); }
+.regla__apagar { display: flex; justify-content: flex-end; padding-bottom: 0.5rem; }
+/* El encender, separado de lo de arriba por un filete: es el final del
+   recorrido, después de haber leído lo que se manda. */
+.regla__encender {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  flex-wrap: wrap; margin: 0.8rem 0 0.9rem; padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+.regla__encender .interruptor { flex: 1 1 20rem; }
+/* Cuando no se puede encender se ve que no se puede, y el motivo lo dice el
+   texto de dentro: un interruptor gris sin explicación parece roto. */
+.interruptor--no { opacity: 0.6; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .regla__cabeza::before { transition: none; } }
+
+/* El cartel del acto en la lista: pequeño y apaisado, del tamaño de la fila.
+   No se estira ni la deforma —`flex: none` y `object-fit: cover`—, y si el
+   acto no tiene cartel no deja hueco porque el elemento no se pinta. */
+.eventos-item__cartel {
+  width: 64px; height: 44px; object-fit: cover; flex: none;
+  border-radius: 5px; border: 1px solid var(--line); background: var(--bg-sunken);
+}
+@media (max-width: 640px) { .eventos-item__cartel { width: 48px; height: 34px; } }
+
+/*
+  SUBIR UNA IMAGEN, CON SU VISTA PREVIA (ver `components/CampoImagen.tsx`).
+
+  La vista previa no es un adorno: es el único modo de saber que se ha subido
+  LA imagen que se quería. El nombre del fichero no dice si era la buena, y en
+  la tienda la foto no se vuelve a ver hasta que alguien abre la web.
+
+  Y el campo de la dirección va plegado, no fuera: quien ya tenga sus fotos en
+  su web lo necesita, y quien no, no tiene por qué ver dos caminos para lo
+  mismo y dudar de cuál es el suyo.
+*/
+.campo-imagen { display: flex; flex-direction: column; gap: 0.5rem; }
+.campo-imagen__input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.campo-imagen__vista {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.6rem; background: var(--bg-sunken);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.campo-imagen__vista img {
+  width: 96px; height: 96px; object-fit: cover; flex: none;
+  border-radius: 6px; border: 1px solid var(--line);
+  /* Un cuadro de fondo para que una imagen con transparencia —un escudo en
+     PNG— no se vea flotando sobre la nada. */
+  background: var(--bg);
+}
+.campo-imagen__datos { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; min-width: 0; }
+.campo-imagen__botones { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+.campo-imagen__enlace > summary {
+  cursor: pointer; list-style: none; font-size: 0.78rem; color: var(--text-muted);
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;
+}
+.campo-imagen__enlace > summary::-webkit-details-marker { display: none; }
+.campo-imagen__enlace > summary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); border-radius: 4px; }
+.campo-imagen__enlace input { margin-top: 0.4rem; width: 100%; }
+
+/*
+  LOS DOCUMENTOS DEL EJERCICIO: una fila por documento, con lo que hace a la
+  izquierda y lo que se pulsa a la derecha. Es el mismo reparto que la tabla de
+  informes de más abajo, que era el lenguaje que ya tenía la pantalla.
+*/
+.documentos { list-style: none; margin: 0.8rem 0 0; padding: 0; }
+.documentos__fila {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1rem;
+  padding: 0.85rem 0; border-top: 1px solid var(--line);
+}
+.documentos__fila:first-child { border-top: none; padding-top: 0.2rem; }
+.documentos__que { flex: 1 1 18rem; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.documentos__que b { font-size: 0.95rem; font-weight: 600; }
+.documentos__que .table-subtle { font-size: 0.82rem; line-height: 1.45; }
+/* Las acciones no se estiran ni se parten: el año y los dos botones van
+   juntos, y en una pantalla estrecha bajan enteros a su propia línea. */
+.documentos__acciones { display: flex; align-items: center; gap: 0.45rem; flex: none; }
+.documentos__acciones select { max-width: 7rem; }
+.documentos__aviso { padding: 0 0 0.85rem; }
+@media (max-width: 640px) {
+  .documentos__acciones { flex: 1 1 100%; }
+  .documentos__acciones select { max-width: none; flex: 1; }
+}
+
+/*
+  EL COBRO EN MANO, PLEGADO. El rótulo tiene que seguir pareciendo algo que se
+  pulsa —es lo primero de Cuotas y lo que se busca con alguien delante—, así
+  que se le da el aire de la cabecera de una tarjeta y una flecha que gira, no
+  el triángulo pelado del navegador.
+*/
+.cobro-en-mano > summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.2rem 0.6rem;
+}
+.cobro-en-mano > summary::-webkit-details-marker { display: none; }
+.cobro-en-mano > summary::after {
+  content: '▾'; margin-left: auto; color: var(--text-muted); font-size: 0.8rem;
+  transition: transform 0.15s ease;
+}
+.cobro-en-mano[open] > summary::after { transform: rotate(180deg); }
+.cobro-en-mano > summary .form-hint { margin: 0; }
+.cobro-en-mano > summary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); border-radius: 6px; }
+.cobro-en-mano > *:not(summary) { margin-top: 0.8rem; }
+@media (prefers-reduced-motion: reduce) { .cobro-en-mano > summary::after { transition: none; } }
+
+.asistencia-plegada > summary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); border-radius: 4px; }
+.asistencia-plegada > *:not(summary) { margin-top: 0.7rem; }
+@media (prefers-reduced-motion: reduce) { .asistencia-plegada > summary::before { transition: none; } }
 
 .cortejo-orden__head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1.2rem; }
 .cortejo-orden__tramo { margin-bottom: 1.2rem; }
@@ -8634,6 +8862,17 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
 .pyg__suave { color: var(--text-muted); font-size: 0.85em; }
 .pyg__lectura { margin: 0.8rem 0 0; font-size: 0.9rem; }
 .pyg__cierre { margin-top: 1rem; }
+/* La entradilla de una sección: va ANTES de lo que explica, así que tiene que
+   leerse sin competir con la tabla. Misma tinta floja que el resto del apoyo. */
+.pyg__entradilla {
+  margin: 0.5rem 0 0.7rem; font-size: 0.82rem; line-height: 1.5; color: var(--text-muted);
+}
+/* La clase de la regla —traslado o compromiso— pegada a su nombre. No es una
+   pastilla de color: en el papel el color no se imprime y esto va al papel. */
+.pyg__clase { font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+/* Y lo que le hace al resultado, que es la línea que contesta la pregunta. No
+   va en tinta floja: es tan importante como el nombre de la regla. */
+.pyg__efecto { font-size: 0.85em; }
 .pyg__aviso {
   margin: 1rem 0 0; padding: 0.8rem 0.9rem; font-size: 0.82rem; line-height: 1.55;
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-sunken);
@@ -8730,3 +8969,11 @@ button.aviso-falta__enlace { background: none; border: none; cursor: pointer; fo
 /* Y en el papel no sale: lo que se imprime es el documento entero, que se
    arma aparte y con la lista completa (ver `InformeImpreso`). */
 @media print { .paginador { display: none; } }
+
+/* La ayuda de las dos clases de regla, en dos puntos y no en un párrafo
+   corrido: son DOS cosas y leerlas como una sola era justo el problema. */
+.reglas-ayuda { margin: 0.35rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.reglas-ayuda li { list-style: disc; }
+/* Lo que la regla le hace al resultado, en su propia fila. Va en tinta normal
+   y no en la floja de `small`: es la línea que contesta la pregunta. */
+.reglas-lista__efecto { color: var(--text); }

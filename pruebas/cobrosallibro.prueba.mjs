@@ -20,10 +20,10 @@
  */
 export default async function ({ cargar, caso }) {
   const { readFile } = await import('node:fs/promises')
-  const sinComentarios = (t) => t
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+  /* La pieza compartida de `fuentes.mjs`: aquí había una copia a ojo, y la de
+     otra prueba se comió media pantalla porque `accept="image/*"` tiene un
+     `/*` literal dentro de un texto. */
+  const { sinComentarios } = await import('./fuentes.mjs')
 
   /*
    * LAS PANTALLAS QUE PUEDEN DAR ALGO POR COBRADO. Si una de ellas escribe

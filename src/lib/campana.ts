@@ -520,3 +520,25 @@ export function renovacionDeHermano(
 
   return { estado, sitioAnterior, papeletaActual }
 }
+
+/**
+ * CÓMO SE NOMBRA EL DÍA DE LA SALIDA.
+ *
+ * El rótulo de la asistencia ponía «día de salida 2027», y 2027 no es un día:
+ * se lee como si la aplicación hubiera metido el año donde iba la fecha. Y la
+ * campaña YA sabe el día —`fechaSalida`, que se pide en el alta—, así que no
+ * hacía falta inventarse nada: solo usarlo.
+ *
+ * Si la hermandad no lo ha puesto todavía, se dice «de 2027» con la
+ * preposición, que al menos se lee como lo que es: el año de la edición y no
+ * una fecha a medias.
+ */
+export function rotuloDiaDeSalida(campana: Campana): string {
+  const f = campana.fechaSalida
+  if (!f || !esFecha(f)) return `día de salida de ${campana.anio}`
+  const d = new Date(`${f}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return `día de salida de ${campana.anio}`
+  /* Sin la coma de `es-ES` («domingo, 28 de marzo»): esto se usa detrás de un
+     «·» o de un «del», y dos signos seguidos se leen como un tropiezo. */
+  return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).replace(',', '')
+}

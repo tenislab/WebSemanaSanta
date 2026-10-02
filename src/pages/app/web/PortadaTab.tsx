@@ -42,8 +42,33 @@ export function PortadaTab({ web, editar, actualizar }: { web: WebPublica; edita
         </label>
       </div>
       <p className="form-hint">
-        Se van alternando de fondo en la cabecera, una cada cinco segundos, en el orden que pongas
-        aquí. La primera es la que se ve al entrar.
+        Se cruzan de fondo en la cabecera, una cada cinco segundos, en el orden que pongas aquí. La
+        primera es la que se ve al entrar. A quien tenga pedido en su móvil u ordenador que nada se
+        mueva, se le queda la primera fija.
+      </p>
+      {/*
+        LAS MEDIDAS, DICHAS DONDE SE ELIGE LA FOTO.
+
+        Y dichas con un número, no con un «puede perder calidad», porque lo
+        segundo no deja decidir nada. El motivo es comprobable:
+
+          · Al subirla se reduce a 1.920 px de ancho como máximo, y NO se
+            agranda nunca —`comprimirImagen` escala con `Math.min(1, …)`—, así
+            que una foto pequeña se queda pequeña.
+          · La cabecera ocupa TODO el ancho de la pantalla (medido: la caja de
+            la cabecera mide lo mismo que el sitio en los cinco anchos
+            probados) y el fondo va con `cover`, o sea que la foto se estira
+            hasta cubrirlo.
+
+        De ahí sale la cuenta: 1.920 entre 1.200 es 1,6. No hace falta creerse
+        nada, se divide.
+      */}
+      <p className="form-hint form-hint--aviso">
+        <b>Recomendado: 1.920 × 1.080 px</b> (apaisada). Si subes una más grande se reduce a ese
+        ancho y no pasa nada. Si subes una <b>más pequeña no se agranda</b>, pero la cabecera la
+        estira hasta llenar la pantalla: una de 1.200 px se ve a <b>×1,6</b> de su tamaño en un
+        monitor de 1.920, y a ese aumento se le notan los bordes blandos. De una foto de móvil
+        reciente sobra; de un recorte sacado de Facebook, no llega.
       </p>
       {web.heroFotos.length === 0 ? <p className="form-hint">Sin fotos aún. Sube al menos una para la portada.</p> : (
         <div className="galeria-editor">

@@ -213,6 +213,7 @@ export default function Inventario() {
               className={`chip${filter === f ? ' chip--active' : ''}`}
               onClick={() => setFilter(f)}
               type="button"
+              aria-pressed={filter === f}
             >
               {f}
             </button>

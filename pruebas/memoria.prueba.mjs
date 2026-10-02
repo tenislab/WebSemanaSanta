@@ -184,4 +184,48 @@ export default async function ({ cargar, caso }) {
     m.aniosConMemoria(DATOS, 2025).includes(1991))
   caso('el año en curso está aunque no haya nada apuntado', [2030],
     m.aniosConMemoria({ ...DATOS, hermanos: [], cuotas: [], papeletas: [], movimientos: [] }, 2030))
+
+  await elQueEntroYSeFueElMismoAno({ m, caso, hermano })
+}
+
+/*
+ * EL QUE ENTRÓ Y SE FUE EL MISMO AÑO NO ENCABEZA LAS ALTAS.
+ *
+ * Los hermanos de baja llevan `numero: 0` a propósito —no ocupan puesto en el
+ * escalafón—, no un número real. Las altas del ejercicio se ordenaban por
+ * `a.numero - b.numero`, y el cero gana a cualquier número: quien se dio de
+ * alta en enero y de baja en octubre DEL MISMO AÑO salía ENCABEZANDO la lista,
+ * por delante del nº 12.
+ *
+ * En el papel su celda sale con una raya —los dos sitios que pintan esto ya lo
+ * hacen—, así que no se publica ningún «hermano nº 0»: lo que se publica es una
+ * fila sin número a la cabeza, que en la memoria de un ejercicio se lee como un
+ * error de imprenta. Va al final, que es donde el resto de la aplicación pone
+ * a los que no tienen número.
+ *
+ * SE EJECUTA `construirMemoria` y se mira el ORDEN que devuelve. Mirar el
+ * `.sort` en el código no valdría: lo que importa es dónde acaba la fila.
+ */
+async function elQueEntroYSeFueElMismoAno({ m, caso, hermano }) {
+  const censo = [
+    hermano('a', 12, 'Ana Ruiz Mora', 2026),
+    // Alta en enero, baja en octubre: los de baja llevan número 0.
+    hermano('b', 0, 'Bruno Salas Gil', 2026, { estado: 'Baja', fechaBaja: '2026-10-04', motivoBaja: 'Se muda' }),
+    hermano('c', 13, 'Carmen Vega Nieto', 2026),
+    hermano('d', 5, 'De antes', 1999),
+  ]
+  const memoria = m.construirMemoria(
+    2026,
+    { hermanos: censo, cuotas: [], papeletas: [], movimientos: [], tramos: [], enseres: [] },
+    2026,
+  )
+  const altas = memoria.altas ?? []
+  // Si esto no trajera las tres, todo lo de abajo compararía vacío con vacío.
+  caso('las tres altas de 2026 están', 3, altas.length)
+  caso('y el de antes no', false, altas.some((a) => a.nombre === 'De antes'))
+  caso('el sin número va AL FINAL, no encabezando', 'Bruno Salas Gil',
+    altas[altas.length - 1]?.nombre)
+  caso('y el nº 12 abre la lista', 'Ana Ruiz Mora', altas[0]?.nombre)
+  caso('en orden de número', ['Ana Ruiz Mora', 'Carmen Vega Nieto', 'Bruno Salas Gil'],
+    altas.map((a) => a.nombre))
 }

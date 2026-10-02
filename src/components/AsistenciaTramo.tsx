@@ -1,4 +1,5 @@
-import { useAsistencias, registroDe, etiquetaAsistencia, type EstadoAsistencia } from '../lib/asistencia'
+import { useAsistencias, registroDe, type EstadoAsistencia } from '../lib/asistencia'
+import { ChipsAsistencia, PastillaAsistencia, ResumenAsistencia } from './ChipsAsistencia'
 import type { Hermano } from '../data/hermanos'
 
 export interface MiembroAsistencia {
@@ -12,6 +13,12 @@ interface Props {
   /** Nombre de quien marca (diputado o «Secretaría»), se guarda como traza. */
   porQuien: string
   soloLectura?: boolean
+  /**
+   * Sin las tres pastillas del recuento: para cuando quien nos monta ya las
+   * está enseñando por su cuenta (el plegable de Cortejo las lleva en el
+   * propio rótulo, y repetirlas dentro deja el mismo dato dos veces seguidas).
+   */
+  sinResumen?: boolean
 }
 
 /**
@@ -19,12 +26,10 @@ interface Props {
  * asiste / no asiste (con motivo) / sin confirmar. Se comparte entre el panel
  * (Cortejo) y el área del hermano (diputados de tramo).
  */
-export default function AsistenciaTramo({ anio, miembros, porQuien, soloLectura }: Props) {
+export default function AsistenciaTramo({ anio, miembros, porQuien, soloLectura, sinResumen }: Props) {
   const [mapa, marcar] = useAsistencias()
 
-  const asisten = miembros.filter((m) => registroDe(mapa, anio, m.hermano.id).estado === 'asiste').length
-  const noAsisten = miembros.filter((m) => registroDe(mapa, anio, m.hermano.id).estado === 'no_asiste').length
-  const pendientes = miembros.length - asisten - noAsisten
+  const estados = miembros.map((m) => registroDe(mapa, anio, m.hermano.id).estado)
 
   function cambiarEstado(hermanoId: string, estado: EstadoAsistencia) {
     const actual = registroDe(mapa, anio, hermanoId)
@@ -45,11 +50,7 @@ export default function AsistenciaTramo({ anio, miembros, porQuien, soloLectura 
 
   return (
     <div className="asistencia">
-      <div className="asistencia__resumen">
-        <span className="pill pill--ok">{asisten} asisten</span>
-        <span className="pill pill--warn">{noAsisten} no asisten</span>
-        <span className="pill pill--info">{pendientes} sin confirmar</span>
-      </div>
+      {!sinResumen && <ResumenAsistencia estados={estados} />}
 
       <ul className="asistencia__lista">
         {miembros.map(({ hermano, puesto }) => {
@@ -64,48 +65,13 @@ export default function AsistenciaTramo({ anio, miembros, porQuien, soloLectura 
               </div>
 
               {soloLectura ? (
-                <span className={`pill ${reg.estado === 'asiste' ? 'pill--ok' : reg.estado === 'no_asiste' ? 'pill--warn' : 'pill--info'}`}>
-                  {etiquetaAsistencia(reg.estado)}
-                  {reg.estado === 'no_asiste' && reg.motivo ? ` · ${reg.motivo}` : ''}
-                </span>
+                <PastillaAsistencia reg={reg} />
               ) : (
-                <div className="asistencia__acciones">
-                  <div className="asistencia__botones">
-                    <button
-                      type="button"
-                      className={`chip chip--toggle${reg.estado === 'asiste' ? ' chip--active chip--ok' : ''}`}
-                      onClick={() => cambiarEstado(hermano.id, 'asiste')}
-                    >
-                      ✓ Asiste
-                    </button>
-                    <button
-                      type="button"
-                      className={`chip chip--toggle${reg.estado === 'no_asiste' ? ' chip--active chip--warn' : ''}`}
-                      onClick={() => cambiarEstado(hermano.id, 'no_asiste')}
-                    >
-                      ✕ No asiste
-                    </button>
-                    {reg.estado !== 'pendiente' && (
-                      <button
-                        type="button"
-                        className="chip chip--toggle"
-                        onClick={() => cambiarEstado(hermano.id, 'pendiente')}
-                        title="Volver a dejar sin confirmar"
-                      >
-                        ↺
-                      </button>
-                    )}
-                  </div>
-                  {reg.estado === 'no_asiste' && (
-                    <input
-                      type="text"
-                      className="asistencia__motivo"
-                      placeholder="Motivo (enfermedad, viaje…)"
-                      value={reg.motivo ?? ''}
-                      onChange={(e) => cambiarMotivo(hermano.id, e.target.value)}
-                    />
-                  )}
-                </div>
+                <ChipsAsistencia
+                  reg={reg}
+                  onEstado={(e) => cambiarEstado(hermano.id, e)}
+                  onMotivo={(m) => cambiarMotivo(hermano.id, m)}
+                />
               )}
             </li>
           )

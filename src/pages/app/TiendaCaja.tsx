@@ -307,6 +307,7 @@ export default function TiendaCaja() {
                 type="button"
                 className={`chip${canal === id ? ' chip--active' : ''}`}
                 onClick={() => setCanal(id)}
+                aria-pressed={canal === id}
               >
                 {t}
               </button>

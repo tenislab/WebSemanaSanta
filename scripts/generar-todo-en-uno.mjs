@@ -178,6 +178,13 @@ export const PIEZAS = [
    *     versión se pone después de ella, cuando ya ha pasado todo lo demás:
    *     sellar antes sería prometer que está puesto algo que igual no llegó.
    */
+  /*
+   * EL CARTEL DEL ACTO. Solo añade una columna de texto con `if not exists` y
+   * su comentario: no define ninguna función, no toca ninguna política y se
+   * puede repetir. Va detrás de `imagenes.sql` porque lo que guarda es un
+   * enlace a ese almacén, aunque no lo necesite para crearse.
+   */
+  ['imagen-del-evento.sql', 'Que un acto pueda llevar su cartel'],
   ['vigilancia.sql', 'Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie'],
   ['canal-de-actualizacion.sql', 'Sacar una novedad a una hermandad piloto antes que a todas'],
   ['restaurar-copia.sql', 'Poder volcar la copia de UNA hermandad sin tocar a las demás'],

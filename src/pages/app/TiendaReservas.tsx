@@ -175,6 +175,7 @@ export default function TiendaReservas() {
               type="button"
               className={`chip${filtro === id ? ' chip--active' : ''}`}
               onClick={() => setFiltro(id)}
+              aria-pressed={filtro === id}
             >
               {texto}
             </button>

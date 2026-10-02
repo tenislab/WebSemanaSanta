@@ -126,6 +126,7 @@ with esperado (tabla, columna) as (
     ('eventos', 'hermandad_id'),
     ('eventos', 'hora'),
     ('eventos', 'id'),
+    ('eventos', 'imagen'),
     ('eventos', 'lugar'),
     ('eventos', 'repeticion'),
     ('eventos', 'tareas'),
@@ -604,17 +605,17 @@ select * from (
         then 'TU BASE NO SE HA ACTUALIZADO NUNCA'
       when coalesce((xpath('/row/valor/text()', query_to_xml(
              'select valor from esquema_gobergo where clave = ''version''',
-             false, true, '')))[1]::text::int, 0) < 70
+             false, true, '')))[1]::text::int, 0) < 71
         then 'TU BASE VA POR DETRÁS'
       else 'al día'
     end as "Qué pasa",
     'versión del esquema' as "Tabla",
     case
       when to_regclass('public.esquema_gobergo') is null
-        then 'debería ir por la 70: pega ACTUALIZAR.sql'
+        then 'debería ir por la 71: pega ACTUALIZAR.sql'
       else 'va por la ' || coalesce((xpath('/row/valor/text()', query_to_xml(
              'select valor from esquema_gobergo where clave = ''version''',
-             false, true, '')))[1]::text, '?') || ' y debería ir por la 70'
+             false, true, '')))[1]::text, '?') || ' y debería ir por la 71'
     end as "Columna"
 ) todo
 -- Lo que está al día se calla: si sale una sola fila, es que hay algo que ver.

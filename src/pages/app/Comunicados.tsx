@@ -727,6 +727,7 @@ export default function Comunicados() {
               className={`chip${filtroCanal === f ? ' chip--active' : ''}`}
               onClick={() => setFiltroCanal(f)}
               type="button"
+              aria-pressed={filtroCanal === f}
             >
               {f}
             </button>
@@ -1126,6 +1127,7 @@ export default function Comunicados() {
                       key={c}
                       className={`chip chip--toggle${activo ? ' chip--active' : ''}`}
                       onClick={() => toggleCanal(c)}
+                      aria-pressed={activo}
                     >
                       {activo ? '✓ ' : ''}{c}
                     </button>

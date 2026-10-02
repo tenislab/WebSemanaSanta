@@ -65,6 +65,7 @@ export default function ErroresProduccion() {
             type="button"
             className={`chip${dias === d ? ' chip--active' : ''}`}
             onClick={() => setDias(d)}
+            aria-pressed={dias === d}
           >
             {d === 1 ? 'Hoy' : `${d} días`}
           </button>
@@ -110,7 +111,7 @@ export default function ErroresProduccion() {
                           type="button"
                           className="btn btn-ghost btn-sm"
                           style={{ textAlign: 'left', whiteSpace: 'normal', padding: '0.3rem 0' }}
-                          onClick={() => setAbierto(abierto === e.mensaje ? null : e.mensaje)}
+                          onClick={() => setAbierto((puesto) => (puesto === e.mensaje ? null : e.mensaje))}
                           aria-expanded={abierto === e.mensaje}
                         >
                           {e.mensaje}

@@ -45,7 +45,9 @@ export function PaginasTab({ web, editar, paginaSel, setPaginaSel }: { web: WebP
       </div>
       <div className="cms-chips">
         {web.paginas.map((p) => (
-          <button key={p.id} type="button" className={`chip${sel?.id === p.id ? ' chip--active' : ''}`} onClick={() => setPaginaSel(p.id)}>{p.icono} {p.titulo}</button>
+          <button key={p.id} type="button" className={`chip${sel?.id === p.id ? ' chip--active' : ''}`} onClick={() => setPaginaSel(p.id)}
+aria-pressed={sel?.id === p.id}
+>{p.icono} {p.titulo}</button>
         ))}
       </div>
       {sel && (

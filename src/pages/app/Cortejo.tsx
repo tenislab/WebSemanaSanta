@@ -9,6 +9,7 @@ import { LogoMark } from '../../components/Logo'
 import ItinerarioCortejo from '../../components/ItinerarioCortejo'
 import { useWebPublica, hayItinerario, type EstacionPenitencia } from '../../lib/webPublica'
 import AsistenciaTramo from '../../components/AsistenciaTramo'
+import { ChipsAsistencia, ResumenAsistencia, cuentaAsistencia } from '../../components/ChipsAsistencia'
 import { useAsistencias, registroDe } from '../../lib/asistencia'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
@@ -33,7 +34,7 @@ import { incidenciaToRow, rowToIncidencia } from '../../lib/db/incidencias'
 import { MOVIMIENTOS_INICIALES, type Movimiento } from '../../data/movimientos'
 import { movimientoToRow, rowToMovimiento } from '../../lib/db/movimientos'
 import { conApunteDeCobro, origenDePapeleta } from '../../lib/apuntes'
-import { getCampana, useCampana } from '../../lib/campana'
+import { getCampana, rotuloDiaDeSalida, useCampana } from '../../lib/campana'
 import { useFocoDeDialogo } from '../../lib/foco'
 
 
@@ -547,6 +548,7 @@ export default function Cortejo() {
               className={`chip${estadoFiltro === f ? ' chip--active' : ''}`}
               onClick={() => setEstadoFiltro(f)}
               type="button"
+              aria-pressed={estadoFiltro === f}
             >
               {f}
             </button>
@@ -561,6 +563,7 @@ export default function Cortejo() {
                   className={`chip${cuerpoFiltro === c ? ' chip--active' : ''}`}
                   onClick={() => setCuerpoFiltro(c)}
                   type="button"
+                  aria-pressed={cuerpoFiltro === c}
                 >
                   {c === 'Todos' ? 'Ambos cortejos' : c}
                 </button>
@@ -1064,9 +1067,16 @@ function TramoFicha({
   onResolver: (papeletaId: string, comoBaja: boolean) => void
   onPagada: (papeletaId: string) => void
 }) {
-  const edicionActual = getCampana().anio
-  const [mapaAsistencia] = useAsistencias()
+  const campanaActual = getCampana()
+  const edicionActual = campanaActual.anio
+  /* «día de salida 2027» se leía como si 2027 fuera un día; la campaña ya sabe
+     la fecha, así que se dice entera. */
+  const rotuloDelDia = rotuloDiaDeSalida(campanaActual)
+  const [mapaAsistencia, marcarAsistencia] = useAsistencias()
   const confirmados = reparto.filter((a) => a.estado !== 'Excede aforo')
+  const estadosAsistencia = confirmados.map((a) => registroDe(mapaAsistencia, edicionActual, a.hermano.id).estado)
+  const cuentaDelTramo = cuentaAsistencia(estadosAsistencia)
+  const [asistenciaAbierta, setAsistenciaAbierta] = useState(false)
   const excedidos = reparto.filter((a) => a.estado === 'Excede aforo')
   const ocupados = confirmados.length
   const capacidad = tramo.capacidad
@@ -1081,22 +1091,42 @@ function TramoFicha({
         {ocupados}/{capacidad} puestos ocupados{tramo.tipo && ` · ${tramo.tipo}`}
       </p>
 
+      {/*
+        UNA SOLA LISTA, NO DOS.
+        
+        El día de la salida esta ficha listaba a los mismos hermanos dos veces:
+        arriba, catorce filas para entregar la papeleta; abajo, otras catorce
+        para decir si salían. En un tramo de cirios son cuarenta hermanos, o
+        sea ochenta filas del mismo nombre, y había dos párrafos explicando
+        que el ✓ «de arriba» no era el ✓ «de abajo». Cuando hay que explicar
+        por escrito dónde está cada control, lo que sobra es el segundo sitio,
+        no la explicación.
+        
+        Ahora cada hermano sale UNA vez con sus dos acciones pegadas: entregar
+        la papeleta y decir si asiste. Se quita el «arriba/abajo» —que además
+        no se sostenía: desde la asistencia, el ✓ de la papeleta quedaba fuera
+        de la pantalla— y el recuento de los tres números se sube a la cabeza
+        de la lista, que es donde sirve para algo (cuántos faltan por pasar).
+      */}
       <dl className="ficha__list">
         <div>
-          <dt>{diaDeSalida ? 'Entrega de papeletas · por número de hermano' : 'Roster, por número de hermano'}</dt>
+          <dt>{diaDeSalida ? `Pase de lista · ${rotuloDelDia}` : 'Roster, por número de hermano'}</dt>
           <dd>
-            {/*
-              LOS DOS CONTROLES DEL DÍA DE SALIDA NO HACEN LO MISMO, y hasta
-              ahora los dos eran un ✓ verde sin rótulo: «no funciona el tic de
-              confirmar asistencia, el de abajo sí» —y era que hacían cosas
-              distintas. Aquí se dice cuál es cuál antes de tocarlos.
-            */}
             {diaDeSalida && reparto.length > 0 && (
-              <p className="form-hint">
-                El <b>✓</b> de cada fila <b>entrega la papeleta</b>: pasa a «Entregada» y, si el
-                hermano llega sin haber pagado, se le cobra en mano y queda apuntado en Tesorería.
-                Quién asiste de verdad se confirma más abajo, en <b>Asistencia</b>.
-              </p>
+              <>
+                {/* Un párrafo, no dos: las dos acciones están en la misma fila
+                    y se pueden nombrar señalándolas, sin «arriba» ni «abajo». */}
+                {/* Corto: los dos controles ya se ven juntos en cada fila, así
+                    que basta con decir qué hace cada uno. El párrafo largo era
+                    el precio de tenerlos en dos listas distintas. */}
+                <p className="form-hint">
+                  El <b>✓</b> entrega la papeleta —y la cobra en mano si llega sin pagar—.{' '}
+                  <b>Asiste / No asiste</b> es <b>quién sale de verdad</b>: va al histórico y manda
+                  en el reparto del año que viene. También lo marca el diputado del tramo desde su
+                  área de hermano.
+                </p>
+                <ResumenAsistencia estados={estadosAsistencia} />
+              </>
             )}
             {/* No basta con decir que está vacío: hay que decir de dónde sale
                 lo que lo llena. El reparto no se teclea aquí —se calcula solo
@@ -1108,8 +1138,10 @@ function TramoFicha({
                 papeletas: cada papeleta de este tramo coloca a su hermano aquí.
               </span>
             )}
-            <ul className="cortejo-roster">
-              {reparto.map((a) => (
+            <ul className={`cortejo-roster${diaDeSalida ? ' cortejo-roster--dia' : ''}`}>
+              {reparto.map((a) => {
+                const reg = registroDe(mapaAsistencia, edicionActual, a.hermano.id)
+                return (
                 <li key={a.papeleta.id}>
                   <span className="row-person">
                     {a.hermano.fotoDataUrl ? (
@@ -1160,8 +1192,24 @@ function TramoFicha({
                       Marcar pagada
                     </button>
                   )}
+                  {/* Quien excede el aforo no tiene sitio, así que tampoco se
+                      le pregunta si sale: primero hay que darle puesto. */}
+                  {diaDeSalida && a.estado !== 'Excede aforo' && (
+                    <ChipsAsistencia
+                      reg={reg}
+                      onEstado={(estado) => marcarAsistencia(edicionActual, a.hermano.id, {
+                        estado,
+                        motivo: estado === 'no_asiste' ? reg.motivo ?? '' : undefined,
+                        por: 'Secretaría',
+                      })}
+                      onMotivo={(motivo) => marcarAsistencia(edicionActual, a.hermano.id, {
+                        estado: 'no_asiste', motivo, por: 'Secretaría',
+                      })}
+                    />
+                  )}
                 </li>
-              ))}
+                )
+              })}
             </ul>
             {excedidos.length > 0 && (
               <p className="form-hint form-hint--error">
@@ -1173,20 +1221,41 @@ function TramoFicha({
         </div>
       </dl>
 
-      <div className="assign-box">
-        <label>Asistencia · quién sale de verdad · día de salida {edicionActual}</label>
-        <p className="form-hint">
-          Esto no es la entrega de la papeleta —eso es el ✓ de arriba—: es <b>quién sale</b>, para
-          el histórico de años y para el reparto del que viene. Confírmala aquí o deja que la
-          marque el diputado del tramo desde su área de hermano: se sincroniza al instante en
-          ambos sitios.
-        </p>
-        <AsistenciaTramo
-          anio={edicionActual}
-          miembros={confirmados.map((a) => ({ hermano: a.hermano, puesto: a.puesto }))}
-          porQuien="Secretaría"
-        />
-      </div>
+      {/*
+        FUERA DEL DÍA DE LA SALIDA la asistencia no se toca —todavía no ha
+        salido nadie—, pero sí se consulta: el año siguiente hay que saber
+        quién salió. Así que se queda, plegada y con el recuento en el propio
+        rótulo, en vez de ocupar media ficha abierta para nada.
+      */}
+      {!diaDeSalida && confirmados.length > 0 && (
+        <details
+          className="assign-box asistencia-plegada"
+          open={asistenciaAbierta}
+          onToggle={(e) => setAsistenciaAbierta((e.target as HTMLDetailsElement).open)}
+        >
+          <summary>
+            Asistencia · {rotuloDelDia} · {cuentaDelTramo.asisten} asisten ·{' '}
+            {cuentaDelTramo.noAsisten} no asisten · {cuentaDelTramo.pendientes} sin confirmar
+          </summary>
+          <p className="form-hint">
+            Quién sale de verdad. Normalmente se marca el día de la salida —con el interruptor
+            «Modo día de salida», que la pone en la misma fila que la entrega de la papeleta—, o la
+            marca el diputado del tramo desde su área de hermano. Aquí se puede adelantar o
+            corregir.
+          </p>
+          {/* Solo se monta al abrirlo. Un tramo de cirios son cuarenta hermanos,
+              y `details` cerrado no los pinta pero React sí los construye: eran
+              cuarenta pares de chips en el árbol que nadie estaba mirando. */}
+          {asistenciaAbierta && (
+            <AsistenciaTramo
+              anio={edicionActual}
+              miembros={confirmados.map((a) => ({ hermano: a.hermano, puesto: a.puesto }))}
+              porQuien="Secretaría"
+              sinResumen
+            />
+          )}
+        </details>
+      )}
 
       <p className="recibo-doc__note">{hermandad.nombreLegal || 'Tu hermandad'} · listado generado por Gobergo</p>
 

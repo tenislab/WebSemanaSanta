@@ -321,6 +321,9 @@ export default function Cuotas() {
    * cómo ha pagado de verdad.
    */
   const [cobroEnManoId, setCobroEnManoId] = useState<string | null>(null)
+  /* El cobro en mano se abre a mano: plegado no quita el sitio de arriba, solo
+     el espacio de la cabecera los días en que no hay nadie pagando. */
+  const [cobroAbierto, setCobroAbierto] = useState(false)
   const [metodoEnMano, setMetodoEnMano] = useState<MetodoCobro>('Efectivo')
   const [cobradosEnMano, setCobradosEnMano] = useState<number>(0)
 
@@ -963,18 +966,46 @@ export default function Cuotas() {
         COBRAR EN MANO — el hermano que se pasa por la casa de hermandad
         ====================================================================
 
-        Va ARRIBA DEL TODO y no escondido en un cajón porque es lo que se hace
-        con alguien delante esperando: si hay que buscarlo, se acaba dando por
-        pagado el recibo desde la lista y perdiendo el método — que es
-        justamente lo que descuadraba la caja.
+        SIGUE ARRIBA DEL TODO, pero PLEGADO.
+
+        Está arriba porque es lo que se hace con alguien delante esperando: si
+        hay que buscarlo, se acaba dando por pagado el recibo desde la lista y
+        perdiendo el método, que es justamente lo que descuadraba la caja. Ese
+        motivo no ha cambiado.
+
+        Lo que ha cambiado es que estaba SIEMPRE abierto, con su buscador y su
+        desplegable de método ocupando la cabecera de Cuotas los trescientos
+        sesenta y cuatro días del año en que no hay nadie delante pagando. Ser
+        lo primero y estar abierto no son lo mismo: el sitio se conserva y el
+        espacio se devuelve, y se abre con un clic.
+
+        OJO CON EL `details` CONTROLADO. La primera versión puso
+        `open={cobroAbierto || !!cobroEnManoId}` para que no se cerrase en
+        mitad de un cobro, y en el navegador se cerraba igual: el clic en el
+        `summary` abre o cierra el `details` por su cuenta, y si la prop `open`
+        que React tiene apuntada no cambia de valor, React no vuelve a
+        escribirla. El DOM se va por un lado y el árbol por otro. En el código
+        parecía correcto; solo pulsándolo se vio.
+        
+        Así que `open` sale SOLO del estado, que es lo único que no se
+        desincroniza. Y cerrar no pierde nada: el hermano elegido y el método
+        siguen en su sitio, así que al volver a abrirlo el cobro está donde se
+        dejó. Eso es lo que hay que garantizar, no impedir que lo cierre quien
+        quiere cerrarlo.
       */}
-      <section className="settings-card" style={{ marginBottom: '1.1rem' }}>
-        <div className="settings-card__head">
-          <h2 className="settings-card__title">Cobrar a un hermano</h2>
-        </div>
+      <details
+        className="settings-card cobro-en-mano"
+        style={{ marginBottom: '1.1rem' }}
+        open={cobroAbierto}
+        onToggle={(e) => setCobroAbierto((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className="cobro-en-mano__abrir">
+          <span className="settings-card__title">Cobrar a un hermano</span>
+          <span className="form-hint">Viene a pagar a la casa de hermandad</span>
+        </summary>
         <p className="form-hint" style={{ marginTop: 0 }}>
-          Para cuando alguien viene a pagar a la casa de hermandad. Búscalo, elige cómo paga y dale a
-          cobrar: se apunta en el libro con la cuenta que toca y le llega el aviso a su área.
+          Búscalo, elige cómo paga y dale a cobrar: se apunta en el libro con la cuenta que toca y le
+          llega el aviso a su área.
         </p>
         <div className="form-grid-2">
           <div className="form-row">
@@ -1065,7 +1096,7 @@ export default function Cuotas() {
             </>
           )
         )}
-      </section>
+      </details>
 
       <section className="stat-grid">
         <div className="stat-tile">
@@ -1131,6 +1162,7 @@ export default function Cuotas() {
           aria-selected={vista === 'recibos'}
           className={`chip${vista === 'recibos' ? ' chip--active' : ''}`}
           onClick={() => setVista('recibos')}
+          aria-pressed={vista === 'recibos'}
         >
           Recibos <small>{cuotas.length}</small>
         </button>
@@ -1140,6 +1172,7 @@ export default function Cuotas() {
           aria-selected={vista === 'hermanos'}
           className={`chip${vista === 'hermanos' ? ' chip--active' : ''}`}
           onClick={() => setVista('hermanos')}
+          aria-pressed={vista === 'hermanos'}
         >
           Por hermano <small>{situaciones.length}</small>
         </button>
@@ -1161,6 +1194,7 @@ export default function Cuotas() {
                 type="button"
                 className={`chip${filtroSituacion === f ? ' chip--active' : ''}`}
                 onClick={() => setFiltroSituacion(f)}
+                aria-pressed={filtroSituacion === f}
               >
                 {f === 'Todos'
                   ? 'Todos'
@@ -1189,6 +1223,7 @@ export default function Cuotas() {
               className={`chip${filter === f ? ' chip--active' : ''}`}
               onClick={() => setFilter(f)}
               type="button"
+              aria-pressed={filter === f}
             >
               {f === 'Todas'
                 ? 'Todas'

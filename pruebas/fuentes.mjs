@@ -254,3 +254,79 @@ export async function fuenteDe(ruta) {
   if (ruta === 'src/pages/app/Tesoreria.tsx') return fuenteDeLaTesoreria()
   return fuente(ruta)
 }
+
+/**
+ * QUITAR LOS COMENTARIOS DE UNA FUENTE, SIN ROMPER LO QUE NO LO ES.
+ *
+ * Está aquí porque CUATRO guardas de este repositorio se han puesto rojas
+ * leyendo su propio comentario explicativo: una frase que el código NO debe
+ * tener, escrita justo en el comentario que explica por qué no debe tenerla.
+ * Cada una lo arregló por su cuenta con un `replace` a ojo, y el quinto iba a
+ * volver a tropezar.
+ *
+ * Y EL `replace` A OJO TIENE SU PROPIA TRAMPA, que costó otro rato: con
+ *
+ *     fuente.replace(/\/\*[\s\S]*?\*\//g, ' ')
+ *
+ * un atributo tan normal como `accept="image/*"` ABRE un comentario que no
+ * existe —ahí hay un `/*` literal— y se come la fuente hasta el siguiente
+ * `*\/`, que puede estar doscientas líneas más abajo. La guarda no se pone
+ * roja por lo que vigila: se pone roja porque le han borrado media pantalla.
+ *
+ * Así que esto no es una expresión regular, es un recorrido: se va leyendo
+ * carácter a carácter y se sabe si se está dentro de un texto («…», '…' o
+ * `…`), porque dentro de un texto un `/*` es un `/*` y nada más. Las barras de
+ * una expresión regular escrita en el código (`/\d+/`) no se distinguen de una
+ * división sin analizar la sintaxis entera, y no hace falta: lo que importa es
+ * no confundir un texto con un comentario.
+ */
+export function sinComentarios(fuente) {
+  let fuera = ''
+  let i = 0
+  while (i < fuente.length) {
+    const c = fuente[i]
+    const sig = fuente[i + 1]
+    // Dentro de un texto: se copia tal cual hasta el cierre, saltándose lo
+    // escapado («\"» no cierra nada).
+    if (c === '"' || c === "'" || c === '`') {
+      fuera += c
+      i += 1
+      while (i < fuente.length && fuente[i] !== c) {
+        if (fuente[i] === '\\') { fuera += fuente[i]; i += 1 }
+        if (i < fuente.length) { fuera += fuente[i]; i += 1 }
+      }
+      if (i < fuente.length) { fuera += fuente[i]; i += 1 }
+      continue
+    }
+    if (c === '/' && sig === '*') {
+      const fin = fuente.indexOf('*/', i + 2)
+      // Un comentario sin cerrar se come el resto: es lo que haría el
+      // compilador, y así la guarda no finge que hay código donde no lo hay.
+      i = fin < 0 ? fuente.length : fin + 2
+      fuera += ' '
+      continue
+    }
+    if (c === '/' && sig === '/') {
+      const fin = fuente.indexOf('\n', i)
+      i = fin < 0 ? fuente.length : fin
+      fuera += ' '
+      continue
+    }
+    fuera += c
+    i += 1
+  }
+  return fuera
+}
+
+/**
+ * Lo mismo, y además con los espacios aplanados.
+ *
+ * El JSX parte las frases por donde le cabe: un texto que en la pantalla se
+ * lee seguido viene en la fuente con saltos de línea y sangría en medio, así
+ * que buscarlo literal no lo encuentra y la guarda sale roja contra el código
+ * correcto. Para buscar TEXTO DE PANTALLA se usa esta; para buscar código, la
+ * de arriba.
+ */
+export function fuenteLlana(fuente) {
+  return sinComentarios(fuente).replace(/\s+/g, ' ')
+}

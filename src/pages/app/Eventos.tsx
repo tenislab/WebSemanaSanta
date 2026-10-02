@@ -28,6 +28,7 @@ import { eventoToRow, rowToEvento } from '../../lib/db/eventos'
 import { claseTipo, fechaLarga, iso } from '../../lib/calendario'
 import { ofrecerDeshacer, reinsertar } from '../../lib/deshacer'
 import { agregarAvisoHermano } from '../../lib/avisosHermano'
+import CampoImagen from '../../components/CampoImagen'
 
 export default function Eventos() {
   const [eventosGuardados, setEventos] = useSupabaseTable<Evento>(
@@ -91,6 +92,10 @@ export default function Eventos() {
   }, [params, setParams])
   const [nuevaTarea, setNuevaTarea] = useState('')
   const [repNueva, setRepNueva] = useState<Repeticion>(SIN_REPETICION)
+  /* El cartel del acto que se está dando de alta. No va por `FormData` porque
+     se sube antes del `submit`: el fichero pasa por el almacén y lo que queda
+     es su dirección. */
+  const [imagenNueva, setImagenNueva] = useState<string | undefined>(undefined)
 
   const hoyIso = iso(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
 
@@ -295,9 +300,13 @@ export default function Eventos() {
       hora: hora || undefined,
       lugar: lugar || undefined,
       descripcion: descripcion || undefined,
+      imagen: imagenNueva,
       tareas: [],
     }
     setEventos((prev) => [...prev, nuevo])
+    // El alta se vacía: si no, el cartel del acto anterior saldría puesto en el
+    // siguiente y se publicaría el cartel equivocado sin que nada lo diga.
+    setImagenNueva(undefined)
     setFormOpen(false)
     // Abrimos el mes del evento recién creado y su ficha, para seguir con las tareas.
     setSaltarA(fecha)
@@ -448,6 +457,13 @@ export default function Eventos() {
               return (
                 <li key={e.id}>
                   <button type="button" className="eventos-item" onClick={() => abrirEvento(e)}>
+                    {/* EL CARTEL SE VE AQUÍ, en la lista, y no solo dentro de la
+                        ficha. Es lo que hace que ponerlo sirva para algo: en el
+                        calendario no cabe —la casilla de un día da para «20:30
+                        T…»— y una imagen que solo se ve abriendo el acto no se
+                        la mira nadie. Quien no tiene cartel no ve ningún hueco:
+                        la miniatura simplemente no está. */}
+                    {e.imagen && <img className="eventos-item__cartel" src={e.imagen} alt="" loading="lazy" />}
                     <span className={`eventos-item__tipo ${claseTipo(e.tipo)}`}>{e.tipo}</span>
                     <span className="eventos-item__cuerpo">
                       <b>{e.titulo}</b>
@@ -519,6 +535,21 @@ export default function Eventos() {
               <p className="form-hint">📍 {seleccionado.lugar}</p>
             )}
             {seleccionado.descripcion && <p className="portal__lead">{seleccionado.descripcion}</p>}
+
+            {/* El cartel, aquí también: la mayoría de los actos se dan de alta
+                deprisa y se completan después, así que si solo se pudiera poner
+                en el alta no se pondría casi nunca. La `key` hace que al
+                cambiar de acto el campo arranque con el cartel de ese. */}
+            <div className="form-row">
+              <CampoImagen
+                key={seleccionado.id}
+                rotulo="Cartel o foto"
+                carpeta="eventos"
+                valor={seleccionado.imagen}
+                onCambiar={(v) => aplicarEvento(seleccionado.id, { imagen: v })}
+                ayuda="Se ve en la lista de próximos eventos. Apaisada, 1.200 × 630 px, queda bien."
+              />
+            </div>
 
             {/* Repetición: se ve y se cambia desde la propia ficha. */}
             <div className="assign-box">
@@ -685,6 +716,22 @@ export default function Eventos() {
           <div className="form-row">
             <label htmlFor="descEvento">Descripción (opcional)</label>
             <textarea id="descEvento" name="descripcion" rows={3} placeholder="Detalles, horarios, avisos…" />
+          </div>
+          {/*
+            EL CARTEL. Un acto tenía título, fecha, lugar y descripción, y
+            ninguna imagen: para anunciar un triduo en la web solo se podía
+            poner texto, y el cartel —que es lo que la gente mira— no tenía
+            dónde guardarse. Es opcional y se puede poner después desde la
+            ficha, que es donde se acaban de preparar los actos.
+          */}
+          <div className="form-row">
+            <CampoImagen
+              rotulo="Cartel o foto (opcional)"
+              carpeta="eventos"
+              valor={imagenNueva}
+              onCambiar={setImagenNueva}
+              ayuda="Se ve en la lista de próximos eventos y en la ficha del acto. Apaisada, 1.200 × 630 px, queda bien; se guarda a 1.600 px de lado como máximo."
+            />
           </div>
 
           {/* Repetición: la mayoría de los actos de una hermandad vuelven. */}

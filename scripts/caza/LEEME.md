@@ -67,6 +67,20 @@ página, pulsa «Ver todas» y vuelve.
 node scripts/caza/ver-paginador.mjs     # deja las capturas en /tmp/claude-0/fotos-paginador
 ```
 
+## `probar-padron.mjs` y `probar-beforeprint.mjs`
+
+El primero mide cuánto pesa el padrón oculto del censo y **si sale en el papel**
+por los tres caminos: el Ctrl+P, el botón y una impresión de verdad a PDF.
+
+El segundo es el que decidió el diseño: contesta si `beforeprint` llega y si el
+navegador recoge lo que se añada al DOM dentro del manejador. De eso dependía
+poder montar el padrón solo al imprimir sin romper el Ctrl+P.
+
+```bash
+node scripts/caza/probar-beforeprint.mjs   # no necesita la app servida
+node scripts/caza/probar-padron.mjs
+```
+
 ## `botones.mjs`
 
 Pulsa los botones visibles de diecisiete pantallas y anota si la pantalla se

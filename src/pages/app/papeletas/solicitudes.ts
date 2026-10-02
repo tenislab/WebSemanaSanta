@@ -117,11 +117,11 @@ export function useLasSolicitudes({
       }
       return [nueva, ...prev]
     })
-    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Aceptada' } : x)))
+    setSolicitudes((prev) => prev.map((x) => (x.id === s.id ? { ...x, estado: 'Aceptada' } : x)))
   }
 
   function rechazarSolicitud(s: SolicitudPapeleta) {
-    setSolicitudes(solicitudes.map((x) => (x.id === s.id ? { ...x, estado: 'Rechazada' } : x)))
+    setSolicitudes((prev) => prev.map((x) => (x.id === s.id ? { ...x, estado: 'Rechazada' } : x)))
   }
   return {
     solicitudes, solicitudesPendientes, solicitudesOpen, setSolicitudesOpen,

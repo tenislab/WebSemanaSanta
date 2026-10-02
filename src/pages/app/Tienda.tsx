@@ -240,6 +240,7 @@ function Pantalla() {
             className={`chip${pestana === id ? ' chip--active' : ''}`}
             tabIndex={pestana === id ? 0 : -1}
             onClick={() => irA(id)}
+            aria-pressed={pestana === id}
           >
             {texto}
             {cuenta !== null && <small>{cuenta}</small>}

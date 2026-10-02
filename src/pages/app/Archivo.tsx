@@ -340,6 +340,7 @@ export default function Archivo() {
               className={`chip${filtroCategoria === f ? ' chip--active' : ''}`}
               onClick={() => setFiltroCategoria(f)}
               type="button"
+              aria-pressed={filtroCategoria === f}
             >
               {f}
             </button>

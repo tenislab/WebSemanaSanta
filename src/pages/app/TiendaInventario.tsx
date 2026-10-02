@@ -20,6 +20,7 @@ import {
   agotado, margen, margenPorcentaje, quedaPoco,
   type MovimientoStock, type Producto,
 } from '../../data/tienda'
+import CampoImagen from '../../components/CampoImagen'
 
 /** Cómo se lee cada motivo de movimiento en el historial. */
 const MOTIVO: Record<string, string> = {
@@ -38,6 +39,9 @@ export default function TiendaInventario() {
   const [filtro, setFiltro] = useState<Filtro>('todos')
   const [fichaOpen, setFichaOpen] = useState(false)
   const [editando, setEditando] = useState<Producto | null>(null)
+  /* La foto del artículo que se está editando: no va por `FormData` porque se
+     sube antes del `submit`, así que viaja en el campo oculto de CampoImagen. */
+  const [foto, setFoto] = useState<string | undefined>(undefined)
   const [error, setError] = useState('')
   const [hecho, setHecho] = useState('')
 
@@ -92,6 +96,9 @@ export default function TiendaInventario() {
 
   function abrirFicha(p: Producto | null) {
     setEditando(p)
+    // La ficha arranca con la foto del artículo que se abre, y vacía al dar
+    // de alta uno nuevo: si no, se quedaría la del anterior.
+    setFoto(p?.fotoUrl)
     setError('')
     setFichaOpen(true)
   }
@@ -323,6 +330,7 @@ export default function TiendaInventario() {
               type="button"
               className={`chip${filtro === id ? ' chip--active' : ''}`}
               onClick={() => setFiltro(id)}
+              aria-pressed={filtro === id}
             >
               {texto}
             </button>
@@ -449,9 +457,30 @@ export default function TiendaInventario() {
               </p>
             </div>
           </div>
+          {/*
+            LA FOTO SE SUBE, NO SE ENLAZA.
+
+            Aquí solo había un campo de texto para PEGAR UNA DIRECCIÓN. La foto
+            ya se guardaba y la web pública ya la pintaba, pero para enseñar una
+            medalla había que subirla antes a otro sitio —y tener ese otro
+            sitio—. Eso no es poder poner la foto del artículo: es poder
+            enlazarla. El campo de la dirección sigue ahí, plegado, para quien
+            ya tenga sus fotos en su web.
+
+            La `key` es la que hace que al abrir la ficha de OTRO artículo el
+            campo arranque con la foto de ese: sin ella, el estado se quedaría
+            con la del anterior y se guardaría en la ficha equivocada.
+          */}
           <div className="form-row">
-            <label htmlFor="fotoUrl">Foto (dirección)</label>
-            <input id="fotoUrl" name="fotoUrl" defaultValue={editando?.fotoUrl ?? ''} placeholder="https://…" />
+            <CampoImagen
+              key={editando?.id ?? 'nuevo'}
+              rotulo="Foto del artículo"
+              carpeta="tienda"
+              nombreCampo="fotoUrl"
+              valor={foto}
+              onCambiar={setFoto}
+              ayuda="Se ve en la tienda de la web. Cuadrada queda mejor; se guarda a 1.600 px de lado como máximo."
+            />
           </div>
           <label className="checkbox">
             <input type="checkbox" name="activo" defaultChecked={editando ? editando.activo : true} />

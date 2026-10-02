@@ -111,6 +111,7 @@ export default function Campanas() {
           aria-selected={pestana === 'campanas'}
           className={`chip${pestana === 'campanas' ? ' chip--active' : ''}`}
           onClick={() => setPestana('campanas')}
+          aria-pressed={pestana === 'campanas'}
         >
           Campañas
         </button>
@@ -119,6 +120,7 @@ export default function Campanas() {
           aria-selected={pestana === 'proyectos'}
           className={`chip${pestana === 'proyectos' ? ' chip--active' : ''}`}
           onClick={() => setPestana('proyectos')}
+          aria-pressed={pestana === 'proyectos'}
         >
           Proyectos
         </button>
@@ -172,7 +174,7 @@ function PanelCampanas({ creando, setCreando }: PropsDePanel) {
   }), [campanas])
 
   function guardar(r: Recaudacion) {
-    setCampanas(campanas.some((c) => c.id === r.id)
+    setCampanas((prev) => prev.some((c) => c.id === r.id)
       ? campanas.map((c) => (c.id === r.id ? r : c))
       : [r, ...campanas])
     setEditando(null)
@@ -216,7 +218,22 @@ function PanelCampanas({ creando, setCreando }: PropsDePanel) {
           falta={loQueFalta(loRecaudado(movimientos, aportandoA), aportandoA.objetivo)}
           onCerrar={() => setAportandoA(null)}
           onApuntar={(datos) => {
-            setMovimientos(conApunteDeCobro(movimientos, datos))
+            /*
+             * DENTRO DEL ACTUALIZADOR, que esto es el libro de cuentas.
+             *
+             * Estaba `setMovimientos(conApunteDeCobro(movimientos, datos))`, con
+             * `movimientos` sacado del cierre del pintado. Es la trampa que
+             * `COMO-TRABAJAR.md` nombra con estas palabras: «calcular con la
+             * lista del render y guardar después pierde cambios». Aquí lo que se
+             * perdería es un apunte de dinero.
+             *
+             * No lo he conseguido reproducir —el formulario se cierra en la misma
+             * pulsación, así que para apuntar dos veces hay que volver a abrirlo y
+             * entonces el estado ya está fresco—, y se arregla igual: es una línea,
+             * es dinero, y el día que alguien añada un segundo camino que apunte
+             * sin cerrar el formulario, este ya no es el fallo.
+             */
+            setMovimientos((prev) => conApunteDeCobro(prev, datos))
             setAportandoA(null)
           }}
         />
@@ -606,7 +623,7 @@ function PanelProyectos({ creando, setCreando }: PropsDePanel) {
   const ordenados = useMemo(() => ordenDeProyectos(proyectos, hoy), [proyectos, hoy])
 
   function guardar(p: Proyecto) {
-    setProyectos(proyectos.some((x) => x.id === p.id)
+    setProyectos((prev) => prev.some((x) => x.id === p.id)
       ? proyectos.map((x) => (x.id === p.id ? p : x))
       : [p, ...proyectos])
     setEditando(null)

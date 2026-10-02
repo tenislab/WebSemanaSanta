@@ -10,6 +10,7 @@ export function eventoToRow(e: Evento): Record<string, unknown> {
     hora: e.hora ?? null,
     lugar: e.lugar ?? null,
     descripcion: e.descripcion ?? null,
+    imagen: e.imagen ?? null,
     // `?? []`: un evento del espejo viejo puede no traerlas, y `undefined`
     // desaparece al serializar el JSON, así que la columna se quedaría con
     // lo que hubiera antes en vez de vaciarse.
@@ -30,6 +31,7 @@ export function rowToEvento(r: Record<string, unknown>): Evento {
     hora: (r.hora as string | null) ?? undefined,
     lugar: (r.lugar as string | null) ?? undefined,
     descripcion: (r.descripcion as string | null) ?? undefined,
+    imagen: (r.imagen as string | null) ?? undefined,
     repeticion: (r.repeticion as Evento['repeticion'] | null) ?? undefined,
     tareas: Array.isArray(r.tareas) ? (r.tareas as TareaEvento[]) : [],
   }

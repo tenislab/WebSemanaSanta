@@ -277,10 +277,19 @@ export default async function ({ cargar, caso }) {
  * ASISTENCIA, para el histórico y el reparto del año que viene. Se leían como
  * uno repetido porque los dos eran un ✓ verde sin rótulo.
  *
- * Aquí se comprueba lo que hace que no se confundan: que la fila dice cuál es
- * cuál, que el tic no se vuelve a ofrecer si ya está entregada, y que el
- * bloque de asistencia dice que no es la entrega. Y sobre todo: que el cobro
- * en mano sigue ahí, que es lo que de verdad hace el de arriba.
+ * PRIMER ARREGLO (no bastó): rotular cada uno y explicar por escrito que el ✓
+ * «de arriba» no era el ✓ «de abajo». Siguió leyéndose raro —«esta rerete»—, y
+ * al pintarlo se vio por qué: con cuarenta nazarenos, el mismo nombre salía dos
+ * veces en la misma ficha, a ochenta filas de distancia, y desde la asistencia
+ * el ✓ de la papeleta quedaba fuera de la pantalla. La explicación era el
+ * síntoma; lo que sobraba era el segundo sitio.
+ *
+ * SEGUNDO ARREGLO: una sola lista, cada hermano una vez, con sus dos acciones
+ * pegadas. Las guardas de aquí quedaron fijando el texto de los dos párrafos
+ * que se fusionaron, así que vigilaban un diseño que ya no existe. Ahora
+ * vigilan lo de siempre —que no se confundan y que el cobro en mano no se
+ * pierda— pero contra la ficha de una sola lista, y lo que no puede volver es
+ * el «arriba / abajo»: eso lo guarda `diadesalida.prueba.mjs`.
  */
 async function losDosControlesDelDiaDeSalida({ caso }) {
   const { readFile } = await import('node:fs/promises')
@@ -291,20 +300,31 @@ async function losDosControlesDelDiaDeSalida({ caso }) {
   caso('el distintivo de entregada no es el de confirmada', true,
     /'Entregada'/.test(pill) && !/'Entregada' \|\| estado === 'Confirmada'/.test(pill))
 
-  // La fila dice qué hace el tic, antes de tocarlo.
-  const roster = src.slice(src.indexOf('Entrega de papeletas'), src.indexOf('excedidos.length > 0'))
+  /*
+   * La fila dice qué hace cada cosa, antes de tocarla. El trozo se acota desde
+   * el rótulo del pase de lista hasta el aviso del aforo, que es la lista
+   * única; antes se acotaba por «Entrega de papeletas», que era el rótulo
+   * viejo, y al cambiarlo el `indexOf` devolvía -1 y el trozo salía siendo
+   * TODO el fichero. Esa es la trampa del -1: la guarda no se pone roja, se
+   * pone verde mirando donde no debe.
+   */
+  const desdeLaLista = src.indexOf('Pase de lista · ${rotuloDelDia}')
+  caso('se encuentra el rótulo del pase de lista', true, desdeLaLista > 0)
+  const roster = src.slice(desdeLaLista, src.indexOf('excedidos.length > 0'))
   caso('la fila explica que el ✓ entrega la papeleta', true, /entrega la papeleta/.test(roster))
   caso('y que si no ha pagado se le cobra en mano', true, /cobra en mano/.test(roster))
-  caso('y manda la asistencia abajo', true, /más abajo/.test(roster) && /Asistencia/.test(roster))
   // Entregada ya: el tic no se ofrece otra vez.
   caso('el tic no se repite si ya está entregada', true,
     /\{a\.estado !== 'Entregada' && \(/.test(roster))
   caso('pero la incidencia se puede seguir registrando', true, /Registrar incidencia/.test(roster))
 
-  // Y el bloque de asistencia dice que NO es la entrega.
-  const asistencia = src.slice(src.indexOf('<label>Asistencia'), src.indexOf('<AsistenciaTramo'))
-  caso('asistencia dice que no es la entrega', true, /no es la entrega de la papeleta/.test(asistencia))
-  caso('y para qué sirve', true, /histórico/.test(asistencia))
+  /*
+   * Y LOS DOS CONTROLES SE NOMBRAN EN LA MISMA FRASE, que es lo que sustituye
+   * a los dos párrafos de antes: ahora están en la misma fila, así que se
+   * pueden señalar sin decir dónde caen.
+   */
+  caso('la asistencia dice qué guarda', true, /quién sale de verdad/.test(roster) && /histórico/.test(roster))
+  caso('y que la marca también el diputado', true, /diputado del tramo/.test(roster))
 
   /*
    * LO QUE NO SE PUEDE PERDER: el cobro en mano. Es lo único que hace el tic

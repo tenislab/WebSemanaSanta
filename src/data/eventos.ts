@@ -39,6 +39,12 @@ export interface Evento {
   hora?: string
   lugar?: string
   descripcion?: string
+  /**
+   * El cartel o la foto del acto: una DIRECCIÓN, no la imagen. El fichero sube
+   * al almacén de la hermandad y aquí queda su enlace; cabe también un enlace
+   * de fuera, para quien ya tenga sus carteles en su propia web.
+   */
+  imagen?: string
   /** Cada cuánto vuelve. Los eventos de antes no lo traen: no se repiten. */
   repeticion?: Repeticion
   tareas: TareaEvento[]

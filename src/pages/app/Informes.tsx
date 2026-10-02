@@ -7,6 +7,7 @@ import AvisoDeCampo from '../../components/AvisoDeCampo'
 import { anioDelMovimiento, cuentaDeResultados } from '../../lib/perdidasYGanancias'
 import {
   useRepartos, problemaDeReparto, seRepartenDeMas, comoSeLeeElReparto,
+  nombreDelTipo, queLeHaceAlResultado,
   porcentajeDe, type Reparto, type TipoReparto,
 } from '../../lib/repartos'
 import { CATEGORIAS_INGRESO, CATEGORIAS_GASTO } from '../../data/movimientos'
@@ -594,85 +595,100 @@ export default function Informes() {
       </section>
 
       {/* ------------------------------------------------------------------
-          LA MEMORIA DEL EJERCICIO, delante del estado de cuentas.
+          LOS DOCUMENTOS DEL EJERCICIO, EN UNA LISTA Y NO EN DOS BOTONAZOS.
 
-          Va primero porque es el documento que abre el cabildo general: el
-          estado de cuentas es una de sus partes, y quien prepara la carpeta
-          empieza por aquí.
+          Eran dos tarjetas seguidas, cada una con su título, su párrafo de dos
+          líneas, su desplegable de año y su botón primario grande y oscuro:
+          374 px de cabecera para dos acciones. Y más abajo, en la misma
+          pantalla, los seis informes ya se ofrecen en una tabla con una fila
+          por informe y un icono para verlo. O sea que Informes tenía DOS
+          lenguajes para lo mismo —elige un documento y llévatelo— y el de
+          arriba era el caro.
+
+          Así que estos dos pasan al lenguaje de abajo: una fila por documento,
+          con lo que hace a la izquierda y lo que se pulsa a la derecha. Nada
+          desaparece —el año, el Excel de la memoria y el aviso del ejercicio
+          cerrado siguen estando—, solo deja de ocupar como si fuera lo único
+          de la pantalla.
+
+          La memoria sigue PRIMERA porque es el documento que abre el cabildo
+          general: el estado de cuentas es una de sus partes, y quien prepara la
+          carpeta empieza por ahí.
           ------------------------------------------------------------------ */}
       <section className="settings-card">
-        <h2 className="settings-card__title">Memoria del ejercicio</h2>
-        <p className="form-hint">
-          Todo lo del año en un solo documento: el censo con sus altas y bajas, las cuotas, la
-          tesorería, la estación de penitencia y el patrimonio. Es el papel que se lleva al cabildo
-          general, y se puede llevar también en hoja de cálculo.
-        </p>
-        <div className="assign-box__row">
-          <select
-            value={anioMemoria}
-            onChange={(e) => setAnioMemoria(Number(e.target.value))}
-            aria-label="Ejercicio de la memoria"
-            style={{ maxWidth: '9rem' }}
-          >
-            {aniosMemoria.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => { setSelected(null); setImprimiendo('memoria') }}
-          >
-            Imprimir la memoria
-          </button>
-          <button type="button" className="btn btn-ghost" onClick={exportarMemoriaExcel}>
-            Descargar en Excel
-          </button>
-        </div>
-        {/* Lo mismo que va impreso dentro del documento, dicho también aquí:
-            quien elige el año tiene que saber qué está pidiendo ANTES de
-            mandarlo a imprimir, no al leer el papel. */}
-        {!memoria.esElAnioEnCurso && (
-          <p className="form-hint form-hint--aviso">
-            De {anioMemoria} son exactas las altas, las bajas y la tesorería. Los hermanos que
-            figuran en el censo son los de HOY: quien se dio de baja después ya no está en la
-            lista. El documento lo advierte también impreso.
-          </p>
-        )}
-      </section>
-
-      <section className="settings-card">
-        <h2 className="settings-card__title">Estado de cuentas anual</h2>
-        <p className="form-hint">
-          Ingresos y gastos por partida, con el formato clásico que suelen pedir las diócesis,
-          calculado a partir de las categorías de tus movimientos de tesorería.
-        </p>
-        <div className="assign-box__row">
-          <select
-            value={anioEstado}
-            onChange={(e) => setAnioEstado(Number(e.target.value))}
-            aria-label="Ejercicio"
-            style={{ maxWidth: '9rem' }}
-          >
-            {aniosDisponibles.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setSelected(null)
-              setImprimiendoEstado(true)
-            }}
-          >
-            Descargar Estado de Cuentas
-          </button>
-        </div>
+        <h2 className="settings-card__title">Documentos del ejercicio</h2>
+        <ul className="documentos">
+          <li className="documentos__fila">
+            <div className="documentos__que">
+              <b>Memoria del ejercicio</b>
+              <span className="table-subtle">
+                Todo el año en un documento: censo con sus altas y bajas, cuotas, tesorería,
+                estación de penitencia y patrimonio. Es el papel del cabildo general.
+              </span>
+            </div>
+            <div className="documentos__acciones">
+              <select
+                value={anioMemoria}
+                onChange={(e) => setAnioMemoria(Number(e.target.value))}
+                aria-label="Ejercicio de la memoria"
+              >
+                {aniosMemoria.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => { setSelected(null); setImprimiendo('memoria') }}
+              >
+                Imprimir
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={exportarMemoriaExcel}>
+                Excel
+              </button>
+            </div>
+          </li>
+          {/* Lo mismo que va impreso dentro del documento, dicho también aquí:
+              quien elige el año tiene que saber qué está pidiendo ANTES de
+              mandarlo a imprimir, no al leer el papel. Va pegado a su fila, que
+              es de la memoria y de ningún otro documento. */}
+          {!memoria.esElAnioEnCurso && (
+            <li className="documentos__aviso">
+              <p className="form-hint form-hint--aviso" style={{ margin: 0 }}>
+                De {anioMemoria} son exactas las altas, las bajas y la tesorería. Los hermanos que
+                figuran en el censo son los de HOY: quien se dio de baja después ya no está en la
+                lista. El documento lo advierte también impreso.
+              </p>
+            </li>
+          )}
+          <li className="documentos__fila">
+            <div className="documentos__que">
+              <b>Estado de cuentas anual</b>
+              <span className="table-subtle">
+                Ingresos y gastos por partida, con el formato clásico que suelen pedir las
+                diócesis, a partir de las categorías de tus movimientos de tesorería.
+              </span>
+            </div>
+            <div className="documentos__acciones">
+              <select
+                value={anioEstado}
+                onChange={(e) => setAnioEstado(Number(e.target.value))}
+                aria-label="Ejercicio del estado de cuentas"
+              >
+                {aniosDisponibles.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => { setSelected(null); setImprimiendoEstado(true) }}
+              >
+                Descargar
+              </button>
+            </div>
+          </li>
+        </ul>
       </section>
 
       <SeccionPyG
@@ -904,25 +920,51 @@ function SeccionPyG({ cuenta, anio, repartos, onRepartos, onImprimir }: {
         * Lo comprometido se enseña APARTE y nunca mezclado con el resultado.
         * Es dinero que sigue en la cuenta: el saldo del banco cuadra con el
         * resultado del ejercicio, no con este.
+        *
+        * Y SE DICE CUÁL DE LAS DOS CIFRAS VALE. Antes era «hay X comprometidos,
+        * así que quedarían Y»: dos importes y un condicional, sin decir con cuál
+        * cuadra el banco, que es justo lo que se viene a saber.
         */}
       {cuenta.comprometido > 0 && (
         <p className="form-hint" style={{ marginTop: '0.8rem' }}>
-          De ese resultado hay <b>{formatCurrency(cuenta.comprometido)}</b> ya comprometidos por las
-          reglas de abajo, así que quedarían <b>{formatCurrency(cuenta.resultadoAjustado)}</b>. El
-          dinero <b>sigue en la cuenta</b>: no se ha apuntado ningún gasto en Tesorería.
+          Los compromisos de abajo apartan <b>{formatCurrency(cuenta.comprometido)}</b>, así que
+          quedan libres <b>{formatCurrency(cuenta.resultadoAjustado)}</b>. Pero{' '}
+          <b>el banco cuadra con los {formatCurrency(cuenta.resultado)}</b>: lo comprometido sigue
+          en la cuenta y no se ha apuntado ningún gasto en Tesorería.
         </p>
       )}
 
+      {/*
+        EL TITULAR DECÍA «GASTOS» PARA ALGO QUE SALE DE UN INGRESO.
+        Era «Gastos porcentuales enlazados a una partida», y de las dos clases
+        que hay debajo, una se engancha a un INGRESO —el 10 % de los donativos—
+        y la otra no es un gasto nuevo, sino el troceo de uno ya pagado. Lo
+        primero que se lee desorientaba a quien venía a entender el resto.
+      */}
       <h3 className="settings-card__subtitle" style={{ marginTop: '1.4rem' }}>
-        Gastos porcentuales enlazados a una partida
+        Reglas porcentuales sobre una partida
       </h3>
+      {/*
+        Y LOS EJEMPLOS SON LOS DE LA LISTA DE ABAJO, NO OTROS.
+        Decía «la luz» y «la lotería», y en la lista salen «Mantenimiento» y
+        «Donativos, Ofrendas y Cepillos»: el lector tenía que traducir los dos
+        antes de entender nada. Ahora el ejemplo nombra la partida que va a ver.
+      */}
       <p className="form-hint">
-        Dos cosas distintas. Un <b>reparto</b> trocea un gasto que ya está pagado entre varias
-        partidas —la luz: 60 % a la casa hermandad, 40 % al almacén— y no cambia ningún total. Un{' '}
-        <b>compromiso</b> aparta un porcentaje de lo que entre por una partida —el 10 % de la
-        lotería para caridad— y ese dinero sigue en la cuenta hasta que se gasta de verdad.
-        Ninguna de las dos escribe nada en Tesorería.
+        Dos cosas distintas, y ninguna escribe nada en Tesorería.
       </p>
+      <ul className="form-hint reglas-ayuda">
+        <li>
+          Un <b>traslado entre partidas</b> trocea un gasto que <b>ya está pagado</b> —el 40 % de
+          «Mantenimiento» pasa a «Gastos varios menores», porque el contador de la luz es único—.
+          <b> No cambia ningún total.</b>
+        </li>
+        <li>
+          Un <b>compromiso</b> aparta un porcentaje de lo que <b>entre</b> por una partida —el 10 %
+          de «Donativos, Ofrendas y Cepillos» para caridad—. <b>Sí se resta del resultado</b>, y el
+          dinero sigue en la cuenta hasta que se gaste.
+        </li>
+      </ul>
 
       {avisos.map((a) => <AvisoDeCampo key={a} texto={a} />)}
 
@@ -932,10 +974,16 @@ function SeccionPyG({ cuenta, anio, repartos, onRepartos, onImprimir }: {
             <li key={r.id} className={r.activo ? '' : 'is-apagada'}>
               <div className="reglas-lista__texto">
                 <b>{r.nombre}</b>
-                <span className={`pill pill--${r.tipo === 'reparto' ? 'off' : 'warn'}`}>
-                  {r.tipo === 'reparto' ? 'reparto' : 'compromiso'}
+                {/*
+                  `pill--off` es el gris de «apagado», y se lo llevaba un
+                  traslado que está ACTIVO: la fila se leía como desactivada. Y
+                  ahora dice de sí misma si se resta o no, que es la pregunta.
+                */}
+                <span className={`pill pill--${r.tipo === 'reparto' ? 'info' : 'warn'}`}>
+                  {nombreDelTipo(r)}
                 </span>
                 <small>{comoSeLeeElReparto(r)}</small>
+                <small className="reglas-lista__efecto">{queLeHaceAlResultado(r)}</small>
                 {r.nota && <small className="reglas-lista__nota">{r.nota}</small>}
               </div>
               <div className="reglas-lista__acciones">
@@ -1046,13 +1094,13 @@ function FormularioReparto({ regla, onGuardar, onCerrar }: {
               setCategoriaBase('')
             }}
           >
-            <option value="reparto">Reparto — trocear un gasto ya pagado</option>
+            <option value="reparto">Traslado entre partidas — trocear un gasto ya pagado</option>
             <option value="compromiso">Compromiso — apartar parte de un ingreso</option>
           </select>
           <p className="form-hint">
             {tipo === 'reparto'
               ? 'No cambia ningún total: el gasto ya está en el libro por su importe. Solo dice a qué partida corresponde cada trozo.'
-              : 'Suma un gasto que en el libro NO está. El dinero sigue en la cuenta hasta que se gaste de verdad.'}
+              : 'SE RESTA del resultado, y suma un gasto que en el libro no está. El dinero sigue en la cuenta hasta que se gaste de verdad.'}
           </p>
         </div>
 

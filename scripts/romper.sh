@@ -33,6 +33,24 @@
 #      pruebas se cuelgan y se corta con Ctrl-C: el respaldo se restaura desde
 #      un `trap`, no desde la última línea.
 #
+# NO TOQUES NADA MIENTRAS ESTO CORRE
+#
+#   El paso 5 restaura el árbol COMPLETO al estado que tenía al empezar. Si
+#   mientras la suite da sus cien segundos te pones a editar otro fichero, ese
+#   cambio se va con la restauración y sin avisar: no es un fallo del script,
+#   es lo que el script promete. Pasó —se perdió entera la lista de documentos
+#   de Informes, con su CSS, y se notó un cuarto de hora después porque una
+#   guarda nueva salía roja contra un código que ya no estaba—. Si el guion
+#   tarda, espera; no es tanto.
+#
+#   Y NO LO LANCES EN SEGUNDO PLANO. Si la pasada se queda huérfana y la matan,
+#   su `trap` restaura el árbol CUANDO LE TOQUE —puede ser en mitad de la
+#   siguiente pasada—, y entonces la segunda corre las pruebas sobre un árbol
+#   sin la rotura y contesta «NO SALTA». Pasó, y costó media hora persiguiendo
+#   un guardia que sí vigilaba: la rotura se había deshecho por debajo. Antes de
+#   creerte un «NO SALTA», comprueba que no hay otro romper.sh vivo
+#   (`pgrep -af romper.sh`).
+#
 # LO QUE DEVUELVE, Y ES LO IMPORTANTE
 #
 #   0  si algo ha fallado  → el guardia salta, la prueba sirve.

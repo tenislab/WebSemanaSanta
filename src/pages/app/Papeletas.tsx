@@ -604,6 +604,7 @@ export default function Papeletas() {
               className={`chip${filter === f ? ' chip--active' : ''}`}
               onClick={() => setFilter(f)}
               type="button"
+              aria-pressed={filter === f}
             >
               {f}
             </button>
@@ -843,6 +844,7 @@ export default function Papeletas() {
                         type="button"
                         className={`chip chip--toggle${variantePapeleta === 'movil' ? ' chip--active' : ''}`}
                         onClick={() => setVariantePapeleta('movil')}
+                        aria-pressed={variantePapeleta === 'movil'}
                       >
                         📱 Móvil (con QR)
                       </button>
@@ -850,6 +852,7 @@ export default function Papeletas() {
                         type="button"
                         className={`chip chip--toggle${variantePapeleta === 'fisica' ? ' chip--active' : ''}`}
                         onClick={() => setVariantePapeleta('fisica')}
+                        aria-pressed={variantePapeleta === 'fisica'}
                       >
                         🖨️ Física (sin QR)
                       </button>
@@ -857,6 +860,7 @@ export default function Papeletas() {
                         type="button"
                         className={`chip chip--toggle${variantePapeleta === 'ambas' ? ' chip--active' : ''}`}
                         onClick={() => setVariantePapeleta('ambas')}
+                        aria-pressed={variantePapeleta === 'ambas'}
                       >
                         📱+🖨️ Las dos
                       </button>

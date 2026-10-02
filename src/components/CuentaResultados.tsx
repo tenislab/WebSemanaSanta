@@ -23,7 +23,7 @@ import { LogoMark } from './Logo'
 import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import { formatCurrency } from '../lib/format'
 import { comoSeLeeElResultado, variacion, type CuentaPyG, type LineaPyG } from '../lib/perdidasYGanancias'
-import { comoSeLeeElReparto } from '../lib/repartos'
+import { comoSeLeeElReparto, nombreDelTipo, queLeHaceAlResultado } from '../lib/repartos'
 
 /**
  * La variación respecto al año pasado, ya escrita.
@@ -113,7 +113,7 @@ export default function CuentaResultados({
             <th className="pyg__num">Peso</th>
             <th className="pyg__num">{cuenta.anio - 1}</th>
             <th className="pyg__num">Var.</th>
-            {hayAjustes && <th className="pyg__num">Reglas</th>}
+            {hayAjustes && <th className="pyg__num">Reglas (aparte)</th>}
           </tr>
         </thead>
         <tbody>
@@ -141,7 +141,7 @@ export default function CuentaResultados({
             <th className="pyg__num">Peso</th>
             <th className="pyg__num">{cuenta.anio - 1}</th>
             <th className="pyg__num">Var.</th>
-            {hayAjustes && <th className="pyg__num">Reglas</th>}
+            {hayAjustes && <th className="pyg__num">Reglas (aparte)</th>}
           </tr>
         </thead>
         <tbody>
@@ -182,6 +182,20 @@ export default function CuentaResultados({
         </tbody>
       </table>
 
+      {/*
+        LOS TOTALES SON LOS DEL LIBRO, Y HAY QUE DECIRLO DONDE ESTÁN.
+        «TOTAL GASTOS 2.786,90 €» cuadra con las partidas SIN su columna de
+        reglas. Pero quien lee «Obras Benéficas y Sociales 500,00 € … +1.043,16 €»
+        entiende que esa partida ha costado 1.543,16, y entonces el total no le
+        cuadra y no hay nada que se lo explique.
+      */}
+      {hayAjustes && (
+        <p className="pyg__entradilla">
+          Los dos totales son los del libro de Tesorería. La columna «Reglas (aparte)» <b>no está
+          sumada en ellos</b>: se detalla al final, en «Reglas aplicadas».
+        </p>
+      )}
+
       <p className="pyg__lectura">{comoSeLeeElResultado(cuenta)}</p>
 
       {/*
@@ -193,14 +207,34 @@ export default function CuentaResultados({
       {hayAjustes && (
         <>
           <h3 className="estado-cuentas__seccion">R E G L A S   A P L I C A D A S</h3>
+          {/*
+            LA ENTRADILLA VA ANTES DE LAS FILAS Y NO DESPUÉS.
+            El aviso del final seguía estando —y sigue—, pero llegaba cuando el
+            lector ya había intentado cuadrar los importes y no le había salido.
+          */}
+          <p className="pyg__entradilla">
+            Ninguna de estas reglas está apuntada en Tesorería. De los importes de esta columna,
+            <b> solo los compromisos se restan</b> del resultado; los traslados entre partidas no
+            cambian ningún total. Cada fila lo dice.
+          </p>
           <table className="recibo-doc__table estado-cuentas__table">
             <tbody>
               {cuenta.reglasAplicadas.map(({ regla, importe }) => (
                 <tr key={regla.id}>
                   <td>
                     <b>{regla.nombre}</b>
+                    {' — '}
+                    <span className="pyg__clase">{nombreDelTipo(regla)}</span>
                     <br />
                     <span className="pyg__suave">{comoSeLeeElReparto(regla)}</span>
+                    {/*
+                      QUÉ LE HACE AL RESULTADO, EN SU PROPIA FILA.
+                      Aquí había dos importes en la misma columna y abajo solo se
+                      restaba uno, sin nada en la fila que dijera cuál. Ver
+                      `queLeHaceAlResultado` en `lib/repartos.ts`.
+                    */}
+                    <br />
+                    <span className="pyg__efecto">{queLeHaceAlResultado(regla)}</span>
                     {regla.nota && <><br /><span className="pyg__suave">{regla.nota}</span></>}
                   </td>
                   <td className="pyg__num">{formatCurrency(importe)}</td>
@@ -228,12 +262,19 @@ export default function CuentaResultados({
             </table>
           )}
 
+          {/*
+            EL AVISO DEL FINAL SE QUEDA CON LO QUE NO ESTÁ DICHO ARRIBA.
+            Explicaba también qué es un reparto y qué un compromiso, y eso ahora
+            lo dice la entradilla de la sección y lo repite cada fila: tres veces
+            lo mismo se lee como relleno y hace que no se lea ninguna. Lo que
+            solo puede ir aquí es la consecuencia práctica —con cuál de los dos
+            resultados cuadra el extracto del banco—, que es lo que se pregunta
+            al comparar el papel con la libreta.
+          */}
           <p className="pyg__aviso">
-            <b>Los compromisos no son gastos todavía.</b> Es dinero que sigue en la cuenta y que la
-            junta ha decidido destinar a algo. Por eso el saldo del banco cuadra con el{' '}
-            <b>resultado del ejercicio</b>, no con el de después de compromisos. Y los repartos no
-            cambian ningún total: solo dicen a qué partida corresponde cada trozo de un gasto que
-            ya estaba pagado.
+            <b>Los compromisos no son gastos todavía</b>: ese dinero sigue en la cuenta. Por eso el
+            saldo del banco cuadra con el <b>resultado del ejercicio</b>, no con el de después de
+            compromisos.
           </p>
         </>
       )}

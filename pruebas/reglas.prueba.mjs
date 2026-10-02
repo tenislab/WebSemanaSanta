@@ -350,7 +350,17 @@ export default async function ({ cargar, caso }) {
    * ochocientos, y sin este número no hay forma de saber si es que solo cumplen
    * tres o si es que el resto no tiene la fecha en su ficha.
    */
-  caso('se enseña a cuánta gente alcanzaría hoy', true, /hoy alcanzaría a \$\{alcanza\}/.test(pantalla))
+  /*
+   * Esta guarda pinchaba el texto exacto —«hoy alcanzaría a {alcanza}»— y se
+   * puso roja al rehacer el panel, donde el dato pasó a una pastilla que dice
+   * «hoy, a 5». No vigilaba el dato: vigilaba una frase. Ahora pide que el
+   * número se calcule Y se pinte, que es lo que no puede perderse.
+   */
+  caso('se enseña a cuánta gente alcanzaría hoy', true,
+    /const alcanza = aCuantosAlcanzaHoy\(r\)/.test(pantalla) && /\$\{alcanza\}/.test(pantalla))
+  // Y con los dos casos dichos, porque «0» a secas no se entiende: hay que
+  // saber si es que hoy no toca a nadie o si es que el filtro está mal.
+  caso('y se distingue el «a nadie» del número', true, /alcanza === 0 \?/.test(pantalla))
   /*
    * Y SE CUENTA CON EL MISMO CAMINO QUE SE MANDA.
    *
@@ -412,15 +422,22 @@ export default async function ({ cargar, caso }) {
    * saldría en cada cumpleaños durante años, y nadie ata la queja del hermano
    * con lo que se escribió aquel día.
    */
+  /*
+   * Y ESTA PINCHABA LA FORMA DEL `disabled`, no el freno. Al rehacer el panel
+   * la condición salió a una variable (`puedeEncenderse`) y la guarda se puso
+   * roja contra un código que frena exactamente igual. Ahora se vigila que el
+   * freno EXISTA y que llegue al interruptor, no cómo está escrito.
+   */
   caso('no se puede encender con una marca inventada', true,
-    /disabled=\{!r\.activa && \(\s*!sePuedePersonalizar\(/.test(pantalla))
+    /const puedeEncenderse = sePuedePersonalizar\(/.test(pantalla)
+    && /disabled=\{!r\.activa && !puedeEncenderse\}/.test(pantalla))
   /*
    * NI CON UNA MARCA EN EL TEXTO DEL POST. Ahí no se sustituye nada —un post
    * es un texto para todos— así que se publicaría literalmente «Hola
    * {nombre}» en Instagram, con el nombre de nadie y a la vista de todos.
    */
   caso('ni con una marca en lo que se publica', true,
-    /\|\| llevaMarcas\(r\.textoRedes\)/.test(pantalla))
+    /!llevaMarcas\(r\.textoRedes\)/.test(pantalla))
 
   /*
    * Y EL POST SE DEJA CON EL TEXTO DEL POST, NO CON EL DEL CORREO.

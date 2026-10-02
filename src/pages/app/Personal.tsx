@@ -512,13 +512,13 @@ export default function Personal() {
   }
 
   function toggleActivo(id: string) {
-    setPersonal(personal.map((p) => (p.id === id ? { ...p, activo: !p.activo } : p)))
+    setPersonal((prev) => prev.map((p) => (p.id === id ? { ...p, activo: !p.activo } : p)))
   }
 
   function eliminar(id: string) {
     const posicion = personal.findIndex((p) => p.id === id)
     const quien = personal[posicion]
-    setPersonal(personal.filter((p) => p.id !== id))
+    setPersonal((prev) => prev.filter((p) => p.id !== id))
     setSeñalado(null)
     // «Eliminar acceso» está al lado de «Desactivar acceso» y se parecen. El
     // de al lado es reversible con un clic; este dejaba a la secretaria fuera

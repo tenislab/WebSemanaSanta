@@ -19,8 +19,11 @@ export const REPARTOS_INICIALES: Reparto[] = [
     porcentajeCent: 4000, // 40 %
     categoriaDestino: 'Gastos varios menores',
     activo: true,
+    // Sin «imputar»: la demo es lo primero que lee una hermandad, y si el
+    // ejemplo usa la palabra del gestor, la palabra del gestor es la que se
+    // copia. Ver `comoSeLeeElReparto` en `lib/repartos.ts`.
     nota: 'El contador es único para la casa hermandad y el almacén de enseres. '
-      + 'Se acordó imputar el 40 % al almacén.',
+      + 'Se acordó cargarle el 40 % al almacén.',
     creadoEn: '2026-01-15T10:00:00.000Z',
   },
   {
@@ -31,8 +34,10 @@ export const REPARTOS_INICIALES: Reparto[] = [
     porcentajeCent: 1000, // 10 %
     categoriaDestino: 'Obras Benéficas y Sociales',
     activo: true,
+    // La nota es para el POR QUÉ —de dónde viene la decisión—, no para repetir
+    // lo que la regla hace: eso ya lo dice su propia línea ahora.
     nota: 'Cabildo de enero: se aparta el 10 % de lo que se recoja en donativos '
-      + 'para la bolsa de caridad. El dinero sigue en la cuenta hasta que se reparte.',
+      + 'para la bolsa de caridad.',
     creadoEn: '2026-01-15T10:05:00.000Z',
   },
 ]

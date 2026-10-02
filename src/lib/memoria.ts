@@ -143,9 +143,27 @@ export function construirMemoria(
 
   /* ---------------------------------------------------------------- CENSO */
   const enElCenso = hermanos.filter(esMiembro)
+  /*
+   * EL ORDEN DE LAS ALTAS, Y EL QUE ENTRÓ Y SE FUE EL MISMO AÑO.
+   *
+   * Los hermanos de baja llevan `numero: 0` a propósito —no ocupan puesto en el
+   * escalafón, lo dice `COMO-TRABAJAR.md`—, no un número real. Así que quien se
+   * da de alta en enero y de baja en octubre DEL MISMO AÑO entra en esta lista
+   * con un cero, y ordenando por `a.numero - b.numero` el cero gana a cualquier
+   * número: sale ENCABEZANDO las altas del ejercicio, por delante del nº 12.
+   *
+   * Lo que se ve en el papel es una raya en su celda —los dos sitios que pintan
+   * esto ya lo hacen, `MemoriaEjercicio` y el informe—, así que no sale ningún
+   * «hermano nº 0». Sale una fila sin número a la cabeza de la lista, que en la
+   * memoria de un ejercicio se lee como un error de imprenta.
+   *
+   * Con `|| Infinity` se va al final, que es donde el resto de la aplicación
+   * pone a los que no tienen número (`Hermanos.tsx`, `Papeletas.tsx`,
+   * `papeletas/impresion.ts`). Aquí no se usaba y era el único sitio.
+   */
   const altas = hermanos
     .filter((h) => h.antiguedad === anio)
-    .sort((a, b) => a.numero - b.numero)
+    .sort((a, b) => (a.numero || Infinity) - (b.numero || Infinity))
     .map((h) => ({ numero: h.numero, nombre: h.nombre, estado: h.estado }))
 
   const deBaja = hermanos.filter((h) => h.estado === 'Baja')

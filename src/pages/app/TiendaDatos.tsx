@@ -126,6 +126,7 @@ export default function TiendaDatos() {
               type="button"
               className={`chip${vista === v.id ? ' chip--active' : ''}`}
               onClick={() => setVista(v.id)}
+              aria-pressed={vista === v.id}
             >
               {v.texto}
             </button>

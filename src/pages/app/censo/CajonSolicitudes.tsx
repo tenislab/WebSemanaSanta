@@ -83,6 +83,7 @@ export function CajonSolicitudes({
                           type="button"
                           className={`chip${motivoRechazo === m ? ' chip--active' : ''}`}
                           onClick={() => setMotivoRechazo(m)}
+                          aria-pressed={motivoRechazo === m}
                         >
                           {m}
                         </button>

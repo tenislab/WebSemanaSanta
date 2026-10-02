@@ -139,7 +139,7 @@ export default function Notificaciones() {
    */
   function aceptar(a: Aviso) {
     if (a.tipo === 'pagoCuota') {
-      setCuotas(cuotas.map((c) => (c.id === a.refId
+      setCuotas((prev) => prev.map((c) => (c.id === a.refId
         ? { ...c, estado: 'Pagada' as const, fechaPago: hoyIso(), pagoComunicado: null }
         : c)))
       /*
@@ -163,7 +163,7 @@ export default function Notificaciones() {
       return
     }
     if (a.tipo === 'pagoPapeleta') {
-      setPapeletas(papeletas.map((p) => (p.id === a.refId
+      setPapeletas((prev) => prev.map((p) => (p.id === a.refId
         ? { ...p, estado: 'Pagada' as const, pagoComunicado: null }
         : p)))
       const p = papeletas.find((x) => x.id === a.refId)
@@ -296,6 +296,7 @@ export default function Notificaciones() {
                           type="button"
                           className={`chip${motivo === m ? ' chip--active' : ''}`}
                           onClick={() => setMotivo(m)}
+                          aria-pressed={motivo === m}
                         >
                           {m}
                         </button>

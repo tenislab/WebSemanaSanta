@@ -6,9 +6,10 @@ sospecha: cada punto lleva **cómo se ha medido** y con qué números, y los
 frentes que han salido limpios se dicen también — un informe que solo enseña
 los hallazgos no deja saber qué se ha mirado.
 
-Está ordenado por lo que le hace daño a una hermandad de verdad. **Los tres
-primeros están arreglados** —van tachados, con su medición de antes y de
-después—; del 4 al 7 siguen abiertos.
+Está ordenado por lo que le hace daño a una hermandad de verdad. **Los siete
+están arreglados**, cada uno con su medición de antes y de después y su
+guardia roto a propósito. Dos de los siete estaban mal contados en la primera
+versión de este informe, y las dos correcciones van dichas en su sitio.
 
 ---
 
@@ -19,10 +20,10 @@ después—; del 4 al 7 siguen abiertos.
 | ~~**1**~~ | ~~La supresión del art. 17 certifica un borrado incompleto~~ **ARREGLADO** | **alta** | ejecutando la función con la consulta caída |
 | ~~**2**~~ | ~~Cuatro tokens CSS que no existen se comen 16 declaraciones~~ **ARREGLADO** | **alta** | estilo calculado en el navegador |
 | ~~**3**~~ | ~~Tres tablas pintan todas sus filas: 245 ms por tecla~~ **ARREGLADO ENTERO** (la tecla y abrir) | **media** | A/B alternado, tres pasadas por lado |
-| **4** | El censo lleva un padrón oculto que es el 20 % del DOM | media | conteo de nodos |
-| **5** | La memoria del ejercicio publica «hermano nº 0» | baja | ejecutando `construirMemoria` |
-| **6** | 34 de 39 filtros solo dicen cuál está puesto con el color | baja | recuento sobre el código |
-| **7** | Un apunte de dinero calculado con el estado del render | latente | lectura; **no reproducido** |
+| ~~**4**~~ | ~~El censo lleva un padrón oculto que es el 20 % del DOM~~ **ARREGLADO** | media | conteo de nodos e impresión a PDF |
+| ~~**5**~~ | ~~La memoria del ejercicio publica «hermano nº 0»~~ **ARREGLADO** — y **mal contado**: no publicaba ningún cero, lo que fallaba era el **orden** | baja | ejecutando `construirMemoria` |
+| ~~**6**~~ | ~~34 de 39 filtros solo dicen cuál está puesto con el color~~ **ARREGLADO** | baja | recuento sobre el código |
+| ~~**7**~~ | ~~Un apunte de dinero calculado con el estado del render~~ **ARREGLADO** (sigue **sin reproducir**) | latente | lectura; **no reproducido** |
 
 **Frentes que han salido limpios, y se ha mirado:** no hay ni un desborde
 horizontal en móvil (390 px) en quince pantallas; ningún botón revienta la
@@ -401,7 +402,44 @@ Tesorería y Papeletas lo que se le hizo al censo.
 
 ---
 
-## 4. El censo lleva un padrón oculto que es el 20 % de su DOM
+## ~~4. El censo lleva un padrón oculto que es el 20 % de su DOM~~ — ARREGLADO
+
+> **Hecho.** Ahora se monta al empezar a imprimir y se desmonta al acabar.
+> Medido con `scripts/caza/probar-padron.mjs`:
+>
+> | | nodos | filas del padrón |
+> |---|---|---|
+> | en pantalla, sin imprimir | **2.756** | 0 |
+> | mientras se imprime | 7.592 | **800** |
+> | al acabar | **2.756** | 0 |
+>
+> Con el censo de 800 hermanos, la pantalla pasa de los **24.380 nodos** del
+> principio a **2.756** sumando esto y la paginación.
+>
+> **Se engancha a `beforeprint`, no al botón, y ahí está la decisión.** Hay dos
+> caminos para imprimir: el botón «Imprimir el listado», que llama a
+> `window.print()`, y el **Ctrl+P del navegador**, que no pasa por ninguna
+> pantalla nuestra. Montándolo en el botón, el Ctrl+P imprimiría un censo en
+> blanco sin decir nada — cambiar un problema por otro peor. `window.print()`
+> dispara `beforeprint` ella también, así que un solo enganche cubre los dos y
+> el botón no cambia.
+>
+> Antes de escribirlo lo comprobé en el navegador
+> (`scripts/caza/probar-beforeprint.mjs`): `beforeprint` llega por los tres
+> caminos —botón, Ctrl+P y `Page.printToPDF`— y lo que se añade al DOM dentro
+> del manejador se queda.
+>
+> **Y va con `flushSync`**, que no es un atajo: el navegador prepara el papel en
+> cuanto vuelve el manejador, y un `setState` normal es asíncrono. React lo
+> agruparía para después y el diálogo ya tendría su foto hecha, sin el padrón.
+>
+> **Y el papel sale.** Imprimiendo de verdad con `Page.printToPDF`: un PDF de
+> **37 páginas** y 1.416 kB, y la pantalla limpia después. Los tres caminos
+> probados uno a uno, el del botón abriendo su menú.
+>
+> Las 8 capturas del censo salen **byte a byte iguales**: lo único que cambia en
+> el volcado son los recuentos de filas, exactamente a la mitad (100 → 50), que
+> es el padrón saliendo del DOM.
 
 **Dónde:** `src/pages/app/Hermanos.tsx:1199`
 
@@ -425,7 +463,33 @@ resuelto bien a cuatro ficheros de distancia.
 
 ---
 
-## 5. La memoria del ejercicio publica «hermano nº 0»
+## ~~5. La memoria del ejercicio publica «hermano nº 0»~~ — ARREGLADO, y estaba MAL CONTADO
+
+> **Primero la corrección, que es la mitad de este punto.** Escribí que la
+> memoria «publica hermano nº 0». **No lo publicaba.** Los dos sitios que pintan
+> esa lista —`MemoriaEjercicio.tsx` y el informe— ya escriben una raya cuando el
+> número es cero, y uno de ellos lo lleva comentado. Mi sonda imprimió `nº 0`
+> porque **leyó los datos, no el papel**: medí la estructura y di por hecho lo
+> que se vería.
+>
+> **Lo que sí fallaba es el ORDEN**, y eso era real: ordenando por
+> `a.numero - b.numero`, el cero gana a cualquier número, así que quien se dio de
+> alta en enero y de baja en octubre del mismo año salía **encabezando** las
+> altas del ejercicio, por delante del nº 12. Una fila sin número a la cabeza de
+> la lista, que en la memoria de un ejercicio se lee como un error de imprenta.
+>
+> Arreglado con `|| Infinity`, que es donde el resto de la aplicación pone a los
+> que no tienen número. Comprobado ejecutando `construirMemoria`:
+>
+> ```
+> nº  12 · Ana Ruiz Mora · Activo
+> nº  13 · Carmen Vega Nieto · Activo
+> nº   — · Bruno Salas Gil · Baja
+> ```
+>
+> Y nada vigilaba esto: la primera rotura a propósito dejó las 5.767 pruebas en
+> verde. Ahora hay cinco guardias que **ejecutan** la memoria y miran dónde
+> acaba la fila, no cómo está escrito el `.sort`.
 
 **Dónde:** `src/lib/memoria.ts:147`
 
@@ -450,7 +514,16 @@ escribe `h.numero > 0 ? h.numero : '—'`. Aquí no se usa.
 
 ---
 
-## 6. Treinta y cuatro filtros dicen cuál está puesto solo con el color
+## ~~6. Treinta y cuatro filtros dicen cuál está puesto solo con el color~~ — ARREGLADO
+
+> **Hecho: los 34 llevan ya `aria-pressed`.** `aria-pressed` y no
+> `aria-current`, porque un chip es un botón de dos estados —puesto o no
+> puesto—, mientras que `aria-current` es «el sitio en el que estás» de una
+> navegación; el paginador nuevo sí usa `aria-current`, que ahí es lo correcto.
+>
+> El barrido automático encajó 26 a la primera; los otros 8 tenían otra forma de
+> `className` (`chip chip--toggle${…}`) y hubo que ampliar el patrón. Y la
+> sangría salió desalineada un carácter en 25 de ellos, que también se corrigió.
 
 De los 39 botones que se pintan con `chip--active`, **34 no llevan
 `aria-pressed` ni `aria-current`**. Quien use un lector de pantalla no puede
@@ -463,7 +536,38 @@ dieciséis más. Cinco sí lo llevan, así que el patrón bueno también está e
 
 ---
 
-## 7. Un apunte de dinero calculado con el estado del render
+## ~~7. Un apunte de dinero calculado con el estado del render~~ — ARREGLADO
+
+> **Hecho, y sigo sin haberlo reproducido.** Se arregla igual: es una línea, es
+> dinero, y el día que alguien añada un segundo camino que apunte sin cerrar el
+> formulario, este ya no es el fallo.
+>
+> Eran **nueve sitios**, no uno: la aportación a una campaña (la del libro de
+> cuentas), guardar una campaña y un proyecto, marcar un recibo y una papeleta
+> desde Notificaciones, activar y borrar personal, y aceptar y rechazar una
+> solicitud de papeleta.
+>
+> **Y arreglé tres de más.** `setCampos` y `setSesgos` se llaman igual que un
+> setter de React pero son **props** del tipo `(v: X[]) => void`: reciben un
+> valor, no un actualizador, y el estado lo tiene el padre. Ahí pasar un array
+> nuevo es exactamente su contrato — «arreglarlo» no compila, y el compilador me
+> lo dijo.
+>
+> **El guardia cierra la clase entera**, y me costó dos correcciones llegar a
+> algo que no gritara donde no hay fallo:
+>
+> · La primera versión se puso roja **por su propio arreglo**: el comentario que
+>   explica el fallo cita la línea vieja, y el detector la leyó como código. Un
+>   guardia que lee los comentarios acusa a quien los escribe. Ahora quita
+>   comentarios y cadenas antes de mirar.
+> · Y daba 45 avisos, de los que 43 eran falsos: `setError(r.error)` o
+>   `setFilas(corte.filas)` leen una propiedad de lo que acaba de volver, no el
+>   estado; y `const { error } = await …; setError(error)` es una local que se
+>   llama igual que el estado donde va a acabar, que es la costumbre de la casa
+>   en ocho sitios. Los dos casos se descartan ahora.
+>
+> Con las dos cosas, el detector queda en cero de verdad, y rompiendo a propósito
+> cualquiera de los nueve salta.
 
 **Dónde:** `src/pages/app/Campanas.tsx:219`
 
@@ -517,26 +621,41 @@ Merece decirse, porque es la mitad del trabajo:
 
 ## Lo que queda
 
-**Los puntos 1, 2 y 3 están hechos.** Después de ellos:
+**Los siete están hechos.** Lo que se puede comprobar hoy, y cómo:
 
-- El barrido de las quince pantallas × tres vistas (móvil claro, móvil oscuro,
-  escritorio oscuro) sale **limpio en las cuarenta y cinco**: ni un desborde,
-  ni un contraste por debajo de 3:1, ni un error de consola. Antes salían tres
-  avisos.
-- La pantalla de Cuotas con 4.512 recibos **abre en 465 ms en vez de 1.697** y
-  cuesta **34 ms por tecla en vez de 179**, con **3.723 nodos en vez de
-  107.834**. Tesorería, 448 ms en vez de 1.152 y 37 por tecla en vez de 170.
-- Y una hermandad pequeña no nota ninguno de los tres cambios: 29 capturas byte
-  a byte iguales.
-- 5.757 pruebas pasan, con 67 guardias nuevos.
+| | comprobación | resultado |
+|---|---|---|
+| interfaz | 15 pantallas × móvil claro, móvil oscuro y escritorio oscuro | **45 de 45 limpias** (antes, 3 avisos) |
+| rendimiento | Cuotas con 4.512 recibos | abre en **465 ms** (era 1.697) · **34 ms/tecla** (era 179) · **3.723 nodos** (eran 107.834) |
+| rendimiento | el censo con 800 hermanos | **2.756 nodos** (eran 24.380) |
+| funcionamiento | 17 pantallas, pulsando sus botones | ninguno rompe nada ni deja error en consola |
+| pruebas | la suite entera | **5.774 pasan**, con 105 guardias nuevos |
 
-**Lo que queda:** los puntos **4, 5, 6 y 7**, cada uno de un rato corto. El 4
-—el padrón oculto que el censo monta siempre— es además lo que impide que el
-censo baje como han bajado las otras tres: de sus 7.591 nodos, unos 4.800 son
-ese padrón.
+Y una hermandad pequeña **no nota ninguno de los siete cambios**: 37 capturas
+byte a byte iguales entre las cuatro pantallas que se han tocado.
 
-Y la lección que más dice de cómo está montado esto salió del punto 3: el
-`memo` del censo llevaba tiempo puesto y funcionando, y el de la pantalla de al
-lado no habría funcionado nunca —una prop cambiaba de identidad cuatro ficheros
-más abajo—. **Leyendo el código las dos cosas se ven igual. Solo el cronómetro
-las distingue.**
+---
+
+## Las cuatro cosas que me corrigió el cronómetro o el compilador
+
+No van aparte por humildad: van porque en las cuatro, lo que yo había escrito
+en este informe era lo que cualquiera habría deducido leyendo el código, y era
+falso.
+
+1. **«245 ms por tecla» era una sola muestra.** Con tres pasadas por lado, el
+   mismo estado va de 162 a 304 ms. La mediana honesta de partida es 179.
+2. **Los cuatro `memo` no bastaban.** Puestos, Tesorería no mejoró nada: una
+   prop cambiaba de identidad cuatro ficheros más abajo, en
+   `useSupabaseTable`. El `memo` del censo funcionaba y el de al lado no habría
+   funcionado nunca. **Leyendo el código las dos cosas se ven igual.**
+3. **La memoria no publicaba ningún «hermano nº 0».** Mi sonda leyó los datos y
+   no el papel; los dos sitios que lo pintan ya ponían una raya. Lo que fallaba
+   era el orden.
+4. **Tres de los nueve «estado obsoleto» no lo eran.** `setCampos` y
+   `setSesgos` parecen setters de React y son props. Lo dijo el compilador al
+   intentar arreglarlos.
+
+Y dos veces fue **mi propio guardia** el que estaba mal: uno se le colaba una
+flecha entre paréntesis, y otro se puso rojo leyendo el comentario que explica
+el fallo que vigila. Los dos se descubrieron rompiendo a propósito, que es para
+lo que sirve.

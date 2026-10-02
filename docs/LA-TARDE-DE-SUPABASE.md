@@ -29,7 +29,7 @@ nada a mano — solo que no dé error.
 select version_del_esquema();
 ```
 
-Tiene que decir **70**, que es lo que pone `supabase/VERSION.json` hoy. Si dice
+Tiene que decir **71**, que es lo que pone `supabase/VERSION.json` hoy. Si dice
 menos, el SQL no ha entrado (o ha entrado a medias y lo habría dicho: es una
 sola transacción).
 
@@ -161,7 +161,7 @@ la sección 5 de [`CUANDO-TENGA-DOMINIO.md`](CUANDO-TENGA-DOMINIO.md).
 
 | | Paso | Está hecho cuando |
 |---|---|---|
-| 1 | El SQL nuevo | `version_del_esquema()` dice 70 y `DIAGNOSTICO.sql` no dice nada |
+| 1 | El SQL nuevo | `version_del_esquema()` dice 71 y `DIAGNOSTICO.sql` no dice nada |
 | 2 | `api/w.ts` y `api/seo.ts` | WhatsApp enseña el nombre de la hermandad al pegar su enlace |
 | 3 | `pg_cron` | cuatro filas en `cron.job` y, al día siguiente, `succeeded` en `cron.job_run_details` |
 | 4 | Copias automáticas | hay una copia **con fecha** en Database → Backups |

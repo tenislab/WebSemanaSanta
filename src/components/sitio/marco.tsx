@@ -2,6 +2,7 @@ import { BotonEntrar } from './piezas'
 import IconoRed from '../IconoRed'
 import { type WebPublica, urlSegura } from '../../lib/webPublica'
 import { useEffect, useState } from 'react'
+import { useQuieto } from '../../lib/imprimir'
 
 export interface EnlaceMenu {
   ancla: string
@@ -63,21 +64,56 @@ export function MenuDesplegable({
   )
 }
 
+/**
+ * LAS FOTOS DE FONDO DE LA PORTADA, PASANDO UNA TRAS OTRA.
+ *
+ * Ya se alternaban, pero de GOLPE: el fondo era un `backgroundImage` en la
+ * propia sección y cambiarlo es un corte seco. Detrás del nombre de la
+ * hermandad, un corte cada cinco segundos es un parpadeo, no un paso.
+ *
+ * Ahora cada foto es una capa propia y lo que cambia es su opacidad, así que
+ * se cruzan. Y están TODAS en el árbol desde el principio, que es lo que hace
+ * que el paso no se vea en blanco: con una sola capa que cambia de dirección,
+ * la primera vuelta pide la imagen cuando ya le toca enseñarla.
+ *
+ * SI EL VISITANTE PIDE QUIETO, SE QUEDA QUIETO. Una foto que se mueve detrás de
+ * un texto es exactamente lo que marea a quien lleva `prefers-reduced-motion`
+ * puesto, y ese ajuste no se pone por capricho. Entonces se ve la primera y no
+ * pasa nada más: no se cruza y tampoco se cambia a saltos, porque quitar la
+ * transición y dejar el temporizador es el corte seco de antes con otro nombre.
+ */
 export function HeroFondo({ web, titulo, interactivo }: { web: WebPublica; titulo: string; interactivo: boolean }) {
   const fotos = web.heroFotos
   const [i, setI] = useState(0)
+  const quieto = useQuieto()
   useEffect(() => {
-    if (fotos.length < 2) return
+    if (fotos.length < 2 || quieto) return
     const t = setInterval(() => setI((n) => (n + 1) % fotos.length), 5000)
     return () => clearInterval(t)
-  }, [fotos.length])
-  const fondo = fotos[i] ?? fotos[0]
+  }, [fotos.length, quieto])
+  /*
+   * El índice se recorta al número de fotos. Si la hermandad quita fotos
+   * mientras alguien tiene la portada abierta —sucede: el editor guarda y la
+   * vista previa se entera—, `i` se queda apuntando a una que ya no está y la
+   * cabecera se queda sin fondo hasta la siguiente vuelta.
+   */
+  const puesta = fotos.length ? i % fotos.length : 0
+  const fondo = fotos[puesta]
 
   return (
     <section
       className={`sitio__hero sitio__hero--${web.heroAltura}${fondo ? '' : ' sitio__hero--sinfoto'}`}
-      style={fondo ? { backgroundImage: `url(${fondo})` } : undefined}
     >
+      {fotos.map((f, n) => (
+        <div
+          key={n}
+          className={`sitio__hero-foto${n === puesta ? ' sitio__hero-foto--puesta' : ''}`}
+          style={{ backgroundImage: `url(${f})` }}
+          /* Decorativa: el nombre de la hermandad lo dice el `h1` de al lado,
+             así que un lector de pantalla no tiene nada que hacer aquí. */
+          aria-hidden="true"
+        />
+      ))}
       <div className="sitio__hero-overlay" style={fondo ? { background: `rgba(15,8,10,${web.heroOverlay / 100})` } : undefined} />
       <div className="sitio__hero-inner">
         <h1>{titulo}</h1>

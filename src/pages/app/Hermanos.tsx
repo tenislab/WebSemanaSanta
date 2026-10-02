@@ -115,6 +115,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { FilasDelCenso } from './censo/FilasDelCenso'
 import { Paginador } from '../../components/Paginador'
 import { usePaginado } from '../../lib/paginar'
+import { useImprimiendo } from '../../lib/imprimir'
 import { CajonSolicitudes } from './censo/CajonSolicitudes'
 import { useSolicitudesDeAlta } from './censo/solicitudesDeAlta'
 import {
@@ -1201,15 +1202,25 @@ export default function Hermanos() {
     setSelectedId(null)
   }
 
+  const aImprimir = useImprimiendo()
+
   /*
-   * EL CENSO IMPRIMIBLE, CONGELADO ENTRE TECLEOS.
+   * EL CENSO IMPRIMIBLE, Y AHORA SÍ SOLO CUANDO SE IMPRIME.
    *
-   * Este listado oculto —solo existe al imprimir— pinta OTRA VEZ todo el
-   * censo filtrado. Sus `filas` se construían inline en el render, así que
-   * cada letra del buscador lo reconstruía entero EN EL CAMINO URGENTE,
-   * aunque la lista no hubiera cambiado todavía. Con el elemento en un
-   * `useMemo`, mientras las dependencias no cambien React recibe el MISMO
-   * elemento y ni entra a compararlo.
+   * Este listado pinta OTRA VEZ todo el censo filtrado, escondido con
+   * `screen-hidden` y visible solo en el papel. El comentario que había aquí
+   * decía «solo existe al imprimir» y NO ERA VERDAD: existía siempre. Con
+   * ochocientos hermanos son 4.836 nodos —el 20 % del DOM de esta pantalla—
+   * que nadie mira hasta que se pulsa Imprimir.
+   *
+   * Ahora se monta al empezar a imprimir y se desmonta al acabar, enganchado a
+   * `beforeprint` para cubrir también el Ctrl+P del navegador, que no pasa por
+   * el botón. Ver `lib/imprimir.ts`, que explica por qué ahí y no en el botón.
+   *
+   * EL `useMemo` SE QUEDA, y no es redundante: sin él, cada letra del buscador
+   * reconstruía el elemento entero en el camino urgente aunque la lista no
+   * hubiera cambiado. Ahora además el elemento no llega a montarse, pero
+   * construirlo seguiría costando lo mismo.
    */
   const informeImpreso = useMemo(() => (
       <InformeImpreso
@@ -1334,6 +1345,7 @@ export default function Hermanos() {
               className={`chip${filter === f ? ' chip--active' : ''}`}
               onClick={() => setFilter(f)}
               type="button"
+              aria-pressed={filter === f}
             >
               {f === 'Todos' ? 'Todos'
                 : f === 'Activo' ? 'Activos'
@@ -1348,6 +1360,7 @@ export default function Hermanos() {
               className={`chip chip--cumples${soloCumples ? ' chip--active' : ''}`}
               onClick={() => setSoloCumples((v) => !v)}
               title={`Hermanos que cumplen años en ${mesEnCurso()}`}
+              aria-pressed={soloCumples}
             >
               🎂 Cumplen en {mesEnCurso()} ({cumplenEsteMes})
             </button>
@@ -1358,6 +1371,7 @@ export default function Hermanos() {
           className={`chip${sesgando ? ' chip--active' : ''}`}
           onClick={() => setSesgando((v) => !v)}
           aria-expanded={sesgando}
+          aria-pressed={sesgando}
         >
           {sesgoActivo ? '✓ Sesgado' : 'Sesgar'}
         </button>
@@ -2154,6 +2168,7 @@ export default function Hermanos() {
                       key={et}
                       className={`chip chip--toggle${activa ? ' chip--active' : ''}`}
                       onClick={() => toggleEtiquetaHermano(selected.id, et)}
+                      aria-pressed={activa}
                     >
                       {activa ? '✓ ' : ''}{et}
                     </button>
@@ -2426,8 +2441,11 @@ export default function Hermanos() {
       </Drawer>
 
       {/* Solicitudes de alta pedidas desde el área del hermano */}
-      {/* Documento imprimible: solo aparece en el papel (ver .screen-hidden). */}
-      {informeImpreso}
+      {/*
+        Documento imprimible: aparece SOLO mientras se imprime, por los dos
+        caminos —el botón y el Ctrl+P—. Ver `lib/imprimir.ts`.
+      */}
+      {aImprimir && informeImpreso}
 
       {/*
         EL CERTIFICADO, para verlo antes de imprimirlo.

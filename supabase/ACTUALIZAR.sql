@@ -99,11 +99,12 @@
 --   62. reglas-automaticas.sql         Felicitar el cumpleaños (y demás) sin que nadie se acuerde
 --   63. ensayo-de-restauracion.sql     Comprobar que la copia encaja antes de vaciar nada
 --   64. renovacion-y-fallo-de-cobro.sql Que se apunte la renovación, y que una tarjeta que falla se avise antes de cortar
---   65. vigilancia.sql                 Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
---   66. canal-de-actualizacion.sql     Sacar una novedad a una hermandad piloto antes que a todas
---   67. restaurar-copia.sql            Poder volcar la copia de UNA hermandad sin tocar a las demás
---   68. soporte.sql                    Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
---   69. version-del-esquema.sql        Que la aplicación avise cuando la base se ha quedado atrás
+--   65. imagen-del-evento.sql          Que un acto pueda llevar su cartel
+--   66. vigilancia.sql                 Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
+--   67. canal-de-actualizacion.sql     Sacar una novedad a una hermandad piloto antes que a todas
+--   68. restaurar-copia.sql            Poder volcar la copia de UNA hermandad sin tocar a las demás
+--   69. soporte.sql                    Ver lo que ve esa hermandad para poder ayudarla, y que quede escrito
+--   70. version-del-esquema.sql        Que la aplicación avise cuando la base se ha quedado atrás
 --
 -- -----------------------------------------------------------------------------
 -- POR QUÉ ES TAN LARGO: LLEVA TODAS LAS PIEZAS
@@ -773,6 +774,10 @@ create table if not exists eventos (
   hora text,
   lugar text,
   descripcion text,
+  -- El cartel del acto: la DIRECCIÓN en el almacén de imágenes de la
+  -- hermandad, nunca la imagen dentro (esta tabla se lee entera para pintar el
+  -- calendario). Ver `imagen-del-evento.sql`.
+  imagen text,
   tareas jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
@@ -11432,6 +11437,40 @@ $$;
 grant execute on function mi_suscripcion() to authenticated;
 
 -- =============================================================================
+--   IMAGEN-DEL-EVENTO.SQL — Que un acto pueda llevar su cartel
+-- =============================================================================
+
+-- ============================================================================
+-- Gobergo — que un acto pueda llevar su cartel
+-- ============================================================================
+--
+-- Un evento tenía título, fecha, lugar y descripción, y ninguna imagen. Para
+-- anunciar un triduo o una salida extraordinaria en la web pública, lo único
+-- que se podía poner era texto; el cartel —que es lo que la gente mira—
+-- no tenía dónde guardarse.
+--
+-- Guarda una DIRECCIÓN, no la imagen: el fichero sube al almacén de la
+-- hermandad (`imagenes.sql`, cubo `imagenes`) y aquí queda su enlace. Es el
+-- mismo trato que el escudo y las fotos de la web, y por el mismo motivo: esta
+-- tabla se lee entera para pintar el calendario, y una imagen en base64
+-- dentro de una fila se paga en cada carga de la pantalla.
+--
+-- Cabe también un enlace a una imagen de fuera, para la hermandad que ya tenga
+-- sus carteles en su propia web y no quiera volver a subirlos.
+--
+-- CÓMO SE EJECUTA
+--   Supabase → SQL Editor → pegar esto entero → Run.
+--   Se puede ejecutar más de una vez sin que pase nada.
+-- ============================================================================
+
+alter table eventos add column if not exists imagen text;
+
+comment on column eventos.imagen is
+  'Dirección del cartel o foto del acto: el enlace en el almacén de imágenes de '
+  'la hermandad, o una dirección de fuera. Nunca la imagen en base64: esta tabla '
+  'se lee entera para pintar el calendario.';
+
+-- =============================================================================
 --   VIGILANCIA.SQL — Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie
 -- =============================================================================
 
@@ -12428,7 +12467,7 @@ grant execute on function version_del_esquema() to authenticated, anon;
 -- Generado. Sube cada vez que cambia cualquier pieza del SQL. La aplicación lo
 -- lee al arrancar y avisa si va por detrás; ver `src/lib/versionEsquema.ts`.
 
-select sellar_esquema(70);
+select sellar_esquema(71);
 
 
 -- =============================================================================

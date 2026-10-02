@@ -642,6 +642,10 @@ create table if not exists eventos (
   hora text,
   lugar text,
   descripcion text,
+  -- El cartel del acto: la DIRECCIÓN en el almacén de imágenes de la
+  -- hermandad, nunca la imagen dentro (esta tabla se lee entera para pintar el
+  -- calendario). Ver `imagen-del-evento.sql`.
+  imagen text,
   tareas jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );

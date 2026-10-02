@@ -163,9 +163,50 @@ export function lasQueCuentan(reglas: readonly Reparto[]): Reparto[] {
 /** Cómo se lee una regla en una línea, para el informe y para la lista. */
 export function comoSeLeeElReparto(r: Reparto): string {
   const pct = porcentajeDe(r)
+  /*
+   * «PASA A» Y NO «SE IMPUTA A».
+   *
+   * «Imputar» es la palabra del gestor, no la del vocal que lee el papel en el
+   * cabildo, y este proyecto escribe en cristiano por norma. Y los dos verbos
+   * de antes —«se imputa a» y «se aparta para»— eran además casi iguales a la
+   * vista, justo en las dos cosas que el documento se esfuerza en decir que son
+   * DISTINTAS.
+   */
   return r.tipo === 'reparto'
-    ? `${pct} % de «${r.categoriaBase}» se imputa a «${r.categoriaDestino}»`
+    ? `${pct} % de «${r.categoriaBase}» pasa a «${r.categoriaDestino}»`
     : `${pct} % de «${r.categoriaBase}» se aparta para «${r.categoriaDestino}»`
+}
+
+/**
+ * QUÉ LE HACE ESTA REGLA AL RESULTADO, EN LA PROPIA FILA.
+ *
+ * Es el arreglo de lo que se reportó como «el informe no se entiende», y el
+ * fallo estaba en el papel, no en la pantalla. «Reglas aplicadas» ponía dos
+ * importes en la misma columna —74,56 € de un traslado y 1.043,16 € de un
+ * compromiso— y abajo solo restaba el segundo:
+ *
+ *     Luz y agua: la parte del almacén              74,56 €
+ *     El diezmo de caridad                       1.043,16 €
+ *     …
+ *     Comprometido y todavía sin pagar          − 1.043,16 €
+ *
+ * Quien suma los dos y ve que solo se descuenta uno no tiene en la fila
+ * ninguna forma de saber por qué. La explicación estaba, pero en un párrafo de
+ * seis líneas al final del documento, y en un cabildo de cuentas eso es la
+ * pregunta que se levanta.
+ *
+ * Así que cada fila lo dice de sí misma. Una frase corta y en el sitio donde
+ * nace la duda vale más que un párrafo impecable al final.
+ */
+export function queLeHaceAlResultado(r: Reparto): string {
+  return r.tipo === 'reparto'
+    ? 'No cambia ningún total: ese gasto ya está pagado y en el libro. Solo dice a qué partida corresponde cada trozo.'
+    : 'Se resta del resultado, más abajo. El dinero sigue en la cuenta hasta que se gaste.'
+}
+
+/** Cómo se llama cada clase en pantalla y en el papel. */
+export function nombreDelTipo(r: Reparto): string {
+  return r.tipo === 'reparto' ? 'traslado entre partidas' : 'compromiso'
 }
 
 export function useRepartos() {
