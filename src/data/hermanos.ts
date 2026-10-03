@@ -1,3 +1,27 @@
+/**
+ * EL HERMANO: el tipo central de toda la aplicación.
+ *
+ * Casi todas las pantallas acaban mirando esta ficha, así que merece la pena
+ * leer los comentarios de los campos antes de usarlos. Tres avisos que ahorran
+ * un día de trabajo:
+ *
+ * · `cuotaAlDia` ES DATO MUERTO. Nadie lo actualiza al cobrar. Para saber si
+ *   un hermano está al corriente está `situacionDeHermano()` en
+ *   `lib/estadoCuotaHermano.ts`, que mira los recibos de verdad y distingue
+ *   CUATRO situaciones, no dos: al día, debe, sin emitir (que no es lo mismo
+ *   que estar al día) y no le toca pagar.
+ * · `numero` ES EL ESCALAFÓN, y `0` significa «no ocupa escalafón» (el hermano
+ *   civil). Dar de baja a alguien renumera a todos los que van detrás: en una
+ *   hermandad de mil, dar de baja al nº 8 son novecientas noventa y dos fichas
+ *   cambiadas. Ver `lib/censo.ts`.
+ * · `dni` ES LA LLAVE con la que el hermano entra en su área, no su correo. Se
+ *   compara SIEMPRE con `mismoDni()` de `lib/dni.ts` —nunca a mano— y viaja
+ *   limpio de puntos a la base.
+ *
+ * `HERMANOS_INICIALES` son los datos de ejemplo del modo local. No son un
+ * `fixture` de pruebas: es lo que ve quien abre la demostración, así que son
+ * nombres y situaciones verosímiles de una hermandad de verdad.
+ */
 import type { Cargo } from './documentos'
 export type EstadoHermano = 'Activo' | 'Nuevo' | 'Baja'
 

@@ -16,7 +16,7 @@
  * que ya lo lleva).
  */
 import { useEffect, useState } from 'react'
-import { useSupabaseTable } from './supabaseSync'
+import { useSupabaseTable, avisarDeFallo } from './supabaseSync'
 import { CLAVES_DATOS, leerPersistido } from './persistencia'
 import { diaLocalDe, hoyIso } from './hoy'
 import { isSupabaseConfigured, supabase } from './supabase'
@@ -52,13 +52,8 @@ import {
  * Se avisa por la misma señal que usa `useSupabaseTable` y que el marco de la
  * aplicación ya escucha para pintar la banda roja. Ver `supabaseSync.ts`.
  */
-function avisarDeFallo(que: string, motivo: string) {
-  console.error(`No se pudo traer «${que}»:`, motivo)
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent('cabildo-sync-error', {
-    detail: { tabla: que, fallos: [`no se pudo cargar «${que}»: ${motivo}`] },
-  }))
-}
+/* La copia local que había aquí se ha ido a `supabaseSync.ts`, que es donde
+   vive la señal. Eran dos iguales y iban a ser tres. */
 
 /**
  * El catálogo de la hermandad. Lo edita quien lleva el inventario.

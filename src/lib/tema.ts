@@ -1,3 +1,20 @@
+/**
+ * EL TEMA CLARO Y OSCURO.
+ *
+ * El tema se guarda en `localStorage` y se aplica como `data-theme` en el
+ * `<html>`; todo el CSS cuelga de ese atributo. De fábrica se respeta lo que
+ * diga el sistema (`prefers-color-scheme`).
+ *
+ * VA POR EVENTO Y NO SOLO POR ESTADO, y es por algo concreto: se puede cambiar
+ * desde DOS sitios —el botón de la barra y la paleta de comandos (Ctrl+K)— y
+ * sin el evento uno de los dos se queda con el icono al revés.
+ *
+ * Y UN AVISO QUE CUESTA CARO OLVIDAR: al tocar colores, comprueba lo que SALE
+ * EN PAPEL. Este proyecto ya imprimió un recibo en blanco porque en tema oscuro
+ * el fondo no lo pinta la impresora y el texto claro sí. Los recibos, las
+ * papeletas y los informes se imprimen de verdad, y el CSS de impresión tiene
+ * que forzar sus propios colores.
+ */
 import { useEffect, useState } from 'react'
 
 export type Tema = 'light' | 'dark'

@@ -1,3 +1,31 @@
+/**
+ * LA PAPELETA DE SITIO: el tipo y los datos de ejemplo.
+ *
+ * Es a la vez un RECIBO y una ENTRADA: el hermano la saca cada año, la paga, y
+ * en ella se le dice qué sitio le toca en el cortejo. Un año es un año — la
+ * papeleta no se hereda, se renueva, y por eso `anio` está en casi todos los
+ * filtros de la aplicación.
+ *
+ * ----------------------------------------------------------------------------
+ * DOS COSAS QUE SE CONFUNDEN AL LEER ESTO
+ * ----------------------------------------------------------------------------
+ *
+ * · HAY DOS LISTAS DE MÉTODOS DE PAGO Y NO SON LA MISMA. `MetodoPago` es cómo
+ *   AVISA EL HERMANO desde su área de que ya ha pagado, y solo admite Bizum o
+ *   transferencia: desde su área no puede cobrar nadie. `MetodoPagoPapeleta` es
+ *   con qué REGISTRA EL COBRO LA SECRETARÍA, y ahí sí entran el efectivo, la
+ *   tarjeta y el «Exento».
+ * · `Anulada` Y `Renuncia` NO SON LO MISMO, aunque las dos queden fuera del
+ *   cortejo y de las papeletas activas. `Renuncia` es que el hermano DICE QUE
+ *   ESTE AÑO NO SALE, y es una papeleta que existe: `lib/campana.ts` la lee y
+ *   deja la renovación en «No renovada», que es lo que impide volver a
+ *   ofrecerle su sitio. `Anulada` es deshacer la papeleta, y ahí no queda nada
+ *   que leer. Al filtrar, mira cuál de las dos cosas estás preguntando.
+ *
+ * Y un detalle que arrastra a otras pantallas: la papeleta es de donde salen
+ * las ETIQUETAS AUTOMÁTICAS del censo (el tramo, la opción), que se ponen solas
+ * mientras la tenga y se van si se anula. Ver `lib/rolesPapeleta.ts`.
+ */
 export type EstadoPapeleta = 'Solicitada' | 'Asignada' | 'Pagada' | 'Entregada' | 'Anulada' | 'Renuncia'
 
 /** Cómo avisa el hermano de que ha pagado desde su área (solo Bizum/transferencia). */

@@ -1,3 +1,24 @@
+/**
+ * PASAR LISTA A UN TRAMO: quién ha venido el día de la salida.
+ *
+ * Se usa en `pages/app/Cortejo.tsx`, y el contexto de uso es lo que explica su
+ * forma: se toca EN LA CALLE, con el móvil, de pie, con guantes y con la
+ * cobertura que haya. Así que lo que se mide es el NÚMERO DE TOQUES, y por eso
+ * los estados se cambian con un solo golpe y no con un formulario.
+ *
+ * Tres estados: `pendiente` (de fábrica), `asiste` y `no_asiste`. «Pendiente»
+ * NO es «no ha venido»: a media mañana casi todo está pendiente, y contar eso
+ * como ausencia daría un recuento falso en el peor momento.
+ *
+ * `soloLectura` para cuando se consulta y no se pasa lista (la ficha del
+ * hermano), y `sinResumen` cuando el recuento ya lo pinta quien lo envuelve.
+ *
+ * Y SI LA ESCRITURA NO LLEGA, SE ENCOLA Y SE MANDA SOLA
+ * (`lib/colaEscritura.ts`). Es el momento del año para el que se escribió esa
+ * cola: una hermandad en la calle, sin cobertura, y alguien pasando lista. La
+ * banda de aviso dice «está apuntado y se manda solo», y eso es a propósito
+ * distinto de «no se ha podido guardar» — ver `components/AppShell.tsx`.
+ */
 import { useAsistencias, registroDe, type EstadoAsistencia } from '../lib/asistencia'
 import { ChipsAsistencia, PastillaAsistencia, ResumenAsistencia } from './ChipsAsistencia'
 import type { Hermano } from '../data/hermanos'

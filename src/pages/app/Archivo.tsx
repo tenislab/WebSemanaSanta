@@ -1,3 +1,52 @@
+/**
+ * ARCHIVO DOCUMENTAL: las actas, las reglas y todo lo que la hermandad guarda.
+ *
+ * ----------------------------------------------------------------------------
+ * DOS PREGUNTAS DISTINTAS SOBRE CADA DOCUMENTO, Y ESTUVIERON MEZCLADAS
+ * ----------------------------------------------------------------------------
+ *
+ * Es lo único que de verdad hay que entender de esta pantalla:
+ *
+ *   · `cargosConAcceso` — QUÉ CARGOS DE LA JUNTA lo ven dentro del panel. Un
+ *     acta reservada al Hermano Mayor y al Fiscal, por ejemplo.
+ *   · `publicacion` — HASTA DÓNDE SALE del panel, y son tres valores
+ *     acumulativos: `junta` (solo el panel, y es el de fábrica), `hermanos`
+ *     (además, el hermano lo ve en su área) y `web` (además, cualquiera lo ve
+ *     en la web pública, sin entrar).
+ *
+ * Había UNA sola pregunta —«Quién puede verlo: Todos los hermanos / Restringido
+ * a cargos concretos»— y era una promesa sin cumplir: con «Todos los hermanos»
+ * marcado, un hermano NO veía el documento por ningún camino, porque las
+ * políticas del archivo llevan `not auth_es_hermano()`. El rótulo prometía algo
+ * que la base no hacía. Ver `supabase/documentos-hasta-donde-salen.sql`.
+ *
+ * Y EL FRENO QUE IMPORTA ESTÁ EN LA BASE, no aquí: un documento restringido a
+ * cargos concretos NO puede salir de la junta, y lo impide un `check` de la
+ * tabla. Son dos decisiones que se toman en momentos distintos y a veces por
+ * personas distintas, y el precio de equivocarse es un acta reservada al Fiscal
+ * en internet. Una regla de negocio que protege datos no se deja en el
+ * navegador.
+ *
+ * ----------------------------------------------------------------------------
+ * EL SIMULADOR DE PERMISOS QUE HUBO AQUÍ, PARA QUE NO VUELVA
+ * ----------------------------------------------------------------------------
+ *
+ * Había un desplegable de «ver como este cargo» que tenía cualquiera: al vocal
+ * al que se le habían restringido las actas del cabildo le bastaba con
+ * cambiarlo a «Hermano Mayor» y leerlas. No era una restricción, era una
+ * sugerencia. Ahora el cargo sale solo de `useCargoDeLaSesion()`, y para ver
+ * qué alcanza cada cargo está Personal y permisos, que es donde se decide.
+ *
+ * ----------------------------------------------------------------------------
+ * EL FICHERO Y SU FICHA VIVEN EN SITIOS DISTINTOS
+ * ----------------------------------------------------------------------------
+ *
+ * La ficha es una fila de `documentos`; el PDF es un objeto en el cubo
+ * `documentos` de Storage, en `<hermandad_id>/<documento_id>`. Así que puede
+ * haber ficha SIN fichero (un adjunto borrado, una copia restaurada a medias),
+ * y entonces hay que DECIRLO: el panel se quedaba callado y parecía que el
+ * botón no funcionaba.
+ */
 import { llano } from '../../lib/buscar'
 import { useMemo, useState, type FormEvent } from 'react'
 import { useCargoDeLaSesion } from '../../lib/permisos'
@@ -6,10 +55,13 @@ import {
   CARGOS,
   CATEGORIAS_DOCUMENTO,
   DOCUMENTOS_INICIALES,
+  PUBLICACIONES,
+  comoSePublica,
   type Cargo,
   type CategoriaDocumento,
   type Documento,
   type EstadoExpediente,
+  type Publicacion,
   type TipoCabildo,
 } from '../../data/documentos'
 import { useAuth } from '../../context/AuthContext'
@@ -113,6 +165,19 @@ export default function Archivo() {
 
   const [categoriaNueva, setCategoriaNueva] = useState<CategoriaDocumento>('Acta')
   const [visibilidadNueva, setVisibilidadNueva] = useState<'Todos' | 'Restringido'>('Todos')
+  /*
+   * HASTA DÓNDE SALE, que es OTRA pregunta.
+   *
+   * Hasta ahora había una sola —«Quién puede verlo: Todos los hermanos /
+   * Restringido a cargos concretos»— y mezclaba dos cosas que no tienen nada
+   * que ver: qué cargos de la junta lo ven en el panel, y si el documento sale
+   * del panel. Lo segundo no existía: con «Todos los hermanos» marcado, un
+   * hermano no veía el documento por ningún camino, porque las políticas del
+   * archivo llevan `not auth_es_hermano()`. El rótulo prometía algo que la
+   * base no hacía.
+   */
+  const [publicacionNueva, setPublicacionNueva] = useState<Publicacion>('junta')
+  const restringido = visibilidadNueva === 'Restringido'
   const [guardandoArchivo, setGuardandoArchivo] = useState(false)
   const [urlArchivo, setUrlArchivo] = useState<string | null>(null)
   const [cargandoArchivo, setCargandoArchivo] = useState(false)
@@ -157,6 +222,7 @@ export default function Archivo() {
   function abrirNuevo() {
     setCategoriaNueva('Acta')
     setVisibilidadNueva('Todos')
+    setPublicacionNueva('junta')
     setFormOpen(true)
   }
 
@@ -193,6 +259,17 @@ export default function Archivo() {
       descripcion,
       archivadoPor,
       cargosConAcceso,
+      /*
+       * LO RESTRINGIDO NO SALE, Y SE FUERZA AQUÍ TAMBIÉN.
+       *
+       * La base lo frena con un `check`, que es donde tiene que estar. Pero si
+       * la pantalla manda la combinación prohibida, el `insert` revienta y lo
+       * que ve quien subía el documento es un error en crudo. Así que aquí se
+       * corrige antes de mandarlo: si está restringido a cargos, se queda en
+       * la junta. Y el desplegable ya se desactiva solo en ese caso, o sea que
+       * esto es el cinturón de un tirante.
+       */
+      publicacion: cargosConAcceso && cargosConAcceso.length > 0 ? 'junta' : publicacionNueva,
       tipoCabildo,
       proveedor,
       vigenciaHasta,
@@ -384,12 +461,18 @@ export default function Archivo() {
                   </td>
                   <td className="num td-nowrap col-opcional">{fmt(d.fecha)}</td>
                   <td>
+                    {/*
+                      LA COLUMNA DECÍA «Todos», y «todos» ahí eran los cargos
+                      de la junta: lo contrario de lo que se lee. Ahora dice
+                      hasta dónde sale, que es lo que alguien quiere comprobar
+                      de un vistazo cuando repasa el archivo.
+                    */}
                     {d.cargosConAcceso ? (
                       <span className="pill pill--restricted">
-                        <LockIcon /> Restringido
+                        <LockIcon /> Solo algunos cargos
                       </span>
                     ) : (
-                      <span className="pill pill--info">Todos</span>
+                      <span className={`pill ${comoSePublica(d).clase}`}>{comoSePublica(d).texto}</span>
                     )}
                   </td>
                   <td className="col-opcional">{d.archivadoPor ?? <span className="table-muted">—</span>}</td>
@@ -436,7 +519,14 @@ export default function Archivo() {
                   <span className="pill pill--info">{selected.categoria}</span>
                   {selected.cargosConAcceso && (
                     <span className="pill pill--restricted">
-                      <LockIcon /> Restringido
+                      <LockIcon /> Solo algunos cargos
+                    </span>
+                  )}
+                  {/* Y hasta dónde sale, aquí también: es la pastilla que hay
+                      que poder mirar antes de mandarle el enlace a alguien. */}
+                  {!selected.cargosConAcceso && (
+                    <span className={`pill ${comoSePublica(selected).clase}`}>
+                      {comoSePublica(selected).texto}
                     </span>
                   )}
                 </div>
@@ -646,8 +736,27 @@ export default function Archivo() {
             </p>
           </div>
 
+          {/*
+            DOS PREGUNTAS, NO UNA.
+
+            Antes había una sola —«Quién puede verlo: Todos los hermanos /
+            Restringido a cargos concretos»— y mezclaba dos cosas distintas:
+            quién de LA JUNTA lo ve en el panel, y si el documento SALE del
+            panel. Y lo segundo no existía: con «Todos los hermanos» marcado,
+            un hermano no veía el documento por ningún camino, porque las
+            políticas del archivo llevan `not auth_es_hermano()`. El rótulo
+            prometía algo que la base no hacía.
+
+            Así que ahora se preguntan por separado y con los nombres de
+            verdad: «Quién lo ve en el panel» (la junta) y «Hasta dónde sale»
+            (fuera del panel).
+          */}
           <div className="assign-box">
-            <label id="visibilidadLabel">Quién puede verlo</label>
+            <label id="visibilidadLabel">Quién lo ve en el panel</label>
+            <p className="form-hint" style={{ marginTop: 0 }}>
+              Entre los cargos de la junta. Esto no habla del hermano: para eso está «Hasta dónde
+              sale», aquí abajo.
+            </p>
             <div role="radiogroup" aria-labelledby="visibilidadLabel" className="archivo-visibilidad-group">
               <label className="checkbox-row" htmlFor="visibilidadTodos">
                 <input
@@ -658,7 +767,7 @@ export default function Archivo() {
                   checked={visibilidadNueva === 'Todos'}
                   onChange={() => setVisibilidadNueva('Todos')}
                 />
-                Todos los hermanos
+                Cualquier cargo de la junta
               </label>
               <label className="checkbox-row" htmlFor="visibilidadRestringido">
                 <input
@@ -684,6 +793,51 @@ export default function Archivo() {
                 </div>
                 <p className="form-hint">Marca al menos un cargo, o el documento no se podrá guardar.</p>
               </>
+            )}
+          </div>
+
+          {/*
+            HASTA DÓNDE SALE. Tres destinos acumulativos y un solo valor, no
+            tres interruptores: con tres caben combinaciones que no significan
+            nada —«en la web pero no para los hermanos»— y alguien las marcaría.
+          */}
+          <div className="assign-box">
+            <label htmlFor="publicacion">Hasta dónde sale</label>
+            <select
+              id="publicacion"
+              value={restringido ? 'junta' : publicacionNueva}
+              /*
+               * UN DOCUMENTO RESTRINGIDO A CARGOS NO SALE DE LA JUNTA, y aquí
+               * no se ofrece siquiera. Lo frena además un `check` de la tabla,
+               * que es donde tiene que estar una regla que protege datos: un
+               * acta reservada al Fiscal no termina en internet por un
+               * desplegable mal dado.
+               */
+              disabled={restringido}
+              onChange={(e) => setPublicacionNueva(e.target.value as Publicacion)}
+            >
+              {PUBLICACIONES.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+            <p className="form-hint">
+              {restringido
+                ? 'Un documento restringido a cargos no sale del panel. Si tiene que verlo alguien más, quita la restricción de arriba.'
+                : PUBLICACIONES.find((p) => p.id === publicacionNueva)?.nota}
+            </p>
+            {/*
+              Y SI ES UN ACTA, SE AVISA. Un acta lleva nombres, votaciones y a
+              veces asuntos de personas; ponerla en internet no es lo mismo que
+              poner las reglas, aunque se marque con el mismo desplegable. Se
+              puede hacer —habrá hermandades que publiquen sus actas— pero no
+              callándoselo.
+            */}
+            {!restringido && publicacionNueva === 'web' && categoriaNueva === 'Acta' && (
+              <p className="form-hint form-hint--aviso">
+                Es un <b>acta</b>: suele llevar nombres de hermanos, votaciones y acuerdos sobre
+                personas. En la web la puede leer y guardar cualquiera, y la indexa Google. Si solo
+                querías que la vieran los hermanos, elige «Los hermanos».
+              </p>
             )}
           </div>
         </form>

@@ -1,3 +1,19 @@
+/**
+ * EL MARCO DE LA WEB PÚBLICA: la barra de arriba, el pie y el fondo del hero.
+ *
+ * No son secciones del cuerpo —no se pueden apagar ni reordenar— pero sí se
+ * editan, y por eso la vista previa los nombra aparte (`FocoPreview` admite
+ * `'cabecera'` y `'pie'`).
+ *
+ * `HeroFondo` tiene su propio comentario largo ahí abajo —cruza las fotos del
+ * hero y respeta `prefers-reduced-motion`—, y merece leerse antes de tocarlo:
+ * las dos cosas que parecen de más (todas las capas en el árbol desde el
+ * principio, y el índice recortado con un módulo) están cada una arreglando un
+ * fallo concreto.
+ *
+ * `interactivo` manda aquí igual que en el resto de `sitio/`: `true` en la web
+ * de verdad, `false` en la vista previa del panel.
+ */
 import { BotonEntrar } from './piezas'
 import IconoRed from '../IconoRed'
 import { type WebPublica, urlSegura } from '../../lib/webPublica'

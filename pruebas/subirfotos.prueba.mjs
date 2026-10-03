@@ -70,6 +70,22 @@ export default async function ({ caso }) {
      */
     'lib/filestore.ts',
     'pages/app/Archivo.tsx',
+    /*
+     * Y LOS DOS SITIOS QUE SOLO LEEN UN ADJUNTO PARA DARLO.
+     *
+     * `leerArchivo(` es el lector del archivo documental, y esta prueba lo
+     * busca porque en la práctica quien lo llama suele estar metiendo una
+     * imagen. Aquí no: estos dos leen un PDF QUE YA ESTÁ GUARDADO para
+     * enseñárselo al hermano en su área o a quien pasa por la web. No suben
+     * nada, así que no tienen a dónde pasar — importar el almacén de imágenes
+     * sería traer código que no usan.
+     *
+     * Lo que esta prueba protege —que un adjunto no acabe en base64 dentro de
+     * una fila— lo cumple el camino de subida, que sigue siendo el de
+     * `Archivo.tsx` y pasa por `filestore.ts`.
+     */
+    'components/DocumentosDelHermano.tsx',
+    'lib/documentosWeb.ts',
   ])
 
   const leenImagenes = archivos.filter((a) => {

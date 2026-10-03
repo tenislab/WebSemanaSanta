@@ -1,3 +1,53 @@
+/**
+ * LA WEB PÚBLICA DE LA HERMANDAD: cargarla, guardarla y publicarla.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ ESTO ESTÁ PARTIDO EN TRES FICHEROS
+ * ----------------------------------------------------------------------------
+ *
+ * Es lo primero que extraña al llegar, y tiene un motivo concreto:
+ *
+ *   · `webPublicaPuro.ts` — las funciones sin dependencias (slugs, orden,
+ *     filtros).
+ *   · `webPublicaDatos.ts` — los tipos, los valores de fábrica y `conDefectos`.
+ *   · ESTE — todo lo que habla con Supabase o con React.
+ *
+ * Las dos primeras las necesitan TAMBIÉN las funciones de servidor de Vercel
+ * (`api/seo.ts` y `api/w.ts`, que sirven las etiquetas Open Graph y el
+ * `sitemap.xml` porque un bot de Twitter no ejecuta JavaScript). Y desde una
+ * función de servidor no se puede importar este fichero: arrastraría React y el
+ * cliente de Supabase dentro del paquete.
+ *
+ * Los dos primeros se REEXPORTAN desde aquí para que el resto de la aplicación
+ * los siga pidiendo en un solo sitio, como siempre. Si añades algo que la
+ * función de servidor vaya a necesitar, va en `Puro` o en `Datos`, no aquí.
+ *
+ * ----------------------------------------------------------------------------
+ * PUBLICADA O NO PUBLICADA, QUE NO ES LO MISMO QUE GUARDADA
+ * ----------------------------------------------------------------------------
+ *
+ * Una hermandad edita su web durante semanas antes de que exista para nadie.
+ * `publicada` es lo que abre la puerta, y lo comprueba LA BASE: todas las
+ * funciones que sirven la web a un visitante llevan `and w.publicada` dentro.
+ * Guardar no publica.
+ *
+ * `cargarWebPorSlug` y `cargarWebPorDominio` son los dos caminos de entrada —la
+ * dirección normal y el dominio propio de la hermandad— y los dos pasan por
+ * funciones `security definer` que devuelven las columnas una a una: nunca por
+ * la tabla. El porqué está en `docs/PARA-UN-INGENIERO.md` §7.
+ *
+ * `enlaceLibre()` existe porque el slug es global: dos hermandades no pueden
+ * compartirlo, y quien lo elige tiene que saberlo antes de guardar.
+ *
+ * ----------------------------------------------------------------------------
+ * `conDefectos` SE APLICA AL LEER
+ * ----------------------------------------------------------------------------
+ *
+ * Una web guardada hace seis meses no tiene los campos que se añadieron
+ * después, y media aplicación recorre esas listas. Completarla al leer es un
+ * sitio; completarla al pintar son veinte y el veintiuno que alguien añada
+ * mañana — y el que se olvide no da error, deja la pantalla en blanco.
+ */
 import { useCallback, useEffect, useState } from 'react'
 import { guardarConAviso, leerPersistido } from './persistencia'
 import { isSupabaseConfigured, supabase } from './supabase'

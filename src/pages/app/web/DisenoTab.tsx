@@ -1,8 +1,32 @@
 /**
- * DISEÑO: plantilla, colores, tipografía, secciones y su orden.
+ * DISEÑO: plantilla, colores, tipografía, secciones, orden y el dominio propio.
  *
- * Es la pestaña más grande del editor, y con motivo: es la que decide cómo se
- * ve todo lo demás.
+ * Es la pestaña más grande del editor de la web, y con motivo: es la que decide
+ * cómo se ve todo lo demás. Cuatro cosas que conviene saber antes de tocarla.
+ *
+ * 1. EL ORDEN Y LA VISIBILIDAD DE LAS SECCIONES SE EDITAN AQUÍ, y es la lista
+ *    que `components/SitioContenido.tsx` recorre para pintar. Las que nacen
+ *    APAGADAS lo hacen a propósito: una sección cuyo contenido no vive en `web`
+ *    —la tienda, los documentos del archivo— no tiene nada que enseñar hasta que
+ *    la hermandad marca algo, y una sección vacía queda peor que no tenerla.
+ *
+ * 2. EL CONTRASTE SE COMPRUEBA (`lib/contraste.ts`). Una hermandad elige sus dos
+ *    colores de marca por devoción, no por legibilidad, y la combinación
+ *    burdeos sobre negro es perfectamente normal y perfectamente ilegible. Se
+ *    avisa en vez de impedirlo: el color es suyo.
+ *
+ * 3. EL DOMINIO PROPIO ES UNA CAPACIDAD DEL PACK «TODO», así que lo que hay que
+ *    enseñar a quien no lo tiene es QUÉ SE GANA, no un botón apagado. Y
+ *    activarlo de verdad no lo hace esta pantalla: se pide
+ *    (`pedirActivarDominio`) porque hay que tocar DNS fuera de la aplicación.
+ *    `lib/dominio.ts` tiene los estados y cómo se explican.
+ *
+ * 4. EL INTERRUPTOR DE «PUBLICADA» ESTÁ AQUÍ, y es lo único de esta pantalla
+ *    que cambia algo para el mundo: guardar no publica. Una hermandad edita su
+ *    web durante semanas antes de que exista para nadie, y con el interruptor
+ *    en «Oculta» ni la portada ni los PDF salen — lo comprueba LA BASE, con un
+ *    `and w.publicada` dentro de cada función que sirve la web a un visitante.
+ *    Ver `lib/webPublica.ts`.
  */
 import { avisosDeContraste } from '../../../lib/contraste'
 import {

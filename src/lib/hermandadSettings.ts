@@ -1,3 +1,49 @@
+/**
+ * LOS AJUSTES DE LA HERMANDAD, QUE SON DE LA HERMANDAD Y NO DE ESTE NAVEGADOR.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ ESTE MÓDULO EXISTE, Y ES UNA LECCIÓN QUE SE REPITIÓ CUATRO VECES
+ * ----------------------------------------------------------------------------
+ *
+ * Todo esto vivía en `localStorage`. En una casa de hermandad con tres
+ * ordenadores eso significa tres configuraciones distintas, y ninguna falla ni
+ * avisa:
+ *
+ *   · El tesorero ponía la papeleta a 18 € en su ordenador y la secretaria
+ *     emitía todo el año al precio de fábrica desde el suyo.
+ *   · El escudo y los colores de la hermandad no aparecían en el área del
+ *     hermano para quien entrara desde otro sitio.
+ *   · Y al cerrar sesión se borra todo lo que empieza por `cabildo-`, así que
+ *     la configuración entera desaparecía.
+ *
+ * Ahora vive en `hermandad_settings`, con `hermandad_id`. Ver
+ * `supabase/ajustes-de-la-hermandad.sql` y `papeletas-simbolica-y-precio.sql`.
+ *
+ * ----------------------------------------------------------------------------
+ * CÓMO SE USA, Y EL DETALLE QUE IMPORTA
+ * ----------------------------------------------------------------------------
+ *
+ * `useHermandadSettings(fallbackNombre)` devuelve los ajustes EN DOS TIEMPOS:
+ * primero lo que haya en la copia local —para pintar ya— y después lo que
+ * traiga Supabase. O sea que el valor CAMBIA solo, un instante después de
+ * montar.
+ *
+ * Eso rompe un formulario que lo use como estado inicial: lo que alguien esté
+ * escribiendo desaparece a mitad de frase. La forma de hacerlo bien está en
+ * `pages/app/Configuracion.tsx`, con una bandera `tocado`: hasta que el
+ * formulario se toca, refleja lo que llegue; desde que se toca, manda quien
+ * escribe.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE AQUÍ NO ES UN SECRETO, AUNQUE LO PAREZCA
+ * ----------------------------------------------------------------------------
+ *
+ * `stripeCuenta` es el DESTINATARIO del cobro (`acct_…`), no la llave: dice a
+ * qué cuenta va el dinero. La clave con la que se habla con Stripe vive en la
+ * función del servidor, y guardar aquí la de cada hermandad habría sido una
+ * fuga con veinte cuentas dentro. Igual con `identificadorAcreedor`, que es un
+ * identificador público que va dentro del fichero SEPA.
+ */
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { useEscuchaOtrasPestanas } from './persistencia'

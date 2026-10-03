@@ -185,6 +185,14 @@ export const PIEZAS = [
    * enlace a ese almacén, aunque no lo necesite para crearse.
    */
   ['imagen-del-evento.sql', 'Que un acto pueda llevar su cartel'],
+  /*
+   * HASTA DÓNDE SALE CADA DOCUMENTO. Va detrás de todo lo que define la
+   * frontera y los permisos del archivo —`multi-hermandad.sql` pone
+   * `hermandad_id`, `lo-que-toca-el-hermano.sql` deja las políticas del
+   * archivo como están— porque añade políticas NUEVAS sin redefinir ninguna de
+   * las suyas. Y detrás de la web pública, porque su función la consulta.
+   */
+  ['documentos-hasta-donde-salen.sql', 'Que el hermano pueda abrir las reglas, y que las actas no salgan a internet'],
   ['vigilancia.sql', 'Que los fallos se apunten solos: con cincuenta hermandades no te los cuenta nadie'],
   ['canal-de-actualizacion.sql', 'Sacar una novedad a una hermandad piloto antes que a todas'],
   ['restaurar-copia.sql', 'Poder volcar la copia de UNA hermandad sin tocar a las demás'],

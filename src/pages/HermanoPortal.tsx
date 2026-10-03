@@ -120,6 +120,9 @@ import {
   useTablaPorHermandad,
   type Sesion,
 } from './portal/sesion'
+import DocumentosDelHermano from '../components/DocumentosDelHermano'
+import { DOCUMENTOS_INICIALES, type Documento } from '../data/documentos'
+import { documentoToRow, rowToDocumento } from '../lib/db/documentos'
 
 export default function HermanoPortal() {
 
@@ -179,6 +182,25 @@ export default function HermanoPortal() {
     EVENTOS_INICIALES,
     eventoToRow,
     rowToEvento,
+    undefined,
+    sinEspejo,
+  )
+  /*
+   * LOS DOCUMENTOS QUE PUEDE VER. La política `documentos_hermano_select` solo
+   * le manda los marcados para hermanos o para la web, así que esto no trae de
+   * más; el componente vuelve a filtrar por si el espejo del navegador guarda
+   * filas de cuando la sesión era de secretaría.
+   *
+   * CON `sinEspejo`, como los eventos: el espejo en `localStorage` es por
+   * hermandad y aquí hay varias de muestra, así que guardarlo mezclaría los
+   * documentos de unas con los de otras.
+   */
+  const [documentos] = useSupabaseTable<Documento>(
+    'documentos',
+    CLAVES_DATOS.documentos,
+    DOCUMENTOS_INICIALES,
+    documentoToRow,
+    rowToDocumento,
     undefined,
     sinEspejo,
   )
@@ -1653,6 +1675,13 @@ export default function HermanoPortal() {
             intentosTarjeta={intentosPago}
           />
         )}
+
+        {/*
+          LOS DOCUMENTOS, ANTES DE «MIS DATOS». Es lo que el hermano viene a
+          consultar —las reglas, un boletín—, y lo de abajo es lo que viene a
+          cambiar. Primero lo que se lee, después lo que se toca.
+        */}
+        <DocumentosDelHermano documentos={documentos} />
 
         {/* Mis datos */}
         <section className="portal__section">

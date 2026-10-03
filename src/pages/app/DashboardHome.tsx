@@ -1,3 +1,48 @@
+/**
+ * INICIO: la primera pantalla del panel. Resumen, avisos y el guiado inicial.
+ *
+ * ----------------------------------------------------------------------------
+ * NO INVENTA NI UN NÚMERO, Y ESO COSTÓ ARREGLARLO
+ * ----------------------------------------------------------------------------
+ *
+ * Es la única pantalla que no tiene datos propios: todo lo que enseña es de
+ * otras. Y leía solo del navegador, cayendo en los DATOS DE EJEMPLO cuando no
+ * encontraba nada. El resultado: una hermandad recién creada abría el panel y
+ * se encontraba «4 cuotas pendientes» y «un hermano pagó su cuota anual»
+ * teniendo CERO hermanos. Números inventados en la primera pantalla que ve un
+ * cliente, y encima contradiciéndose entre ellos.
+ *
+ * Por eso monta siete `useSupabaseTable` de solo lectura. Es caro y es a
+ * propósito: una cifra falsa en Inicio es peor que ninguna cifra.
+ *
+ * Si añades un número aquí, sale de uno de esos hooks. Nunca de `leerDatos`,
+ * que con base de datos conectada devuelve VACÍO en un navegador recién
+ * estrenado (a propósito: ver `lib/persistencia.ts`).
+ *
+ * ----------------------------------------------------------------------------
+ * EL GUIADO DE LA PRIMERA VEZ MIRA EL DATO, NO UNA MARCA
+ * ----------------------------------------------------------------------------
+ *
+ * `estadoPuestaEnMarcha` comprueba el hecho de verdad en cada paso: hay censo,
+ * hay tramos, está el correo puesto, hay un IBAN. NO una marca de «este paso ya
+ * se hizo» guardada aparte.
+ *
+ * El motivo: con una marca, quien borra su censo se queda con el paso tachado
+ * para siempre, y el guion pasa a decir mentiras justo cuando más falta hace.
+ * Ver `lib/primerosPasos.ts`.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE SE VE DEPENDE DEL CARGO Y DEL PLAN
+ * ----------------------------------------------------------------------------
+ *
+ * Los recuadros se filtran por el módulo al que llevan (`statsVisibles`): un
+ * tesorero no ve un resumen de una pantalla en la que no puede entrar, porque
+ * un número que lleva a una puerta cerrada es peor que no estar.
+ *
+ * Y el cargo se resuelve contra la LISTA REAL DE PERSONAL
+ * (`useCargoDeLaSesion()`), no contra el `user_metadata` de la sesión, que lo
+ * puede reescribir cualquiera desde la consola del navegador.
+ */
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'

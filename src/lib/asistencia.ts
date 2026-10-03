@@ -189,3 +189,20 @@ export function asistenciaEnUnaFrase(historial: AnioDeAsistencia[]): string {
   const frase = partes.join(' y ')
   return ultimaFalta ? `${frase} (la última, en ${ultimaFalta.anio})` : frase
 }
+
+/**
+ * EL RECUENTO DE UN TRAMO, en los tres números que se preguntan el día de la
+ * salida.
+ *
+ * Vive aquí y no en `components/ChipsAsistencia.tsx`, que es quien la pinta,
+ * por dos motivos: es lógica y no pintura —una prueba la ejecuta con una lista
+ * a mano, sin montar nada—, y un fichero de componentes que exporta además una
+ * función rompe la recarga en caliente de Vite (`react-refresh`).
+ */
+export function cuentaAsistencia(
+  estados: EstadoAsistencia[],
+): { asisten: number; noAsisten: number; pendientes: number } {
+  const asisten = estados.filter((e) => e === 'asiste').length
+  const noAsisten = estados.filter((e) => e === 'no_asiste').length
+  return { asisten, noAsisten, pendientes: estados.length - asisten - noAsisten }
+}

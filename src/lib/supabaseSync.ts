@@ -1,3 +1,59 @@
+/**
+ * CÓMO VIAJA UN DATO. El fichero más importante del proyecto.
+ *
+ * ----------------------------------------------------------------------------
+ * `useSupabaseTable`: SE USA COMO UN `useState` Y HACE CUATRO COSAS
+ * ----------------------------------------------------------------------------
+ *
+ * Cada pantalla lo monta para su colección y recibe `[items, setItems]`. Por
+ * dentro:
+ *
+ *   1. Pinta YA con lo que haya en `localStorage` (o los datos de ejemplo).
+ *   2. Pide la tabla a Supabase y repinta cuando llega.
+ *   3. Cada `setX` escribe en la base Y deja copia en el navegador.
+ *   4. Escucha los cambios de las otras pestañas.
+ *
+ * Y si una escritura falla por red, SE ENCOLA y se manda sola
+ * (`lib/colaEscritura.ts`). Si falla por otra cosa, se avisa: el marco de la
+ * aplicación escucha la señal `cabildo-sync-error` y pinta la banda.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ HAY UN ESPEJO EN EL NAVEGADOR AUNQUE HAYA BASE DE DATOS
+ * ----------------------------------------------------------------------------
+ *
+ * Porque las pantallas se leen entre ellas. Hermanos necesita el tramo de cada
+ * uno (que está en las papeletas); Comunicados necesita saber quién debe dinero
+ * (que está en las cuotas). Esas lecturas cruzadas se hacen con `leerDatos()`
+ * contra el espejo, sin montar la pantalla dueña del dato. Sin espejo, verían
+ * los datos de ejemplo para siempre.
+ *
+ * ----------------------------------------------------------------------------
+ * LAS DOS TRAMPAS DEL ESPEJO. LAS DOS YA SE PAGARON
+ * ----------------------------------------------------------------------------
+ *
+ * · `sinEspejo` — el panel y el área del hermano montan el mismo hook con la
+ *   MISMA clave local, pero a un hermano las políticas solo le dejan ver SU
+ *   ficha. En el ordenador de la casa de hermandad, con el panel abierto en una
+ *   pestaña y un hermano entrando en otra, la secretaria vio cómo sus 400
+ *   hermanos se convertían en 1 delante de sus ojos. Y la copia se quedaba así.
+ * · LA VENTANA (`ventana`) — traerse solo una parte de la tabla. Son DOS
+ *   MITADES que tienen que decir lo mismo: `filtroOr` va a la base y `dentro()`
+ *   responde lo mismo en memoria. No las construyas aquí a mano: usa las de
+ *   `lib/ventanaHistorico.ts`, que las tiene juntas y con una prueba que las
+ *   compara. Dos mitades que discrepan no dan error, dan totales que no cuadran.
+ *   Y entonces el espejo MEZCLA en vez de sustituir, para no borrarle a las
+ *   otras pantallas la historia que cae fuera de la ventana.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE **NO** DEBE PASAR POR AQUÍ
+ * ----------------------------------------------------------------------------
+ *
+ * Cuando una operación son varias cosas que tienen que pasar JUNTAS, no se hace
+ * desde el navegador: se llama a una función de Postgres. Una venta de la tienda
+ * son seis escrituras (la factura, sus líneas, el stock, el apunte de
+ * tesorería…), así que la escribe `registrar_venta`. Lo mismo con las remesas,
+ * los certificados, el registro de actividad y los cobros.
+ */
 import { traducirErrorDeEscritura, type ErrorTraducido } from './errorDeBaseDeDatos'
 import { traerTodasLasFilas } from './paginado'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -35,7 +91,14 @@ type Actualizador<T> = T[] | ((prev: T[]) => T[])
  * lo segundo: la pantalla se quedaba vacía o con lo que hubiera en el
  * navegador, sin decir nada, y la secretaría se ponía a trabajar encima.
  */
-function avisarDeFallo(tabla: string, motivo: string) {
+/*
+ * SE EXPORTA, Y ERAN DOS. `tienda.ts` tenía su propia copia, palabra por
+ * palabra y con su propio comentario, para avisar de que el catálogo de la web
+ * no se había podido traer; al necesitar lo mismo para los documentos de la
+ * web iban a ser tres. Una sola, y aquí, que es donde vive la señal que el
+ * marco de la aplicación escucha.
+ */
+export function avisarDeFallo(tabla: string, motivo: string) {
   if (typeof window === 'undefined') return
   window.dispatchEvent(
     new CustomEvent('cabildo-sync-error', {

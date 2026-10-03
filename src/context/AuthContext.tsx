@@ -1,3 +1,69 @@
+/**
+ * QUIÉN HA ENTRADO, Y EN CUÁL DE LOS DOS MODOS.
+ *
+ * ----------------------------------------------------------------------------
+ * LO PRIMERO: HAY DOS USUARIOS, NO UNO
+ * ----------------------------------------------------------------------------
+ *
+ *   · `realUser` — la sesión de Supabase Auth.
+ *   · `demoUser` — la sesión del MODO LOCAL, que vive en el navegador y con la
+ *     que la aplicación entera funciona sin base de datos (ver `lib/supabase.ts`).
+ *
+ * `user` es el que haya. Todo lo demás en este fichero existe porque pasar de
+ * uno a otro, y volver, tiene más casos de los que parece.
+ *
+ * ----------------------------------------------------------------------------
+ * LOS ESTADOS QUE HAY QUE CONOCER ANTES DE TOCAR ESTO
+ * ----------------------------------------------------------------------------
+ *
+ * · `loading` — todavía no se sabe si hay sesión. Mientras esté, nadie pasa.
+ * · `mfaPendiente` — y son TRES valores, no dos: `null` es «aún no sé si esta
+ *   sesión necesita el segundo paso», y es distinto de `false`. La sesión se ve
+ *   ANTES de poder preguntarlo, así que con `false` de salida una pestaña ya
+ *   abierta en `/app` pintaba el panel un instante con la sesión a medio
+ *   verificar. Arranca en `null` cuando hay Supabase, y `ProtectedRoute` no
+ *   deja pasar hasta que se resuelve.
+ * · `degradado` — Supabase está configurado pero no responde (el plan gratuito
+ *   PAUSA el proyecto tras unos días). Ojo: caerse al modo local aquí está
+ *   desactivado por defecto a propósito, porque enseñar un censo de ejemplo a
+ *   quien cree estar viendo el suyo es peor que decir «esto está caído». Está
+ *   contado entero en `lib/supabase.ts` → `sinModoLocal`.
+ *
+ * ----------------------------------------------------------------------------
+ * LOS DOS FALLOS QUE EXPLICAN LA FORMA DE `sincronizarSesion`
+ * ----------------------------------------------------------------------------
+ *
+ * Los dos son del ordenador compartido de una casa de hermandad, que es donde
+ * esto se usa de verdad:
+ *
+ * 1. UNA SESIÓN PUEDE CAMBIAR DE PERSONA SIN PASAR POR UNA SESIÓN NULA. La
+ *    secretaria de la hermandad A está dentro del panel; alguien de la
+ *    hermandad B abre en ese mismo navegador su enlace de «confirma tu correo».
+ *    Supabase canjea el token y avisa con la sesión de B, sin emitir antes un
+ *    cierre de sesión. Como la hermandad recordada solo se olvidaba al cerrar
+ *    sesión, B entraba viendo el censo de A. Por eso se guarda
+ *    `ultimoUsuario` y se olvida todo ANTES de averiguar nada del nuevo.
+ *
+ * 2. LA MARCA DEL MODO DEMOSTRACIÓN SOBREVIVE A TODO. Quien primero prueba la
+ *    demostración —que es lo que hace todo el mundo— y luego conecta su base de
+ *    datos se quedaba con la marca puesta, y la aplicación le seguía enseñando
+ *    el censo de ejemplo en vez del suyo: parece que la base no funciona,
+ *    cuando lo que pasa es que no se está mirando. Por eso `limpiarModoDemo()`
+ *    va donde se RESUELVE la sesión y no solo al iniciarla: así quedan
+ *    cubiertos registrarse, entrar, volver con la sesión guardada y confirmar
+ *    el correo.
+ *
+ * ----------------------------------------------------------------------------
+ * Y LO QUE NO ESTÁ AQUÍ
+ * ----------------------------------------------------------------------------
+ *
+ * · A qué hermandad pertenece la cuenta → `lib/multiHermandad.ts`.
+ * · Qué módulos ve su cargo → `lib/permisos.ts`.
+ * · La entrada del HERMANO (que entra con su DNI, no con un correo) →
+ *   `pages/EntradaUnificada.tsx` y `resolver_email_hermano` en la base.
+ * · El alta de cuentas de otras personas, que usa un segundo cliente para no
+ *   expulsar de la suya a quien las crea → `supabaseAlta` en `lib/supabase.ts`.
+ */
 import {
   createContext,
   useContext,

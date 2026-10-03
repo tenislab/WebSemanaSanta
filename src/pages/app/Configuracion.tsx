@@ -1,3 +1,57 @@
+/**
+ * CONFIGURACIÓN: los ajustes de la hermandad, en secciones.
+ *
+ * ----------------------------------------------------------------------------
+ * LA REGLA QUE GOBIERNA TODO ESTE MÓDULO
+ * ----------------------------------------------------------------------------
+ *
+ * LOS AJUSTES SON DE LA HERMANDAD, NO DE ESTE NAVEGADOR. Parece obvio y no lo
+ * era: el precio de la papeleta, las etiquetas, los conceptos de cuota y los
+ * catálogos vivían en `localStorage`, y el resultado en una casa de hermandad
+ * con tres ordenadores era tres precios distintos y un comunicado que no se
+ * podía mandar porque la etiqueta «Costalero de repuesto» solo existía en el
+ * ordenador del mayordomo. Todo eso está ahora en la base; ver
+ * `supabase/ajustes-de-la-hermandad.sql`, `papeletas-simbolica-y-precio.sql`,
+ * `clave-de-catalogos.sql` y `redes-sociales.sql` — los cuatro se escribieron
+ * para arreglar la misma clase de fallo.
+ *
+ * Al tocar algo de aquí, pregúntate siempre: ¿esto tiene que seguir siendo
+ * verdad en el ordenador de al lado? Si sí, va a la base.
+ *
+ * ----------------------------------------------------------------------------
+ * EL FORMULARIO NO SE PISA MIENTRAS SE ESCRIBE
+ * ----------------------------------------------------------------------------
+ *
+ * `settingsRemotas` llega en dos tiempos: primero la caché local, después lo
+ * que traiga Supabase. Si eso sobreescribiera el formulario sin más, lo que
+ * alguien esté escribiendo desaparecería a mitad de frase. De ahí `tocado`:
+ * hasta que el formulario se toca, refleja lo que llegue; desde que se toca,
+ * manda quien escribe.
+ *
+ * ----------------------------------------------------------------------------
+ * LA MUDANZA DE LAS IMÁGENES, QUE PASA AL ABRIR ESTA PANTALLA
+ * ----------------------------------------------------------------------------
+ *
+ * Los ajustes llevaban las imágenes DENTRO, en base64: un escudo de 700 KB y
+ * el modelo de papeleta escaneado al lado, viajando en cada carga del panel y
+ * de la web pública. Arreglar el camino de subida solo arregla lo que se suba a
+ * partir de hoy, así que al abrir esta pantalla se recorren los ajustes enteros
+ * y se sube al almacén lo que lleven escrito dentro.
+ *
+ * Va A CIEGAS, sin conocer los campos, y es deliberado: así salen el escudo, el
+ * modelo de papeleta y el del recibo, y también saldrá lo que se añada mañana.
+ * Ver `lib/imagenes.ts` y `supabase/imagenes.sql`.
+ *
+ * ----------------------------------------------------------------------------
+ * LAS SECCIONES, EN `ajustes/`
+ * ----------------------------------------------------------------------------
+ *
+ * `CuerposYTramos` (la estructura del cortejo), `CatalogosYCuotas`,
+ * `CamposPropiosCard` (los campos que cada hermandad añade a la ficha del
+ * hermano), `CorreoCard`, `ConexionesCard`, `CopiasYDatos` y
+ * `PuestaEnMarchaCard`. La sección abierta se recuerda en `sessionStorage`
+ * porque de aquí se entra y se sale mucho.
+ */
 import { hayAlmacen, mudarImagenes, recibirImagen, sustituirImagenes } from '../../lib/almacenImagenes'
 import { leerArchivo } from '../../lib/imagen'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'

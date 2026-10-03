@@ -1,3 +1,62 @@
+/**
+ * LA WEB PÚBLICA DE UNA HERMANDAD, TAL COMO LA VE QUIEN PASA POR LA CALLE.
+ *
+ * ----------------------------------------------------------------------------
+ * LO PRIMERO: AQUÍ NO HAY CUENTA
+ * ----------------------------------------------------------------------------
+ *
+ * Esta pantalla la abre cualquiera, sin sesión. Eso cambia todas las reglas
+ * respecto al panel:
+ *
+ * · NO SE LEE NINGUNA TABLA. Todo llega por funciones `security definer` de la
+ *   base —`hermandad_de_la_web`, `documentos_de_la_web`…— que devuelven las
+ *   columnas UNA A UNA y solo si la web está publicada. Abrir una tabla a
+ *   `anon` con una política sería una puerta más ancha: el día que esa tabla
+ *   reciba una columna con algo delicado, se colaría sola. Está explicado en
+ *   `docs/PARA-UN-INGENIERO.md` §7.
+ * · Y POR LO MISMO, NO HAY `hermandad_actual()`: quien mira no tiene sesión, así
+ *   que la hermandad se resuelve por el SLUG de la dirección y se fija con
+ *   `fijarHermandadDeLaPagina()` — que es lo que luego permite que un
+ *   formulario de contacto sepa a quién va el mensaje.
+ *
+ * ----------------------------------------------------------------------------
+ * SE LLEGA AQUÍ POR TRES CAMINOS, Y HAY QUE CONOCER LOS TRES
+ * ----------------------------------------------------------------------------
+ *
+ * 1. `/w/:slug` — la dirección normal. El slug está en `useParams()`.
+ * 2. EL DOMINIO PROPIO de la hermandad. Entonces su web vive en `/` y no hay
+ *    slug en la ruta: `Raiz` ya ha resuelto la web y la pasa en `webPorDominio`.
+ *    Por eso `slug` sale de `slugRuta ?? webPorDominio?.slug`, y por eso hay en
+ *    `App.tsx` un juego de rutas duplicado colgando de la raíz (`/n/:noticia`,
+ *    `/t/:titular`, `/c/:culto`): sin ellas caían en el comodín y volvían a la
+ *    portada, y son exactamente las direcciones que la propia aplicación mete
+ *    en el `sitemap.xml`.
+ * 3. `?preview=1` — la VISTA PREVIA del panel, que enseña la web aunque no esté
+ *    publicada. De ahí viene la prop `interactivo` que se le pasa a los
+ *    componentes de `sitio/`: es `true` en la web DE VERDAD —donde los enlaces
+ *    navegan— y `false` en la vista previa. Es fácil de invertir y ya se
+ *    invirtió una vez: un botón «Descargar» apagado para todos los visitantes y
+ *    encendido solo donde no hay nada que descargar.
+ *
+ * ----------------------------------------------------------------------------
+ * UNA PANTALLA, CINCO PÁGINAS
+ * ----------------------------------------------------------------------------
+ *
+ * Según qué parámetro traiga la ruta, esto pinta la portada, una noticia, el
+ * listado de noticias, la ficha de un titular o un culto. Cada una con su
+ * enlace propio porque son las que se pegan en el grupo de WhatsApp cuando se
+ * anuncia un quinario, y con sus etiquetas Open Graph — que las sirve
+ * `api/seo.ts` en el servidor, porque un bot de Twitter no ejecuta JavaScript.
+ *
+ * El CONTENIDO lo pinta `components/SitioContenido.tsx` y sus piezas de
+ * `components/sitio/`; esto resuelve qué hermandad, qué página y con qué
+ * aspecto. Los colores y la pareja tipográfica son de la hermandad
+ * (`PAREJAS_TIPOGRAFICAS`, `asegurarFuentesDeLaWeb`).
+ *
+ * Y SE CUENTA LA VISITA (`lib/visitas.ts`): sin cookies y sin Google
+ * Analytics, por lo que vale una visita y por lo que cuesta un banner de
+ * consentimiento.
+ */
 import { asegurarFuentesDeLaWeb } from '../lib/fuentesDeLaWeb'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
@@ -39,11 +98,7 @@ import {
   urlAbsoluta,
 } from '../lib/seoWeb'
 
-/**
- * Web pública de la hermandad (/w/:slug). Con ?preview=1 se muestra aunque no
- * esté publicada (para la vista previa del panel). El render vive en
- * SitioContenido, compartido con la vista previa.
- */
+/** Ver la cabecera del fichero: los tres caminos de entrada y las cinco páginas. */
 export default function SitioPublico({ webPorDominio }: { webPorDominio?: WebPublica } = {}) {
   // Las doce letras del catálogo, solo aquí: ver lib/fuentesDeLaWeb.ts.
   useEffect(() => { asegurarFuentesDeLaWeb() }, [])

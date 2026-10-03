@@ -26,7 +26,7 @@ import { join } from 'node:path'
  * dejado dos arneses que se separan con el tiempo. Ver `pruebas/postgres.mjs`.
  */
 import {
-  PUERTO, hayPostgres, sql, montarLoQuePoneSupabase, darLosPermisosDeSupabase,
+  PUERTO, hayPostgres, sql, montarLoQuePoneSupabase, darLosPermisosDeSupabase, loQueDijoPostgres,
 } from './postgres.mjs'
 
 /** Todos los ficheros de código de una carpeta, recorriéndola entera. */
@@ -358,6 +358,7 @@ export default async function ({ caso }) {
   await ningunaFilaSePuedeQuedarSinDuena({ sql, caso })
   await hermanoDeDosHermandades({ sql, caso })
   await elWebhookDeStripeActivaLaSuscripcion({ sql, caso })
+  await hastaDondeSaleUnDocumento({ sql, caso })
   await elMandatoSepaLoFirmaElPropioHermano({ sql, caso })
   await elEncargoDeRedesSeReparte({ sql, caso })
   await laTiendaVendeYCuadra({ sql, caso })
@@ -2269,6 +2270,8 @@ async function cadaFuncionAbiertaTieneSuMotivo({ sql, caso }) {
     crear_reserva_web: 'apartar un producto desde la web, sin cobrar',
     contar_visita: 'el contador de visitas de la web (valida que la hermandad exista)',
     hermandad_de_la_web: 'los datos de contacto de una web PUBLICADA',
+    documentos_de_la_web: 'las reglas y boletines que la hermandad marca para la web, de una web PUBLICADA',
+    ruta_del_documento: 'dónde está el PDF de un documento que SÍ está en una web publicada (el visitante no sabe el id de la hermandad)',
     hermandad_de_la_tienda: 'de quién es la tienda de ese enlace, si está publicada',
     hermandades_publicas: 'el buscador de hermandades de la portada',
     suscribirse_a_la_web: 'apuntarse al boletín desde la web',
@@ -5711,4 +5714,223 @@ async function elCertificadoDeAntiguedad({ sql, caso }) {
     `select has_function_privilege('authenticated', p.oid, 'execute')::text
        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname = 'columnas_que_faltan_para_restaurar'`)))
+}
+
+/**
+ * HASTA DÓNDE SALE CADA DOCUMENTO DEL ARCHIVO.
+ *
+ * Esto se prueba CONTRA POSTGRES y con los roles de verdad —`anon` y un
+ * `authenticated` con la sesión de un hermano— porque es lo único que vale:
+ * aquí lo que se abre de más no da un error, da un acta de cabildo en Google.
+ *
+ * El punto de partida era una promesa sin cumplir. El formulario preguntaba
+ * «Quién puede verlo: Todos los hermanos», y el tipo de datos lo repetía
+ * («null = visible para cualquier hermano autenticado»), pero las políticas
+ * del archivo llevan `not auth_es_hermano()`: un hermano no veía ni las reglas
+ * de su hermandad por ningún camino.
+ */
+async function hastaDondeSaleUnDocumento({ sql, caso }) {
+  const HD = `'11111111-0000-4000-8000-000000000aaa'::uuid`
+  const OTRA = `'11111111-0000-4000-8000-000000000bbb'::uuid`
+  /*
+   * SIN `::uuid` AQUÍ: `set local request.jwt.claim.sub` es un ajuste de
+   * sesión y toma una cadena a secas, así que con el cast psql corta con
+   * «syntax error at or near "::"». El cast se pone donde hace falta, en el
+   * `insert`. Costó la primera pasada de esta prueba.
+   */
+  const CUENTA = `'22222222-0000-4000-8000-000000000aaa'`
+  const HNO = `'33333333-0000-4000-8000-000000000aaa'::uuid`
+  const DOC = (n) => `'44444444-0000-4000-8000-00000000000${n}'::uuid`
+
+  await sql(`
+    insert into hermandades (id, nombre) values (${HD}, 'La del archivo')
+      on conflict (id) do nothing;
+    insert into hermandades (id, nombre) values (${OTRA}, 'La de al lado')
+      on conflict (id) do nothing;
+    insert into auth.users (id, email, raw_user_meta_data)
+      values (${CUENTA}::uuid, 'hermano-archivo@ejemplo.com', '{"tipo":"hermano"}')
+      on conflict (id) do nothing;
+    delete from hermanos where id = ${HNO};
+    insert into hermanos (id, hermandad_id, nombre, dni, numero, estado, auth_user_id)
+      values (${HNO}, ${HD}, 'Rafael', '11111111H', 1, 'Activo', ${CUENTA}::uuid);
+
+    delete from documentos where id in (${DOC(1)}, ${DOC(2)}, ${DOC(3)}, ${DOC(4)});
+    insert into documentos (id, hermandad_id, numero, nombre, categoria, publicacion) values
+      (${DOC(1)}, ${HD}, 901, 'Acta de cabildo', 'Acta', 'junta'),
+      (${DOC(2)}, ${HD}, 902, 'Boletín de Cuaresma', 'Boletín', 'hermanos'),
+      (${DOC(3)}, ${HD}, 903, 'Reglas y Estatutos', 'Regla', 'web'),
+      (${DOC(4)}, ${OTRA}, 904, 'Reglas de la de al lado', 'Regla', 'web');
+
+    delete from web_publica where hermandad_id in (${HD}, ${OTRA});
+    insert into web_publica (hermandad_id, slug, publicada)
+      values (${HD}, 'la-del-archivo', true), (${OTRA}, 'la-de-al-lado', false);
+  `)
+
+  /** Una consulta con la sesión de ese hermano, como la haría su navegador. */
+  const comoElHermano = (consulta) => sql(`
+    begin;
+    set local role authenticated;
+    set local request.jwt.claim.sub = ${CUENTA};
+    set local request.jwt.claims = '{"user_metadata":{"tipo":"hermano"}}';
+    ${consulta}
+    rollback;
+  `)
+  /** Y una sin sesión de nadie: el visitante de la web. */
+  const comoUnVisitante = (consulta) => sql(`
+    begin; set local role anon; ${consulta} rollback;
+  `)
+
+  // ── EL HERMANO ───────────────────────────────────────────────────────────
+  const loQueVeElHermano = await comoElHermano(
+    `select string_agg(nombre, ' | ' order by numero) from documentos;`,
+  )
+  const lista = loQueVeElHermano.split('\n').map((l) => l.trim()).find((l) => /\|/.test(l) || /Reglas|Bolet|Acta/.test(l))
+  caso('el hermano ve el boletín y las reglas', 'Boletín de Cuaresma | Reglas y Estatutos', lista)
+  // Y el acta NO: es lo que antes no se podía ni preguntar, porque no veía nada.
+  caso('y no ve el acta de cabildo', false, /Acta de cabildo/.test(loQueVeElHermano))
+  // Ni lo de la hermandad de al lado, aunque esté marcado para la web: la
+  // frontera entre hermandades manda sobre todo lo demás.
+  caso('ni las reglas de la hermandad de al lado', false, /la de al lado/.test(loQueVeElHermano))
+
+  /*
+   * Y NO PUEDE TOCAR NADA. Es de solo lectura: si pudiera cambiar
+   * `publicacion`, un hermano podría publicarse un acta a sí mismo — que es
+   * exactamente el agujero que esto viene a no abrir.
+   */
+  const intento = await comoElHermano(`
+    update documentos set publicacion = 'web' where numero = 901;
+    select publicacion from documentos where numero = 901;
+  `)
+  caso('el hermano no puede publicar un documento', false, /web/.test(intento))
+
+  // ── EL VISITANTE ─────────────────────────────────────────────────────────
+  /*
+   * LA TABLA ESTÁ CERRADA PARA ÉL. No hay política para `anon` sobre
+   * `documentos` a propósito: lo que sale va por una función que devuelve las
+   * columnas UNA A UNA, para que el día que se añada una columna con algo
+   * delicado no se cuele sola.
+   */
+  const tablaDirecta = await comoUnVisitante(`select count(*) from documentos;`)
+  caso('un visitante no lee la tabla de documentos', true,
+    /\b0\b/.test(tablaDirecta) || /permission denied/i.test(tablaDirecta))
+
+  const porLaFuncion = await comoUnVisitante(
+    `select string_agg(nombre, ' | ') from documentos_de_la_web('la-del-archivo');`,
+  )
+  caso('pero sí las reglas por la función', true, /Reglas y Estatutos/.test(porLaFuncion))
+  caso('y solo las reglas', false, /Acta de cabildo|Boletín/.test(porLaFuncion))
+
+  /*
+   * UNA WEB SIN PUBLICAR NO REPARTE NADA. La hermandad de al lado tiene sus
+   * reglas marcadas para la web y la web en preparación: hasta que le dé a
+   * publicar, sus documentos no salen. Si no, el enlace funcionaría antes de
+   * que la hermandad decidiera que existía.
+   */
+  const sinPublicar = await comoUnVisitante(
+    `select count(*) from documentos_de_la_web('la-de-al-lado');`,
+  )
+  caso('una web sin publicar no reparte sus documentos', true, /\b0\b/.test(sinPublicar))
+
+  /*
+   * LA FUNCIÓN NO DEVUELVE LA FILA ENTERA, y es la razón de que exista. Se
+   * comprueba contra las columnas de la tabla: si alguien cambia el `select
+   * d.*` por comodidad, esto se pone rojo.
+   */
+  const columnas = await sql(`
+    select string_agg(a.attname, ',' order by a.attnum)
+    from pg_proc p
+    join unnest(p.proallargtypes, p.proargmodes, p.proargnames)
+      with ordinality as a(tipo, modo, attname, attnum) on true
+    where p.proname = 'documentos_de_la_web' and a.modo = 't';
+  `)
+  caso('la función no devuelve archivado_por', false, /archivado_por/.test(columnas))
+  caso('ni los cargos con acceso', false, /cargos_con_acceso/.test(columnas))
+  caso('ni el proveedor de un contrato', false, /proveedor/.test(columnas))
+  caso('y sí lo que hace falta para descargarlo', true,
+    /archivo_nombre/.test(columnas) && /archivo_tipo/.test(columnas))
+
+  // ── EL FRENO DE LO RESTRINGIDO ───────────────────────────────────────────
+  /*
+   * UN DOCUMENTO RESTRINGIDO A CARGOS NO SALE DE LA JUNTA, y lo frena la
+   * TABLA. La pantalla también lo impide, pero una regla que separa «se me ha
+   * ido el ratón» de «un acta reservada al Fiscal está indexada» no se deja en
+   * el navegador: ahí la salta cualquiera con la consola abierta.
+   */
+  /*
+   * SE COMPRUEBA POR LA EXCEPCIÓN, NO POR UN `raise notice`.
+   *
+   * La primera versión usaba `exception when check_violation then raise notice
+   * 'FRENADO'`, y los tres casos salieron en verde-falso: un `notice` va por
+   * STDERR y el arnés devuelve la salida normal, así que el texto no aparecía
+   * nunca y `/FRENADO/` daba false. La guarda decía «no frena» contra una base
+   * que frenaba bien. Con `ON_ERROR_STOP=1`, un `check` que salta hace que la
+   * consulta falle, y eso sí se ve: se atrapa y se lee el error.
+   */
+  const frena = async (consulta) => {
+    try {
+      await sql(consulta)
+      return 'NO FRENÓ'
+    } catch (e) {
+      return loQueDijoPostgres(e)
+    }
+  }
+
+  caso('no se puede publicar lo restringido a cargos', true,
+    /documentos_restringido_no_sale/.test(await frena(`
+      update documentos set cargos_con_acceso = array['Fiscal'], publicacion = 'web'
+      where id = ${DOC(1)};
+    `)))
+
+  // Y al revés: no se puede restringir lo que ya está publicado sin bajarlo.
+  caso('ni restringir lo que ya está en la web', true,
+    /documentos_restringido_no_sale/.test(await frena(`
+      update documentos set cargos_con_acceso = array['Fiscal'] where id = ${DOC(3)};
+    `)))
+
+  /*
+   * Y NO HAY UN CUARTO DESTINO. Tres valores y nada más: un `publicacion`
+   * escrito a mano con otra palabra —o con una mayúscula de más— entraría sin
+   * decir nada y el filtro de la función lo dejaría fuera en silencio, así que
+   * el documento no saldría y nadie sabría por qué.
+   */
+  caso('no cabe un destino inventado', true,
+    /documentos_publicacion_valida/.test(await frena(`
+      update documentos set publicacion = 'Web' where id = ${DOC(2)};
+    `)))
+
+  /*
+   * EL VALOR POR DEFECTO ES LA JUNTA. Un documento que ya estaba subido antes
+   * de esta columna no puede aparecer en internet por el hecho de actualizar
+   * la base. Es lo último que se quiere de una actualización que toca
+   * permisos, y se comprueba insertando sin decir nada.
+   */
+  const porDefecto = await sql(`
+    insert into documentos (hermandad_id, numero, nombre, categoria)
+      values (${HD}, 905, 'Subido sin decir hasta dónde', 'Acta');
+    select publicacion from documentos where numero = 905;
+  `)
+  caso('lo que no dice nada se queda en la junta', true, /junta/.test(porDefecto))
+
+  /*
+   * LA RUTA DEL FICHERO solo se da por un documento que está en la web. El
+   * visitante no conoce el id de la hermandad —solo el slug—, así que la
+   * carpeta la dice la base; y si alguien prueba con el id de un acta, esto
+   * devuelve vacío y la descarga no llega ni a intentarse.
+   */
+  const rutaDeLasReglas = await comoUnVisitante(
+    `select ruta_del_documento('la-del-archivo', ${DOC(3)});`,
+  )
+  caso('se da la ruta del PDF de las reglas', true,
+    rutaDeLasReglas.includes('11111111-0000-4000-8000-000000000aaa/44444444-0000-4000-8000-000000000003'))
+  const rutaDelActa = await comoUnVisitante(
+    `select coalesce(ruta_del_documento('la-del-archivo', ${DOC(1)}), 'NADA');`,
+  )
+  caso('y no la del acta', true, /NADA/.test(rutaDelActa))
+  // Ni cambiando de web: el slug y el documento tienen que ser de la misma.
+  const rutaCruzada = await comoUnVisitante(
+    `select coalesce(ruta_del_documento('la-de-al-lado', ${DOC(3)}), 'NADA');`,
+  )
+  caso('ni cruzando el slug de otra hermandad', true, /NADA/.test(rutaCruzada))
+
+  await sql(`delete from documentos where numero in (901, 902, 903, 904, 905);`)
 }

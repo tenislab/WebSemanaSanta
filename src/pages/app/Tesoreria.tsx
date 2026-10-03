@@ -1,3 +1,46 @@
+/**
+ * TESORERÍA: el libro de cuentas de la hermandad.
+ *
+ * ----------------------------------------------------------------------------
+ * ESTA TABLA ES EL DESTINO DE MEDIA APLICACIÓN
+ * ----------------------------------------------------------------------------
+ *
+ * `movimientos` no se llena solo desde aquí. Le escriben, y tienen que
+ * escribirle, Cuotas (cada recibo cobrado), Papeletas (cada papeleta pagada),
+ * la Tienda (cada venta) y Campañas (cada donativo). De ahí que esas pantallas
+ * monten esta tabla aunque no sea lo suyo: sin ese apunte, el dinero entra en
+ * la hermandad y el libro de cuentas no se entera.
+ *
+ * Lo mejor que puedes hacer si añades una forma de cobrar algo es buscar cómo
+ * lo hace Cuotas y copiarlo. Ver también `supabase/apuntes-automaticos.sql`,
+ * que es lo que hace que los cobros lleguen solos.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE SE LEE DESDE AQUÍ, Y QUE NO SE GUARDA EN DOS SITIOS
+ * ----------------------------------------------------------------------------
+ *
+ * · LO RECAUDADO por una campaña se cuenta desde estos apuntes cada vez
+ *   (`lib/recaudaciones.ts`), y NO se guarda como total aparte: dos verdades
+ *   sobre el mismo dinero es el peor fallo posible aquí.
+ * · LA CUENTA DE PÉRDIDAS Y GANANCIAS de Informes reparte estos apuntes entre
+ *   partidas con reglas porcentuales (`lib/repartos.ts`), y esas reglas NO
+ *   escriben apuntes nunca: son una forma de LEER los que ya hay.
+ * · EL ESTADO DE CUENTAS que se entrega en la diócesis sale de aquí. Un apunte
+ *   mal no es un bug de pantalla: es un papel firmado con cifras que no son.
+ *
+ * ----------------------------------------------------------------------------
+ * EL ESTADO DE UN APUNTE
+ * ----------------------------------------------------------------------------
+ *
+ * Son DOS: `Pendiente` y `Conciliado` (`data/movimientos.ts`), y solo los
+ * CONCILIADOS cuentan para el balance de Informes. Conciliado quiere decir que
+ * el apunte se ha visto en el extracto del banco; pendiente es un apunte que la
+ * hermandad da por hecho y el banco todavía no confirma.
+ *
+ * Las categorías y las cuentas son CATÁLOGOS que edita la hermandad
+ * (`lib/catalogos.ts`), no constantes: cada hermandad lleva sus cuentas como
+ * quiere, y una lista cerrada obligaría a meter todo en «Otros».
+ */
 import { llano } from '../../lib/buscar'
 import { sumaEuros, aCentimos } from '../../lib/format'
 import { useCallback, useDeferredValue, useMemo, useState, type FormEvent } from 'react'

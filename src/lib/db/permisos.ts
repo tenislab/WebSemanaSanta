@@ -1,3 +1,18 @@
+/**
+ * LOS PERMISOS POR CARGO, EN LA BASE (`permisos_cargo`).
+ *
+ * NO es un traductor como el resto de `lib/db/`: lee y escribe la matriz de
+ * «qué cargo ve qué módulo» que `lib/permisos.ts` usa en la pantalla.
+ *
+ * LOS DE FÁBRICA LLEGAN POR PARÁMETRO, y no es un capricho: importarlos de
+ * `lib/permisos.ts` crearía un import circular, porque ese módulo importa este.
+ *
+ * Y ESTO NO ES LA SEGURIDAD. Lo que de verdad impide entrar en un módulo es
+ * `modulo_permitido()` en la base, que lee esta misma tabla. Las dos tienen que
+ * decir lo mismo: cuando discrepan, la base deja escribir en un módulo que la
+ * pantalla no enseña, y eso es de lo más difícil de diagnosticar que hay. Ver
+ * `supabase/permisos-por-hermandad.sql`.
+ */
 import { supabase } from '../supabase'
 import { CARGOS, type Cargo } from '../../data/documentos'
 

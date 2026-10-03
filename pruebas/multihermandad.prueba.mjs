@@ -167,7 +167,19 @@ async function aislamientoAuditoria({ caso }) {
   const portal = await (await import('./fuentes.mjs')).fuenteDelPortalDelHermano()
   caso('el área del hermano no deja copia', true, /const sinEspejo = \{ sinEspejo: true \}/.test(portal))
   // Las cuatro tablas que monta, no solo una.
-  caso('en las cuatro tablas', 4, (portal.match(/\n\s+sinEspejo,\n/g) ?? []).length)
+  /*
+   * EN TODAS LAS TABLAS QUE LEE, NO EN CUATRO.
+   *
+   * Esto pedía exactamente 4 y se puso rojo al añadir los documentos: una
+   * tabla más y la guarda acusa de un fallo que no existe. Y al revés es peor:
+   * si alguien añadiera una tabla SIN `sinEspejo`, el número seguiría
+   * cuadrando mientras quitara otra. Lo que hay que vigilar es la proporción:
+   * tantos `sinEspejo` como tablas leídas, sean las que sean.
+   */
+  const tablasDelPortal = (portal.match(/useSupabaseTable</g) ?? []).length
+  const sinCopia = (portal.match(/\n\s+sinEspejo,\n/g) ?? []).length
+  caso('el área del hermano lee alguna tabla', true, tablasDelPortal > 0)
+  caso('y ninguna deja copia en el navegador', tablasDelPortal, sinCopia)
 
   // --- Un fallo de red no puede llenar el panel de datos de ejemplo ---
   caso('la reserva nunca son los ejemplos', true, /isSupabaseConfigured \? \[\] : inicial/.test(sync))

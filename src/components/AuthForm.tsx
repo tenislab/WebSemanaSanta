@@ -1,3 +1,42 @@
+/**
+ * EL FORMULARIO DE ENTRAR, REGISTRARSE Y RECUPERAR LA CLAVE.
+ *
+ * Un solo componente para los tres, gobernado por la prop `mode`: los tres
+ * comparten los mismos campos, los mismos errores y el mismo camino de MFA, y
+ * tenerlos en tres ficheros significaba arreglar cada cosa tres veces.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE PASA AL ENTRAR, QUE NO ES SOLO ENTRAR
+ * ----------------------------------------------------------------------------
+ *
+ * `signIn` puede devolver `mfaRequerido`, y entonces esto NO ha terminado: hay
+ * que pedir el código de la aplicación de autenticación y pasarlo por
+ * `verificarCodigoMfa`. Hasta ese momento la sesión existe pero no vale, y
+ * `ProtectedRoute` no deja pasar. Ver `context/AuthContext.tsx`.
+ *
+ * Y `signUp` puede devolver `needsConfirmation`: la cuenta está creada pero
+ * hace falta el correo. Decirlo es importante — quien no lo sabe vuelve a
+ * registrarse y se encuentra «ese correo ya existe».
+ *
+ * ----------------------------------------------------------------------------
+ * LOS DOS PUNTOS DE PARTIDA DE LA DEMOSTRACIÓN
+ * ----------------------------------------------------------------------------
+ *
+ * En modo local (sin Supabase) se entra con un clic, y se elige entre:
+ *
+ *   · LLENA (`sembrarDemoLlena`) — con datos de ejemplo, para ver el producto
+ *     funcionando.
+ *   · VACÍA (`sembrarDemoVacia`) — una hermandad sin nada, para montarlo todo
+ *     desde cero y ver el guiado de la primera vez.
+ *
+ * Se siembra `localStorage` ANTES de entrar, porque el panel se monta leyendo
+ * ya esos datos.
+ *
+ * OJO: la marca del modo demostración sobrevive a cerrar sesión, así que quien
+ * prueba la demostración y luego conecta su base de datos se quedaba viendo el
+ * censo de ejemplo en vez del suyo — parecía que la base no funcionaba. Se
+ * limpia donde se resuelve la sesión; está contado en `AuthContext.tsx`.
+ */
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
 import { useAuth, DEMO_EMAIL, DEMO_PASSWORD } from '../context/AuthContext'

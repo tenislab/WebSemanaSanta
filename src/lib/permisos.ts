@@ -1,3 +1,66 @@
+/**
+ * QUÉ MÓDULOS DEL PANEL VE CADA CARGO.
+ *
+ * ----------------------------------------------------------------------------
+ * ESTO ESCONDE; LA BASE IMPIDE. Y LAS DOS COSAS HACEN FALTA
+ * ----------------------------------------------------------------------------
+ *
+ * Lo primero que hay que tener claro: este módulo NO es la seguridad. Recorta
+ * el menú y bloquea la ruta para que la pantalla tenga sentido —un tesorero no
+ * ve un enlace a una puerta cerrada—, pero lo que de verdad impide leer o
+ * escribir es `modulo_permitido()` en la base (`supabase/rls-cargos.sql`,
+ * `permisos-por-hermandad.sql`).
+ *
+ * Y LAS DOS TIENEN QUE DECIR LO MISMO. Cuando discrepan, el síntoma es de los
+ * peores que hay: la base le deja escribir en un módulo que la pantalla no le
+ * enseña, o al contrario. Si cambias una regla aquí, mira si hay que cambiarla
+ * allí.
+ *
+ * ----------------------------------------------------------------------------
+ * `null` SIGNIFICA «EL QUE MANDA», Y AHÍ HUBO UN AGUJERO DE VERDAD
+ * ----------------------------------------------------------------------------
+ *
+ * El TITULAR no tiene cargo: `cargoDeCuenta()` devuelve `null` y `null` lo ve
+ * todo. Así que cualquier camino que devuelva `null` por error abre el panel
+ * entero.
+ *
+ * Pasó: el cargo se buscaba por `user_metadata.personalId`, que SOLO se
+ * escribe en el acceso de demostración. Cuando el Hermano Mayor daba de alta al
+ * tesorero de verdad, ese campo no se guardaba, y al entrar:
+ *
+ *     personalId → undefined → cargoDeCuenta(undefined) → null → TITULAR
+ *
+ * O sea que todo el personal con cuenta de verdad entraba con el panel entero
+ * abierto. La persona a la que le habías dado solo Tesorería veía el censo
+ * completo, con DNI, teléfonos, direcciones y datos de salud. Eso no es un
+ * permiso de más: es categoría especial del RGPD delante de quien no debía.
+ *
+ * De ahí las tres reglas de este fichero, y ninguna es cosmética:
+ *
+ * 1. EL CARGO SE DECIDE POR `auth_user_id`, que es lo único que el usuario no
+ *    puede reescribir. Nunca por `user_metadata`.
+ * 2. SIN IDENTIFICAR, SE CIERRA. Una cuenta que no se ha podido cruzar devuelve
+ *    `'__desconocido__'`, no `null`: ante la duda hay que cerrar, no abrir.
+ * 3. EL TITULAR SE COMPRUEBA PRIMERO. Va antes que la ficha de hermano porque
+ *    la cuenta de la hermandad es casi siempre la del Hermano Mayor, que TIENE
+ *    ficha con su cargo escrito: estando al final, ganaba la ficha y la cuenta
+ *    de la hermandad dejaba de verlo todo. `esTitular` viene de la base (tabla
+ *    `titulares`).
+ *
+ * ----------------------------------------------------------------------------
+ * EL CARGO TARDA EN SABERSE, Y ESO TIENE CONSECUENCIAS
+ * ----------------------------------------------------------------------------
+ *
+ * Se resuelve preguntando a la base, así que durante el primer pintado es «no
+ * lo sé». Por eso `useCargoDeLaSesionConEstado()` devuelve también `resuelto`,
+ * y por eso el guardián de `AppShell` solo bloquea CUANDO SE SABE: sin esperar,
+ * la redirección a Inicio saltaba en el primer pintado y pulsar cualquier
+ * sección devolvía a Inicio, para todo el mundo.
+ *
+ * `PERMISOS_POR_DEFECTO` es un punto de partida razonable, no una ley: cada
+ * hermandad lo edita desde Personal y permisos. «Inicio» no está en `MODULOS` a
+ * propósito — el resumen lo ve cualquiera con acceso al panel.
+ */
 import { useEffect, useState } from 'react'
 import { CLAVES_DATOS, leerDatos, leerPersistido, useEscuchaOtrasPestanas } from './persistencia'
 import { isSupabaseConfigured } from './supabase'

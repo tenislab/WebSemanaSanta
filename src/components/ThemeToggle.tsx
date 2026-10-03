@@ -1,3 +1,10 @@
+/**
+ * EL BOTÓN DE CAMBIAR ENTRE TEMA CLARO Y OSCURO.
+ *
+ * Todo lo que hace está en `lib/tema.ts`, y la razón de que eso vaya por evento
+ * es justo este botón: el tema también se cambia desde la paleta de comandos
+ * (Ctrl+K), y sin el evento uno de los dos se queda con el icono al revés.
+ */
 import { useTema } from '../lib/tema'
 
 export default function ThemeToggle() {

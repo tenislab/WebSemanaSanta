@@ -1,3 +1,28 @@
+/**
+ * LA CONFIGURACIÓN DEL CORREO DE LA HERMANDAD, con su diagnóstico.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ HAY UN «MIRAR QUÉ FALTA» Y NO SOLO UN «MANDAR UNA PRUEBA»
+ * ----------------------------------------------------------------------------
+ *
+ * Es la lección de este fichero, y costó días. Antes solo se podía mandar el
+ * correo de prueba y ver si llegaba, y ese es JUSTAMENTE el caso que no se
+ * puede diagnosticar así: con el remitente de pruebas de Resend, el envío
+ * contesta que todo ha ido bien y el correo no llega nunca. Se pasaron días
+ * pensando que el problema era del proveedor.
+ *
+ * `diagnosticarCorreo()` + `loQueLeFaltaAlCorreo()` preguntan por el estado de
+ * verdad —la clave, el dominio verificado, el remitente— y dicen qué falta.
+ * «Enviado correctamente» no significa «ha llegado».
+ *
+ * Y cuando se manda la prueba, el aviso dice que mire TAMBIÉN la carpeta de
+ * spam: si ha caído ahí, lo que falta es verificar el dominio, y eso es un
+ * diagnóstico distinto de «no llegó».
+ *
+ * El camino completo de un correo está en `docs/COMO-VIAJA-UN-CORREO.md`. Lo
+ * manda la función `enviar-correo` de Supabase, no el navegador: la clave del
+ * proveedor no baja aquí.
+ */
 import AvisoFalta from '../../../components/AvisoFalta'
 import { correoDePrueba, correoDisponible, diagnosticarCorreo, enviarCorreo, loQueLeFaltaAlCorreo, type AjustesCorreo, useAjustesCorreo } from '../../../lib/correo'
 import { requisito } from '../../../lib/requisitos'

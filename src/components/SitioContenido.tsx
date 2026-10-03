@@ -1,3 +1,53 @@
+/**
+ * EL MOTOR QUE PINTA LA WEB DE UNA HERMANDAD.
+ *
+ * ----------------------------------------------------------------------------
+ * UN SOLO COMPONENTE PARA DOS SITIOS, Y DE AHÍ SALE TODO LO DEMÁS
+ * ----------------------------------------------------------------------------
+ *
+ * Lo usan la web pública de verdad (`pages/SitioPublico.tsx`) y la VISTA PREVIA
+ * del editor del panel, en vivo y sin `iframe`. Que sea el mismo es la razón de
+ * que la vista previa no mienta nunca: no hay dos pinturas que mantener a la
+ * par.
+ *
+ * Y de ahí la prop que hay que entender antes de tocar nada:
+ *
+ *   `interactivo` — `true` en la web DE VERDAD, donde los enlaces navegan;
+ *   `false` en la VISTA PREVIA. Es fácil de invertir y ya se invirtió una vez:
+ *   el botón «Descargar» de los documentos salió apagado para todos los
+ *   visitantes y encendido solo en la vista previa, donde no hay nada que
+ *   descargar. Si escribes `disabled={interactivo || …}`, está al revés.
+ *
+ * ----------------------------------------------------------------------------
+ * NO LEE DATOS. SE LOS DAN
+ * ----------------------------------------------------------------------------
+ *
+ * `web`, `hermandad` y `cultosDelCalendario` entran por props. Es deliberado:
+ * así sirve igual para la web pública —donde los datos vienen de funciones de
+ * la base, sin sesión— y para la vista previa, donde vienen del formulario que
+ * alguien está escribiendo en ese momento.
+ *
+ * La excepción son las secciones cuyo contenido NO vive en `web` y llega por su
+ * cuenta (el catálogo de la tienda, los documentos del archivo). Esas sí piden
+ * lo suyo, y entonces el índice NO PUEDE SABER si hay algo que enseñar, así que
+ * dice que sí: es la propia sección la que se calla si está vacía, y en la
+ * vista previa dice QUÉ FALTA —si no, la hermandad enciende la sección, no ve
+ * nada y cree que está rota cuando lo que pasa es que no ha marcado nada—.
+ *
+ * ----------------------------------------------------------------------------
+ * LAS PIEZAS ESTÁN EN `sitio/`
+ * ----------------------------------------------------------------------------
+ *
+ * Este fichero es el ÍNDICE: decide qué secciones hay, en qué orden y cuáles
+ * están visibles. Cada sección la pinta su pieza (`sitio/portada.tsx`,
+ * `sitio/Galeria.tsx`, `sitio/Documentos.tsx`, `sitio/marco.tsx`…), y algunas
+ * se reexportan desde aquí porque `SitioPublico` las usa suelta para las
+ * páginas de una noticia o un titular.
+ *
+ * `seccionActiva` solo sirve en la vista previa: al cambiar de pestaña en el
+ * editor, la vista previa salta a esa sección. Sin eso, editabas «Cultos» y la
+ * vista previa seguía en la Historia.
+ */
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { PAREJAS_TIPOGRAFICAS, TIPOGRAFIAS, contenidoVacio, nombreSeccion, type CultoWeb, type TipoSeccion, type WebPublica } from '../lib/webPublica'
 import type { HermandadSettings } from '../lib/hermandadSettings'
@@ -10,6 +60,7 @@ import {
   pintarTitulares, pintarGaleria, pintarActualidad, pintarPaginas, pintarBoletines,
 } from './sitio/seccionesDeActualidad'
 import { pintarDonativos, pintarTienda, pintarLoteria } from './sitio/seccionesDeDinero'
+import { pintarDocumentos } from './sitio/seccionDocumentos'
 import { pintarContacto } from './sitio/seccionContacto'
 import { useTrampaDeFoco } from './sitio/foco'
 import type { EnlaceMenu } from './sitio/marco'
@@ -198,6 +249,13 @@ export default function SitioContenido({
     if (tipo === 'actualidad') return web.noticias.some((n) => n.publicada)
     if (tipo === 'paginas') return web.paginas.filter((p) => p.enMenu !== false).length > 0
     if (tipo === 'boletines') return web.boletines.length > 0
+    /*
+     * LA DE DOCUMENTOS SE PORTA COMO LA TIENDA: lo que enseña no vive en
+     * `web`, vive en el archivo documental y llega por su cuenta. Así que
+     * desde aquí no se puede saber si hay algo, y se dice que sí: la propia
+     * sección se calla si no hay nada marcado para la web.
+     */
+    if (tipo === 'documentos') return true
     if (tipo === 'donativos') {
       const d = web.donativos
       // Sin una vía de pago no hay donativo que valga: una sección que solo
@@ -448,6 +506,7 @@ function Seccion({
   if (tipo === 'actualidad') return pintarActualidad(sec, titulo, props)
   if (tipo === 'paginas') return pintarPaginas(sec, props)
   if (tipo === 'boletines') return pintarBoletines(sec, titulo, props)
+  if (tipo === 'documentos') return pintarDocumentos(sec, titulo, props)
   if (tipo === 'donativos') return pintarDonativos(sec, titulo, props)
   if (tipo === 'loteria') return pintarLoteria(sec, titulo, props)
   if (tipo === 'tienda') return pintarTienda(sec, titulo, props)

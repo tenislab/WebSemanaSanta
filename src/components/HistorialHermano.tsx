@@ -1,3 +1,25 @@
+/**
+ * EL HISTORIAL DE UN HERMANO: sus cuotas y sus papeletas, año por año.
+ *
+ * Se usa en DOS SITIOS con el mismo código, y eso es lo que hay que tener en la
+ * cabeza al tocarlo:
+ *
+ *   · En la ficha del censo, donde lo ve la SECRETARÍA.
+ *   · En el área del hermano, donde lo ve ÉL MISMO.
+ *
+ * O sea que todo lo que se añada aquí aparece en los dos, y lo que se escriba
+ * tiene que poder leerlo el propio hermano. Una nota interna («moroso
+ * reincidente», «problemas con el tesorero») no va aquí.
+ *
+ * Lo que hace es agrupar por año (`porAnio`, `aniosDeHermandad`,
+ * `ejercicioDe`): un hermano de treinta años de antigüedad tiene treinta
+ * recibos y treinta papeletas, y una lista plana de sesenta filas no se lee.
+ *
+ * Y DESDE AQUÍ SE REIMPRIME: un recibo (`Recibo` o `ReciboModeloRender`, según
+ * si la hermandad ha diseñado el suyo) y una papeleta (`PapeletaTicket`). Es lo
+ * que más se pide en el mostrador — «me he perdido el recibo del año pasado»—,
+ * así que el modelo se trae de la hermandad y no se usa el de fábrica.
+ */
 import { useMemo, useState } from 'react'
 import Drawer from './Drawer'
 import Recibo from './Recibo'

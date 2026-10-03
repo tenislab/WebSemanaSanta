@@ -20,9 +20,24 @@
 import { readFileSync } from 'node:fs'
 
 export default async function ({ caso }) {
-  const src = await (await import('./fuentes.mjs')).fuenteDelCenso()
-  // El cajón de la ficha: desde su cabecera hasta el bloque de corregirla.
+  const { fuenteDelCenso, fuenteDe } = await import('./fuentes.mjs')
+  const src = await fuenteDelCenso()
+  /*
+   * DOS FUENTES, Y ES EL PRECIO DE HABER PARTIDO LA PANTALLA.
+   *
+   * Esta prueba acotaba un trozo —«desde la cabecera hasta el bloque de
+   * corregir la ficha»— y comprobaba dentro tanto EL ORDEN como EL CONTENIDO.
+   * Funcionaba mientras la ficha era un solo fichero de ochocientas líneas. Al
+   * sacar el certificado a su propio componente, su texto se fue al final de
+   * lo pegado y cayó fuera de la ventana: once comprobaciones en rojo contra
+   * una pantalla que no había cambiado ni un píxel.
+   *
+   * Así que ahora cada cosa se mira donde está:
+   *  · EL ORDEN en el padre, que es quien coloca los bloques en la pantalla.
+   *  · EL CONTENIDO en la pieza, que es quien lo tiene.
+   */
   const ficha = src.slice(src.indexOf('</header>'), src.indexOf('<label>Corregir la ficha</label>'))
+  const cert = await fuenteDe('src/pages/app/censo/FichaCertificado.tsx')
 
   /*
    * 1. LOS DATOS, ANTES QUE LAS EXPLICACIONES.
@@ -35,8 +50,10 @@ export default async function ({ caso }) {
     donde('<dt>DNI / NIE</dt>') < donde('<h4>Cuotas</h4>') && donde('<dt>DNI / NIE</dt>') > 0)
   caso('y antes que el historial de la estación', true,
     donde('<dt>DNI / NIE</dt>') < donde('Participación en la estación de penitencia'))
+  /* El certificado ya no está escrito aquí: lo coloca `<FichaCertificado />`,
+     y es esa etiqueta la que marca su sitio en la pantalla. */
   caso('y antes que el certificado', true,
-    donde('<dt>DNI / NIE</dt>') < donde('<h4>Certificado de antigüedad</h4>'))
+    donde('<dt>DNI / NIE</dt>') < donde('<FichaCertificado') && donde('<FichaCertificado') > 0)
   caso('el cumpleaños va con él', true,
     donde('<dt>Cumpleaños</dt>') < donde('<h4>Cuotas</h4>'))
   // Siguen estando los demás datos de la rejilla: no se ha perdido nada al subirla.
@@ -50,8 +67,8 @@ export default async function ({ caso }) {
    * ha perdido la contraseña» siguen escritos, dentro de un <details>.
    */
   caso('el certificado explica qué es, plegado', true,
-    /<details className="ficha-ayuda">\s*<summary>¿Qué es esto\?<\/summary>/.test(ficha))
-  caso('sin perder para qué sirve', true, /para el varal que va por antigüedad/.test(ficha))
+    /<details className="ficha-ayuda">\s*<summary>¿Qué es esto\?<\/summary>/.test(cert))
+  caso('sin perder para qué sirve', true, /para el varal que va por antigüedad/.test(cert))
   caso('y el acceso pliega el «si no la recuerda»', true,
     /<summary>¿Y si no la recuerda\?<\/summary>/.test(ficha))
   caso('sin perder que la contraseña no se guarda', true,
@@ -64,9 +81,9 @@ export default async function ({ caso }) {
    * el botón abre el formulario, y es ahí donde avisa — que es el momento en
    * que hace falta: enterarse al imprimirlo, con la persona delante, es tarde.
    */
-  caso('el certificado empieza siendo un botón', true, /Expedir certificado…\s*<\/button>/.test(ficha))
-  caso('que abre el formulario', true, /onClick=\{\(\) => setExpidiendoAbierto\(true\)\}/.test(ficha))
-  const alExpedir = ficha.slice(ficha.indexOf('{!expidiendoAbierto ? ('), ficha.indexOf('{/* Lo primero que hace la secretaría'))
+  caso('el certificado empieza siendo un botón', true, /Expedir certificado…\s*<\/button>/.test(cert))
+  caso('que abre el formulario', true, /onClick=\{\(\) => setExpidiendoAbierto\(true\)\}/.test(cert))
+  const alExpedir = cert.slice(cert.indexOf('{!expidiendoAbierto ? ('), cert.indexOf('{/* Lo primero que hace la secretaría'))
   caso('el aviso de los firmantes va dentro', true, /sinFirmantes\.length > 0 &&/.test(alExpedir))
   caso('y el «para qué lo pide» también', true, /id="motivoCert"/.test(alExpedir))
   caso('con su botón de verdad y su cancelar', true,
@@ -76,11 +93,16 @@ export default async function ({ caso }) {
    * Y SE CIERRA CUANDO TOCA. Abierto en la ficha de OTRA persona sería un
    * certificado a punto de salir a nombre de quien no lo pidió.
    */
-  const efecto = src.slice(src.indexOf('setIbanDraft(selected?.iban'), src.indexOf('setContactoSaved(false)'))
+  /*
+   * Los dos sitios que lo cierran viven ahora en la propia pieza, uno al lado
+   * del otro, que es como se lee de un tirón: antes había que acotar un
+   * `useEffect` de la pantalla que reiniciaba media ficha a la vez.
+   */
+  const efecto = cert.slice(cert.indexOf('useEffect(() => {'), cert.indexOf('}, [selected.id])'))
   caso('al cambiar de hermano se cierra', true, /setExpidiendoAbierto\(false\)/.test(efecto))
-  const expedir = src.slice(src.indexOf('const r = await emitirCertificado('), src.indexOf('const [ident, setIdent]'))
+  const expedir = cert.slice(cert.indexOf('const r = await emitirCertificado('))
   caso('y al expedirlo, también', true, /setExpidiendoAbierto\(false\)/.test(expedir))
   // Lo que no cambia: el certificado se sigue expidiendo igual, con su motivo.
   caso('se sigue expidiendo con el motivo escrito', true,
-    /emitirCertificado\(selected\.id, motivoCert\.trim\(\)\)/.test(expedir))
+    /emitirCertificado\(selected\.id, motivoCert\.trim\(\)\)/.test(cert))
 }

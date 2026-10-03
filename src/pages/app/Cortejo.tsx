@@ -1,3 +1,57 @@
+/**
+ * EL CORTEJO: quién va dónde el día de la salida.
+ *
+ * ----------------------------------------------------------------------------
+ * QUÉ ES ESTO EN EL MUNDO REAL
+ * ----------------------------------------------------------------------------
+ *
+ * Una procesión va dividida en TRAMOS, y cada tramo tiene puestos: cirios,
+ * insignias, bocinas, costaleros. Esta pantalla reparte a los hermanos que han
+ * sacado papeleta entre esos puestos, y es lo que una hermandad discute durante
+ * todo el año: el orden del cortejo va por ANTIGÜEDAD, y cambiar a alguien de
+ * sitio es una conversación, no un clic.
+ *
+ * El reparto en sí NO se calcula aquí: `lib/cortejo.ts` lo hace con funciones
+ * puras —`repartoCompleto`, `repartoPorTramo`, `papeletasSinSitio`— que se
+ * pueden probar sin navegador, y de hecho se prueban mucho. Esta pantalla pinta
+ * ese reparto y deja tocarlo.
+ *
+ * ----------------------------------------------------------------------------
+ * DOS PANTALLAS EN UNA: EL AÑO ENTERO Y EL DÍA DE LA SALIDA
+ * ----------------------------------------------------------------------------
+ *
+ * `diaDeSalida` cambia a qué sirve la pantalla, y hay que entenderlo para no
+ * mezclarlas:
+ *
+ *   · APAGADO (todo el año) — organizar: ver huecos, asignar, reordenar,
+ *     registrar incidencias.
+ *   · ENCENDIDO (el día) — pasar lista en la calle, con el móvil, de pie y con
+ *     la cobertura que haya. Aquí lo que importa es marcar quién ha venido
+ *     (`lib/asistencia.ts`) y quién ha recogido su papeleta, y lo que se mide
+ *     es el número de toques. Si una escritura no llega, se encola y se manda
+ *     sola — ver `lib/colaEscritura.ts`, que existe por este momento exacto.
+ *
+ * ----------------------------------------------------------------------------
+ * DE DÓNDE SALE CADA COSA, QUE ES LO QUE MÁS CONFUNDE AL LLEGAR
+ * ----------------------------------------------------------------------------
+ *
+ * · LAS PAPELETAS son la fuente del reparto, y se filtran por el año de la
+ *   CAMPAÑA activa (`lib/campana.ts`): el cortejo del año pasado no se toca.
+ * · LOS TRAMOS vienen de `lib/tramos.ts`, que es la estructura que la
+ *   hermandad define una vez.
+ * · EL ITINERARIO SE LEE DE LA WEB PÚBLICA (`useWebPublica`), donde ya estaba y
+ *   donde se edita. No hay un segundo recorrido que mantener: dos copias del
+ *   itinerario son dos horarios distintos el Viernes Santo.
+ * · LAS INCIDENCIAS son su propia tabla, y una incidencia ABIERTA sobre una
+ *   papeleta marca el tramo entero: es el aviso de que ahí hay algo sin
+ *   resolver.
+ * · LOS HERMANOS se leen del espejo con `leerDatos`, no con `useSupabaseTable`.
+ *   Aquí solo se consultan (el nombre, el número, la antigüedad), y montar la
+ *   tabla entera para eso traería 800 filas y la sincronizaría sin necesidad.
+ *
+ * Y COBRAR LA PAPELETA AQUÍ DEJA SU APUNTE EN TESORERÍA, igual que en Cuotas:
+ * por eso esta pantalla monta también `movimientos`.
+ */
 import { hayDatosDeEjemplo } from '../../lib/demo'
 import { llano } from '../../lib/buscar'
 import { useMemo, useState, type FormEvent, useRef } from 'react'
@@ -9,8 +63,8 @@ import { LogoMark } from '../../components/Logo'
 import ItinerarioCortejo from '../../components/ItinerarioCortejo'
 import { useWebPublica, hayItinerario, type EstacionPenitencia } from '../../lib/webPublica'
 import AsistenciaTramo from '../../components/AsistenciaTramo'
-import { ChipsAsistencia, ResumenAsistencia, cuentaAsistencia } from '../../components/ChipsAsistencia'
-import { useAsistencias, registroDe } from '../../lib/asistencia'
+import { ChipsAsistencia, ResumenAsistencia } from '../../components/ChipsAsistencia'
+import { cuentaAsistencia, useAsistencias, registroDe } from '../../lib/asistencia'
 import { HERMANOS_INICIALES, initials, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES, type Papeleta } from '../../data/papeletas'
 import { INCIDENCIAS_INICIALES, TIPOS_INCIDENCIA_POR_DEFECTO, type Incidencia, type TipoIncidencia } from '../../data/incidencias'

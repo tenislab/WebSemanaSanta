@@ -1,3 +1,48 @@
+/**
+ * EL REPARTO DEL CORTEJO: quién ocupa cada puesto, calculado y no guardado.
+ *
+ * ----------------------------------------------------------------------------
+ * QUÉ ES Y POR QUÉ SON FUNCIONES PURAS
+ * ----------------------------------------------------------------------------
+ *
+ * Una procesión va dividida en TRAMOS, y cada tramo tiene puestos (cirios,
+ * insignias, bocinas). Esto coloca a los hermanos que han sacado papeleta en
+ * esos puestos.
+ *
+ * No hay estado y no se guarda nada: el reparto SE CALCULA cada vez a partir de
+ * los tramos, las papeletas y las incidencias. Es deliberado — un reparto
+ * guardado se queda viejo en cuanto alguien anula una papeleta, y entonces hay
+ * dos verdades sobre quién va en el tercer tramo. Y siendo puras se pueden
+ * probar de verdad, que es lo que hace `pruebas/cortejo.prueba.mjs`.
+ *
+ * `pages/app/Cortejo.tsx` solo pinta lo que sale de aquí y deja tocarlo.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE HAY QUE SABER DE LOS ESTADOS
+ * ----------------------------------------------------------------------------
+ *
+ * `EstadoAsignacion` no es el estado de la papeleta, es el del SITIO:
+ *
+ *   · `Reservada` / `Confirmada` — el sitio está dado.
+ *   · `Entregada` — además, la papeleta ya está en su mano. El día de la salida
+ *     es lo que se mira en la puerta.
+ *   · `Con incidencia` — hay algo sin resolver sobre esa persona o ese puesto.
+ *     Marca el tramo entero: es el aviso de que ahí hay que mirar.
+ *   · `Excede aforo` — hay más gente asignada que puestos. NO se tira a nadie
+ *     ni se esconde: se enseña y se avisa, porque quien tiene que decidir a
+ *     quién se mueve es la hermandad, y es una conversación, no un algoritmo.
+ *
+ * ----------------------------------------------------------------------------
+ * Y EL ORDEN, QUE NO ES UN DETALLE
+ * ----------------------------------------------------------------------------
+ *
+ * El cortejo va por ANTIGÜEDAD. No es una preferencia de presentación: es la
+ * regla de la corporación, y cambiarle el sitio a alguien se discute en junta.
+ * Si tocas el orden, lo estás tocando ahí.
+ *
+ * `puedeSalirEnElCortejo()` es la puerta de entrada: quien está de baja no
+ * sale, y el hermano civil tampoco ocupa puesto.
+ */
 import type { Hermano } from '../data/hermanos'
 import type { Papeleta } from '../data/papeletas'
 import { cuerposPresentes, esAutomatico, gruposAutomaticos, type Cuerpo, type Tramo } from './tramos'

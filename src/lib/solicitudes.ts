@@ -1,3 +1,53 @@
+/**
+ * LAS SOLICITUDES DE ALTA: quien quiere ser hermano y todavía no lo es.
+ *
+ * ----------------------------------------------------------------------------
+ * EL CAMINO COMPLETO, QUE EMPIEZA FUERA DEL PANEL
+ * ----------------------------------------------------------------------------
+ *
+ * Una persona que no está en el censo la manda desde el área del hermano, o un
+ * hermano la manda PARA SU HIJO MENOR (`tutorId`). La secretaría la revisa
+ * desde el censo y:
+ *
+ *   · APROBADA → se crea el hermano con el DNI, el correo y la contraseña que
+ *     la persona propuso, y si era un menor, queda a cargo de quien lo pidió:
+ *     podrá gestionarle la papeleta desde su propia cuenta.
+ *   · RECHAZADA → no se da de alta a nadie, pero QUEDA CONSTANCIA y con motivo.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ UN «NO» LLEVA MOTIVO OBLIGATORIO
+ * ----------------------------------------------------------------------------
+ *
+ * Antes la solicitud se resolvía y DESAPARECÍA. Quien había pedido el alta de
+ * su hijo veía un día que ya no estaba y no sabía si le habían dado de alta, si
+ * se había perdido o si se la habían denegado. Un «no» sin motivo obliga a
+ * llamar a la hermandad para preguntar, que es justo la llamada que esto tenía
+ * que ahorrar. De ahí `motivoRechazo` y `resueltaEl`. Ver
+ * `supabase/motivo-del-rechazo.sql`.
+ *
+ * ----------------------------------------------------------------------------
+ * DOS COSAS QUE SE ESCAPAN AL LEER ESTO
+ * ----------------------------------------------------------------------------
+ *
+ * · LA ESCRIBE ALGUIEN SIN SESIÓN DE GESTIÓN, así que no puede ir por la tabla
+ *   como una escritura normal: `crearSolicitudPrincipal()` pasa por una función
+ *   de la base. Y por eso hace falta saber a qué hermandad va — ver
+ *   `fijarHermandadDeLaPagina()` en `lib/multiHermandad.ts`.
+ * · `STORAGE_KEY` SE EXPORTA a propósito: el área del hermano escucha los
+ *   cambios de esa clave para enterarse de que su solicitud se ha resuelto sin
+ *   tener que recargar.
+ *
+ * `saveSolicitudes()` SINCRONIZA POR DIFERENCIA: lee lo que hay en la tabla,
+ * compara con la lista nueva y manda solo las bajas, las altas y los cambios,
+ * una a una. Y MIRA EL ERROR DE CADA OPERACIÓN, que es lo importante:
+ * `supabase-js` NO lanza excepción cuando la base rechaza algo, devuelve
+ * `{ error }`. Sin mirarlo, un alta aceptada en pantalla podía no llegar nunca
+ * a la base y la persona se quedaba sin dar de alta creyendo que lo estaba.
+ *
+ * Y al LEER, si la consulta falla NO se vacía la lista: poner cero solicitudes
+ * porque la consulta falló es afirmar algo que no se sabe, y encima es la
+ * afirmación que hace que nadie vuelva a mirar.
+ */
 import { useEffect, useState } from 'react'
 import { traerTodasLasFilas } from './paginado'
 import { leerPersistido, useEscuchaOtrasPestanas } from './persistencia'

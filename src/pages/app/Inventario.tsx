@@ -1,3 +1,36 @@
+/**
+ * INVENTARIO: el patrimonio de la hermandad, pieza por pieza.
+ *
+ * ----------------------------------------------------------------------------
+ * PARA QUÉ SIRVE DE VERDAD: EL PARTE AL SEGURO
+ * ----------------------------------------------------------------------------
+ *
+ * Un manto bordado son sesenta y cinco mil euros y un palio cuarenta y dos mil.
+ * Esta pantalla es de donde sale la relación valorada que se le da a la
+ * compañía de seguros, así que `valorAsegurado` (`null` = no está asegurado) es
+ * el campo delicado de todo el módulo.
+ *
+ * Y de ahí la regla de este fichero: EL FORMULARIO NO SE PUEDE CALLAR. Había un
+ * `if (!nombre || !categoria) return`: se pulsaba «Guardar pieza», no pasaba
+ * nada, y no se decía por qué. Peor: un valor asegurado mal escrito —una coma
+ * de más, una letra— se tiraba en silencio y la pieza se guardaba como si no
+ * estuviera asegurada. Eso es peor que no guardarla, porque el día del parte al
+ * seguro la pieza aparece a cero y nadie se enteró.
+ *
+ * ----------------------------------------------------------------------------
+ * LOS OTROS DOS CAMPOS QUE IMPORTAN
+ * ----------------------------------------------------------------------------
+ *
+ * · `prestadoA` — una pieza cedida a una exposición o a otra hermandad sigue
+ *   siendo de la casa, pero no está en la casa. Es lo que se mira antes de la
+ *   salida para no buscar un estandarte que está prestado.
+ * · `estadoConservacion` — «Necesita restauración» es lo que se lleva al
+ *   cabildo para pedir el presupuesto.
+ *
+ * Las CATEGORÍAS son un catálogo que edita la hermandad (`lib/catalogos.ts`),
+ * no una lista cerrada: orfebrería, textil y túnicas son de todas, pero cada
+ * hermandad tiene lo suyo, y una lista cerrada obligaría a meterlo en «Otro».
+ */
 import { llano } from '../../lib/buscar'
 import { useMemo, useState, type FormEvent } from 'react'
 import Drawer from '../../components/Drawer'

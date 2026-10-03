@@ -1,3 +1,27 @@
+/**
+ * LAS TABLAS PEQUEÑAS QUE SE EDITAN EN BLOQUE (catálogos y listas de precios).
+ *
+ * NO es un traductor como el resto de `lib/db/`: aquí no hay `toRow`/`fromRow`.
+ * Son tablas cortas —los conceptos de cuota, las opciones de papeleta, las
+ * categorías— que la hermandad edita de golpe desde Configuración, así que se
+ * sustituyen enteras en vez de fila a fila.
+ *
+ * ----------------------------------------------------------------------------
+ * `reemplazarTablaCompleta` BORRA ANTES DE INSERTAR, Y AHÍ ESTÁ EL PELIGRO
+ * ----------------------------------------------------------------------------
+ *
+ * Si el borrado sale bien y el alta falla —una política que no deja escribir,
+ * una columna que no cuadra—, la tabla se queda VACÍA: no es que no se guarde
+ * lo nuevo, es que además desaparece lo que había. Y como no se miraba ningún
+ * error, la hermandad se quedaba sin sus conceptos de cuota ni sus tipos de
+ * papeleta EN SILENCIO, con el visto bueno verde en pantalla.
+ *
+ * Así que se miran LOS DOS errores, el del borrado y el del alta. Si tocas
+ * esto, mantenlo.
+ *
+ * Y el borrado solo alcanza a las filas de esta hermandad: de eso se encarga la
+ * política `solo_mi_hermandad` de la base, no este código.
+ */
 import { supabase } from '../supabase'
 import { traerTodasLasFilas } from '../paginado'
 

@@ -1,3 +1,12 @@
+/**
+ * LAS REGLAS de reparto de la cuenta de resultados · camelCase (aplicación) ⇄ snake_case (tabla).
+ *
+ * Un fichero por tabla, y los dos traductores se le pasan a `useSupabaseTable`.
+ * El porqué de que esto esté en un solo sitio, y los TRES SITIOS que hay que
+ * tocar al añadir un campo —el tipo, los dos traductores y la columna—, está
+ * contado en `lib/db/hermanos.ts`. Olvidar `fromRow` no da error: el dato se
+ * guarda y no vuelve, y eso se lee como «se ha perdido».
+ */
 import type { Reparto } from '../repartos'
 
 /**

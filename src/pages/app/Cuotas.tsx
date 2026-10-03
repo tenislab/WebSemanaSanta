@@ -1,3 +1,67 @@
+/**
+ * CUOTAS Y RECIBOS: el dinero que la hermandad cobra a sus hermanos.
+ *
+ * ----------------------------------------------------------------------------
+ * EL CICLO COMPLETO, QUE ES LO QUE HAY QUE TENER EN LA CABEZA
+ * ----------------------------------------------------------------------------
+ *
+ *   1. SE EMITEN. Una vez al año, en bloque, para todo el censo activo y para
+ *      un EJERCICIO (un año). Emitir dos veces el mismo ejercicio sería cobrar
+ *      dos veces, así que esa es la operación más vigilada de la pantalla.
+ *   2. SE COBRAN. En mano (efectivo, tarjeta, Bizum) o por REMESA SEPA: un
+ *      fichero XML que se lleva al banco con cientos de domiciliaciones de
+ *      golpe. Ver `cuotas/remesa.ts` y `supabase/remesas.sql`.
+ *   3. EL BANCO DEVUELVE algunas. Se cargan de vuelta y el recibo vuelve a
+ *      estar pendiente. Ver `cuotas/devoluciones.ts`.
+ *   4. Y CADA COBRO DEJA SU APUNTE EN TESORERÍA. No es opcional: sin eso el
+ *      dinero entra en la hermandad y el libro de cuentas no se entera. Por eso
+ *      esta pantalla monta también la tabla `movimientos`.
+ *
+ * ----------------------------------------------------------------------------
+ * LAS DOS VISTAS, Y POR QUÉ HACEN FALTA LAS DOS
+ * ----------------------------------------------------------------------------
+ *
+ * La pantalla solo enseñaba RECIBOS, que es la vista que sirve para cuadrar el
+ * banco y no sirve para nada más. La pregunta que se hace en una hermandad —al
+ * repartir papeletas, al montar el cortejo, en el mostrador— no es «¿cómo está
+ * el recibo 1048?» sino «¿está Fulano al corriente?», y esa no se podía
+ * contestar: un hermano con tres recibos salía tres veces sin sumar, y uno SIN
+ * NINGÚN recibo no salía en absoluto — justo el que peor está. Con cero recibos
+ * emitidos la pantalla se quedaba entera en blanco: «0 recibos» y cinco
+ * hermanos en el censo.
+ *
+ * De ahí `vista: 'recibos' | 'hermanos'`, con sus dos cuerpos de tabla
+ * separados (`cuotas/FilasDeRecibos.tsx` y `cuotas/FilasPorHermano.tsx`).
+ *
+ * ----------------------------------------------------------------------------
+ * LA VENTANA DE HISTÓRICO: NO SE TRAE TODO
+ * ----------------------------------------------------------------------------
+ *
+ * Se traían TODOS los ejercicios para enseñar uno. Una hermandad de 800
+ * hermanos acumula 32.000 recibos en diez años, y eso deja de caber en el
+ * navegador sola, sin que nadie toque nada. Está contado entero en
+ * `lib/ventanaHistorico.ts`, con la advertencia importante: son DOS MITADES
+ * —el filtro que va a la base y el que responde en memoria— que tienen que
+ * decir lo mismo, y dos mitades que discrepan no dan error, dan totales que no
+ * cuadran. Nace APAGADA, detrás de la bandera `cuotas-ventana`.
+ *
+ * ----------------------------------------------------------------------------
+ * COSAS QUE PARECEN RARAS Y NO LO SON
+ * ----------------------------------------------------------------------------
+ *
+ * · «AVISADOS» NO ES UN ESTADO DEL RECIBO: es el hermano que ha dicho desde su
+ *   área que ya pagó por Bizum o transferencia y espera confirmación.
+ * · LA MORA LA PONE SOLO QUIEN DEBE. Tesorero, secretario o titular, y
+ *   comprobado contra la lista real de personal, no contra el `user_metadata`
+ *   de la sesión, que lo puede reescribir cualquiera desde la consola.
+ * · `prepararAvisos()` AL MONTAR. Antes de mandar un solo correo hay que traer
+ *   de la base la configuración de la hermandad y lo que cada hermano tenga
+ *   apagado. Sin eso, quien entra desde otro ordenador trabaja con la de
+ *   fábrica: o no sale ningún aviso, o se le escribe a quien pidió que no. Los
+ *   dos en silencio.
+ * · EL MODELO DEL RECIBO SE TRAE DE LA BASE. Sin eso, quien entra desde otro
+ *   ordenador imprime el recibo de fábrica aunque la hermandad tenga el suyo.
+ */
 import { llano } from '../../lib/buscar'
 import { useCallback, useDeferredValue, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'

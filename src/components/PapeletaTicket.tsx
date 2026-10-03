@@ -1,3 +1,20 @@
+/**
+ * LA PAPELETA DE SITIO, tal como se imprime o se manda.
+ *
+ * ESTO SE IMPRIME DE VERDAD, y eso cambia las reglas. Lleva `print-doc`, y el
+ * CSS de impresión vive en `styles/`. Dos cosas que ya han roto un papel en
+ * esta aplicación:
+ *
+ * · EL TEMA OSCURO. El fondo no lo pinta la impresora y el texto claro sí: el
+ *   papel sale EN BLANCO. Los colores de un documento imprimible se fuerzan,
+ *   no se heredan del tema.
+ * · EL ESCUDO Y LOS DATOS SON DE LA HERMANDAD (`HermandadSettings`), que llegan
+ *   por prop. Si se cogieran de los de fábrica, la hermandad entrega papeles con
+ *   el logo de otro.
+ *
+ * Al tocarlo, imprímelo: `window.print()` en los dos temas. Mirarlo en pantalla
+ * no vale, y hay sondas para esto en `scripts/caza/`.
+ */
 import { LogoMark } from './Logo'
 import QrCode from './QrCode'
 import type { Hermano } from '../data/hermanos'

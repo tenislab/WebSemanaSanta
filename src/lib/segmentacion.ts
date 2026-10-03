@@ -6,9 +6,37 @@ import type { SituacionCuota } from './estadoCuotaHermano'
 import { cumpleEsteMes, esSuCumpleHoy } from './hermanoFicha'
 
 /**
- * Segmentación de hermanos por criterios, para mandar comunicados solo a quien
- * toca (p. ej. «activos, mayores de edad, con cuota pendiente»). Se calcula al
- * vuelo sobre el censo; no guarda nada.
+ * SEGMENTAR EL CENSO: a quién va dirigido un comunicado.
+ *
+ * Criterios combinables —«activos, mayores de edad, con cuota pendiente»— que
+ * se calculan AL VUELO sobre el censo. No se guarda la lista de personas, y es
+ * deliberado: una lista congelada se queda vieja en cuanto alguien se da de
+ * alta o paga, y entonces el aviso de morosos va a quien ya pagó.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE SÍ SE GUARDA SON LOS CRITERIOS, NO LA ETIQUETA
+ * ----------------------------------------------------------------------------
+ *
+ * Un comunicado guarda los `CriteriosSegmento` con los que se compuso su
+ * destino, además del texto legible. Antes solo se guardaba la etiqueta, y con
+ * eso no se puede volver a resolver a quién iba: «Activos · con cuota
+ * pendiente» no encaja en ningún segmento del catálogo, y el catálogo lo edita
+ * la hermandad, así que la misma palabra puede significar otra cosa el año que
+ * viene. Ver `pages/app/Comunicados.tsx`.
+ *
+ * ----------------------------------------------------------------------------
+ * DE DÓNDE SALE CADA CRITERIO
+ * ----------------------------------------------------------------------------
+ *
+ * Del censo casi todos; la SITUACIÓN DE CUOTA no (`lib/estadoCuotaHermano.ts`),
+ * porque se calcula sobre los recibos de verdad y distingue cuatro estados, no
+ * dos. Y los CAMPOS PROPIOS que cada hermandad añade a la ficha también son
+ * criterio (`lib/camposPropios.ts`): una hermandad puede querer escribir solo a
+ * quien apuntó una talla de túnica.
+ *
+ * `mismosCriterios` y `limpiarCriterios` están para comparar y normalizar antes
+ * de guardar: dos criterios iguales escritos distinto se leen como dos
+ * segmentos y ensucian el historial.
  */
 
 export interface CriteriosSegmento {

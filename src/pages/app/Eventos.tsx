@@ -1,3 +1,44 @@
+/**
+ * EVENTOS Y TAREAS: la agenda de la hermandad y el reparto del trabajo.
+ *
+ * ----------------------------------------------------------------------------
+ * SON DOS COSAS EN UNA PANTALLA, Y VAN JUNTAS A PROPÓSITO
+ * ----------------------------------------------------------------------------
+ *
+ *   · LOS EVENTOS — cultos, cabildos, la salida. Van en un calendario mensual.
+ *   · LAS TAREAS DE CADA EVENTO — montar el altar, pedir las flores, avisar a
+ *     la banda. Cuelgan del evento porque es ahí donde tienen sentido: «pedir
+ *     las flores» sin saber para qué culto no es una tarea, es una nota.
+ *
+ * ----------------------------------------------------------------------------
+ * A QUIÉN SE LE PUEDE ASIGNAR UNA TAREA: TRES LISTAS, Y EN ESE ORDEN
+ * ----------------------------------------------------------------------------
+ *
+ * Primero los CARGOS y los GRUPOS (`rolesAsignables`), después el PERSONAL con
+ * acceso al panel (`personalAsignable`) y por último los HERMANOS del censo
+ * (`hermanosAsignables`). El orden es el que es porque muchas tareas son «de
+ * secretaría» o «de los costaleros», y para eso buscar un nombre concreto
+ * sobra — y además una tarea asignada a un cargo sobrevive al cambio de junta.
+ *
+ * Ojo al leer `nombreDeTrabajador`: un asignado puede estar en cualquiera de
+ * las tres listas, y el personal NO tiene número de hermano.
+ *
+ * ----------------------------------------------------------------------------
+ * DOS COSAS QUE HAN ROTO ESTA PANTALLA
+ * ----------------------------------------------------------------------------
+ *
+ * · `conDefectosEvento` SE APLICA AL LEER, no al pintar. `e.tareas` se recorre
+ *   en cinco sitios de este fichero, y basta que uno reciba un evento sin la
+ *   lista para que se caiga la pantalla entera. Al leer es un sitio; al pintar
+ *   son cinco y el sexto que alguien añada.
+ * · LA REPETICIÓN. Un quinario se repite cinco días y un cabildo es anual: la
+ *   repetición se guarda en el evento (`repeticion`) y las ocurrencias se
+ *   calculan, no se duplican filas. Ver `supabase/eventos-repeticion.sql` — se
+ *   escribió porque un culto que se repetía dejaba de repetirse al guardar.
+ *
+ * Y los cultos de esta agenda son los que salen en la web pública: ver
+ * `lib/cultosDelCalendario.ts`.
+ */
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import CalendarioMes from '../../components/CalendarioMes'

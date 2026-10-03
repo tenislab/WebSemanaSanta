@@ -1,3 +1,32 @@
+/**
+ * LA FRONTERA ENTRE LA APLICACIÓN Y LA TABLA, para los hermanos.
+ *
+ * En la aplicación los campos son `camelCase` (`fechaNacimiento`); en Postgres
+ * son `snake_case` (`fecha_nacimiento`). La conversión se hace AQUÍ y solo
+ * aquí: hay un fichero así por tabla en `lib/db/`, y los dos traductores se le
+ * pasan a `useSupabaseTable` (ver `lib/supabaseSync.ts`).
+ *
+ * POR QUÉ UN SITIO Y NO VEINTE. Cuando la conversión se hace en cada consulta,
+ * un campo nuevo se olvida en la mitad de ellas y el síntoma es que el dato «no
+ * se guarda» — sin error, sin aviso, solo un campo que vuelve vacío al recargar.
+ * Ha pasado con los campos propios del hermano y con el tutor de un menor.
+ *
+ * ASÍ QUE AL AÑADIR UN CAMPO A `Hermano` SON SIEMPRE TRES SITIOS:
+ *
+ *   1. El tipo, en `data/hermanos.ts`.
+ *   2. `hermanoToRow` Y `rowToHermano`, aquí. Las dos: con solo la primera el
+ *      dato se guarda y no vuelve, y eso se lee como «se ha perdido».
+ *   3. La columna en la tabla, con su fichero SQL y su registro en
+ *      `scripts/generar-todo-en-uno.mjs`.
+ *
+ * Y UN AVISO QUE NO ES DE ESTILO: `clave_acceso` SE MANDA VACÍA a propósito.
+ * Guardaba la contraseña del hermano en texto plano dentro del censo. La de
+ * verdad vive cifrada en Supabase Auth; esta era una copia en claro que solo
+ * hacía falta para el modo demostración y que en producción era un regalo para
+ * cualquiera que pudiera leer la tabla. La columna sigue existiendo un tiempo
+ * para que la versión anterior de la web no falle al guardar. Ver
+ * `supabase/seguridad-claves-y-registro.sql`.
+ */
 import type { Hermano } from '../../data/hermanos'
 import type { Cargo } from '../../data/documentos'
 

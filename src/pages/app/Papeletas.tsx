@@ -1,3 +1,64 @@
+/**
+ * PAPELETAS DE SITIO: el documento con el que un hermano sale en la procesión.
+ *
+ * ----------------------------------------------------------------------------
+ * QUÉ ES UNA PAPELETA, PORQUE NO ES OBVIO
+ * ----------------------------------------------------------------------------
+ *
+ * Es a la vez un RECIBO y una ENTRADA: el hermano la saca cada año, la paga, y
+ * en ella se le dice qué sitio le toca en el cortejo. Un año es un año: las
+ * papeletas no se heredan, se RENUEVAN, y de ahí el nombre de la pantalla.
+ *
+ * La papeleta que sale de aquí es el dato de entrada de dos sitios más:
+ *
+ *   · EL CORTEJO (`Cortejo.tsx`) reparte a quien tiene papeleta entre los
+ *     tramos. Sin papeleta no hay sitio.
+ *   · LAS ETIQUETAS AUTOMÁTICAS del censo salen del tramo o la opción de la
+ *     papeleta, y desaparecen si se anula. Ver `lib/rolesPapeleta.ts`.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE PASA AL EMITIR UNA, QUE ES MÁS QUE GUARDAR UNA FILA
+ * ----------------------------------------------------------------------------
+ *
+ * 1. SE COMPRUEBA SI DEBE DINERO. Se avisa de la deuda de cuotas al emitir, y
+ *    es el momento de hacerlo: es cuando el hermano está delante. La deuda se
+ *    lee del espejo de `cuotas`, no montando la tabla.
+ * 2. SE COBRA, y eso DEJA SU APUNTE EN TESORERÍA. Por eso esta pantalla monta
+ *    `movimientos` aunque no sea lo suyo: sin ese apunte, el dinero entra en la
+ *    hermandad y el libro de cuentas no se entera.
+ * 3. SE NUMERA. El número siguiente se calcula sobre las papeletas del año de
+ *    la campaña, no sobre todas.
+ * 4. SE IMPRIME con el modelo que la hermandad haya diseñado
+ *    (`ModeloPapeletaEditor`), y en DOS SALIDAS distintas: la de móvil lleva un
+ *    QR —es la que va por correo y se verifica en `/verificar`— y la física no,
+ *    porque en papel el QR no sirve para nada. Ver `papeletas/impresion.ts` y
+ *    `ZonaDeImpresion.tsx`. El QR, por cierto, se generaba perfectamente y al
+ *    escanearlo daba «código no válido»: uno de los bugs que compilaban.
+ *
+ * ----------------------------------------------------------------------------
+ * EL PRECIO Y LOS AJUSTES SON DE LA HERMANDAD, NO DE ESTE NAVEGADOR
+ * ----------------------------------------------------------------------------
+ *
+ * `hermandad.precioPapeleta` viene de `lib/hermandadSettings.ts`, que lo trae
+ * de la base. Estuvo en `localStorage` y el resultado era que cada ordenador de
+ * la casa de hermandad cobraba un precio distinto. Igual con la papeleta
+ * simbólica. Ver `supabase/papeletas-simbolica-y-precio.sql`.
+ *
+ * ----------------------------------------------------------------------------
+ * LA VENTANA DE HISTÓRICO, Y UN DETALLE QUE SE ESCAPA
+ * ----------------------------------------------------------------------------
+ *
+ * Esta pantalla trabaja ENTERA sobre el año de la campaña, así que traerse las
+ * papeletas de hace cinco años es traerlas para no mirarlas ni una vez. El
+ * mecanismo está en `lib/ventanaHistorico.ts`.
+ *
+ * EL AÑO SE MIRA DOS VECES —el de la campaña y el del calendario— y se coge el
+ * MENOR: `campana.anio` es la Semana Santa QUE VIENE, así que en otoño va un
+ * año por delante del calendario, y una hermandad puede haberlo dejado puesto
+ * en un año raro. Cogiendo el menor y restando uno, la ventana no se queda
+ * corta por ninguno de los dos lados. Nace apagada, detrás de la misma bandera
+ * que las cuotas.
+ */
 import { llano } from '../../lib/buscar'
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'

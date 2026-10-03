@@ -1,3 +1,12 @@
+/**
+ * EL ARRANQUE. El orden de estas cuatro líneas es la mitad del fichero.
+ *
+ *   `vigilar()` → `SiAlgoPetardea` → `BrowserRouter` → `AuthProvider` → `App`
+ *
+ * Los dos porqués están contados abajo, y los dos son del mismo caso: el error
+ * que deja la pantalla EN BLANCO, que es el único que nadie puede contar a
+ * mano.
+ */
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'

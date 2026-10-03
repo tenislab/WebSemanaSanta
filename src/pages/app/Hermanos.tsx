@@ -10,8 +10,9 @@
  * que decide no es el tamaño de cada trozo sino cuántos props costaría sacarlo.
  * Medido antes de tocar nada:
  *
- *   · LA FICHA DEL HERMANO (780 líneas) → 31 props, aun mudando con ella todo
- *     su estado. SE QUEDA.
+ *   · LA FICHA DEL HERMANO ENTERA (780 líneas) → 31 props, aun mudando con
+ *     ella todo su estado. SE QUEDA ENTERA, pero se parte POR DENTRO: los
+ *     bloques de la ficha salen uno a uno, y cada uno se lleva su estado.
  *   · LA LISTA con sus filtros (345 líneas) → 33 props. SE QUEDA.
  *   · Las solicitudes de alta → su estado, sus manejadores y su cajón son un
  *     asunto completo y salen con pocos props.
@@ -20,8 +21,27 @@
  *   · El cuerpo de la tabla ya estaba separado.
  *
  * Treinta y un props es peor que el fichero gordo: un componente así no se lee,
- * se descifra. Es el mismo listón que se aplicó al área del hermano, y por eso
- * aquí se sacan cuatro piezas y no siete.
+ * se descifra. Es el mismo listón que se aplicó al área del hermano.
+ *
+ * LO QUE SÍ SALIÓ, MEDIDO UNO A UNO. El truco no fue mover pantalla: fue mirar
+ * cuántos props costaba cada bloque CONTANDO con llevarse dentro su estado, que
+ * es lo que convierte nueve props en cuatro:
+ *
+ *   · `FichaCorregir`    identidad y contacto · 9 props → 4, con 6 variables
+ *                        de estado, dos manejadores y el efecto que siembra
+ *                        los campos.
+ *   · `FichaCertificado` el certificado de antigüedad · 5 variables de estado.
+ *   · `FichaCobro`       la cuenta bancaria · 7 props → 3.
+ *   · `FichaAdmin`       dar de baja, acceso, RGPD · 6 props, sin estado.
+ *   · `FichaEtiquetas`   8 props → 5, con `crearEtiqueta` y el toggle dentro.
+ *   · `FichaDatosSueltos` foto, bautismo, talla · DOS props y nada de estado:
+ *                        el más barato de todos.
+ *   · `AltaDeHermano`, `CajonDeBajas`, `CajonSolicitudes`, `FilasDelCenso`.
+ *
+ * Y se nota en algo que no es el número de líneas: nueve variables de estado
+ * que estaban AQUÍ ARRIBA —el borrador del IBAN, el del nombre, el del
+ * contacto— repintaban la tabla entera del censo cada vez que alguien tecleaba
+ * una letra. Mil filas por letra.
  *
  * ----------------------------------------------------------------------------
  * LO QUE HAY QUE SABER SI SE TOCA
@@ -32,31 +52,23 @@
  * hermanos— y no leen este fichero: piden el censo entero con `fuenteDelCenso()`
  * (ver `pruebas/fuentes.mjs`), que pega esto con todo lo de `censo/`.
  */
-import AvisoDeCampo from '../../components/AvisoDeCampo'
 import CamposPropiosForm from '../../components/CamposPropios'
-import CertificadoAntiguedad from '../../components/CertificadoAntiguedad'
 import Drawer from '../../components/Drawer'
 import EditorSegmento from '../../components/EditorSegmento'
-import FotoHermano from '../../components/FotoHermano'
 import ImportarCenso from '../../components/ImportarCenso'
 import InformeImpreso from '../../components/InformeImpreso'
 import MenuAcciones from '../../components/MenuAcciones'
 import { useAuth } from '../../context/AuthContext'
-import { referenciaCertificado, type Certificado } from '../../data/certificados'
 import { CUOTAS_INICIALES, type Cuota } from '../../data/cuotas'
 import { HERMANOS_INICIALES, initials, type EstadoHermano, type Hermano } from '../../data/hermanos'
 import { PAPELETAS_INICIALES } from '../../data/papeletas'
-import { crearAccesoHermano } from '../../lib/accesos'
 import { asistenciaEnUnaFrase, getAsistencias, historialDeAsistencia } from '../../lib/asistencia'
 import { avisarPorCorreo, prepararAvisos } from '../../lib/avisosCorreo'
-import { agregarAvisoHermano, avisarCambiosHermano } from '../../lib/avisosHermano'
-import { darLaBienvenida } from '../../lib/bienvenida'
+import { agregarAvisoHermano } from '../../lib/avisosHermano'
 import { llano } from '../../lib/buscar'
 import { getCampana } from '../../lib/campana'
 import { useCamposPropios, valorLegible } from '../../lib/camposPropios'
 import { darDeBajaEnCenso, reactivarEnCenso } from '../../lib/censo'
-import { emitirCertificado, useCertificadosDe } from '../../lib/certificados'
-import { claveDeUnSoloUso } from '../../lib/claves'
 import { repartoCompleto } from '../../lib/cortejo'
 import { descargarArchivo, toCsv } from '../../lib/csv'
 import { ejercicioDeCuotas } from '../../lib/cuotasEmision'
@@ -64,7 +76,6 @@ import { cuotaToRow, rowToCuota } from '../../lib/db/cuotas'
 import { hermanoToRow, rowToHermano } from '../../lib/db/hermanos'
 import { personalToRow, rowToPersonal } from '../../lib/db/personal'
 import { hayDatosDeEjemplo } from '../../lib/demo'
-import { limpiarDni, mismoDni, problemaDeDocumento } from '../../lib/dni'
 import { contarLaTanda, enviarAcceso, enviarAccesoEnTanda, porQueNoSePuede } from '../../lib/enviarAcceso'
 import {
   situacionDeHermano,
@@ -73,7 +84,7 @@ import {
   type SituacionCuota,
 } from '../../lib/estadoCuotaHermano'
 import { useEtiquetas } from '../../lib/etiquetas'
-import { formatCurrency, isPlausibleIban, maskIban, porQueNoValeElIban } from '../../lib/format'
+import { formatCurrency } from '../../lib/format'
 import { useHermandadSettings } from '../../lib/hermandadSettings'
 import {
   cumpleEsteMes,
@@ -98,8 +109,7 @@ import {
   type CriteriosSegmento,
 } from '../../lib/segmentacion'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
-import { nuevoId, useSupabaseTable } from '../../lib/supabaseSync'
-import { problemaDeTelefono } from '../../lib/telefono'
+import { useSupabaseTable } from '../../lib/supabaseSync'
 import { etiquetaTramo, useTramos } from '../../lib/tramos'
 import {
   useCallback,
@@ -109,7 +119,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type FormEvent,
 } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { FilasDelCenso } from './censo/FilasDelCenso'
@@ -126,6 +135,14 @@ import {
   estadoClass,
   type OrdenCampo,
 } from './censo/columnas'
+import AltaDeHermano from './censo/AltaDeHermano'
+import CajonDeBajas from './censo/CajonDeBajas'
+import FichaAdmin from './censo/FichaAdmin'
+import FichaCobro from './censo/FichaCobro'
+import FichaCertificado from './censo/FichaCertificado'
+import FichaCorregir from './censo/FichaCorregir'
+import FichaDatosSueltos from './censo/FichaDatosSueltos'
+import FichaEtiquetas from './censo/FichaEtiquetas'
 
 export default function Hermanos() {
   // Antes de mandar nada, traer de la base la configuración de correo de
@@ -173,7 +190,7 @@ export default function Hermanos() {
     const ficha = params.get('ficha')
     if (q === null && nuevo === null && ficha === null) return
     if (q !== null) setQuery(q)
-    if (nuevo !== null) { setDniError(null); setFormOpen(true) }
+    if (nuevo !== null) setFormOpen(true)
     if (ficha !== null) setSelectedId(ficha)
     // Se limpia la URL: si no, al recargar vuelve a filtrar y desconcierta.
     setParams({}, { replace: true })
@@ -320,11 +337,8 @@ export default function Hermanos() {
   const camposDeAlta = camposPropios.filter((c) => c.enAlta && c.nombre.trim())
   // Los campos propios del alta no van en el <form> (no son inputs con name):
   // se llevan aparte y se vuelcan al crear.
-  const [camposNuevo, setCamposNuevo] = useState<Record<string, string>>({})
   // Mientras se crea la cuenta en Supabase el botón se bloquea: si no, dos
   // clics seguidos daban de alta dos veces al mismo hermano.
-  const [guardandoAlta, setGuardandoAlta] = useState(false)
-  const [nuevaEtiqueta, setNuevaEtiqueta] = useState('')
   /**
    * Selección múltiple. Con mil doscientos hermanos, poner «Costalero» de uno
    * en uno abriendo la ficha era media tarde de trabajo.
@@ -333,14 +347,11 @@ export default function Hermanos() {
   const [avisoMasivo, setAvisoMasivo] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [justAddedId, setJustAddedId] = useState<string | null>(null)
-  const [dniError, setDniError] = useState<string | null>(null)
-  const [telefonoError, setTelefonoError] = useState<string | null>(null)
   /**
    * El del FORMULARIO DE ALTA, aparte del de la ficha (`ibanError`): son dos
    * paneles distintos y el de la ficha ni siquiera está abierto mientras se da
    * de alta a alguien, así que el aviso no se vería.
    */
-  const [ibanAltaError, setIbanAltaError] = useState<string | null>(null)
   /**
    * «La ficha se ha guardado, pero NO se ha creado su acceso».
    *
@@ -406,70 +417,19 @@ export default function Hermanos() {
     setAvisoAcceso(contarLaTanda(r) + detalle)
   }
 
-  const [ibanDraft, setIbanDraft] = useState('')
-  const [ibanError, setIbanError] = useState<string | null>(null)
-  const [ibanSaved, setIbanSaved] = useState(false)
-  const [contacto, setContacto] = useState({ email: '', telefono: '', direccion: '' })
-  const [contactoSaved, setContactoSaved] = useState(false)
-  /*
-   * LOS DATOS DE IDENTIDAD SE PUEDEN CORREGIR, Y HASTA AHORA NO.
-   *
-   * De la ficha solo se podían tocar el contacto y los datos sueltos (talla,
-   * parroquia, notas). El nombre, el DNI, el número y las fechas se escribían
-   * en el alta y se quedaban así PARA SIEMPRE.
-   *
-   * Y hay una errata en el nombre o en el DNI de cada dos altas. Peor: cuando
-   * se intentaba dar de alta otra vez a alguien que ya estaba, el propio aviso
-   * decía «busca la que ya está y edítala» — mandando a hacer justo lo único
-   * que no se podía hacer.
-   */
   /*
    * EL CERTIFICADO DE ANTIGÜEDAD que se está expidiendo, o el que se acaba de
    * expedir para poder imprimirlo. `null` = no hay ninguno abierto.
    */
-  const [certificado, setCertificado] = useState<Certificado | null>(null)
-  const [motivoCert, setMotivoCert] = useState('')
-  const [expidiendo, setExpidiendo] = useState(false)
-  const [errorCert, setErrorCert] = useState<string | null>(null)
   /* Expedir un certificado se pide poco, y su formulario —con el aviso de los
      firmantes y el «para qué lo pide»— ocupaba media ficha siempre. Se abre
      al decir que se va a expedir. */
-  const [expidiendoAbierto, setExpidiendoAbierto] = useState(false)
-  const { certificados, recargar: recargarCertificados } = useCertificadosDe(selected?.id ?? null)
 
   /*
    * Los cargos que firman el certificado y están vacantes. Se mira sobre el
    * censo, que es de donde los saca la base al expedirlo.
    */
-  const sinFirmantes = useMemo(
-    () => (['Hermano Mayor', 'Secretario/a'] as const)
-      .filter((cargo) => !hermanos.some((h) => h.cargo === cargo && h.estado !== 'Baja')),
-    [hermanos],
-  )
 
-  async function expedirCertificado() {
-    if (!selected || expidiendo) return
-    setExpidiendo(true)
-    setErrorCert(null)
-    const r = await emitirCertificado(selected.id, motivoCert.trim())
-    setExpidiendo(false)
-    if (!r.ok) {
-      // El mensaje de la base va TAL CUAL: los suyos están escritos para
-      // leerlos en pantalla, y cambiarlos por un «no se ha podido» le quita a
-      // quien está en secretaría la única pista de qué pasa.
-      setErrorCert(r.error)
-      return
-    }
-    setCertificado(r.certificado)
-    setMotivoCert('')
-    // Expedido: el formulario se cierra. Dejarlo abierto invita a expedir dos.
-    setExpidiendoAbierto(false)
-    recargarCertificados()
-  }
-
-  const [ident, setIdent] = useState({ nombre: '', dni: '', numero: '', antiguedad: '', fechaNacimiento: '' })
-  const [identError, setIdentError] = useState<string | null>(null)
-  const [identSaved, setIdentSaved] = useState(false)
 
   /*
    * LAS SOLICITUDES DE ALTA, en `censo/solicitudesDeAlta.tsx`.
@@ -493,37 +453,6 @@ export default function Hermanos() {
 
 
 
-
-  useEffect(() => {
-    setIbanDraft(selected?.iban ?? '')
-    setIbanError(null)
-    setIbanSaved(false)
-    // Al cambiar de hermano, el formulario de expedir se cierra: abierto en la
-    // ficha de otra persona es un certificado a punto de salir a nombre de
-    // quien no lo pidió.
-    setExpidiendoAbierto(false)
-    setErrorCert(null)
-    setContacto({
-      email: selected?.email ?? '',
-      telefono: selected?.telefono && selected.telefono !== 'Sin datos' ? selected.telefono : '',
-      direccion: selected?.direccion && selected.direccion !== 'Sin datos' ? selected.direccion : '',
-    })
-    setContactoSaved(false)
-    setIdent({
-      nombre: selected?.nombre ?? '',
-      dni: selected?.dni ?? '',
-      numero: String(selected?.numero ?? 0),
-      antiguedad: String(selected?.antiguedad ?? ''),
-      fechaNacimiento: selected?.fechaNacimiento ?? '',
-    })
-    setIdentError(null)
-    setIdentSaved(false)
-
-    // Solo al CAMBIAR de hermano (por eso la dependencia es el id y no la ficha
-    // entera): si dependiera de cada campo, el formulario se reiniciaría solo
-    // mientras se está escribiendo en él.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id])
 
   /**
    * Quien ha pedido la baja desde su área y sigue esperando. Antes esto solo se
@@ -602,111 +531,9 @@ export default function Hermanos() {
     [hermanos],
   )
 
-  /** Añade o quita una etiqueta a un hermano (y refleja el cambio en la ficha abierta). */
   /** Cambia unos cuantos campos de un hermano. Se guarda al escribir, como el resto. */
-  /**
-   * GUARDA LOS DATOS DE IDENTIDAD DE LA FICHA: nombre, DNI, número, año de
-   * antigüedad y fecha de nacimiento.
-   *
-   * Se comprueba lo mismo que en el alta, y por lo mismo:
-   *
-   *   · EL DNI, letra incluida. Es por lo que entra el hermano en su área, y
-   *     con la letra mal el que no puede entrar es él, con un «DNI o
-   *     contraseña incorrectos» que le hace probar contraseñas hasta rendirse.
-   *   · QUE NO SE REPITA, ni el DNI ni el número. La base tiene índices únicos
-   *     para los dos: si se cuela, el error que sale es un «duplicate key» que
-   *     no dice nada, y encima llega DESPUÉS de haber cerrado el panel.
-   *
-   * El número se puede dejar en 0 —el hermano civil no ocupa escalafón— pero
-   * no se puede poner uno que ya tenga otro.
-   */
-  function guardarIdentidad() {
-    if (!selected) return
-    setIdentError(null)
-    const nombre = ident.nombre.trim()
-    if (!nombre) { setIdentError('El nombre no puede quedarse vacío.'); return }
-
-    /*
-     * EL DNI SE COMPRUEBA SOLO SI SE HA TOCADO.
-     *
-     * Es la misma regla que en el alta y por el mismo motivo: se valida lo que
-     * se teclea HOY, con el hermano delante, no lo que vino de un Excel de
-     * hace quince años. Un censo importado trae erratas, y son fichas de gente
-     * de verdad.
-     *
-     * Comprobarlo siempre dejaba la ficha bloqueada entera: con el DNI mal de
-     * origen no se podía corregir ni el nombre, que es justo para lo que se
-     * abre esto. Se comprueba lo que se cambia, y lo demás se deja pasar.
-     */
-    const dni = limpiarDni(ident.dni)
-    if (!mismoDni(dni, selected.dni)) {
-      const problema = problemaDeDocumento(dni)
-      if (problema) { setIdentError(problema); return }
-    }
-    if (hermanos.some((h) => h.id !== selected.id && mismoDni(h.dni, dni))) {
-      setIdentError(`Ya hay otro hermano con el DNI ${dni}.`)
-      return
-    }
-
-    const numero = Number(ident.numero)
-    if (!Number.isInteger(numero) || numero < 0) {
-      setIdentError('El número de hermano tiene que ser un número entero, o 0 si no ocupa escalafón.')
-      return
-    }
-    if (numero > 0 && hermanos.some((h) => h.id !== selected.id && h.numero === numero)) {
-      const quien = hermanos.find((h) => h.id !== selected.id && h.numero === numero)
-      setIdentError(`El número ${numero} ya lo tiene ${quien?.nombre}.`)
-      return
-    }
-
-    const antiguedad = ident.antiguedad.trim() === '' ? selected.antiguedad : Number(ident.antiguedad)
-    if (!Number.isInteger(antiguedad) || antiguedad < 1000 || antiguedad > 2999) {
-      setIdentError('El año de antigüedad tiene que ser un año de cuatro cifras.')
-      return
-    }
-
-    aplicarHermano(selected.id, {
-      nombre,
-      dni,
-      numero,
-      antiguedad,
-      fechaNacimiento: ident.fechaNacimiento || undefined,
-    })
-    apuntar({
-      autorNombre: quienSoy, accion: 'ficha', sobreTipo: 'hermano',
-      sobreId: selected.id, sobreNombre: nombre,
-      detalle: `Corrigió los datos de la ficha de ${nombre}`,
-    })
-    setIdentSaved(true)
-    setTimeout(() => setIdentSaved(false), 2500)
-  }
-
   function aplicarHermano(hermanoId: string, cambios: Partial<Hermano>) {
     setHermanos((prev) => prev.map((h) => (h.id === hermanoId ? { ...h, ...cambios } : h)))
-  }
-
-  function toggleEtiquetaHermano(hermanoId: string, etiqueta: string) {
-    setHermanos((prev) =>
-      prev.map((h) => {
-        if (h.id !== hermanoId) return h
-        const actuales = h.etiquetas ?? []
-        const siguiente = actuales.includes(etiqueta)
-          ? actuales.filter((e) => e !== etiqueta)
-          : [...actuales, etiqueta]
-        return { ...h, etiquetas: siguiente }
-      }),
-    )
-  }
-
-  /** Crea una etiqueta nueva en el catálogo y se la asigna al hermano abierto. */
-  function crearEtiqueta() {
-    const limpia = nuevaEtiqueta.trim()
-    if (!limpia) return
-    if (!etiquetas.includes(limpia)) setEtiquetas([...etiquetas, limpia])
-    if (selected && !(selected.etiquetas ?? []).includes(limpia)) {
-      toggleEtiquetaHermano(selected.id, limpia)
-    }
-    setNuevaEtiqueta('')
   }
 
   const stats = useMemo(() => {
@@ -836,236 +663,7 @@ export default function Hermanos() {
     setHermanos((prev) => prev.map((h) => (h.id === id ? { ...h, campos } : h)))
   }
 
-  async function handleCreate(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const form = e.currentTarget
-    const data = new FormData(form)
-    const nombre = String(data.get('nombre') ?? '').trim()
-    const email = String(data.get('email') ?? '').trim()
-    /**
-     * El DNI se guarda SIEMPRE limpio: sin puntos, sin guiones, sin espacios.
-     *
-     * Antes se guardaba tal cual lo escribieran, y eso rompía dos cosas a la
-     * vez, las dos en silencio:
-     *
-     *   - El control de duplicados. «12.345.678-A» y «12345678A» son el mismo
-     *     señor, pero comparados en crudo no coinciden: se daba de alta dos
-     *     veces al mismo hermano, con dos números distintos.
-     *   - Y peor: el hermano no podía entrar en su área. Ahí escribe su DNI
-     *     como lo lleva la tarjeta, y la búsqueda no encontraba la ficha. El
-     *     mensaje que veía era «DNI o contraseña incorrectos», así que probaba
-     *     contraseñas hasta rendirse y llamar a secretaría.
-     */
-    const dni = limpiarDni(String(data.get('dni') ?? ''))
-    if (!nombre || !email || !dni) return
-    if (guardandoAlta) return
-    setGuardandoAlta(true)
 
-    if (hermanos.some((h) => limpiarDni(h.dni) === dni)) {
-      setDniError(`Ya hay un hermano registrado con el DNI ${dni}.`)
-      // Sin esto el botón se quedaba en «Guardando…» y deshabilitado para
-      // siempre: había que cerrar el panel y volver a escribirlo todo.
-      setGuardandoAlta(false)
-      return
-    }
-    /*
-     * Y QUE EL DOCUMENTO ESTÉ BIEN. Se comprueba AQUÍ y no al importar: un DNI
-     * que se teclea hoy, con el hermano delante, se puede comprobar; uno que
-     * viene de un Excel de hace quince años, no —ver `lib/dni.ts`—.
-     *
-     * De ese número cuelgan tres cosas que se rompen calladamente: es la llave
-     * con la que el hermano entra en su área, es lo que evita darlo de alta dos
-     * veces, y es lo que va en el mandato SEPA que se le enseña al banco.
-     */
-    const malDocumento = problemaDeDocumento(dni)
-    if (malDocumento) {
-      setDniError(malDocumento)
-      setGuardandoAlta(false)
-      return
-    }
-    setDniError(null)
-
-    /*
-     * Y EL TELÉFONO. No tumba nada, pero es por donde se llama al hermano
-     * cuando hay que llamarle —una papeleta que no recoge, un cargo devuelto—,
-     * y un número con una cifra de menos no se descubre hasta que hace falta.
-     */
-    const telefonoTecleado = String(data.get('telefono') ?? '')
-    const malTelefono = problemaDeTelefono(telefonoTecleado)
-    if (malTelefono) {
-      setTelefonoError(malTelefono)
-      setGuardandoAlta(false)
-      return
-    }
-    setTelefonoError(null)
-
-    /*
-     * EL IBAN MAL ESCRITO SE DECÍA, NO SE TIRABA.
-     *
-     * Antes: `ibanRaw && isPlausibleIban(ibanRaw) ? ibanRaw : null`. O sea, se
-     * borraba en silencio. La secretaria daba de alta al hermano con su cuenta
-     * delante, se comía una cifra, y la ficha se guardaba SIN IBAN sin decir
-     * nada. Después nadie entendía por qué a ese hermano no se le cobraba: en
-     * su ficha no había ninguna cuenta, y ella recordaba haberla escrito.
-     */
-    const ibanRaw = String(data.get('iban') ?? '').trim()
-    if (ibanRaw && !isPlausibleIban(ibanRaw)) {
-      setIbanAltaError(`Ese IBAN no vale: ${porQueNoValeElIban(ibanRaw)}.`)
-      return
-    }
-    setIbanAltaError(null)
-    const iban = ibanRaw || null
-    const fechaNacimiento = String(data.get('fechaNacimiento') ?? '').trim() || undefined
-
-    const nuevo: Hermano = {
-      id: nuevoId(),
-      // Se numera dentro del setHermanos de abajo, con la lista más reciente.
-      numero: 0,
-      nombre,
-      estado: 'Nuevo',
-      antiguedad: new Date().getFullYear(),
-      email,
-      telefono: String(data.get('telefono') ?? '') || 'Sin datos',
-      direccion: String(data.get('direccion') ?? '') || 'Sin datos',
-      cuotaAlDia: false,
-      iban,
-      dni,
-      /*
-       * Su contraseña provisional es ALEATORIA, no su DNI.
-       *
-       * Antes era el DNI, «fácil de comunicar». Y también fácil de adivinar:
-       * el DNI está en su ficha, así que cualquiera con acceso al censo podía
-       * entrar como cualquier hermano que no la hubiera cambiado — incluido el
-       * Hermano Mayor, cuyo cargo abre los trece módulos. Ver src/lib/claves.ts.
-       *
-       * No se guarda en ninguna parte: se usa para crear la cuenta, se le manda
-       * por correo y aquí queda en blanco. La de verdad vive cifrada en
-       * Supabase Auth.
-       */
-      claveAcceso: '',
-      authUserId: null,
-      fechaNacimiento,
-      campos: Object.keys(camposNuevo).length ? camposNuevo : undefined,
-    }
-    const claveProvisional = claveDeUnSoloUso()
-    const acceso = await crearAccesoHermano(email, claveProvisional, dni, nombre)
-    nuevo.authUserId = acceso.id
-    // Cómo se llama su cuenta por dentro. Sin apuntarlo, la pantalla de entrar
-    // no la encuentra a partir de su DNI y esa persona no entra nunca.
-    nuevo.correoAcceso = acceso.correoAcceso ?? null
-    if (acceso.error) setAvisoAcceso(acceso.error)
-    // El duplicado se vuelve a mirar DENTRO del updater: entre el clic y la
-    // respuesta de Supabase pasan segundos, y pulsando dos veces se daban de
-    // alta dos hermanos con el mismo DNI.
-    let duplicado = false
-    let suNumero = 0
-    setHermanos((prev) => {
-      // El tecleado ya viene limpio; el del censo hay que limpiarlo también.
-      // Comparar uno limpio contra otro sin limpiar es no comparar nada: un
-      // censo importado con puntos no reconocía al que ya estaba dentro, y la
-      // misma persona se daba de alta DOS VECES, con dos números.
-      if (prev.some((h) => mismoDni(h.dni, dni))) {
-        duplicado = true
-        return prev
-      }
-      suNumero = Math.max(0, ...prev.map((h) => h.numero)) + 1
-      return [...prev, { ...nuevo, numero: suNumero }]
-    })
-    // La bienvenida, igual que en el alta desde solicitud.
-    // La bienvenida, igual que en el alta desde solicitud, y con la contraseña
-    // de un solo uso: es la única vez que se escribe en algún sitio.
-    if (!duplicado) {
-      void darLaBienvenida({
-        id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email, dni: nuevo.dni,
-        numero: suNumero, claveProvisional: acceso.id ? claveProvisional : null,
-        hermandad: hermandad.nombreLegal,
-      })
-    }
-    if (duplicado) {
-      setDniError('Ya hay un hermano con ese DNI.')
-      setGuardandoAlta(false)
-      return
-    }
-    setJustAddedId(nuevo.id)
-    setFormOpen(false)
-    setFilter('Todos')
-    setQuery('')
-    form.reset()
-    setCamposNuevo({})
-    setGuardandoAlta(false)
-    setTimeout(() => setJustAddedId(null), 3000)
-  }
-
-  function guardarIban() {
-    if (!selected) return
-    const trimmed = ibanDraft.trim()
-    if (trimmed && !isPlausibleIban(trimmed)) {
-      // Se dice QUÉ le pasa. «No parece válido» delante de un IBAN de veinte
-      // cifras no ayuda a nadie: al que le faltan cifras y al que tiene una
-      // cambiada se les arregla de maneras distintas.
-      setIbanError(`Ese IBAN no vale: ${porQueNoValeElIban(trimmed)}. Ejemplo: ES91 2100 0418 4502 0005 1332.`)
-      return
-    }
-    const nuevoIban = trimmed || null
-    if ((selected.iban ?? null) !== nuevoIban) {
-      const texto = 'La secretaría ha actualizado tu cuenta bancaria.'
-      agregarAvisoHermano(selected.id, texto)
-      apuntar({
-        autorNombre: quienSoy, accion: 'iban', sobreTipo: 'hermano',
-        sobreId: selected.id, sobreNombre: selected.nombre,
-        // El IBAN NO se apunta: duplicaría datos bancarios en una segunda
-        // tabla que nadie vigila. Con saber quién lo tocó y cuándo basta.
-        detalle: `Cambió la cuenta bancaria de ${selected.nombre}`,
-      })
-      // Este en concreto conviene que salga por correo: un cambio de cuenta
-      // que el hermano no ha pedido es lo primero que hay que poder detectar.
-      avisarPorCorreo(
-        [{ id: selected.id, nombre: selected.nombre, email: selected.email }],
-        // «importante», no «ficha»: el interruptor de ficha viene apagado de
-        // fábrica, así que este aviso —el que permite detectar un cambio de
-        // cuenta que el hermano no ha pedido— no salía NUNCA.
-        'importante',
-        'Han cambiado tu cuenta bancaria',
-        [texto, 'Si no lo has pedido tú, avisa a la secretaría cuanto antes.'],
-      )
-    }
-    setHermanos((prev) => prev.map((h) => (h.id === selected.id ? { ...h, iban: nuevoIban } : h)))
-    setIbanError(null)
-    setIbanSaved(true)
-    setTimeout(() => setIbanSaved(false), 2500)
-  }
-
-  /** Guarda los datos de contacto editados en la ficha y avisa al hermano. */
-  function guardarContacto() {
-    if (!selected) return
-    const nuevo: Hermano = {
-      ...selected,
-      email: contacto.email.trim() || selected.email,
-      telefono: contacto.telefono.trim() || 'Sin datos',
-      direccion: contacto.direccion.trim() || 'Sin datos',
-    }
-    const cambio = avisarCambiosHermano(selected, nuevo)
-    if (cambio) {
-      apuntar({
-        autorNombre: quienSoy, accion: 'ficha', sobreTipo: 'hermano',
-        sobreId: nuevo.id, sobreNombre: nuevo.nombre, detalle: cambio.replace('La secretaría ha', 'Cambió'),
-      })
-    }
-    // Y por correo, si la hermandad tiene encendido «avisar de cambios en la
-    // ficha». Viene apagado de fábrica a propósito: son muchos y menores.
-    if (cambio) {
-      avisarPorCorreo(
-        [{ id: nuevo.id, nombre: nuevo.nombre, email: nuevo.email }],
-        'ficha',
-        'Han cambiado datos de tu ficha',
-        [cambio, 'Si no reconoces este cambio, avisa a la secretaría.'],
-        'Este aviso lo puedes apagar desde tu área de hermano.',
-      )
-    }
-    setHermanos((prev) => prev.map((h) => (h.id === selected.id ? nuevo : h)))
-    setContactoSaved(true)
-    setTimeout(() => setContactoSaved(false), 2500)
-  }
 
   /**
    * Da de baja a un hermano y renumera el censo: su número queda libre y todos
@@ -1285,7 +883,7 @@ export default function Hermanos() {
               Imprimir el listado <small>{filtered.length}</small>
             </button>
           </MenuAcciones>
-          <button className="btn btn-primary" onClick={() => { setDniError(null); setFormOpen(true) }}>
+          <button className="btn btn-primary" onClick={() => setFormOpen(true)}>
             + Nuevo hermano
           </button>
         </div>
@@ -1561,7 +1159,7 @@ export default function Hermanos() {
                   </p>
                   <div className="vacio__acciones">
                     {hermanos.length === 0 ? (
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => { setDniError(null); setFormOpen(true) }}>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => setFormOpen(true)}>
                         + Dar de alta al primero
                       </button>
                     ) : (
@@ -1856,343 +1454,32 @@ export default function Hermanos() {
               Va aquí, en su ficha, y no en una pantalla aparte: se pide de uno
               en uno, mirando a la persona que lo está pidiendo.
             */}
-            <section className="ficha-bloque">
-              <h4>Certificado de antigüedad</h4>
-              {selected.estado === 'Baja' ? (
-                /* De quien causó baja se puede certificar que LO FUE, y eso es
-                   otro papel con otro texto. Este dice, en presente, que figura
-                   inscrito; dárselo sería firmar algo que no es verdad. */
-                <p className="table-subtle">
-                  Figura de baja, así que no se le puede certificar que está inscrito. Ese sería
-                  otro documento, con otro texto.
-                </p>
-              ) : (
-                <>
-                  {/*
-                    UNA LÍNEA Y UN BOTÓN, NO DOS PÁRRAFOS.
-
-                    Esto era lo que más texto ponía en la ficha: dos párrafos de
-                    qué es y a quién acredita, el aviso de los firmantes, el
-                    campo «Para qué lo pide» con su explicación y el botón — y
-                    todo eso SIEMPRE, delante del DNI y del cumpleaños, se
-                    fuera a expedir o no. No se ha borrado nada: lo que
-                    explica se pliega, y lo que hace falta para expedir aparece
-                    al decir que se va a expedir.
-                  */}
-                  <p className="table-subtle">
-                    Acredita que es hermano/a desde <b>{selected.antiguedad}</b> y con qué número.
-                    {' '}
-                    <details className="ficha-ayuda">
-                      <summary>¿Qué es esto?</summary>
-                      Es el papel que pide un hermano cuando tiene que acreditar ante alguien que
-                      lo es y desde cuándo: para entrar en otra hermandad, para el consejo, para
-                      una bolsa de caridad, para el varal que va por antigüedad. Queda registrado
-                      con su número de orden, para poder responder por él si se lo piden a la
-                      hermandad.
-                    </details>
-                  </p>
-                  {!expidiendoAbierto ? (
-                    <button className="btn btn-outline btn-sm" onClick={() => setExpidiendoAbierto(true)}>
-                      Expedir certificado…
-                    </button>
-                  ) : (
-                  <div className="assign-box">
-                    {/*
-                      SI NO HAY QUIÉN FIRME, SE DICE ANTES DE EXPEDIRLO.
-                      El papel sale igual —con la línea y el título, como en
-                      papel— pero quien lo expide tiene que saber que va a salir
-                      sin nombres, y dónde se arregla. Enterarse al imprimirlo,
-                      con la persona esperando, es enterarse tarde. Y aquí es
-                      «antes de expedirlo»: en el momento en que hace falta, no
-                      cada vez que se abre una ficha.
-                    */}
-                    {sinFirmantes.length > 0 && (
-                      <p className="form-hint">
-                        Nadie figura como{' '}
-                        {sinFirmantes.map((cargo, i) => (
-                          <span key={cargo}>
-                            {i > 0 && ' ni como '}<b>{cargo}</b>
-                          </span>
-                        ))}
-                        {' '}en el censo, así que{' '}
-                        {sinFirmantes.length === 1 ? 'esa línea saldrá' : 'esas líneas saldrán'} sin nombre.
-                        Se pone en la ficha de quien lleve el cargo.
-                      </p>
-                    )}
-                    {errorCert && <div className="banner-inline banner-inline--warn" role="alert">{errorCert}</div>}
-                    <div className="form-row">
-                      <label htmlFor="motivoCert">Para qué lo pide</label>
-                      <input
-                        id="motivoCert"
-                        value={motivoCert}
-                        onChange={(e) => setMotivoCert(e.target.value)}
-                        placeholder="Solicitar el ingreso en otra hermandad, bolsa de caridad…"
-                      />
-                      <p className="form-hint">
-                        Sale escrito en el certificado. En blanco dice «para que conste donde
-                        proceda».
-                      </p>
-                    </div>
-                    <div className="assign-box__row">
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => void expedirCertificado()}
-                        disabled={expidiendo}
-                      >
-                        {expidiendo ? 'Expidiendo…' : 'Expedir certificado'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        onClick={() => setExpidiendoAbierto(false)}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                  )}
-
-                  {/* Lo primero que hace la secretaría cuando le piden uno es
-                      mirar si ya se lo dio, y con qué número. */}
-                  {certificados.length > 0 && (
-                    <ul className="ficha-bloque__filas">
-                      {certificados.map((c) => (
-                        <li key={c.id}>
-                          <b>Nº {referenciaCertificado(c)}</b>
-                          <span>{c.fecha}{c.motivo ? ` · ${c.motivo}` : ''}</span>
-                          <button className="btn btn-ghost btn-sm" onClick={() => setCertificado(c)}>
-                            Ver
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </section>
+            <FichaCertificado selected={selected} hermandad={hermandad} hermanos={hermanos} />
 
 
             {/*
-              CORREGIR LA FICHA.
+              CORREGIR LA FICHA: identidad y contacto, en `censo/FichaCorregir.tsx`.
 
-              Faltaba entero: el nombre, el DNI, el número y las fechas se
-              escribían en el alta y se quedaban así para siempre. Con una
-              errata en el nombre no había nada que hacer, y con el DNI mal el
-              hermano no podía entrar en su área.
-
-              Y era peor de lo que parece: al intentar dar de alta a alguien
-              que ya estaba, el aviso decía «busca la que ya está y edítala» —
-              mandando a hacer justo lo único que no se podía hacer.
+              Se lleva dentro sus seis variables de estado, sus dos manejadores
+              y el efecto que siembra los campos al cambiar de hermano. Estando
+              aquí arriba, teclear una letra del nombre repintaba la tabla
+              entera del censo.
             */}
-            <div className="assign-box">
-              <label>Corregir la ficha</label>
-              <p className="form-hint">
-                Los datos con los que se dio de alta. El DNI es con el que entra en su área, así
-                que si está mal, quien no puede entrar es él.
-              </p>
-              <div className="form-row">
-                <label htmlFor="identNombre">Nombre y apellidos</label>
-                <input
-                  id="identNombre" value={ident.nombre} maxLength={120}
-                  onChange={(e) => setIdent((v) => ({ ...v, nombre: e.target.value }))}
-                />
-              </div>
-              <div className="form-grid-2">
-                <div className="form-row">
-                  <label htmlFor="identDni">DNI o NIE</label>
-                  <input
-                    id="identDni" value={ident.dni}
-                    onChange={(e) => setIdent((v) => ({ ...v, dni: e.target.value }))}
-                  />
-                </div>
-                <div className="form-row">
-                  <label htmlFor="identNumero">Nº de hermano</label>
-                  <input
-                    id="identNumero" type="number" min={0} value={ident.numero}
-                    onChange={(e) => setIdent((v) => ({ ...v, numero: e.target.value }))}
-                  />
-                  <p className="form-hint">0 = no ocupa escalafón (hermano civil).</p>
-                </div>
-              </div>
-              <div className="form-grid-2">
-                <div className="form-row">
-                  <label htmlFor="identAnt">Año de antigüedad</label>
-                  <input
-                    id="identAnt" type="number" min={1000} max={2999} value={ident.antiguedad}
-                    onChange={(e) => setIdent((v) => ({ ...v, antiguedad: e.target.value }))}
-                  />
-                </div>
-                <div className="form-row">
-                  <label htmlFor="identNac">Fecha de nacimiento</label>
-                  <input
-                    id="identNac" type="date" value={ident.fechaNacimiento}
-                    onChange={(e) => setIdent((v) => ({ ...v, fechaNacimiento: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <AvisoDeCampo texto={identError} />
-              <div className="assign-box__row">
-                <button type="button" className="btn btn-primary btn-sm" onClick={guardarIdentidad}>
-                  Guardar la ficha
-                </button>
-                {identSaved && <span className="pill pill--ok">Guardado</span>}
-              </div>
-            </div>
+            <FichaCorregir
+              selected={selected}
+              hermanos={hermanos}
+              setHermanos={setHermanos}
+              quienSoy={quienSoy}
+            />
+            <FichaDatosSueltos selected={selected} aplicarHermano={aplicarHermano} />
 
-            <div className="assign-box">
-              <label>Datos de contacto</label>
-              <p className="form-hint">
-                Si cambias algún dato, el hermano recibe un aviso en su área (correo simulado hasta
-                conectar el proveedor).
-              </p>
-              <div className="form-row">
-                <label htmlFor="emailHermano">Correo electrónico</label>
-                <input
-                  id="emailHermano"
-                  type="email"
-                  value={contacto.email}
-                  onChange={(e) => setContacto((c) => ({ ...c, email: e.target.value }))}
-                />
-              </div>
-              <div className="form-grid-2">
-                <div className="form-row">
-                  <label htmlFor="telHermano">Teléfono</label>
-                  <input
-                    id="telHermano"
-                    type="tel"
-                    value={contacto.telefono}
-                    placeholder="600 000 000"
-                    onChange={(e) => setContacto((c) => ({ ...c, telefono: e.target.value }))}
-                  />
-                  <AvisoDeCampo texto={problemaDeTelefono(contacto.telefono)} />
-                </div>
-                <div className="form-row">
-                  <label htmlFor="dirHermano">Dirección</label>
-                  <input
-                    id="dirHermano"
-                    type="text"
-                    value={contacto.direccion}
-                    placeholder="Calle y número"
-                    onChange={(e) => setContacto((c) => ({ ...c, direccion: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="assign-box__row">
-                <button type="button" className="btn btn-primary btn-sm" onClick={guardarContacto}>
-                  Guardar datos de contacto
-                </button>
-                {contactoSaved && <span className="form-hint form-hint--ok">Guardado · avisado al hermano.</span>}
-              </div>
-            </div>
-            <div className="assign-box">
-              <label>Foto</label>
-              <FotoHermano
-                nombre={selected.nombre}
-                foto={selected.fotoDataUrl}
-                consiente={selected.consienteFoto}
-                onCambiar={(foto, consiente) => aplicarHermano(selected.id, { fotoDataUrl: foto, consienteFoto: consiente })}
-              />
-            </div>
-
-            <div className="assign-box">
-              <label>Datos que suelen hacer falta</label>
-              <p className="form-hint">
-                El expediente pide el bautismo; la talla y las notas de salud se acaban apuntando en
-                un papel aparte que se pierde todos los años.
-              </p>
-              <div className="form-grid-2">
-                <div className="form-row">
-                  <label htmlFor="parroquiaBautismo">Parroquia de bautismo</label>
-                  <input
-                    id="parroquiaBautismo" type="text" value={selected.parroquiaBautismo ?? ''}
-                    onChange={(e) => aplicarHermano(selected.id, { parroquiaBautismo: e.target.value })}
-                    placeholder="Parroquia de Santa Ana"
-                  />
-                </div>
-                <div className="form-row">
-                  <label htmlFor="fechaBautismo">Fecha de bautismo</label>
-                  <input
-                    id="fechaBautismo" type="date" value={selected.fechaBautismo ?? ''}
-                    onChange={(e) => aplicarHermano(selected.id, { fechaBautismo: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="form-grid-2">
-                <div className="form-row">
-                  <label htmlFor="tallaTunica">Talla de túnica</label>
-                  <input
-                    id="tallaTunica" type="text" value={selected.tallaTunica ?? ''}
-                    onChange={(e) => aplicarHermano(selected.id, { tallaTunica: e.target.value })}
-                    placeholder="M · 1,75 m"
-                  />
-                </div>
-                <div className="form-row">
-                  <label htmlFor="notasSalud">Para el día de la salida</label>
-                  <input
-                    id="notasSalud" type="text" value={selected.notasSalud ?? ''}
-                    onChange={(e) => aplicarHermano(selected.id, { notasSalud: e.target.value })}
-                    placeholder="Alergia a…, no puede andar mucho"
-                  />
-                  <p className="form-hint">Son ocho horas de pie: esto no es curiosidad.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="assign-box">
-              <label>Etiquetas</label>
-              <p className="form-hint">
-                Marca los grupos a los que pertenece. Sirven para mandarle avisos segmentados (p. ej.
-                solo a los costaleros) y para filtrar el censo.
-              </p>
-              {/* Las que vienen de su papeleta no se marcan a mano: se ponen
-                  solas mientras la tenga y se van si la anula. Enseñarlas aquí
-                  evita que alguien las busque en la lista y no las encuentre. */}
-              {(roles.get(selected.id) ?? []).length > 0 && (
-                <div className="etiquetas-auto">
-                  <span className="etiquetas-auto__ante">Por su papeleta de este año</span>
-                  <div className="etiquetas-chips">
-                    {(roles.get(selected.id) ?? []).map((et) => (
-                      <span key={et} className="chip chip--auto" title="Se pone sola por el tramo u opción de su papeleta">
-                        {et}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="etiquetas-chips">
-                {etiquetas.map((et) => {
-                  const activa = (selected.etiquetas ?? []).includes(et)
-                  return (
-                    <button
-                      type="button"
-                      key={et}
-                      className={`chip chip--toggle${activa ? ' chip--active' : ''}`}
-                      onClick={() => toggleEtiquetaHermano(selected.id, et)}
-                      aria-pressed={activa}
-                    >
-                      {activa ? '✓ ' : ''}{et}
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="assign-box__row" style={{ marginTop: '0.6rem' }}>
-                <input
-                  type="text"
-                  placeholder="Crear etiqueta nueva…"
-                  value={nuevaEtiqueta}
-                  onChange={(e) => setNuevaEtiqueta(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      crearEtiqueta()
-                    }
-                  }}
-                />
-                <button type="button" className="btn btn-outline btn-sm" onClick={crearEtiqueta}>
-                  Añadir
-                </button>
-              </div>
-            </div>
+            <FichaEtiquetas
+              selected={selected}
+              roles={roles}
+              etiquetas={etiquetas}
+              setEtiquetas={setEtiquetas}
+              setHermanos={setHermanos}
+            />
 
             {camposPropios.length > 0 && (
               <div className="assign-box">
@@ -2210,235 +1497,40 @@ export default function Hermanos() {
               </div>
             )}
 
-            <div className="assign-box">
-              <label htmlFor="ibanHermano">
-                Cuenta bancaria (para domiciliar sus cuotas)
-              </label>
-              <div className="assign-box__row">
-                <input
-                  id="ibanHermano"
-                  type="text"
-                  placeholder="ES00 0000 0000 0000 0000 0000"
-                  value={ibanDraft}
-                  onChange={(e) => {
-                    setIbanDraft(e.target.value)
-                    setIbanError(null)
-                  }}
-                />
-                <button type="button" className="btn btn-primary btn-sm" onClick={guardarIban}>
-                  Guardar
-                </button>
-              </div>
-              {ibanError && <p className="form-hint form-hint--error">{ibanError}</p>}
-              {ibanSaved && !ibanError && <p className="form-hint form-hint--ok">Cuenta guardada.</p>}
-              {!selected.iban && !ibanDraft && !ibanError && (
-                <p className="form-hint">
-                  Sin cuenta registrada, sus cuotas no se pueden domiciliar todavía.
-                </p>
-              )}
-              {selected.iban && !ibanError && ibanDraft === selected.iban && (
-                <p className="form-hint">Cuenta actual: {maskIban(selected.iban)}</p>
-              )}
-            </div>
+            <FichaCobro selected={selected} setHermanos={setHermanos} quienSoy={quienSoy} />
 
-            <details className="afinar afinar--suelto ficha-admin">
-              <summary className="afinar__cabeza">
-                <span className="afinar__titulo">Administración</span>
-                <span className="afinar__nota">Baja, reactivación y protección de datos</span>
-              </summary>
-              <div className="afinar__cuerpo">
-            <div className="assign-box">
-              <label>Situación en la hermandad</label>
-              {selected.bajaSolicitada && selected.estado !== 'Baja' && (
-                <div className="banner-inline banner-inline--warn" style={{ marginBottom: '0.7rem' }}>
-                  <b>{selected.nombre.split(' ')[0]} ha solicitado la baja</b> desde su área de
-                  hermano. Tramítala aquí abajo si procede.
-                </div>
-              )}
-              {/*
-                * DARLE ACCESO A SU ÁREA.
-                *
-                * La cuenta se creaba al darlo de alta a mano y al aprobar su
-                * solicitud. Pero una hermandad entra IMPORTANDO su censo, y la
-                * importación no crea cuentas —ni debe: 800 altas serían 800
-                * correos de golpe—. Sin este botón, la hermandad tenía su censo
-                * entero y ni un hermano podía entrar en su área.
-                */}
-              {selected.estado !== 'Baja' && (
-                <div className="ficha-acceso">
-                  {selected.authUserId ? (
-                    <p className="form-hint">
-                      <b>Ya tiene acceso.</b> Si no recuerda su contraseña, que use
-                      «he olvidado mi contraseña» en la pantalla de entrar: desde aquí no se le
-                      puede poner otra.
-                    </p>
-                  ) : !selected.email?.includes('@') ? (
-                    <p className="form-hint">
-                      <b>No puede entrar todavía.</b> Para darle acceso hace falta su correo:
-                      ponlo arriba y guarda.
-                    </p>
-                  ) : (
-                    <>
-                      <p className="form-hint">
-                        <b>Todavía no puede entrar en su área.</b> Al enviarle el acceso se le crea
-                        su cuenta y se le manda por correo una clave de un solo uso, que cambiará al
-                        entrar.
-                      </p>
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        disabled={enviandoAcceso === selected.id}
-                        onClick={() => mandarAcceso(selected)}
-                      >
-                        {enviandoAcceso === selected.id ? 'Enviando…' : 'Enviar acceso por correo'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-              {selected.estado !== 'Baja' ? (
-                <>
-                  <p className="form-hint">
-                    Al dar de baja, su número queda libre y los hermanos con número mayor
-                    descienden uno (el escalafón de antigüedad se recoloca solo). Se conserva su
-                    historial y puede reactivarse más adelante.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm rgpd-borrar"
-                    onClick={() => {
-                      if (window.confirm(`¿Dar de baja a ${selected.nombre}? Los números de hermano se recolocarán.`)) {
-                        void darDeBaja(selected.id)
-                      }
-                    }}
-                  >
-                    Dar de baja
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="form-hint">
-                    Está de baja: fuera de la numeración activa. Al reactivarlo hay que decidir qué
-                    pasa con su antigüedad, y no da igual.
-                  </p>
-                  <div className="assign-box__row">
-                    <button
-                      type="button" className="btn btn-primary btn-sm"
-                      onClick={() => reactivar(selected.id, true)}
-                    >
-                      Recupera su antigüedad ({selected.antiguedad})
-                    </button>
-                    <button
-                      type="button" className="btn btn-outline btn-sm"
-                      onClick={() => reactivar(selected.id, false)}
-                    >
-                      Entra al final del censo
-                    </button>
-                  </div>
-                  <p className="form-hint">
-                    Con <b>recuperar su antigüedad</b> vuelve al puesto que le toca por su año de
-                    entrada y los de abajo descienden uno, que es lo normal cuando alguien se
-                    reincorpora. Con <b>al final</b> entra como uno nuevo.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="assign-box">
-              <label>Protección de datos (RGPD)</label>
-              <p className="form-hint">
-                {selected.nombre.split(' ')[0]} puede ejercer sus derechos sobre sus datos: descargar
-                todo lo que la hermandad guarda de él/ella, o pedir que se supriman.
-              </p>
-              <div className="assign-box__row">
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => descargarDatosRgpd(selected)}>
-                  Descargar sus datos
-                </button>
-                <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => borrarHermanoRgpd(selected)}>
-                  Borrar sus datos
-                </button>
-              </div>
-              <p className="form-hint">
-                La supresión borra al hermano y sus cuotas, papeletas e incidencias. Ten en cuenta que
-                la normativa contable puede obligar a conservar ciertos registros; esa decisión es de
-                la hermandad.
-              </p>
-            </div>
-              </div>
-            </details>
+            <FichaAdmin
+              selected={selected}
+              enviandoAcceso={enviandoAcceso}
+              mandarAcceso={mandarAcceso}
+              darDeBaja={darDeBaja}
+              reactivar={reactivar}
+              descargarDatosRgpd={descargarDatosRgpd}
+              borrarHermanoRgpd={borrarHermanoRgpd}
+            />
           </div>
         )}
       </Drawer>
 
       {/* Alta de hermano */}
-      <Drawer
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title="Nuevo hermano"
-        subtitle="Alta en el censo"
-        footer={
-          <>
-            <button className="btn btn-ghost" onClick={() => setFormOpen(false)}>
-              Cancelar
-            </button>
-            <button className="btn btn-primary" form="hermano-form" type="submit" disabled={guardandoAlta}>
-              {guardandoAlta ? 'Guardando…' : 'Guardar hermano'}
-            </button>
-          </>
-        }
-      >
-        <form id="hermano-form" className="app-form" onSubmit={handleCreate}>
-          <div className="form-row">
-            <label htmlFor="nombre">Nombre y apellidos</label>
-            <input id="nombre" name="nombre" type="text" placeholder="Nombre completo" required />
-          </div>
-          <div className="form-row">
-            <label htmlFor="email">Correo electrónico</label>
-            <input id="email" name="email" type="email" placeholder="correo@ejemplo.com" required />
-          </div>
-          <div className="form-row">
-            <label htmlFor="dni">DNI / NIE</label>
-            <input id="dni" name="dni" type="text" placeholder="12345678A" required />
-            {dniError && <p className="form-hint form-hint--error">{dniError}</p>}
-          </div>
-          <div className="form-grid-2">
-            <div className="form-row">
-              <label htmlFor="telefono">Teléfono</label>
-              <input id="telefono" name="telefono" type="tel" inputMode="tel" placeholder="600 00 00 00" />
-              <AvisoDeCampo texto={telefonoError} />
-            </div>
-            <div className="form-row">
-              <label htmlFor="fechaNacimiento">Fecha de nacimiento</label>
-              <input id="fechaNacimiento" name="fechaNacimiento" type="date" />
-              <p className="form-hint">Necesaria para los avisos por edad (p. ej. solo mayores de edad).</p>
-            </div>
-          </div>
-          <div className="form-row">
-            <label htmlFor="direccion">Dirección</label>
-            <input id="direccion" name="direccion" type="text" placeholder="Calle y número" />
-          </div>
-          <div className="form-row">
-            <label htmlFor="iban">Cuenta bancaria (opcional)</label>
-            <input
-              id="iban" name="iban" type="text" placeholder="ES00 0000 0000 0000 0000 0000"
-              aria-invalid={ibanAltaError ? true : undefined}
-            />
-            {ibanAltaError && <p className="form-hint form-hint--error">{ibanAltaError}</p>}
-          </div>
-          <CamposPropiosForm
-            campos={camposDeAlta}
-            valores={camposNuevo}
-            onChange={setCamposNuevo}
-            idPrefijo="alta"
-          />
-          <p className="form-hint">
-            Se le asignará automáticamente el siguiente número de hermano disponible y quedará en
-            estado «Nuevo». Su usuario será su DNI y la contraseña provisional también su DNI, que
-            podrá cambiar desde su área del hermano. Sin cuenta bancaria, sus cuotas no podrán
-            domiciliarse hasta que la añada.
-          </p>
-        </form>
-      </Drawer>
+      <AltaDeHermano
+        abierto={formOpen}
+        onCerrar={() => setFormOpen(false)}
+        hermanos={hermanos}
+        setHermanos={setHermanos}
+        hermandad={hermandad}
+        camposDeAlta={camposDeAlta}
+        onCreado={(id) => {
+          // Lo que pasa DESPUÉS del alta es cosa de esta pantalla: resaltar su
+          // fila un rato y quitar los filtros, para que el recién dado de alta
+          // se vea aunque estuviera filtrando por otra cosa.
+          setJustAddedId(id)
+          setFilter('Todos')
+          setQuery('')
+          setTimeout(() => setJustAddedId(null), 3000)
+        }}
+        onAviso={setAvisoAcceso}
+      />
 
       {/* Solicitudes de alta pedidas desde el área del hermano */}
       {/*
@@ -2454,75 +1546,16 @@ export default function Hermanos() {
         papel que sale de la hermandad con dos firmas, y quien lo expide tiene
         que poder leerlo antes de dárselo a nadie. Ancho, porque es un A4.
       */}
-      <Drawer
-        open={certificado !== null}
-        onClose={() => { setCertificado(null); setErrorCert(null) }}
-        title={certificado ? `Certificado nº ${referenciaCertificado(certificado)}` : 'Certificado'}
-        subtitle={certificado?.hermanoNombre}
-        ancho="ancho"
-        footer={
-          <>
-            <button className="btn btn-ghost" onClick={() => setCertificado(null)}>Cerrar</button>
-            <button className="btn btn-primary" onClick={() => window.print()}>
-              Imprimir / Descargar
-            </button>
-          </>
-        }
-      >
-        {certificado && <CertificadoAntiguedad certificado={certificado} hermandad={hermandad} />}
-      </Drawer>
 
-      <Drawer
-        open={bajasOpen}
-        onClose={() => setBajasOpen(false)}
-        title="Bajas pedidas"
-        subtitle={`${bajasPedidas.length} esperando`}
-      >
-        <div className="ficha">
-          <p className="form-hint">
-            Lo han pedido desde su área. Hasta que se tramite <b>siguen siendo hermanos de pleno
-            derecho</b>, con su número y su antigüedad.
-          </p>
-          {bajasPedidas.length === 0 ? (
-            <p className="form-hint">No hay bajas pendientes.</p>
-          ) : (
-            bajasPedidas.map((h) => (
-              <div className="assign-box" key={h.id}>
-                <div className="ficha__row">
-                  <span className="pill pill--warn">Pide la baja</span>
-                  {h.bajaSolicitadaEl && <span className="pill pill--off">{h.bajaSolicitadaEl}</span>}
-                </div>
-                <dl className="ficha__list">
-                  <div><dt>Hermano/a</dt><dd>{h.nombre}</dd></div>
-                  <div><dt>Número</dt><dd>{h.numero > 0 ? h.numero : '—'}</dd></div>
-                  <div><dt>Hermano desde</dt><dd>{h.antiguedad}</dd></div>
-                  <div><dt>Cuota</dt><dd>{cuotaEnPalabras(situacionDe(h.id))}</dd></div>
-                  {h.email && <div><dt>Correo</dt><dd><a href={`mailto:${h.email}`}>{h.email}</a></dd></div>}
-                  {h.telefono && <div><dt>Teléfono</dt><dd><a href={`tel:${h.telefono.replace(/\s+/g, '')}`}>{h.telefono}</a></dd></div>}
-                </dl>
-                {/* El motivo es lo único que le permite a la hermandad
-                    reaccionar. Si lo ha escrito, va destacado, no perdido. */}
-                {h.motivoBaja ? (
-                  <p className="baja-motivo">«{h.motivoBaja}»</p>
-                ) : (
-                  <p className="form-hint">No ha dicho por qué.</p>
-                )}
-                <div className="assign-box__row">
-                  <button type="button" className="btn btn-ghost btn-sm rgpd-borrar" onClick={() => darDeBaja(h.id)}>
-                    Tramitar la baja
-                  </button>
-                  <button type="button" className="btn btn-outline btn-sm" onClick={() => descartarBaja(h.id)}>
-                    Retirar la solicitud
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setBajasOpen(false); setSelectedId(h.id) }}>
-                    Ver su ficha
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Drawer>
+      <CajonDeBajas
+        abierto={bajasOpen}
+        onCerrar={() => setBajasOpen(false)}
+        bajasPedidas={bajasPedidas}
+        situacionDe={situacionDe}
+        onTramitar={darDeBaja}
+        onDescartar={descartarBaja}
+        onVerFicha={(id) => { setBajasOpen(false); setSelectedId(id) }}
+      />
 
       <CajonSolicitudes
         alta={alta}

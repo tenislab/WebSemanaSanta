@@ -4378,6 +4378,26 @@ label.icon-btn { display: inline-grid; place-items: center; cursor: pointer; }
 .interruptor--no { opacity: 0.6; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .regla__cabeza::before { transition: none; } }
 
+/*
+  REGLAS Y DOCUMENTOS EN LA WEB PÚBLICA.
+
+  Una fila por documento, con lo que es a la izquierda y el botón a la derecha
+  — el mismo reparto que la lista de documentos del panel y la del área del
+  hermano, para que las tres se lean igual. Usa los colores de la plantilla de
+  la hermandad (`--sitio-*`), no los del panel: esto lo ve quien entra en la
+  web y tiene que parecer de su web, no de la aplicación.
+*/
+.sitio-documentos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sitio-documentos__item {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.7rem 1rem;
+  padding: 1rem 0; border-top: 1px solid var(--sitio-linea);
+}
+.sitio-documentos__item:first-child { border-top: none; }
+.sitio-documentos__que { flex: 1 1 16rem; min-width: 0; }
+.sitio-documentos__que b { display: block; font-size: 1.02rem; }
+.sitio-documentos__dato { font-size: 0.84rem; color: var(--sitio-muted); }
+.sitio-documentos__nota { margin: 0.35rem 0 0; font-size: 0.9rem; color: var(--sitio-fg); }
+
 /* El cartel del acto en la lista: pequeño y apaisado, del tamaño de la fila.
    No se estira ni la deforma —`flex: none` y `object-fit: cover`—, y si el
    acto no tiene cartel no deja hueco porque el elemento no se pinta. */

@@ -1,3 +1,16 @@
+/**
+ * LA PALETA DE COMANDOS (Ctrl/⌘ + K): ir a cualquier sitio y hacer lo de siempre.
+ *
+ * Lo único que hay que saber antes de añadirle algo: NO DECIDE NADA SOBRE
+ * PERMISOS. Los destinos le llegan en `destinos`, ya filtrados por el cargo de
+ * quien ha entrado (los calcula `AppShell` con `lib/permisos.ts`), y las
+ * acciones se comprueban contra esa misma lista con `puede(to)`.
+ *
+ * El motivo es el de siempre: una paleta que construyera su propia lista sería
+ * una segunda fuente de verdad sobre qué puede ver cada cargo, y tarde o
+ * temprano ofrecería un atajo a una pantalla cerrada. Si añades una acción,
+ * compruébala contra `destinos`.
+ */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useFocoDeDialogo } from '../lib/foco'
 import { useNavigate } from 'react-router-dom'

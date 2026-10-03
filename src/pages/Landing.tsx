@@ -1,3 +1,30 @@
+/**
+ * LA PORTADA PÚBLICA DE GOBERGO: la página de venta del producto.
+ *
+ * No es la web de una hermandad —eso es `pages/SitioPublico.tsx`—: es la
+ * portada de la plataforma, con las funciones, los precios y el botón de
+ * entrar. No lee ningún dato de ninguna hermandad y no necesita sesión.
+ *
+ * ----------------------------------------------------------------------------
+ * LO ÚNICO QUE AQUÍ TIENE LÓGICA, Y NO ES DECORACIÓN
+ * ----------------------------------------------------------------------------
+ *
+ * LA CUENTA ATRÁS PARA LA SEMANA SANTA se CALCULA (`lib/semanaSanta.ts`), no se
+ * escribe a mano. La fecha se mueve más de un mes de un año a otro, y una
+ * portada que anuncia el Domingo de Ramos en la fecha equivocada se descalifica
+ * sola delante de un cofrade — que es exactamente el público al que le estamos
+ * vendiendo.
+ *
+ * Y durante la propia Semana Santa la cuenta atrás DEJA DE CONTAR y dice lo que
+ * pasa: «Mañana», «Hoy», «Ya está en la calle». «Faltan −3 días» sería justo lo
+ * que no hay que enseñar el Jueves Santo, que es el día del año con más gente
+ * mirando esta página.
+ *
+ * El resto son los precios (con el conmutador mensual/anual) y texto. Si tocas
+ * los precios, mira también `lib/suscripcion.ts`, que es quien decide de verdad
+ * qué incluye cada plan: una portada que promete un módulo que el plan no abre
+ * es una reclamación.
+ */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from '../components/Logo'

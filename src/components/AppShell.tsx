@@ -1,3 +1,61 @@
+/**
+ * EL MARCO DEL PANEL DE GESTIÓN: el menú de la izquierda y todo lo que avisa.
+ *
+ * ----------------------------------------------------------------------------
+ * QUÉ ES Y DÓNDE ENCAJA
+ * ----------------------------------------------------------------------------
+ *
+ * Es el `element` de la ruta `/app` en `App.tsx`, así que envuelve las veinte
+ * pantallas del panel y NO se desmonta al cambiar de pestaña: las pantallas
+ * entran y salen por el `<Outlet />`, el marco se queda. Por eso vive aquí
+ * todo lo que tiene que estar encendido mientras alguien trabaja, y no en cada
+ * pantalla.
+ *
+ * Son cuatro trabajos distintos, y conviene no mezclarlos al leer:
+ *
+ *   1. EL MENÚ (`NAV`), recortado por el cargo de quien ha entrado y por el
+ *      plan contratado. Ver `lib/permisos.ts` y `moduloPermitidoPorPack`.
+ *   2. EL GUARDIÁN DE LA RUTA: si el cargo no puede ver ese módulo, devuelve a
+ *      Inicio.
+ *   3. LAS BANDAS DE AVISO, que son seis y cada una dice una cosa distinta
+ *      (abajo).
+ *   4. LOS ARRANQUES: la copia de seguridad semanal
+ *      (`lib/copiaAutomatica.ts`), la hidratación de plantillas
+ *      (`lib/hidratar.ts`) y la comprobación de la versión del esquema.
+ *
+ * ----------------------------------------------------------------------------
+ * LAS BANDAS, Y POR QUÉ SON VARIAS Y NO UNA
+ * ----------------------------------------------------------------------------
+ *
+ * Juntarlas fue la primera idea y es un error, porque dicen cosas que piden
+ * reacciones opuestas:
+ *
+ *   · «NO SE HA PODIDO GUARDAR» → hay que hacer algo. Lleva el motivo de
+ *     Postgres plegado dentro, para poder copiarlo y mandarlo: el texto exacto
+ *     de la base es inútil para quien lleva la hermandad e imprescindible para
+ *     quien lo arregla. Antes se iba a la consola, donde no mira nadie.
+ *   · «ESTÁ APUNTADO Y SE MANDA SOLO» (la cola de escritura) → NO hay que
+ *     hacer nada, solo no cerrar. Meterlo en el aviso de error haría que quien
+ *     pasa lista en la calle el Viernes Santo creyera que ha perdido la noche
+ *     justo cuando no la ha perdido. Ver `lib/colaEscritura.ts`.
+ *   · «LA BASE ESTÁ EN UNA VERSIÓN ANTERIOR» → hay que ejecutar
+ *     `ACTUALIZAR.sql`. Ver `lib/versionDelEsquema.ts`.
+ *   · «ESTÁS VIENDO LA HERMANDAD DE OTROS» (suplantación de soporte), que no
+ *     puede pasar desapercibida ni un segundo. Ver `lib/soporte.ts`.
+ *   · El alta de hermandad a medias, y el contador de avisos pendientes.
+ *
+ * ----------------------------------------------------------------------------
+ * DOS COSAS QUE SE ROMPIERON Y ESTÁN ATADAS CON UN COMENTARIO ABAJO
+ * ----------------------------------------------------------------------------
+ *
+ * · EL GUARDIÁN SOLO BLOQUEA CUANDO SABE. Sin esperar a `cargoResuelto`, la
+ *   redirección a Inicio saltaba en el primer pintado —cuando el cargo todavía
+ *   es «no lo sé»—, o sea que pulsar cualquier sección devolvía a Inicio.
+ *   Todas, siempre, para todo el mundo.
+ * · EL ÚLTIMO ERROR DE LA BASE NO SE BORRA al cerrar el aviso: cuando alguien
+ *   se decide a contar el fallo, el aviso lo cerró hace rato y ese texto es
+ *   justo el dato que hacía falta.
+ */
 import type { ErrorTraducido } from '../lib/errorDeBaseDeDatos'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { copiaSemanalSiTocaba } from '../lib/copiaAutomatica'

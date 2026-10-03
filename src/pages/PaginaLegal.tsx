@@ -1,3 +1,16 @@
+/**
+ * LOS TEXTOS LEGALES (aviso legal, privacidad, cookies): `/legal/:slug`.
+ *
+ * El contenido vive en `data/legal.ts`, y son PLANTILLAS: llevan huecos
+ * marcados con corchetes (`[...]`) que el titular tiene que rellenar con sus
+ * datos.
+ *
+ * MIENTRAS QUEDE UN HUECO, SE AVISA EN GRANDE de que el texto no tiene validez
+ * legal hasta que se rellene y lo revise un profesional. No es exceso de celo:
+ * una política de privacidad a medio rellenar publicada en un sitio que trata
+ * datos personales de cientos de personas es peor que no tener ninguna, porque
+ * parece que la hay.
+ */
 import { Link, Navigate, useParams } from 'react-router-dom'
 import Logo from '../components/Logo'
 import { DOCUMENTOS_LEGALES, getDocumentoLegal } from '../data/legal'

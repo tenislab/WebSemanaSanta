@@ -1,4 +1,4 @@
-import { etiquetaAsistencia, type EstadoAsistencia, type RegistroAsistencia } from '../lib/asistencia'
+import { cuentaAsistencia, etiquetaAsistencia, type EstadoAsistencia, type RegistroAsistencia } from '../lib/asistencia'
 
 /**
  * EL PAR DE CHIPS «ASISTE / NO ASISTE» DE UN HERMANO, Y SU MOTIVO.
@@ -68,19 +68,6 @@ export function PastillaAsistencia({ reg }: { reg: RegistroAsistencia }) {
       {reg.estado === 'no_asiste' && reg.motivo ? ` · ${reg.motivo}` : ''}
     </span>
   )
-}
-
-/**
- * EL RECUENTO DE UN TRAMO, en los tres números que se preguntan el día de la
- * salida. Es una función aparte y pura para que una prueba pueda ejecutarla con
- * una lista a mano, sin pintar nada.
- */
-export function cuentaAsistencia(
-  estados: EstadoAsistencia[],
-): { asisten: number; noAsisten: number; pendientes: number } {
-  const asisten = estados.filter((e) => e === 'asiste').length
-  const noAsisten = estados.filter((e) => e === 'no_asiste').length
-  return { asisten, noAsisten, pendientes: estados.length - asisten - noAsisten }
 }
 
 /** Las tres pastillas del recuento, iguales en la lista y en el plegable. */

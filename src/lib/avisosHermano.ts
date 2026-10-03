@@ -6,10 +6,32 @@ import { supabase, isSupabaseConfigured } from './supabase'
 import type { Hermano } from '../data/hermanos'
 
 /**
- * Avisos al hermano cuando la secretaría cambia algo de sus datos. Cada cambio
- * genera un aviso (correo simulado hasta conectar el proveedor) que el hermano
- * ve en su área. Así el hermano se entera de cualquier modificación que haga la
- * hermandad sobre su ficha.
+ * AVISAR AL HERMANO DE LO QUE LA SECRETARÍA TOCA EN SU FICHA.
+ *
+ * Cada cambio genera un aviso que el hermano ve en su área, y así se entera de
+ * cualquier modificación que la hermandad haga sobre sus datos. No es cortesía:
+ * es lo que convierte «le han cambiado la cuenta bancaria» en algo que él puede
+ * detectar.
+ *
+ * `avisarCambiosHermano(antes, despues)` compara las dos fichas y devuelve la
+ * frase de lo que ha cambiado, o `null` si no ha cambiado nada que le importe.
+ * Quien lo llama decide qué hacer con ella: apuntarla en el registro, mandarla
+ * por correo, o las dos.
+ *
+ * ----------------------------------------------------------------------------
+ * UN AVISO POR CAMBIO, Y NO TODOS SALEN POR CORREO
+ * ----------------------------------------------------------------------------
+ *
+ * El interruptor de «avisar de cambios en la ficha» viene APAGADO de fábrica a
+ * propósito: son muchos y menores, y una hermandad que cambia doscientas fichas
+ * al importar un censo no quiere mandar doscientos correos.
+ *
+ * Pero hay DOS que no se pueden apagar, y van como `importante`: la BAJA en la
+ * hermandad —a partir de ahí el hermano pierde el acceso a su área, así que el
+ * aviso de dentro no lo va a leer nunca— y el CAMBIO DE CUENTA BANCARIA, que es
+ * lo primero que hay que poder detectar. Los dos iban por el interruptor
+ * apagado, o sea que no salían nunca y no había forma de saberlo: está contado
+ * justo debajo, en `TipoAviso`.
  */
 
 /**

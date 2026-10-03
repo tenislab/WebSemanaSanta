@@ -1,3 +1,21 @@
+/**
+ * EL APUNTE DEL LIBRO DE CUENTAS: el tipo y los datos de ejemplo.
+ *
+ * Esta tabla es el DESTINO de media aplicación: le escriben Cuotas (cada recibo
+ * cobrado), Papeletas (cada papeleta pagada), la Tienda (cada venta) y Campañas
+ * (cada donativo). Ver `pages/app/Tesoreria.tsx`.
+ *
+ * DOS ESTADOS, y la diferencia importa: solo los `Conciliado` cuentan para el
+ * balance de Informes. Conciliado quiere decir que el apunte se ha visto en el
+ * extracto del banco; `Pendiente` es lo que la hermandad da por hecho y el
+ * banco todavía no confirma.
+ *
+ * LAS CUENTAS Y LAS CATEGORÍAS SON CATÁLOGOS que edita cada hermandad
+ * (`CuentaMovimiento` es `string` a propósito, no una unión cerrada):
+ * `CUENTAS_POR_DEFECTO` es solo el punto de partida. Una lista cerrada
+ * obligaría a meter media contabilidad en «Otros», y de estos apuntes sale el
+ * estado de cuentas que se entrega en la diócesis.
+ */
 export type TipoMovimiento = 'Ingreso' | 'Gasto'
 export type EstadoMovimiento = 'Conciliado' | 'Pendiente'
 /** Cuenta de tesorería; la lista la define cada hermandad en Configuración. */

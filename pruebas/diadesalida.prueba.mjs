@@ -74,7 +74,7 @@ export default async function ({ cargar, caso }) {
   // ---------------------------------------------------------------------
   // 2. EL RECUENTO: función pura, con listas a mano.
   // ---------------------------------------------------------------------
-  const { cuentaAsistencia } = await cargar('src/components/ChipsAsistencia.tsx')
+  const { cuentaAsistencia } = await cargar('src/lib/asistencia.ts')
   caso('el tramo vacío no inventa pendientes', { asisten: 0, noAsisten: 0, pendientes: 0 },
     cuentaAsistencia([]))
   caso('los tres números suman el tramo', { asisten: 2, noAsisten: 1, pendientes: 3 },

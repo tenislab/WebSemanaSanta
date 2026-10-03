@@ -101,3 +101,26 @@ node scripts/caza/botones.mjs
 Y al leer lo que saca: un filtro **ya activo** no cambia nada al pulsarlo, y un
 `submit` con un campo obligatorio vacío tampoco —el navegador enseña su globo, y
 eso no se ve desde aquí—. Los dos son normales.
+
+## `ver-ficha-partida.mjs`
+
+La ficha del hermano, después de partirla en seis piezas. No comprueba que
+compile —eso lo dice `tsc`— sino que los tres bloques que mudaron de fichero
+**siguen funcionando con su estado dentro**, que es lo que se rompe al mudarlo:
+abre una ficha, mira que los campos lleguen sembrados, **cambia de hermano**
+para ver que se vuelven a sembrar, corrige el nombre y comprueba que el censo
+cambia de verdad, marca una etiqueta, crea una nueva y escribe una talla.
+
+```bash
+node scripts/caza/ver-ficha-partida.mjs
+```
+
+Dos cosas que esta sonda se equivocó en decir, y por eso están escritas en ella:
+
+* Buscar `/cerrar/i` entre **todos** los botones encuentra «Cerrar sesión» en el
+  menú. La sonda cerraba la sesión y seguía midiendo una página vacía. El botón
+  de cerrar se busca **dentro del cajón**.
+* Y con la página vacía, la pregunta «¿han cambiado los campos al cambiar de
+  hermano?» salía **verdadera**, porque los dos lados eran `null`. Comparar dos
+  cosas que no están no es comparar: la comprobación exige ahora que las dos
+  fichas tengan nombre.

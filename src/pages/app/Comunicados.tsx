@@ -1,3 +1,63 @@
+/**
+ * COMUNICADOS: lo que la hermandad manda, y a quién.
+ *
+ * ----------------------------------------------------------------------------
+ * LA PANTALLA QUE MÁS CUIDADO PIDE DE TODO EL PANEL
+ * ----------------------------------------------------------------------------
+ *
+ * Desde aquí salen correos en nombre de la hermandad a ochocientas personas, y
+ * un envío no se puede deshacer. Por eso tiene DOCE ficheros de prueba
+ * mirándola, varios de ellos leyendo su fuente, y por eso casi todas las
+ * decisiones de abajo están del lado de «mejor no mandarlo» cuando hay dudas.
+ *
+ * ----------------------------------------------------------------------------
+ * A QUIÉN SE PUEDE ESCRIBIR, QUE SON DOS PÚBLICOS DISTINTOS
+ * ----------------------------------------------------------------------------
+ *
+ *   · LOS HERMANOS, por SEGMENTOS: «activos», «con cuota pendiente»,
+ *     «costaleros». Un segmento se guarda con los CRITERIOS con los que se
+ *     compuso, no solo con su etiqueta legible: así se puede volver a resolver
+ *     más tarde, cuando el censo ya ha cambiado. Ver `lib/segmentacion.ts`.
+ *   · LOS SUSCRIPTORES DE LA WEB — vecinos y devotos que no son hermanos y se
+ *     apuntaron en la web. De esta lista sale el boletín.
+ *
+ * ----------------------------------------------------------------------------
+ * TRES DISTINCIONES QUE PARECEN SUTILES Y SON LA DIFERENCIA ENTRE MANDAR Y NO
+ * ----------------------------------------------------------------------------
+ *
+ * 1. `suscriptores === null` NO ES LO MISMO QUE `[]`. `null` es «no se ha
+ *    podido preguntar»; `[]` es «de verdad no hay ninguno». Dando por buena una
+ *    lista vacía que en realidad es un fallo, el envío se hace, no escribe a
+ *    nadie y la pantalla dice «Enviado a 0 suscriptores» — y nadie vuelve a
+ *    mirarlo.
+ * 2. QUIEN NO HA CONFIRMADO NO RECIBE NADA. Si son la mitad de la lista, la
+ *    mitad de los avisos de la hermandad no salen de aquí, y en silencio. Hay
+ *    un botón para reenviarles el correo de confirmación de una vez.
+ * 3. `prepararAvisos()` AL MONTAR, antes de mandar nada: trae de la base la
+ *    configuración de correo de la hermandad y lo que cada hermano tenga
+ *    APAGADO en sus preferencias. Sin eso, quien entra desde otro ordenador
+ *    trabaja con la de fábrica: o no sale ningún aviso, o se le escribe a quien
+ *    pidió que no. Los dos en silencio.
+ *
+ * ----------------------------------------------------------------------------
+ * LAS PIEZAS, EN `comunicados/`
+ * ----------------------------------------------------------------------------
+ *
+ * · `mandarElComunicado.ts` — el envío de verdad. Lo que se toca con más miedo.
+ * · `losProgramados.ts` — los que salen a una hora. Ver `supabase/envio-programado.sql`.
+ * · `PanelDeReglas.tsx` — los «avisos automáticos»: se mandan solos cuando pasa
+ *   algo (un hermano se da de alta, una cuota vence).
+ * · `PanelDeRedes.tsx` + `redesSociales.ts` — el texto para publicar en redes.
+ *   Esto NO publica: genera el texto y lo copia, porque publicar de verdad
+ *   necesita credenciales de cada red que una hermandad no tiene.
+ * · `PanelDeEncargos.tsx` + `encargosDeRedes.ts` — el encargo a quien lleva las
+ *   redes, que es una persona distinta de quien escribe el comunicado.
+ * · `alcance.ts` — a cuánta gente llegaría esto, que es lo que se mira antes de
+ *   darle al botón.
+ *
+ * El correo de verdad lo manda la función `enviar-correo` de Supabase, no el
+ * navegador; el camino completo está en `docs/COMO-VIAJA-UN-CORREO.md`.
+ */
 import { llano } from '../../lib/buscar'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { prepararAvisos } from '../../lib/avisosCorreo'

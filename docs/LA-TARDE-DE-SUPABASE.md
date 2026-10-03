@@ -29,7 +29,7 @@ nada a mano — solo que no dé error.
 select version_del_esquema();
 ```
 
-Tiene que decir **71**, que es lo que pone `supabase/VERSION.json` hoy. Si dice
+Tiene que decir **74**, que es lo que pone `supabase/VERSION.json` hoy. Si dice
 menos, el SQL no ha entrado (o ha entrado a medias y lo habría dicho: es una
 sola transacción).
 
@@ -40,6 +40,29 @@ En la aplicación, la banda de arriba de «tu base va atrasada» tiene que
 desaparecer.
 
 ---
+
+### Y una cosa que hay que comprobar a mano: el PDF de un documento público
+
+Las políticas de los documentos están probadas contra un Postgres montado
+igual que el de Supabase, y eso cubre la lógica: quién ve qué fila, quién
+puede pedir la ruta de qué fichero. Lo que **no** cubre es cómo sirve Supabase
+Storage ese fichero a alguien **sin sesión de ninguna clase**, porque eso ya no
+es Postgres.
+
+Así que después de pegar el SQL, con dos minutos:
+
+1. En el panel, **Archivo documental** → abre un documento que tenga PDF
+   (o súbele uno) y pon «Hasta dónde sale → **La web pública**».
+2. En **Web pública** → enciende la sección «Reglas y documentos» y publica.
+3. Abre tu web **en una ventana de incógnito** —sin sesión— y pulsa
+   «Descargar».
+
+Si el PDF baja, está. Si da un error de permisos, lo que falta es la política
+`documentos_archivo_publico` del cubo: compruébala en
+Storage → Policies → `objects`.
+
+Lo mismo con el área del hermano: entra con el DNI y la clave de un hermano y
+mira que «Documentos de la hermandad» le ofrezca las reglas y **no** las actas.
 
 ## 2 · Desplegar `api/w.ts` y `api/seo.ts`
 
@@ -161,7 +184,7 @@ la sección 5 de [`CUANDO-TENGA-DOMINIO.md`](CUANDO-TENGA-DOMINIO.md).
 
 | | Paso | Está hecho cuando |
 |---|---|---|
-| 1 | El SQL nuevo | `version_del_esquema()` dice 71 y `DIAGNOSTICO.sql` no dice nada |
+| 1 | El SQL nuevo | `version_del_esquema()` dice 74 y `DIAGNOSTICO.sql` no dice nada |
 | 2 | `api/w.ts` y `api/seo.ts` | WhatsApp enseña el nombre de la hermandad al pegar su enlace |
 | 3 | `pg_cron` | cuatro filas en `cron.job` y, al día siguiente, `succeeded` en `cron.job_run_details` |
 | 4 | Copias automáticas | hay una copia **con fecha** en Database → Backups |

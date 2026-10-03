@@ -1,3 +1,24 @@
+/**
+ * EL MARCO DE UN INFORME IMPRESO: la cabecera con el escudo y el pie legal.
+ *
+ * Envuelve el contenido de cualquier informe de `pages/app/Informes.tsx` para
+ * que todos salgan con la misma cara. Y la cara importa: el estado de cuentas y
+ * la memoria anual se entregan en la diócesis.
+ *
+ * ----------------------------------------------------------------------------
+ * LO QUE SE REPITE EN CADA HOJA, QUE ES LA PARTE DIFÍCIL
+ * ----------------------------------------------------------------------------
+ *
+ * Un informe son varias hojas, y cada una tiene que llevar de quién es.
+ * `.print-hoja` va con `position: fixed`, que es lo único que el navegador
+ * repite en todas las páginas al imprimir — pero entonces el navegador lo clava
+ * encima del contenido, así que hace falta reservarle el hueco (ver
+ * `print-pie-hueco` y el comentario de abajo).
+ *
+ * El tema oscuro deja el papel en blanco si los colores se heredan: aquí se
+ * fuerzan. Y el escudo y el CIF salen de `HermandadSettings`, de la hermandad
+ * de verdad, no de los de fábrica.
+ */
 import { LogoMark } from './Logo'
 import { direccionEnUnaLinea, type HermandadSettings } from '../lib/hermandadSettings'
 import { hayDatosDeEjemplo } from '../lib/demo'

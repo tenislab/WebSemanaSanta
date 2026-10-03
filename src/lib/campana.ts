@@ -4,10 +4,42 @@ import { guardarPlantilla, traerPlantilla } from './plantillasHermandad'
 import { isSupabaseConfigured } from './supabase'
 
 /**
- * Una campaña de papeletas de sitio corresponde a la estación de penitencia
- * de un año. Cada año se abre una campaña nueva: quien tuvo sitio el año
- * anterior puede renovarlo hasta la fecha límite; pasado ese día, quien no
- * renovó pierde su sitio y queda libre para otros.
+ * LA CAMPAÑA DE PAPELETAS DE SITIO: el año, y la regla de quién conserva su
+ * sitio.
+ *
+ * OJO AL NOMBRE: hay otra «campaña» en este proyecto y no es esta. Las campañas
+ * de RECAUDACIÓN viven en `lib/recaudaciones.ts`. Dos cosas distintas con el
+ * mismo nombre es cómo se acaba tocando la que no era, y hay una prueba que
+ * vigila que no se mezclen (`pruebas/objetivos.prueba.mjs`).
+ *
+ * Una campaña es la estación de penitencia de UN año. Cada año se abre una
+ * nueva: quien tuvo sitio el año anterior puede RENOVARLO hasta la fecha
+ * límite; pasado ese día, quien no renovó lo pierde y queda libre para otros.
+ * Es la regla que una hermandad aplica desde siempre, y la ventana de
+ * renovación es el momento de más trabajo del año en la secretaría.
+ *
+ * ----------------------------------------------------------------------------
+ * `campana.anio` ES EL AÑO QUE VIENE, Y ESO MUERDE
+ * ----------------------------------------------------------------------------
+ *
+ * Es la Semana Santa PRÓXIMA, así que de otoño en adelante va un año por
+ * delante del calendario. Media aplicación filtra por él —las papeletas, el
+ * cortejo, los avisos— y confundirlo con `new Date().getFullYear()` deja una
+ * pantalla vacía sin dar ningún error. Donde hace falta no quedarse corto (la
+ * ventana de histórico de Papeletas) se cogen LOS DOS y se usa el menor.
+ *
+ * ----------------------------------------------------------------------------
+ * EL ESTADO DE RENOVACIÓN NO SE GUARDA: SE RECALCULA
+ * ----------------------------------------------------------------------------
+ *
+ * `Renovada`, `Nueva`, `Por renovar`, `No renovada`, `Sin papeleta` salen de
+ * mirar las papeletas de este año y del anterior cada vez. Guardarlo sería
+ * tener dos verdades sobre si alguien conserva su sitio, que es justo lo que no
+ * se puede discutir en una hermandad.
+ *
+ * Y OJO con `Renuncia`: una papeleta en ese estado existe y SE LEE —deja la
+ * renovación en «No renovada»—, mientras que una `Anulada` no deja nada que
+ * leer. Las dos quedan fuera del cortejo, pero no son lo mismo.
  */
 export interface Campana {
   anio: number

@@ -4,6 +4,11 @@ Instrucciones de trabajo para Claude (y para cualquiera que retome esto). Están
 escritas a partir de los problemas reales que han ido apareciendo, para no
 repetirlos.
 
+> **Esto son las NORMAS.** Si lo que buscas es entender cómo está construida la
+> aplicación —el vocabulario del dominio, las capas, cómo viaja un dato, el
+> multi-inquilino, las clases de prueba—, eso está en
+> [`PARA-UN-INGENIERO.md`](PARA-UN-INGENIERO.md), y conviene leerlo antes.
+
 ---
 
 ## 1. Antes de dar nada por bueno
@@ -33,6 +38,24 @@ rotos en esta misma app:
 - Un token de CSS inexistente dejaba media interfaz **sin bordes**.
 
 Ninguno lo habría cazado el compilador.
+
+### Y todo fichero empieza explicándose
+
+Cada fichero de `src/` y de `api/` abre con un comentario que dice **qué hace y
+por qué está así**, antes de lo primero que exporta. No es decoración: son
+86.570 líneas sobre un dominio —escalafón, papeletas, cortejo— que no se deduce
+del código, y quien abre `Cuotas.tsx` por el medio no tiene forma de saber que
+emitir dos veces el mismo ejercicio es cobrar dos veces.
+
+Lo comprueba `pruebas/cadaficheroseexplica.prueba.mjs`, que vigila lo único
+comprobable: que la cabecera está, que no es una cáscara vacía, y que un fichero
+de más de cuatrocientas líneas no se despacha con un renglón. **La calidad de lo
+que diga no la mide nadie más que quien lo escribe.**
+
+Y el criterio de qué escribir: **el por qué, no el qué.** Lo que hace el código
+se lee en el código. Lo que no se lee es la razón por la que está así, que casi
+siempre es un fallo que ya se pagó. El mapa completo de la arquitectura está en
+[`PARA-UN-INGENIERO.md`](PARA-UN-INGENIERO.md).
 
 ### Y la prueba nueva, rota a propósito
 

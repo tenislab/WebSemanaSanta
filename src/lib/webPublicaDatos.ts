@@ -52,6 +52,7 @@ export type TipoSeccion =
   | 'actualidad'
   | 'paginas'
   | 'boletines'
+  | 'documentos'
   | 'donativos'
   | 'loteria'
   | 'tienda'
@@ -291,6 +292,15 @@ export const SECCIONES_INFO: Record<TipoSeccion, { nombre: string; publico: stri
   actualidad: { nombre: 'Actualidad (noticias)', publico: 'Actualidad' },
   paginas: { nombre: 'Páginas y textos', publico: 'La Hermandad' },
   boletines: { nombre: 'Boletines', publico: 'Boletines' },
+  /*
+   * NO ES LO MISMO QUE «BOLETINES», y conviene que los dos nombres lo digan.
+   * Los boletines tienen su propia lista en el editor de la web, con portada:
+   * son una publicación periódica. Esto sale del ARCHIVO DOCUMENTAL —se sube
+   * una vez y ahí se dice hasta dónde llega— y es para las reglas, el
+   * reglamento de régimen interno y lo que la hermandad quiera colgar sin
+   * volver a subirlo en otro sitio.
+   */
+  documentos: { nombre: 'Reglas y documentos', publico: 'Reglas y documentos' },
   donativos: { nombre: 'Donativos y colaboración', publico: 'Colabora' },
   loteria: { nombre: 'Lotería', publico: 'Lotería' },
   tienda: { nombre: 'Tienda (recuerdos)', publico: 'Tienda' },
@@ -1134,6 +1144,9 @@ export const SECCIONES_POR_DEFECTO: SeccionConfig[] = [
   { tipo: 'actualidad', visible: true },
   { tipo: 'paginas', visible: true },
   { tipo: 'boletines', visible: false },
+  // Apagada: hasta que la hermandad marque un documento para la web no hay
+  // nada que enseñar, y una sección vacía queda peor que no tenerla.
+  { tipo: 'documentos', visible: false },
   // Donativos y lotería salen apagados: son cosas que hay que rellenar con
   // datos de cobro reales antes de enseñarlas a nadie.
   { tipo: 'donativos', visible: false },

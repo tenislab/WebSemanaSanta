@@ -1,3 +1,66 @@
+/**
+ * INFORMES: los documentos que salen de la hermandad en papel.
+ *
+ * ----------------------------------------------------------------------------
+ * POR QUÉ ESTA PANTALLA ES DELICADA AUNQUE SOLO LEA
+ * ----------------------------------------------------------------------------
+ *
+ * No escribe nada. Pero aquí se imprime la MEMORIA ANUAL y el ESTADO DE
+ * CUENTAS, que son los documentos que se llevan al cabildo general y se
+ * entregan en la diócesis. Un informe con las cifras mal no es un bug de
+ * pantalla: es un papel firmado con cifras que no son.
+ *
+ * Y el fallo de esa clase no se ve, porque un total mal cuadra consigo mismo.
+ * Esta pantalla ya imprimió un estado de cuentas con las cuatro partidas de
+ * ingresos y las doce de gastos a 0,00 €, con el saldo a 31 de diciembre en
+ * 0,00, sin un aviso — y nada lo delataba hasta comparar con el extracto del
+ * banco. La causa: era la ÚNICA página de datos que no montaba
+ * `useSupabaseTable`, así que trabajaba con lo que otra pantalla hubiera dejado
+ * espejado, o con nada.
+ *
+ * De ahí las dos reglas de este fichero:
+ *
+ *   1. TODO SE MONTA CON `useSupabaseTable`. Las cinco tablas que hacen falta
+ *      (hermanos, cuotas, papeletas, movimientos, enseres), de solo lectura.
+ *   2. `construirInformes()` RECIBE LOS DATOS, no los lee. Es una función pura
+ *      con las cinco colecciones por parámetro, y por eso se puede probar.
+ *
+ * ----------------------------------------------------------------------------
+ * UNA SOLA FUENTE POR PREGUNTA
+ * ----------------------------------------------------------------------------
+ *
+ * Los cuatro recuadros de arriba salen de LO MISMO que los informes de abajo, y
+ * no era así: los recuadros se leían del navegador con `leerDatos` mientras los
+ * informes venían de la base, o sea dos fuentes para la misma pregunta. En un
+ * navegador recién estrenado el Balance salía 0 € con los informes de debajo
+ * enseñando las cifras de verdad, en la misma pantalla. Y encima la lista de
+ * dependencias estaba vacía, así que se calculaban una vez al abrir y se
+ * quedaban congelados aunque los datos llegaran un segundo después — que es lo
+ * normal, porque llegan por la red.
+ *
+ * Si añades un número a esta pantalla, sale de los mismos `useSupabaseTable` de
+ * arriba. Nunca de `leerDatos`.
+ *
+ * ----------------------------------------------------------------------------
+ * LA CUENTA DE PÉRDIDAS Y GANANCIAS
+ * ----------------------------------------------------------------------------
+ *
+ * `SeccionPyG` + `lib/repartos.ts`. Las reglas porcentuales reparten un gasto
+ * entre partidas (la luz de la casa de hermandad entre culto y mantenimiento),
+ * y NO escriben apuntes en Tesorería nunca: son una forma de LEER los apuntes
+ * que ya hay. Si escribieran, habría dos verdades sobre el mismo dinero.
+ *
+ * ----------------------------------------------------------------------------
+ * IMPRIMIR
+ * ----------------------------------------------------------------------------
+ *
+ * Se monta el documento, se llama a `window.print()` y se recoge con
+ * `afterprint`, que dispara se haya aceptado o cancelado — más una red de
+ * seguridad a los diez segundos por si un navegador viejo no lo lanza, porque
+ * entonces la pantalla se quedaría en modo impresión para siempre. El CSS de
+ * impresión vive en `styles/`; ojo con el TEMA OSCURO, que ya dejó un papel en
+ * blanco (fondo oscuro que la impresora no pinta, texto claro que sí).
+ */
 import { useEffect, useMemo, useState } from 'react'
 import InformeImpreso from '../../components/InformeImpreso'
 import EstadoCuentas from '../../components/EstadoCuentas'

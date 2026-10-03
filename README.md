@@ -9,6 +9,10 @@ plataforma, pensada para cualquier corporación del tamaño que sea.
 > datos de ejemplo guardados en el navegador. Lo que falta (correos reales,
 > cobros, multidispositivo) necesita conectar la base de datos.
 >
+> 🗺️ **[Para un ingeniero](docs/PARA-UN-INGENIERO.md)** — **empieza por aquí si
+> vas a tocar el código**: el vocabulario del dominio, las capas, cómo viaja un
+> dato, el multi-inquilino por RLS, las cuatro clases de prueba y las trampas
+> que este repositorio ya ha pagado.
 > 📋 **[Hoja de ruta](docs/HOJA-DE-RUTA.md)** — qué está hecho y qué falta.
 > 🛠️ **[Cómo trabajar](docs/COMO-TRABAJAR.md)** — normas de trabajo y trampas del repo.
 

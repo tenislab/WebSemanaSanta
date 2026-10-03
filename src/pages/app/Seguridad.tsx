@@ -1,3 +1,42 @@
+/**
+ * SEGURIDAD: la verificación en dos pasos y el registro de «quién hizo qué».
+ *
+ * ----------------------------------------------------------------------------
+ * DOS COSAS SIN RELACIÓN APARENTE, JUNTAS POR UN MOTIVO
+ * ----------------------------------------------------------------------------
+ *
+ * Las dos son lo que la hermandad tiene que poder ENSEÑAR si alguien pregunta:
+ * una, que la cuenta está protegida; la otra, qué se hizo con los datos
+ * personales de los hermanos. Es el artículo 32 del RGPD, y de ahí que estén en
+ * la misma pantalla y no repartidas.
+ *
+ * ----------------------------------------------------------------------------
+ * 1. LA VERIFICACIÓN EN DOS PASOS (TOTP)
+ * ----------------------------------------------------------------------------
+ *
+ * Supabase Auth lo hace; aquí solo se pinta. El alta son DOS pasos y hay que
+ * respetarlos: `activarMfa()` devuelve el QR y la clave manual pero el factor
+ * NO está activo hasta que `confirmarMfa()` recibe el primer código de la
+ * aplicación de autenticación. Un factor a medio dar de alta deja a alguien
+ * fuera de su propia cuenta.
+ *
+ * El estado intermedio —contraseña correcta pero segundo paso pendiente— se
+ * maneja en `context/AuthContext.tsx`, y ahí está explicado por qué
+ * `mfaPendiente` tiene tres valores y no dos.
+ *
+ * ----------------------------------------------------------------------------
+ * 2. EL REGISTRO DE ACTIVIDAD, QUE NO SE PUEDE BORRAR
+ * ----------------------------------------------------------------------------
+ *
+ * Las bajas, los cambios de cuenta bancaria, las papeletas anuladas y los
+ * recibos devueltos, con quién y cuándo. Y es de solo lectura DESDE AQUÍ
+ * TAMBIÉN: un registro que se puede reescribir no sirve para comprobar nada.
+ *
+ * Lo escribe la base, no el navegador. `lib/registroActividad.ts` →
+ * `apuntar()`, y la política está en `supabase/registro-actividad.sql` y
+ * `seguridad-claves-y-registro.sql`. Si añades una acción que toca datos
+ * personales, `apuntar()` va en la misma función que hace el cambio.
+ */
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, type FactorMfa } from '../../context/AuthContext'
 import { NOMBRE_ACCION, cuandoEnCristiano, leerRegistro, type Apunte } from '../../lib/registroActividad'

@@ -53,7 +53,23 @@ export default async function ({ cargar, caso }) {
    */
   caso('crear el acceso devuelve también el fallo', true,
     /ResultadoDeAcceso = \{[\s\S]{0,600}?error: string \| null/.test(accesos))
-  caso('y la pantalla lo recoge', true, /if \(acceso\.error\) setAvisoAcceso\(acceso\.error\)/.test(hermanos))
+  /*
+   * Y LA PANTALLA LO RECOGE — SIN PINCHAR EL NOMBRE DEL RECOGEDOR.
+   *
+   * Esta línea pinchaba `setAvisoAcceso(acceso.error)` tal cual, justo debajo
+   * del comentario de arriba que avisa de no hacer eso. Y pasó lo que avisaba:
+   * al sacar el alta de `Hermanos.tsx` a su propio componente, el aviso dejó
+   * de ser un `setState` de la pantalla y pasó a ser una prop (`onAviso`), que
+   * es lo correcto — el formulario cuenta lo que ha pasado y la pantalla
+   * decide qué hacer con ello—. La guarda se puso roja contra un código que
+   * sigue sin tragarse el fallo.
+   *
+   * Lo que hay que vigilar es que el fallo NO SE QUEDE AHÍ: que la rama exista
+   * y que lo que lleve dentro no sea un comentario ni un `console.log`.
+   */
+  const recoge = hermanos.match(/if \(acceso\.error\)\s*(\w+)\(acceso\.error\)/)
+  caso('y la pantalla lo recoge', true, recoge !== null)
+  caso('y no se lo traga en la consola', true, recoge !== null && !/^console/.test(recoge[1]))
   /*
    * En los DOS sitios que dan de alta: la solicitud aceptada y el alta a mano.
    *

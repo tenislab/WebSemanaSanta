@@ -271,8 +271,20 @@ create table if not exists documentos (
   archivo_nombre text,
   archivo_tipo text,
   archivo_tamano bigint,
-  -- Cargos con acceso a un documento restringido; null = visible para cualquiera autenticado.
-  cargos_con_acceso text[]
+  -- Cargos de la JUNTA con acceso a un documento restringido; null = lo ve
+  -- cualquier cargo. Ojo: esto NO habla del hermano — hasta dónde sale el
+  -- documento lo dice `publicacion`. Ver `documentos-hasta-donde-salen.sql`.
+  cargos_con_acceso text[],
+  -- Hasta dónde sale: junta (solo el panel), hermanos (además, su área) o web
+  -- (además, la web pública, sin entrar). Acumulativas.
+  -- CON NOMBRE, y el mismo que le pone `documentos-hasta-donde-salen.sql`. Una
+  -- restricción en línea coge un nombre automático (`documentos_publicacion_check`),
+  -- así que una base nueva y una actualizada tenían DOS restricciones distintas
+  -- con nombres distintos para la misma regla, y el error que ve quien se pasa
+  -- decía una cosa o otra según por dónde se hubiera instalado.
+  publicacion text not null default 'junta'
+    constraint documentos_publicacion_valida
+      check (publicacion in ('junta', 'hermanos', 'web'))
 );
 
 -- -----------------------------------------------------------------------------
