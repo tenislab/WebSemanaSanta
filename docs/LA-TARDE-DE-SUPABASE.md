@@ -19,9 +19,30 @@ El orden importa solo en los dos primeros: el SQL antes de desplegar, y
 
 Va después de todo lo demás por una razón: lleva **todas** las piezas del
 instalador, en su orden, así que deja la base igual que una recién instalada.
-Eso ya se mide con instaladores antiguos de verdad en
-`pruebas/actualizardesdevieja.prueba.mjs`, así que aquí no hay que comprobar
-nada a mano — solo que no dé error.
+Aquí no hay que comprobar nada a mano — solo que no dé error.
+
+**Y eso está ensayado, no supuesto.** Dos medidas distintas:
+
+- `pruebas/actualizardesdevieja.prueba.mjs` instala **dos instaladores antiguos
+  de verdad** —guardados tal cual en `pruebas/esquemas-anteriores/`— les mete
+  datos y les pasa el `ACTUALIZAR.sql` de hoy por encima, dos veces. Corre en
+  cada `npm test`.
+- `scripts/ensayar-la-actualizacion.mjs` hace lo mismo desde **todos los
+  estados intermedios**: genera la base «como estaba en la versión N» pegando
+  solo las N primeras piezas, y actualiza. La última pasada completa:
+  **61 de 61 estados buenos**, del 10 al 70.
+
+En los dos casos lo que se exige no es «sin error», que no es lo mismo que
+«bien»: se compara el catálogo entero —tablas, columnas, valores por defecto,
+políticas, índices, disparadores, funciones y permisos— con el de instalar hoy
+desde cero, y tiene que ser **idéntico**. Más que los datos sembrados sigan ahí.
+
+Antes de una tarde como esta conviene volver a pasarlo, que es para lo que está:
+
+```bash
+PGHOST=/tmp PGPORT=5433 node scripts/ensayar-la-actualizacion.mjs
+PGHOST=/tmp PGPORT=5433 node scripts/ensayar-la-actualizacion.mjs 8   # rápido
+```
 
 **Cómo sabes que ha salido bien:**
 
@@ -93,33 +114,40 @@ en el plan gratuito. Y luego pegar `supabase/tareas-programadas.sql`.
 Si la extensión no está encendida, ese fichero **falla en la primera línea** y
 no hace nada a medias, así que no hay riesgo de dejarlo por la mitad.
 
-Son cuatro tareas, todas de madrugada:
+Son cinco tareas, todas de madrugada:
 
 | Tarea | Cuándo | Qué hace |
 |---|---|---|
 | `gobergo-limpiar-visitas` | domingos 4:10 | tira las visitas de más de dos años |
 | `gobergo-suscriptores-sin-confirmar` | a diario 4:25 | borra los que nunca confirmaron |
 | `gobergo-limpiar-registro` | domingos 4:40 | limpia el registro de accesos |
+| `gobergo-limpiar-errores` | domingos 4:55 | tira los fallos de producción de más de 60 días |
 | `gobergo-caducar-reservas` | a diario 5:20 | caduca las reservas de la tienda |
 
-Hasta que esto esté encendido, esas cuatro cosas **no pasan nunca**, o pasan
+Hasta que esto esté encendido, esas cinco cosas **no pasan nunca**, o pasan
 cuando alguien entra en el panel — y en agosto no entra nadie en un mes.
+
+> **La de los fallos se había quedado sin programar.** `vigilancia.sql` crea la
+> función y su propio comentario decía «la llama el trabajo semanal de cron», y
+> ese trabajo no existía. Y la función está revocada a todo el mundo —a
+> propósito: lo que guarda esa tabla es lo único que cuenta qué se rompe en las
+> bases de verdad, y un visitante no puede borrarlo—, así que no la llamaba
+> **nadie** y la tabla era eterna. Ahora es la quinta tarea de este fichero.
 
 **Cómo sabes que ha salido bien:**
 
 ```sql
-select jobname, schedule, active from cron.job order by jobname;
+select * from tareas_programadas();
 ```
 
-Cuatro filas, las cuatro `active = true`. Y al día siguiente:
+Cinco filas, las cinco `activa = true`. Esta función la trae el propio
+`tareas-programadas.sql` y enseña de una vez el nombre, la hora, si está activa
+y **cómo acabó la última ejecución** — que es lo que de verdad cierra el paso:
+una tarea puede estar creada y fallar todas las noches, y lo hace en silencio y
+de madrugada.
 
-```sql
-select jobname, status, start_time from cron.job_run_details
-order by start_time desc limit 10;
-```
-
-Los `status` tienen que decir `succeeded`. Esta segunda consulta es la que de
-verdad cierra el paso: una tarea puede estar creada y fallar todas las noches.
+El día que se pega, la columna `ultima` sale vacía porque todavía no han
+corrido. Al día siguiente tiene que decir `succeeded` en las cinco.
 
 ---
 
@@ -186,7 +214,7 @@ la sección 5 de [`CUANDO-TENGA-DOMINIO.md`](CUANDO-TENGA-DOMINIO.md).
 |---|---|---|
 | 1 | El SQL nuevo | `version_del_esquema()` dice 74 y `DIAGNOSTICO.sql` no dice nada |
 | 2 | `api/w.ts` y `api/seo.ts` | WhatsApp enseña el nombre de la hermandad al pegar su enlace |
-| 3 | `pg_cron` | cuatro filas en `cron.job` y, al día siguiente, `succeeded` en `cron.job_run_details` |
+| 3 | `pg_cron` | `select * from tareas_programadas()` da cinco filas activas y, al día siguiente, `succeeded` en todas |
 | 4 | Copias automáticas | hay una copia **con fecha** en Database → Backups |
 | 5 | La hermandad de prueba | no sale en la lista de `/entrar` |
 | 6 | Las dos plantillas | el correo de registro llega en español y desde tu dominio |

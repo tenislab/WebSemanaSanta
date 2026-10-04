@@ -344,6 +344,7 @@ export default async function ({ caso }) {
   await elTesoreroQueEsHermanoNoSeQuedaFuera({ sql, caso })
   await laBajaNoRompeElEscalafon({ sql, caso })
   await elRegistroNoCrecePorSiempre({ sql, caso })
+  await losFallosViejosSeLimpianSolos({ sql, caso })
   await elBarridoDeDniSeCorta({ sql, caso })
   await laSegundaHermandadGuardaSusCatalogos({ sql, caso })
   await elHermanoNoSePagaLaCuota({ sql, caso })
@@ -1044,6 +1045,75 @@ async function elRegistroNoCrecePorSiempre({ sql, caso }) {
     `select string_agg(autor_nombre, ', ' order by cuando) from registro_actividad where hermandad_id = '${HDAD}'`,
   )).trim()
   caso('se van los de más de dos años y se quedan los demás', 'Reciente, De hoy', quedan)
+}
+
+/**
+ * LOS FALLOS DE PRODUCCIÓN TAMPOCO CRECEN PARA SIEMPRE, Y ESTE NO LO LIMPIABA NADIE.
+ *
+ * `vigilancia.sql` crea `limpiar_errores_cliente()` y su comentario dice «la
+ * llama el trabajo semanal de cron». NO ERA VERDAD:
+ * `tareas-programadas.sql` traía cuatro tareas y esta no era ninguna.
+ *
+ * Y es peor de lo que parece por una decisión correcta que lo remata: la
+ * función está REVOCADA a `public`, `anon` y `authenticated`, para que un
+ * visitante no pueda borrar lo único que cuenta qué se rompe en las bases de
+ * verdad. Así que no la llamaba nadie — ni la aplicación, que no puede, ni el
+ * cron, que no la tenía— y la tabla era eterna.
+ *
+ * Aquí se comprueban las tres cosas que lo mantienen cerrado: que la tarea está
+ * declarada, que la función sigue revocada, y que al ejecutarla BORRA LO VIEJO
+ * Y SOLO LO VIEJO. La función se saca del fichero y se ejecuta tal cual: si
+ * allí se cambia el plazo, esto se entera.
+ */
+async function losFallosViejosSeLimpianSolos({ sql, caso }) {
+  const tareas = await readFile('supabase/tareas-programadas.sql', 'utf8')
+  const vigilancia = await readFile('supabase/vigilancia.sql', 'utf8')
+
+  caso('hay una tarea que limpia los fallos viejos', true,
+    /cron\.schedule\(\s*'gobergo-limpiar-errores'/.test(tareas))
+  /*
+   * Y QUE SIGA REVOCADA. Si alguien «arregla» el que nadie pueda llamarla
+   * dándole permiso a `authenticated`, el agujero vuelve: cualquier cuenta con
+   * sesión —incluida la de un hermano— podría vaciar los errores de todas las
+   * hermandades a la vez.
+   */
+  caso('y no la puede ejecutar nadie con sesión', true,
+    /revoke all on function limpiar_errores_cliente\(\) from public, anon, authenticated/.test(vigilancia))
+
+  const trozo = vigilancia.match(/create or replace function limpiar_errores_cliente[\s\S]*?\$\$;/)
+  caso('la función está en el fichero', true, Boolean(trozo))
+  if (!trozo) return
+  await sql(trozo[0])
+
+  const HDAD = 'dddddddd-0000-0000-0000-000000000002'
+  await sql(`
+    insert into hermandades (id, nombre) values ('${HDAD}', 'Para los fallos') on conflict do nothing;
+    delete from errores_cliente where hermandad_id = '${HDAD}';
+    insert into errores_cliente (hermandad_id, ruta, mensaje, ocurrido_el)
+    values
+      ('${HDAD}', '/app/cuotas',    'Viejo de tres meses', now() - interval '91 days'),
+      ('${HDAD}', '/app/papeletas', 'Justo pasado',        now() - interval '61 days'),
+      ('${HDAD}', '/app/cortejo',   'Del mes pasado',      now() - interval '30 days'),
+      ('${HDAD}', '/app/hermanos',  'De hoy',              now());
+  `)
+  caso('se han apuntado los cuatro fallos', 4,
+    Number(await sql(`select count(*) from errores_cliente where hermandad_id = '${HDAD}'`)))
+
+  const borradas = Number(await sql('select limpiar_errores_cliente()'))
+  caso('la limpieza dice cuántas se ha llevado', 2, borradas)
+  const quedan = (await sql(
+    `select string_agg(mensaje, ', ' order by ocurrido_el) from errores_cliente where hermandad_id = '${HDAD}'`,
+  )).trim()
+  caso('se van los de más de sesenta días y se quedan los demás', 'Del mes pasado, De hoy', quedan)
+
+  /*
+   * Y SE DEJA LA TABLA COMO SE ENCONTRÓ. No es limpieza de cortesía: una
+   * sección más abajo comprueba lo que ve una cuenta de SOPORTE, que se salta
+   * RLS y por tanto ve las filas de todas las hermandades — incluidas estas
+   * dos. Dejarlas aquí ponía en rojo siete comprobaciones de esa sección, y el
+   * rojo salía donde no estaba la causa. Pasó al escribir esto.
+   */
+  await sql(`delete from errores_cliente where hermandad_id = '${HDAD}';`)
 }
 
 /**

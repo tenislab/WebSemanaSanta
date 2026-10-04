@@ -2764,7 +2764,19 @@ span.logo-mark img { width: 100%; height: 100%; }
   /* Los márgenes los pone la página, no la caja del documento. Con `margin`
      en el .print-doc solo había margen arriba en la PRIMERA hoja: de la
      segunda en adelante el texto llegaba al borde del papel. */
-  @page { margin: 1.4cm 1.4cm 1.9cm; }
+  /*
+     Y EL TAMAÑO SE DECLARA. Sin `size`, el navegador usa EL ÚLTIMO PAPEL QUE
+     TUVIERA PUESTO quien imprime: llegó reportado como «al imprimir papeletas
+     sale enorme», y en la captura el diálogo decía «A1» y «Horizontal» —papel
+     de plano de arquitecto— con la papeleta partida en tres hojas. Nadie lo
+     había elegido para esto: Chrome lo recordaba de otra cosa.
+
+     Declarándolo, el diálogo abre en A4 vertical, que es lo que hay en la
+     impresora de una casa de hermandad. Se puede cambiar a mano si alguien
+     quiere, y por eso lo de abajo no se fía de esto: topa el ancho en
+     centímetros para que, aunque el papel sea enorme, el documento no crezca
+     con él. */
+  @page { size: A4 portrait; margin: 1.4cm 1.4cm 1.9cm; }
 
   /* Ni cristal esmerilado ni filtros en papel. Y no es solo estética: un
      `backdrop-filter` convierte al elemento en el ancla de los posicionados
@@ -2781,7 +2793,35 @@ span.logo-mark img { width: 100%; height: 100%; }
      y los documentos largos (orden del cortejo, informes, impresión masiva) se
      cortaban en la primera. */
   .print-doc { position: absolute; left: 0; top: 0; right: 0; margin: 0; border: none; box-shadow: none; max-width: none !important; width: auto !important; }
-  .modelo-render { max-width: none !important; }
+
+  /*
+     EL MODELO SUBIDO POR LA HERMANDAD: TOPADO EN CENTÍMETROS.
+
+     Aquí decía `max-width: none !important`, o sea «ocupa todo el ancho que
+     haya». En pantalla eso está bien; en papel significa que la papeleta CRECE
+     CON EL PAPEL, y a 59 cm de ancho —un A1— se vuelve un cartel y se parte en
+     tres hojas. Medido: el documento salía a 1.420 px (unos 37 cm) mientras el
+     diseño genérico, que sí tiene su tope, salía a 15,5 cm.
+
+     Los dos topes son el hueco imprimible de un A4 con los márgenes de arriba:
+     21 − 2,8 = 18,2 cm de ancho y 29,7 − 3,3 = 26,4 cm de alto, menos un pelo.
+
+     EL TOPE VA EN LA CAJA Y EL LIENZO SIGUE AL 100 %, y esto costó un intento:
+     lo primero que probé fue topar la IMAGEN y dejar que el lienzo la
+     envolviera con `width: max-content`. Sale a CERO, y no es un despiste del
+     navegador: el lienzo lleva `container-type: inline-size` —hace falta para
+     que los datos escalen en `cqw`— y un contenedor de tamaño en línea NO PUEDE
+     medirse por su contenido. La regla se ignora y el lienzo se queda sin
+     ancho. Medido: lienzo 0 px, imagen 210 px, o sea la papeleta impresa a
+     cinco centímetros.
+
+     Topando la caja, el lienzo sigue al 100 % de ella, la imagen al 100 % del
+     lienzo, y los datos —que son porcentajes del lienzo— se quedan donde se
+     pusieron. La papeleta se encoge entera. */
+  .modelo-render.print-doc { width: 18.2cm !important; max-width: 18.2cm !important; margin: 0 auto !important; }
+  /* La papeleta no se corta por la mitad: si no cabe, pasa entera a la hoja
+     siguiente. */
+  .modelo-render.print-doc, .impresion-masiva__pagina { break-inside: avoid; }
 
   /* Los documentos cortos (papeleta, recibo, justificante) se centran en una
      medida de lectura. A 21 cm de ancho, un recibo de cuatro líneas parece un
@@ -2903,6 +2943,10 @@ span.logo-mark img { width: 100%; height: 100%; }
   body.print-masivo .impresion-masiva { display: block; position: absolute; left: 0; top: 0; right: 0; margin: 0; }
   /* Cada papeleta en su propia página; se anula el posicionado del print-doc suelto. */
   body.print-masivo .impresion-masiva .print-doc { position: static; inset: auto; margin: 0 auto; width: 15.5cm; box-shadow: none; }
+  /* El modelo subido manda sobre ese ancho fijo: con 15,5 cm a pelo, una
+     plantilla de proporción A4 sale a 15,5 × 21,9 y deja media hoja en blanco.
+     Se le deja el hueco imprimible entero, como a la de una en una. */
+  body.print-masivo .impresion-masiva .modelo-render.print-doc { width: auto; max-width: 18.2cm; }
   body.print-masivo .impresion-masiva__pagina { page-break-after: always; }
   /* La última no arrastra una hoja en blanco detrás. */
   body.print-masivo .impresion-masiva__pagina:last-child { page-break-after: auto; }

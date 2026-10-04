@@ -178,7 +178,39 @@ select cron.schedule(
 
 
 -- ---------------------------------------------------------------------------
--- 5. QUÉ TAREAS HAY, PARA PODER MIRARLO
+-- 5. LOS FALLOS DE PRODUCCIÓN VIEJOS, UNA VEZ POR SEMANA
+-- ---------------------------------------------------------------------------
+--
+-- SE QUEDÓ SIN PROGRAMAR, Y ESO HACÍA LA TABLA ETERNA.
+--
+-- `vigilancia.sql` crea `limpiar_errores_cliente()` y su propio comentario dice
+-- «la llama el trabajo semanal de cron». Ese trabajo no existía: este fichero
+-- traía cuatro tareas y esta no era ninguna de las cuatro.
+--
+-- Y la función está REVOCADA a todo el mundo —`public`, `anon` y también
+-- `authenticated`— a propósito, porque lo que guarda esa tabla es lo único que
+-- cuenta qué se está rompiendo en las bases de verdad y un visitante no puede
+-- borrarlo. O sea que sin esta tarea no la llamaba NADIE: ni la aplicación, que
+-- no puede, ni el cron, que no la tenía. La tabla crecía para siempre.
+--
+-- Sesenta días es lo que dice la función y no se toca aquí: un fallo que lleva
+-- dos meses sin repetirse o está arreglado o no le importa a nadie.
+select cron.unschedule('gobergo-limpiar-errores')
+  where exists (select 1 from cron.job where jobname = 'gobergo-limpiar-errores');
+
+select cron.schedule(
+  'gobergo-limpiar-errores',
+  -- Domingos a las 4:55. Va detrás de las otras tres de la madrugada del
+  -- domingo y antes de las diarias, para no solaparse con ninguna: son filas de
+  -- texto y no corre prisa, pero dos limpiezas a la vez en un plan gratuito se
+  -- notan.
+  '55 4 * * 0',
+  $$ select limpiar_errores_cliente() $$
+);
+
+
+-- ---------------------------------------------------------------------------
+-- 6. QUÉ TAREAS HAY, PARA PODER MIRARLO
 -- ---------------------------------------------------------------------------
 --
 -- Una tarea programada que falla lo hace en silencio y de madrugada. Con esto

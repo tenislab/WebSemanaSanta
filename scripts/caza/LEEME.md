@@ -124,3 +124,52 @@ Dos cosas que esta sonda se equivocó en decir, y por eso están escritas en ell
   hermano?» salía **verdadera**, porque los dos lados eran `null`. Comparar dos
   cosas que no están no es comparar: la comprobación exige ahora que las dos
   fichas tengan nombre.
+
+---
+
+## Y uno que no es una sonda: `scripts/ensayar-la-actualizacion.mjs`
+
+No mira pantallas, mira la base. Ensaya `ACTUALIZAR.sql` desde **todos los
+estados intermedios** del esquema —genera la base «como estaba en la versión N»
+pegando solo las N primeras piezas— y comprueba que al actualizar queda
+**idéntica** a una instalación nueva, con los datos intactos.
+
+Está fuera de `npm test` porque son sesenta y una instalaciones completas. Se
+pasa **antes de una tarde de Supabase**, que es cuando importa.
+
+```bash
+PGHOST=/tmp PGPORT=5433 node scripts/ensayar-la-actualizacion.mjs      # todas
+PGHOST=/tmp PGPORT=5433 node scripts/ensayar-la-actualizacion.mjs 8    # una de cada 8
+```
+
+## `medir-papeleta-impresa.mjs`
+
+Cuántas hojas ocupa una papeleta y de qué tamaño sale. Imprime **a PDF de
+verdad** por CDP —el mismo motor que el diálogo— y mide tres cosas: cuántas
+hojas trae el PDF, los milímetros de la hoja (`MediaBox`) y los centímetros de
+la caja del documento. En tres escenarios: A4 forzado, A1 forzado y «lo que
+pida el CSS».
+
+```bash
+node scripts/caza/medir-papeleta-impresa.mjs
+```
+
+Lo que destapó: el `@page` no declaraba tamaño —así que Chrome usaba el último
+papel que tuviera, A1 en la captura que llegó— y el modelo subido por la
+hermandad no tenía tope, así que **crecía con la hoja**: 1.420 px (37 cm) contra
+los 15,5 cm del diseño genérico.
+
+Tres cosas que esta sonda hizo mal antes de servir, y están escritas en ella:
+
+* **El contador de páginas mentía.** Contaba «/Type /Page» en crudo, y Chrome
+  mete los objetos en flujos comprimidos: la misma tanda de 28 papeletas salía
+  «28» en un papel y «1» en otro. Ahora cuenta el `/Count` del árbol,
+  descomprimiendo.
+* **La tanda salía en blanco a partir de la segunda impresión** (1 KB), y la
+  culpa no era de la aplicación: `printToPDF` dispara `afterprint`, y el
+  manejador desmonta la zona de impresión — que es justo lo que debe hacer. La
+  sonda la regenera antes de cada papel.
+* **Topar la imagen y dejar que el lienzo la envolviera con `width: max-content`
+  da cero.** El lienzo lleva `container-type: inline-size` y un contenedor de
+  tamaño en línea no puede medirse por su contenido. Se vio midiendo: lienzo
+  0 px, imagen 210 px, papeleta impresa a cinco centímetros.

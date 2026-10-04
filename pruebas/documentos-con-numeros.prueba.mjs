@@ -42,15 +42,27 @@ export default async function ({ cargar, caso }) {
   caso('y no cita ninguna otra', [], otrasVersiones.filter((v) => v !== version))
 
   /*
-   * LAS CUATRO TAREAS PROGRAMADAS, por su nombre. El documento las lista en una
-   * tabla con su hora, y lo que se pide luego es `select jobname from cron.job`:
-   * si un nombre no coincide, la comprobación de «ha salido bien» no se puede
-   * hacer.
+   * LAS TAREAS PROGRAMADAS, POR SU NOMBRE. El documento las lista en una tabla
+   * con su hora, y lo que se pide luego es `select jobname from cron.job`: si un
+   * nombre no coincide, la comprobación de «ha salido bien» no se puede hacer.
+   *
+   * EL NÚMERO NO VA PINCHADO A MANO, y es un arreglo de esta misma prueba: decía
+   * `4` y al añadir la quinta tarea —la que limpia los fallos de producción, que
+   * se había quedado sin programar— se puso roja por el número, que era lo
+   * ÚNICO correcto del cambio. Un guardia que hay que editar cada vez que se
+   * añade algo enseña a editarlo sin leerlo.
+   *
+   * Así que se compara contra el propio SQL: tantos nombres distintos como
+   * `cron.schedule(` haya. Eso sí es un invariante —si alguien programa dos
+   * tareas con el mismo nombre, la segunda pisa a la primera en silencio— y
+   * además no caduca.
    */
   const sql = await readFile('supabase/tareas-programadas.sql', 'utf8')
+  const cuantasSeProgramanEnElSql = (sql.match(/cron\.schedule\(/g) ?? []).length
   const tareasDelSql = [...new Set([...sql.matchAll(/'(gobergo-[a-z-]+)'/g)].map((m) => m[1]))].sort()
   const tareasDelDoc = [...new Set([...tarde.matchAll(/`(gobergo-[a-z-]+)`/g)].map((m) => m[1]))].sort()
-  caso('están las cuatro tareas programadas', 4, tareasDelSql.length)
+  caso('hay tareas programadas que comprobar', true, cuantasSeProgramanEnElSql >= 4)
+  caso('cada una tiene su nombre, sin repetirse', cuantasSeProgramanEnElSql, tareasDelSql.length)
   caso('y el documento nombra exactamente esas', tareasDelSql, tareasDelDoc)
 
   /*
@@ -63,7 +75,7 @@ export default async function ({ cargar, caso }) {
   }
   const horasDelSql = [...sql.matchAll(/'(gobergo-[a-z-]+)',\s*(?:--[^\n]*\n\s*)*'([^']+)'/g)]
     .map(([, nombre, cron]) => `${nombre} ${horaDeCron(cron)}`)
-  caso('se leen las cuatro horas del SQL', 4, horasDelSql.length)
+  caso('se lee la hora de cada tarea', cuantasSeProgramanEnElSql, horasDelSql.length)
   const horasQueFaltan = horasDelSql.filter(([]) => true).filter((par) => {
     const [nombre, hora] = par.split(' ')
     const fila = tarde.split('\n').find((l) => l.includes(`\`${nombre}\``))
