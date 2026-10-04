@@ -107,6 +107,74 @@ export function avisarDeFallo(tabla: string, motivo: string) {
   )
 }
 
+/**
+ * LO QUE SE GUARDÓ MIENTRAS LA TABLA TODAVÍA VENÍA, PUESTO SOBRE LO QUE TRAE LA BASE.
+ *
+ * ----------------------------------------------------------------------------
+ * EL HUECO, QUE ERA UNA PÉRDIDA SILENCIOSA
+ * ----------------------------------------------------------------------------
+ *
+ * Entre montar una pantalla y recibir su tabla pasan unos cientos de
+ * milisegundos. En ese rato `cargado` es falso, y un guardado se pintaba y se
+ * espejaba pero NO se sincronizaba — eso último está bien y no se toca:
+ * comparar contra una lista que nunca vino de la base es borrar el censo
+ * entero.
+ *
+ * El problema era el final de la carga: `setItemsState(traidos)` y
+ * `espejar(traidos)` machacaban ese cambio SIN DECIR NADA. Se perdía en la
+ * pantalla y en el espejo, así que no quedaba ni rastro: quien había dado un
+ * alta veía la lista sin ella y no tenía forma de saber si se guardó o no.
+ *
+ * ----------------------------------------------------------------------------
+ * CÓMO SE ARREGLA, Y POR QUÉ POR DIFERENCIA Y NO REPITIENDO LA ORDEN
+ * ----------------------------------------------------------------------------
+ *
+ * La primera idea era guardar las funciones de actualización y volver a
+ * pasarlas sobre lo que trae la base. No vale: a `setItems` se le puede dar
+ * también una LISTA YA HECHA, y esa lista se construyó a partir de lo que había
+ * en el hueco —casi siempre vacío—, así que reaplicarla tal cual borraría todo
+ * lo que acaba de llegar. Justo el desastre que se quiere evitar.
+ *
+ * Así que se mira la DIFERENCIA entre lo que había al empezar el hueco y lo que
+ * hay al acabarlo, y se aplica sobre lo que trae la base:
+ *
+ *   · LO AÑADIDO se añade.
+ *   · LO CAMBIADO se cambia, SOLO SI esa fila ha llegado. Si no ha llegado es
+ *     que no existe en la base, y entonces es un alta, no un cambio.
+ *   · LO QUITADO se quita.
+ *
+ * Y lo quitado no puede hacer daño: en el hueco la lista está vacía, así que no
+ * hay nada que quitar y la diferencia nunca pide un borrado masivo. Está
+ * escrito en general porque es igual de corto y así también vale el día que el
+ * hueco empiece con filas dentro.
+ */
+export function conLoDelHueco<T extends { id: string }>(
+  deLaBase: T[],
+  alEmpezarElHueco: T[],
+  alAcabarElHueco: T[],
+): T[] {
+  const antes = new Map(alEmpezarElHueco.map((x) => [x.id, x]))
+  const despues = new Map(alAcabarElHueco.map((x) => [x.id, x]))
+
+  const quitados = new Set([...antes.keys()].filter((id) => !despues.has(id)))
+  const resultado = deLaBase
+    .filter((x) => !quitados.has(x.id))
+    /* Lo cambiado en el hueco manda sobre lo que trae la base: es más reciente
+       —lo acaba de teclear alguien— y además es lo único que no está guardado
+       todavía en ningún sitio. */
+    .map((x) => {
+      const enElHueco = despues.get(x.id)
+      if (!enElHueco) return x
+      const estaba = antes.get(x.id)
+      const cambio = !estaba || JSON.stringify(estaba) !== JSON.stringify(enElHueco)
+      return cambio ? enElHueco : x
+    })
+
+  const yaEstan = new Set(deLaBase.map((x) => x.id))
+  const anadidos = alAcabarElHueco.filter((x) => !antes.has(x.id) && !yaEstan.has(x.id))
+  return [...resultado, ...anadidos]
+}
+
 function espejarEnLocal(claveLocal: string, items: unknown[]) {
   try {
     localStorage.setItem(claveLocal, JSON.stringify(items))
@@ -245,6 +313,14 @@ export function useSupabaseTable<T extends { id: string }>(
     local ? leerPersistido(claveLocal, inicial) : [],
   )
   const cargado = useRef(local)
+  /*
+   * LO QUE SE HAYA GUARDADO MIENTRAS LA TABLA VENÍA DE CAMINO.
+   *
+   * `null` = no se ha tocado nada en el hueco, que es lo normal. Si se toca, se
+   * apunta con qué lista empezaba y en qué quedó, y al llegar la tabla se
+   * reaplica la diferencia encima en vez de machacarla. Ver `conLoDelHueco`.
+   */
+  const elHueco = useRef<{ antes: T[]; despues: T[] } | null>(null)
   /*
    * Para no reintentar en bucle. Se pone al reintentar y se quita en cuanto
    * una carga se da por buena, así que el siguiente cero sospechoso —en otro
@@ -388,9 +464,20 @@ export function useSupabaseTable<T extends { id: string }>(
             return
           }
           reintentado.current = false
-          setItemsState(traidos)
-          if (!sinEspejo) espejar(traidos)
+          /*
+           * Y SI SE GUARDÓ ALGO MIENTRAS ESTO VENÍA, NO SE PIERDE. Se pone
+           * encima de lo que trae la base y se manda a la base, que es lo que
+           * no pudo hacerse en su momento. Ver `conLoDelHueco`.
+           */
+          const hueco = elHueco.current
+          const definitivo = hueco ? conLoDelHueco(traidos, hueco.antes, hueco.despues) : traidos
+          elHueco.current = null
+          setItemsState(definitivo)
+          if (!sinEspejo) espejar(definitivo)
           cargado.current = true
+          /* El `sincronizar` va DESPUÉS de marcar `cargado`: si fallara y alguien
+             volviera a guardar, ya hay una lista de verdad contra la que comparar. */
+          if (hueco) sincronizar(tabla, traidos, definitivo, toRowRef.current)
         }
       }, (err) => {
         // Rechazo de red (fetch fallido) al consultar Supabase: mismo criterio.
@@ -469,6 +556,16 @@ export function useSupabaseTable<T extends { id: string }>(
       const next = typeof actualizador === 'function' ? (actualizador as (p: T[]) => T[])(prev) : actualizador
       if (!local && supabase) {
         if (cargado.current) sincronizar(tabla, prev, next, toRowRef.current)
+        else {
+          /*
+           * SE GUARDA EN EL HUECO. No se sincroniza —comparar contra una lista
+           * que no vino de la base borraría el censo— pero tampoco se tira:
+           * queda apuntado para reaplicarlo cuando llegue la tabla. `antes` es
+           * el de la PRIMERA vez, que es el punto desde el que se mide la
+           * diferencia entera.
+           */
+          elHueco.current = { antes: elHueco.current?.antes ?? prev, despues: next }
+        }
         if (!sinEspejo) espejar(next)
       } else if (!sinEspejo) {
         espejar(next)

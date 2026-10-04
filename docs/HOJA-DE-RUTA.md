@@ -57,6 +57,25 @@ Supabase, el banco o el dominio: son trámites que solo puede hacer la hermandad
 
 ---
 
+## Revisado el 4 de octubre de 2026, línea a línea contra el código
+
+**La versión anterior de este documento daba por pendientes SEIS cosas que
+estaban hechas**: las políticas RLS por cargo, las copias automáticas, la
+verificación en dos pasos, el manual de uso, los mandatos SEPA firmados y el
+webhook de Stripe. Y de las dos últimas decía lo contrario de lo que dice
+[`COBROS-LO-QUE-FALTA.md`](COBROS-LO-QUE-FALTA.md), que es el documento al que
+remite.
+
+Un documento así no es solo inexacto: **produce un plan de trabajo falso**, y el
+tiempo se va en problemas que no existen. Es el mismo fallo que ya pagó el de
+cobros y que su cabecera cuenta.
+
+> **La regla que sale de esto: lo que se termina se tacha aquí EL MISMO DÍA, en
+> el mismo commit.** Y cuando este documento y otro no digan lo mismo, gana el
+> código: se comprueba y se corrige el que esté mal.
+
+---
+
 ## Lo que queda
 
 Ya **no queda nada que se pueda hacer sin configurar servicios de fuera**. Lo
@@ -87,19 +106,32 @@ La fase bisagra: todo lo demás depende de ella.
 - `supabase/migracion-2026-08.sql` — para una base ya creada antes.
 - Todos los módulos usan `useSupabaseTable`, que ya sabe hablar con Supabase.
 
-**Qué falta:**
+**Qué falta, y es solo lo de fuera:**
 - Crear el proyecto y pegar las claves en `.env` (ver `.env.example`).
-- **Cerrar la ventana de arranque**: si se guarda algo en el primer segundo,
-  mientras la tabla aún está cargando, ese cambio se pierde
-  (`src/lib/supabaseSync.ts`, la bandera `cargado`).
-- Repasar las políticas RLS por cargo.
-- Copias de seguridad automáticas.
+- Pegar el SQL y lo demás de la tarde: [`LA-TARDE-DE-SUPABASE.md`](LA-TARDE-DE-SUPABASE.md).
+
+**Lo que este documento daba por pendiente y está hecho:**
+- ~~Cerrar la ventana de arranque~~ — **hecho**. Lo que se guarda mientras la
+  tabla viene de camino se reaplica encima de lo que trae la base y se
+  sincroniza entonces (`conLoDelHueco` en `lib/supabaseSync.ts`).
+- ~~Repasar las políticas RLS por cargo~~ — **hecho**, y probadas contra un
+  Postgres de verdad con el rol que toca: `pruebas/basedatos.prueba.mjs`, 527
+  comprobaciones.
+- ~~Copias de seguridad automáticas~~ — **hecho** en lo que depende del código:
+  `lib/copiaAutomatica.ts` hace una copia semanal y la lanza `AppShell`. Las del
+  servidor son el paso 4 de la tarde de Supabase, y son de pagar el plan.
 
 ---
 
-## F15 — Correos de verdad *(necesita Supabase + dominio)*
+## F15 — Correos de verdad *(necesita una clave y un dominio)*
 
-Hoy **todo el envío es simulado**.
+**El código está hecho.** Los correos salen por la Edge Function
+`supabase/functions/enviar-correo` con Resend, y Configuración → Correo trae un
+diagnóstico que dice QUÉ FALTA además de mandar una prueba — porque «enviado
+correctamente» no significa «ha llegado»: con el remitente de pruebas de Resend
+el envío contesta que todo bien y el correo no llega nunca.
+
+Lo que falta no es código: la clave del proveedor y los tres registros DNS.
 
 ### Lo que hace que lleguen y no caigan en spam
 
@@ -194,8 +226,11 @@ Para papeletas, donativos y lotería: **Redsys** (lo da el propio banco) o
   DEL AÑO hizo falta guardar cuándo se tramita cada una (`hermanos.fecha_baja`);
   las anteriores constan sin fecha y la memoria lo dice en vez de repartirlas
   por ejercicios.
-- Verificación en dos pasos: la pantalla está; falta Supabase.
-- Manual de uso: pendiente.
+- Verificación en dos pasos: **hecha**. `AuthContext` da de alta el factor y lo
+  verifica contra Supabase (`mfa.enroll` / `challenge` / `verify`), y se maneja
+  el estado intermedio —contraseña correcta pero segundo paso pendiente—, que es
+  donde estaba la dificultad.
+- Manual de uso: **hecho**, [`MANUAL.md`](MANUAL.md).
 
 ## Lo que vino después: las fases P
 
@@ -228,13 +263,23 @@ en [`tablas-de-prueba/LEEME.md`](tablas-de-prueba/LEEME.md).
 
 ## Cobros: lo que falta para cobrar de verdad
 
-Las domiciliaciones SEPA y la suscripción de Stripe están a medias, y lo que
-falta de cada una está escrito en [`COBROS-LO-QUE-FALTA.md`](COBROS-LO-QUE-FALTA.md).
-En corto: el fichero SEPA se genera entero pero los mandatos firmados se
-sintetizan (bloqueante legal antes de la primera remesa real), y de Stripe está
-la parte que cobra pero **no el webhook**, así que la aplicación no se entera de
-que ha cobrado. No corre prisa; conviene leerlo antes de prometerle cobros a una
-hermandad.
+Todo lo que depende del código está hecho, y lo que falta de cada pieza está en
+[`COBROS-LO-QUE-FALTA.md`](COBROS-LO-QUE-FALTA.md), que se auditó línea a línea
+el 8 de septiembre.
+
+**Este párrafo decía lo contrario que ese documento** —que los mandatos se
+sintetizaban y que no había webhook— y las dos cosas eran falsas:
+
+- **Los mandatos son de verdad**: tabla `mandatos_sepa`, con el IBAN congelado
+  al firmar, su referencia única y la fecha. El `MndtId` del fichero
+  `pain.008` sale de ahí y no se inventa (`lib/sepa.ts`, `lib/mandatosSepa.ts`).
+- **El webhook de Stripe existe y atiende lo que hay que atender**:
+  `invoice.paid` (la renovación de cada mes), `invoice.payment_failed` (la
+  tarjeta que falla) y `customer.subscription.deleted`.
+
+De todo el circuito del dinero **solo queda un trámite que no es código**: el
+Identificador de Acreedor SEPA, que la hermandad pide a su banco
+([`LOS-DOS-TRAMITES.md`](LOS-DOS-TRAMITES.md)).
 
 ---
 

@@ -223,6 +223,21 @@ dinero (que está en las cuotas). Esas lecturas cruzadas se hacen con
 `leerDatos()` contra el espejo, sin montar la pantalla dueña del dato. Sin
 espejo, verían los datos de ejemplo para siempre.
 
+### El hueco del arranque
+
+Entre montar la pantalla y recibir la tabla pasan unos cientos de milisegundos.
+En ese rato `cargado` es falso y un guardado **no se sincroniza** — eso está
+bien y no se toca: comparar contra una lista que nunca vino de la base es
+pedirle a `sincronizar` que borre en Supabase todo lo que no aparece, o sea el
+censo entero.
+
+Lo que estaba mal era el final de la carga: machacaba ese cambio sin decir nada,
+en la pantalla y en el espejo. Ahora se apunta la **diferencia** del hueco y se
+reaplica encima de lo que trae la base (`conLoDelHueco`), y entonces sí se
+sincroniza. Va por diferencia y no repitiendo la orden de guardado porque a
+`setItems` se le puede dar una lista ya hecha, y esa lista se construyó sobre un
+hueco casi siempre vacío: reaplicarla tal cual borraría lo que acaba de llegar.
+
 ### Las dos trampas del espejo, las dos ya pagadas
 
 **`sinEspejo`.** El panel y el área del hermano montan el mismo hook con la

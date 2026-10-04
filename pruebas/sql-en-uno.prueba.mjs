@@ -73,6 +73,18 @@ export default async function ({ caso }) {
      * aparte y con sus instrucciones dentro.
      */
     'tareas-programadas.sql',
+    /*
+     * Y LA COMPROBACIÓN CORTA, que no instala nada: son seis `select` que
+     * cuentan lo que debería haber y dicen «bien» o «falta». Existe porque
+     * `DIAGNOSTICO.sql` son 626 líneas y pegarlas en el editor de Supabase
+     * sale mal: se quedó a medias en la primera tarde de verdad y el error
+     * —«syntax error at or near )»— no dice en ningún momento que lo que ha
+     * llegado es un quinto del fichero.
+     *
+     * No sustituye al grande: cuenta en vez de listar, así que dice SI falta
+     * algo y no QUÉ. Lo pone en su propia cabecera.
+     */
+    'COMPROBACION-CORTA.sql',
   ])
   const todos = (await readdir('supabase')).filter((f) => f.endsWith('.sql') && !FUERA.has(f))
   const olvidados = todos.filter((f) => !nombres.includes(f))

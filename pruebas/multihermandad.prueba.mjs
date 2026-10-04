@@ -183,11 +183,34 @@ async function aislamientoAuditoria({ caso }) {
 
   // --- Un fallo de red no puede llenar el panel de datos de ejemplo ---
   caso('la reserva nunca son los ejemplos', true, /isSupabaseConfigured \? \[\] : inicial/.test(sync))
-  // Y lo más importante: no marcarlo como cargado, o el primer cambio
-  // dispararía `sincronizar`, que borra en Supabase lo que no aparece en la
-  // lista. Comparar contra una lista que nunca vino de la base es borrar todo.
-  caso('un fallo no marca la tabla como cargada', true,
-    /cargado\.current = true\n\s+\}\n\s+\}, \(err\)/.test(sync))
+  /*
+   * Y LO MÁS IMPORTANTE: UN FALLO NO MARCA LA TABLA COMO CARGADA. Si lo
+   * marcara, el primer cambio que hiciera alguien dispararía `sincronizar`,
+   * que BORRA en Supabase lo que no aparece en la lista — y comparar contra una
+   * lista que nunca vino de la base es borrar el censo entero.
+   *
+   * ESTA GUARDA ESTABA PINCHADA A LA FORMA DEL CÓDIGO, y se puso roja sola:
+   * buscaba `cargado.current = true` seguido exactamente de dos llaves y del
+   * manejador de red, así que al añadir una línea detrás —la que reaplica lo
+   * guardado durante el hueco del arranque— cantó por el formato, no por lo que
+   * vigila. Y lo que vigila seguía intacto.
+   *
+   * Ahora se comprueba la INTENCIÓN, que es lo que importa y no caduca: que se
+   * marque en UN solo sitio, y que ese sitio no sea ninguna de las dos ramas de
+   * fallo. Las ramas se reconocen por `deReserva()`, que es de lo que tiran
+   * cuando la consulta no trae nada.
+   */
+  const vecesQueSeMarca = (sync.match(/cargado\.current = true/g) ?? []).length
+  caso('la tabla se marca como cargada en un solo sitio', 1, vecesQueSeMarca)
+  const ramasDeFallo = [...sync.matchAll(/setItemsState\(deReserva\(\)\)/g)]
+  caso('hay dos ramas de fallo que comprobar (consulta y red)', 2, ramasDeFallo.length)
+  const ramaQueMarca = ramasDeFallo.filter((m) => {
+    /* Lo que viene detrás del fallo hasta cerrar su bloque: si ahí aparece el
+       marcado, el agujero está abierto. */
+    const detras = sync.slice(m.index, m.index + 600)
+    return /cargado\.current = true/.test(detras.split(/\n\s{6}\}/)[0] ?? detras)
+  })
+  caso('un fallo no marca la tabla como cargada', [], ramaQueMarca.map((m) => m.index))
   caso('y se avisa de que no se pudo cargar', true, /function avisarDeFallo/.test(sync))
 
   // --- La web pública no puede enseñar el IBAN de otra hermandad ---

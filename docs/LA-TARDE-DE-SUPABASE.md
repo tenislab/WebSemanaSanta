@@ -13,6 +13,41 @@ El orden importa solo en los dos primeros: el SQL antes de desplegar, y
 
 ---
 
+## Cómo va, a 4 de octubre de 2026
+
+Hecho en una sesión guiada, comprobando cada paso:
+
+| | Paso | Cómo quedó |
+|---|---|---|
+| 1 | El SQL nuevo | **hecho** · `version_del_esquema()` dice 74 y la comprobación corta sale limpia |
+| 1 bis | El PDF público en incógnito | **hecho** · baja sin sesión de ninguna clase |
+| 1 bis | El hermano, en su área | **hecho** · ve las reglas y **no** ve las actas |
+| 2 | `api/w.ts` y `api/seo.ts` | **pendiente** · hay que desplegar |
+| 3 | `pg_cron` | **hecho** · las cinco tareas activas |
+| 4 | Copias automáticas | **pendiente** · es pagar el plan |
+| 5 | La hermandad de prueba | **pendiente** |
+| 6 | Las plantillas de correo | **hechas** las dos que importan (registro y contraseña) |
+
+**Lo que de verdad se cerró con esto** es la única parte de los documentos que no
+se podía probar desde el repositorio. Las políticas están medidas contra un
+Postgres montado igual que el de Supabase, pero *cómo sirve Storage un fichero a
+alguien sin cuenta* ya no es Postgres: eso solo se sabe pulsándolo, y se pulsó.
+
+**Dos cosas que aprendió el documento esa tarde**, y están puestas donde tocan:
+
+- `DIAGNOSTICO.sql` se quedó a medias al pegarlo —626 líneas— y el error no lo
+  dice: `syntax error at or near ")"`. De ahí sale `COMPROBACION-CORTA.sql`.
+- `pg_cron` ya estaba encendido y había **dos** tareas de una versión vieja del
+  fichero. Pegarlo otra vez las dejó las cinco al día sin duplicar ninguna,
+  que es para lo que cada tarea hace `unschedule` de sí misma antes de crearse.
+
+Y una que no es de esta lista pero se vio aquí: **el paso 2 es el que menos
+parece y más calla.** Cuando `api/seo.ts` no está desplegada, no se cae la
+aplicación: se cae la vista previa del enlace que la hermandad pega en su grupo
+de WhatsApp, y no sale ningún error en ningún registro.
+
+---
+
 ## 1 · Pegar el SQL nuevo
 
 **Supabase → SQL Editor.** Se pega `supabase/ACTUALIZAR.sql` entero, de una vez.
@@ -55,7 +90,22 @@ menos, el SQL no ha entrado (o ha entrado a medias y lo habría dicho: es una
 sola transacción).
 
 Y de paso, pegar `supabase/DIAGNOSTICO.sql`: enseña lo que falta o sobra en la
-base. Lo bueno es que **no diga nada**.
+base. Lo bueno es que **no diga nada** («No rows returned»).
+
+> **OJO AL PEGARLO: son 626 líneas y se queda a medias con facilidad.** Pasó en
+> la primera tarde de verdad, y el error no ayuda nada —`syntax error at or
+> near ")"`, señalando una línea que en el fichero completo está en otro sitio—:
+> en ningún momento dice que lo que ha llegado es un quinto del fichero.
+>
+> Para saber que ha entrado entero, la última línea tiene que ser
+> `order by "Qué pasa", "Tabla", "Columna";`.
+>
+> Y si pelearse con el pegado estorba, **`supabase/COMPROBACION-CORTA.sql`** son
+> seis `select` que cuentan lo que debería haber —versión, tablas, tablas sin
+> RLS, funciones, cubos y tareas de `pg_cron`— y responden «bien» o «falta».
+> Cuenta en vez de listar: dice SI falta algo, no QUÉ. Si alguna línea sale mal,
+> entonces sí hay que pegar el grande, que es el que nombra la columna o la
+> función concreta.
 
 En la aplicación, la banda de arriba de «tu base va atrasada» tiene que
 desaparecer.
